@@ -105,3 +105,6 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# 생성물 — tools/reindex.ps1 로 재생성. 낡은 인덱스를 리포에 박제하지 않는다.
+/index/

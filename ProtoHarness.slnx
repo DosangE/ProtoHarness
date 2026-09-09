@@ -1,4 +1,7 @@
 ﻿<Solution>
+  <Project Path="ProtoHarness.Tests.PlayMode.csproj" />
+  <Project Path="ProtoHarness.Runtime.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="ProtoHarness.Editor.csproj" />
 </Solution>

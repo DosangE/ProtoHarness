@@ -1,0 +1,128 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace ProtoHarness.ChainRush
+{
+    [RequireComponent(typeof(CharacterController))]
+    public sealed class RunnerMotor : MonoBehaviour
+    {
+        [SerializeField] private CharacterController controller;
+        [SerializeField] private ChainRushGame game;
+        [SerializeField] private GrappleController grapple;
+        [SerializeField] private Transform bodyVisual;
+        [SerializeField] private float runSpeed = 10f;
+        [SerializeField] private float jumpSpeed = 11.5f;
+        [SerializeField] private float gravity = 22f;
+        [SerializeField] private float lateralSpeed = 7f;
+        private Vector3 spawnPosition;
+        private Vector3 velocity;
+        private float steer;
+        private bool jumpQueued;
+        private float coyoteTime;
+
+        public Vector3 Velocity => velocity;
+        public bool IsGrounded => controller.isGrounded;
+        public float Speed => velocity.magnitude;
+
+        private void Awake()
+        {
+            if (controller == null || game == null || grapple == null || bodyVisual == null)
+            {
+                Debug.LogError("RunnerMotor: controller, game, grapple and bodyVisual must be assigned.", this);
+                enabled = false;
+                return;
+            }
+            spawnPosition = transform.position;
+        }
+
+        private void OnValidate()
+        {
+            if (runSpeed <= 0f || jumpSpeed <= 0f || gravity <= 0f || lateralSpeed <= 0f)
+                Debug.LogError("RunnerMotor: movement settings must be positive.", this);
+        }
+
+        private void Update()
+        {
+            if (!game.IsRunning) return;
+            var keyboard = Keyboard.current;
+            steer = 0f;
+            if (keyboard != null)
+            {
+                if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) steer -= 1f;
+                if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) steer += 1f;
+            }
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame) PrimaryAction();
+            if (mouse != null && (mouse.leftButton.wasReleasedThisFrame || mouse.rightButton.wasPressedThisFrame))
+                grapple.Release(true);
+        }
+
+        public void PrimaryAction()
+        {
+            if (!game.IsRunning) return;
+            if (IsGrounded || coyoteTime > 0f) jumpQueued = true;
+            else grapple.TryAttach();
+        }
+
+        private void FixedUpdate()
+        {
+            if (!game.IsRunning) return;
+            float dt = Time.fixedDeltaTime;
+            bool grounded = controller.isGrounded;
+            coyoteTime = grounded ? 0.1f : Mathf.Max(0f, coyoteTime - dt);
+            if (grounded && velocity.y < 0f) velocity.y = -2f;
+            if (jumpQueued)
+            {
+                if (coyoteTime > 0f)
+                {
+                    velocity.y = jumpSpeed;
+                    coyoteTime = 0f;
+                    game.PlayCue(0);
+                }
+                jumpQueued = false;
+            }
+            velocity.x = Mathf.MoveTowards(velocity.x, steer * lateralSpeed, (grounded ? 60f : 18f) * dt);
+            velocity.z = Mathf.MoveTowards(velocity.z, grapple.IsAttached ? 16f : runSpeed,
+                (grounded ? 30f : 5f) * dt);
+            velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
+            Vector3 displacement = velocity * dt;
+            grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
+            CollisionFlags flags = controller.Move(displacement);
+            if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
+            if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
+            if (grapple.IsAttached && transform.position.z > grapple.AnchorPosition.z + 0.5f)
+                grapple.Release(true);
+            bodyVisual.localRotation = Quaternion.Euler(velocity.y * -0.9f, steer * 12f, steer * -16f);
+            if (transform.position.y < -12f) game.FailRun();
+        }
+
+        public void AddReleaseBoost()
+        {
+            // A full takeoff impulse keeps the capsule above the next platform lip.
+            velocity.y = Mathf.Max(velocity.y, jumpSpeed);
+            velocity.z = Mathf.Max(velocity.z, 13f);
+        }
+
+        public void ShiftOrigin(Vector3 offset)
+        {
+            controller.enabled = false;
+            transform.position += offset;
+            controller.enabled = true;
+            grapple.ShiftOrigin(offset);
+        }
+
+        public void ResetAtSpawn()
+        {
+            grapple.Release(false);
+            controller.enabled = false;
+            transform.position = spawnPosition;
+            controller.enabled = true;
+            controller.Move(Vector3.down * 0.3f);
+            velocity = Vector3.zero;
+            steer = 0f;
+            jumpQueued = false;
+            coyoteTime = 0f;
+            bodyVisual.localRotation = Quaternion.identity;
+        }
+    }
+}

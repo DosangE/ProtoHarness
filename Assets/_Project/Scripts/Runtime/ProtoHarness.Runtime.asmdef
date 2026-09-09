@@ -1,0 +1,6 @@
+{
+  "name": "ProtoHarness.Runtime",
+  "rootNamespace": "ProtoHarness",
+  "references": ["Unity.InputSystem"],
+  "autoReferenced": true
+}

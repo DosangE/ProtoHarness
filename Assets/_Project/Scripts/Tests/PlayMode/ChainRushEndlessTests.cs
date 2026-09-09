@@ -1,0 +1,220 @@
+using System.Collections;
+using NUnit.Framework;
+using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Combat;
+using ProtoHarness.ChainRush.Endless;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
+using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
+#if UNITY_EDITOR
+using UnityEditor.SceneManagement;
+#endif
+
+namespace ProtoHarness.Tests.PlayMode
+{
+    public sealed class ChainRushEndlessTests
+    {
+        private ChainRushGame game;
+        private RunnerMotor player;
+        private GrappleController grapple;
+        private EndlessCourse course;
+        private EnemyDirector enemies;
+        private float timeScale;
+
+        [UnitySetUp]
+        public IEnumerator SetUp()
+        {
+            timeScale = Time.timeScale;
+#if UNITY_EDITOR
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushEndless.unity", new LoadSceneParameters(LoadSceneMode.Single));
+#else
+            Assert.Fail("Endless prototype tests require the Unity Editor.");
+            yield break;
+#endif
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+            {
+                if (root.TryGetComponent(out ChainRushGame g)) game = g;
+                if (root.TryGetComponent(out RunnerMotor p)) { player = p; grapple = p.GetComponent<GrappleController>(); }
+                if (root.TryGetComponent(out EndlessCourse c)) course = c;
+            }
+            Assert.That(game, Is.Not.Null);
+            Assert.That(course, Is.Not.Null);
+            enemies = game.Enemies;
+            yield return null;
+        }
+
+        [UnityTearDown]
+        public IEnumerator TearDown()
+        {
+            Time.timeScale = timeScale;
+            yield return null;
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        private void MovePlayer(float z)
+        {
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = new Vector3(0f, 1f, z);
+            controller.enabled = true;
+            controller.Move(Vector3.down * 0.2f);
+        }
+
+        private IEnumerator Prepare(EnemyDirector.Entrance direction)
+        {
+            game.StartRun();
+            MovePlayer(-5f);
+            yield return new WaitForFixedUpdate();
+            Assert.That(enemies.BeginEncounter(direction), Is.True);
+            Assert.That(enemies.TryAttack(), Is.False, "Warnings are not attackable yet.");
+            float deadline = Time.realtimeSinceStartup + 3f;
+            while (!enemies.CanAttack && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(enemies.CanAttack, Is.True);
+            Assert.That(enemies.Direction, Is.EqualTo(direction));
+        }
+
+        [UnityTest]
+        public IEnumerator Combat_EachDirection_SpaceFiresConnectsAndRetracts()
+        {
+            Keyboard original = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
+                {
+                    yield return Prepare(direction);
+                    ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-enemy-" + direction + ".png"));
+                    yield return null;
+                    InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Space));
+                    yield return new WaitForSeconds(0.07f);
+                    Assert.That(enemies.State, Is.EqualTo(EnemyDirector.EncounterState.Firing));
+                    Assert.That(game.Hits, Is.Zero, "Hit must occur after chain flight, not on key press.");
+                    ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-chain-" + direction + ".png"));
+                    InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                    yield return new WaitForSeconds(0.5f);
+                    Assert.That(game.Hits, Is.EqualTo(1));
+                    Assert.That(game.Health, Is.EqualTo(3));
+                    Assert.That(enemies.HasEncounter, Is.False);
+                }
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                if (original != null) original.MakeCurrent();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Combat_EachDirection_TimeoutDamagesExactlyOnce()
+        {
+            foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
+            {
+                yield return Prepare(direction);
+                yield return new WaitForSeconds(1.7f);
+                Assert.That(game.Health, Is.EqualTo(2));
+                Assert.That(game.Hits, Is.Zero);
+                Assert.That(enemies.HasEncounter, Is.False);
+                yield return new WaitForSeconds(0.15f);
+                Assert.That(game.Health, Is.EqualTo(2));
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Combat_PauseAndRestart_FreezesWindowAndClearsFlight()
+        {
+            yield return Prepare(EnemyDirector.Entrance.Left);
+            game.TogglePause();
+            float remaining = enemies.Remaining;
+            Vector3 position = enemies.Target.position;
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(enemies.Remaining, Is.EqualTo(remaining));
+            Assert.That(enemies.Target.position, Is.EqualTo(position));
+            Assert.That(enemies.TryAttack(), Is.False);
+            game.TogglePause();
+            game.Attack();
+            yield return new WaitForSeconds(0.05f);
+            game.StartRun();
+            Assert.That(enemies.HasEncounter, Is.False);
+            Assert.That(game.Health, Is.EqualTo(3));
+            Assert.That(game.Hits, Is.Zero);
+            Assert.That(course.Distance, Is.EqualTo(0d).Within(0.1d));
+        }
+
+        [UnityTest]
+        public IEnumerator Combat_GapAndJump_DoesNotRequireAttack()
+        {
+            game.StartRun();
+            MovePlayer(29f);
+            yield return new WaitForFixedUpdate();
+            Assert.That(enemies.BeginEncounter(EnemyDirector.Entrance.Above), Is.False);
+            yield return Prepare(EnemyDirector.Entrance.Right);
+            player.PrimaryAction();
+            yield return new WaitForSeconds(0.2f);
+            Assert.That(player.IsGrounded, Is.False);
+            Assert.That(enemies.HasEncounter, Is.False);
+            Assert.That(game.Health, Is.EqualTo(3));
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Grapple_RestartWhileAttached_ClearsOldChainImmediately()
+        {
+            game.StartRun();
+            MovePlayer(28f);
+            yield return new WaitForFixedUpdate();
+            player.PrimaryAction();
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(grapple.TryAttach(), Is.True);
+            yield return new WaitForSeconds(0.08f);
+            ProtoHarness.ChainRush.Visuals.ChainVisual visual = null;
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+                if (root.name == "Grapple Chain") visual = root.GetComponent<ProtoHarness.ChainRush.Visuals.ChainVisual>();
+            Assert.That(visual, Is.Not.Null);
+            Assert.That(visual.IsVisible, Is.True);
+            game.StartRun();
+            yield return null;
+            Assert.That(visual.IsVisible, Is.False);
+            Assert.That(grapple.IsAttached, Is.False);
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Endless_LongRun_RecyclesRebasesAndRestartsWithoutGrowingPool()
+        {
+            int objects = CountObjects();
+            Time.timeScale = 3f;
+            game.StartRun();
+            float deadline = Time.realtimeSinceStartup + 100f;
+            double lastDistance = 0d;
+            while (game.IsRunning && course.Distance < 1400d && Time.realtimeSinceStartup < deadline)
+            {
+                float edge = course.DistanceToEdge();
+                if (player.IsGrounded && edge >= 0f && edge <= 4.5f) player.PrimaryAction();
+                if (!player.IsGrounded && player.transform.position.y > 2.6f && !grapple.IsAttached) grapple.TryAttach();
+                if (enemies.CanAttack) game.Attack();
+                Assert.That(course.Distance, Is.GreaterThanOrEqualTo(lastDistance - 0.01d));
+                lastDistance = course.Distance;
+                yield return null;
+            }
+            Assert.That(game.IsRunning, Is.True, "Failed at " + course.Distance + "m; player=" + player.transform.position + "; health=" + game.Health);
+            Assert.That(course.Distance, Is.GreaterThanOrEqualTo(1400d));
+            Assert.That(course.RebaseCount, Is.GreaterThanOrEqualTo(3));
+            Assert.That(course.RecycledCount, Is.GreaterThan(16));
+            Assert.That(game.Hits, Is.GreaterThan(3), "Safe-platform encounters must actually spawn.");
+            Assert.That(course.PoolSize, Is.EqualTo(8));
+            Assert.That(CountObjects(), Is.EqualTo(objects));
+            game.StartRun();
+            Assert.That(course.RebaseCount, Is.Zero);
+            Assert.That(course.RecycledCount, Is.Zero);
+            Assert.That(course.Distance, Is.EqualTo(0d).Within(0.1d));
+            Assert.That(player.IsGrounded, Is.True);
+        }
+
+        private static int CountObjects()
+        {
+            int count = 0;
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects()) count += root.GetComponentsInChildren<Transform>(true).Length;
+            return count;
+        }
+    }
+}

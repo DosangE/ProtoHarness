@@ -1,0 +1,143 @@
+using UnityEngine;
+using ProtoHarness.ChainRush.Visuals;
+
+namespace ProtoHarness.ChainRush
+{
+    [DefaultExecutionOrder(150)]
+    public sealed class GrappleController : MonoBehaviour
+    {
+        [SerializeField] private ChainRushGame game;
+        [SerializeField] private RunnerMotor motor;
+        [SerializeField] private LineRenderer rope;
+        [SerializeField] private Transform ropeOrigin;
+        [SerializeField] private Transform[] anchors;
+        [SerializeField] private float maxRange = 32f;
+        [SerializeField] private float retractSpeed = 3f;
+        [SerializeField] private ChainVisual chainVisual;
+        private float visualExtension;
+        private Vector3 lastAnchor;
+        private Transform attachedAnchor;
+        private Transform candidate;
+        private float ropeLength;
+        private float missUntil;
+
+        public bool IsAttached => attachedAnchor != null;
+        public Vector3 AnchorPosition => attachedAnchor != null ? attachedAnchor.position : Vector3.zero;
+        public Transform Candidate => candidate;
+        public float RopeLength => ropeLength;
+        public bool JustMissed => Time.time < missUntil;
+
+        private void Awake()
+        {
+            if (game == null || motor == null || rope == null || ropeOrigin == null || anchors == null || anchors.Length == 0)
+            {
+                Debug.LogError("GrappleController: all references and at least one anchor are required.", this);
+                enabled = false;
+                return;
+            }
+            for (int i = 0; i < anchors.Length; i++)
+                if (anchors[i] == null)
+                {
+                    Debug.LogError("GrappleController: anchor array contains a missing reference.", this);
+                    enabled = false;
+                    return;
+                }
+            if (game.IsEndless && chainVisual == null)
+            {
+                Debug.LogError("GrappleController: endless mode requires a chain visual.", this);
+                enabled = false;
+                return;
+            }
+            rope.positionCount = 2;
+            rope.enabled = false;
+        }
+
+        private void OnValidate()
+        {
+            if (maxRange <= 5f || retractSpeed < 0f)
+                Debug.LogError("GrappleController: range must exceed 5 and retract speed cannot be negative.", this);
+        }
+
+        private void LateUpdate()
+        {
+            if (game.IsPaused) return;
+            candidate = SelectCandidate();
+            if (game.IsEndless)
+            {
+                if (IsAttached) lastAnchor = attachedAnchor.position;
+                visualExtension = Mathf.MoveTowards(visualExtension, IsAttached ? 1f : 0f, Time.deltaTime * 8f);
+                if (visualExtension > 0f) chainVisual.Present(lastAnchor, visualExtension);
+                else chainVisual.Hide();
+            }
+            if (!IsAttached) return;
+            rope.SetPosition(0, ropeOrigin.position);
+            rope.SetPosition(1, attachedAnchor.position);
+        }
+
+        private Transform SelectCandidate()
+        {
+            Transform best = null;
+            float bestScore = float.PositiveInfinity;
+            Vector3 origin = transform.position + Vector3.up * 0.4f;
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                Vector3 offset = anchors[i].position - origin;
+                if (offset.z < 1f || offset.y < 0f || offset.sqrMagnitude > maxRange * maxRange) continue;
+                if (Physics.Linecast(origin, anchors[i].position, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                float score = offset.sqrMagnitude + offset.x * offset.x * 3f;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                best = anchors[i];
+            }
+            return best;
+        }
+
+        public bool TryAttach()
+        {
+            if (!game.IsRunning || motor.IsGrounded || IsAttached) return false;
+            candidate = SelectCandidate();
+            if (candidate == null)
+            {
+                missUntil = Time.time + 0.75f;
+                return false;
+            }
+            attachedAnchor = candidate;
+            ropeLength = Mathf.Max(5f, Vector3.Distance(transform.position, attachedAnchor.position));
+            rope.enabled = !game.IsEndless;
+            game.RegisterGrapple();
+            game.PlayCue(1);
+            return true;
+        }
+
+        public void ConstrainMotion(Vector3 position, ref Vector3 displacement, ref Vector3 velocity, float dt)
+        {
+            if (!IsAttached) return;
+            ropeLength = Mathf.Max(5f, ropeLength - retractSpeed * dt);
+            Vector3 radial = position + displacement - attachedAnchor.position;
+            if (radial.sqrMagnitude <= ropeLength * ropeLength) return;
+            Vector3 normal = radial.normalized;
+            displacement = attachedAnchor.position + normal * ropeLength - position;
+            float outwardSpeed = Vector3.Dot(velocity, normal);
+            if (outwardSpeed > 0f) velocity -= normal * outwardSpeed;
+        }
+
+        public void Release(bool boost)
+        {
+            if (!boost && game.IsEndless)
+            {
+                visualExtension = 0f;
+                chainVisual.Hide();
+            }
+            if (!IsAttached) return;
+            attachedAnchor = null;
+            rope.enabled = false;
+            if (boost && game.IsRunning) motor.AddReleaseBoost();
+        }
+
+        public void ShiftOrigin(Vector3 offset)
+        {
+            lastAnchor += offset;
+            if (game.IsEndless) chainVisual.ShiftOrigin(offset);
+        }
+    }
+}

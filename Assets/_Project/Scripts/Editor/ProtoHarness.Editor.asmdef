@@ -1,0 +1,7 @@
+{
+  "name": "ProtoHarness.Editor",
+  "rootNamespace": "ProtoHarness.Editor",
+  "references": ["ProtoHarness.Runtime", "UnityEditor.TestRunner", "UnityEngine.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

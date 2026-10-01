@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-10-02 · 입력 추상화 (P1-2): 시뮬은 장치가 아니라 `TickInput` 을 받는다
+
+- **결정**: ① `Runtime/ChainRush/Control/` (네임스페이스 `ProtoHarness.ChainRush.Control`) 에 `TickInput`(readonly struct), `IInputSource`, `InputLatch`, `KeyboardMouseInputSource` 를 둔다. ② `RunnerMotor.Update` 의 장치 읽기를 제거하고 `Step(in TickInput)` 이 입력을 받는다. `ChainRushGame` 이 소스를 갖고 `Update` 에서 `Poll()`(실행 중일 때만), `FixedUpdate` 에서 `Consume()`, `StartRun` 에서 `Clear()` 를 부른다. ③ 기본 소스는 `Awake` 에서 코드로 만든다(직렬화 참조 없음, 씬 수정 없음). `SetInputSource(IInputSource)` 로 교체하며 null 이면 `ArgumentNullException`. ④ 조향은 `float`, 범위 [-1,1] 밖·NaN 은 예외(보정하지 않음, §5). 양자화는 P3 에서 소스의 `Consume()` 안에서 한다. ⑤ 메뉴 입력(R·Enter·Esc·M, HUD 버튼)은 이번에 소스에 넣지 않았다.
+- **이유**: 서버에 보낼 입력, 터치, 리플레이가 같은 자리(`TickInput`)에 꽂혀야 한다. 시뮬이 `Keyboard.current` 를 직접 읽으면 서버(헤드리스)에는 입력 장치가 없다. 폴더 이름을 `Input` 이 아닌 `Control` 로 한 것은 `ProtoHarness.ChainRush.Input` 네임스페이스가 하위 코드에서 `UnityEngine.Input` 을 가리기 때문이다.
+- **의미가 안 바뀐 것**: 키 매핑(A/D·←/→, 좌클릭, 좌클릭 뗌·우클릭, Space), 실행 중이 아닐 때 눌린 입력은 버림, 한 틱 구간에 누름과 뗌이 같이 오면 "누름 → 뗌" 순서로 둘 다 적용, 입력 지연(프레임에서 읽고 다음 틱에 적용). 공개 시그니처 중 바뀐 것은 이전 커밋에서 만든 `RunnerMotor.Step()` → `Step(in TickInput)` 하나이고 테스트가 직접 부르지 않는다.
+- **검증**: EditMode `testcasecount="39" result="Passed" total="39" passed="39" failed="0"` (01:02 KST, 신규 `InputLatchTests` 8 + `TickInputTests` 9). PlayMode `testcasecount="24" result="Passed" total="24" passed="24" failed="0" duration="101.0614821"` (01:04 KST): 기존 17개 **무수정** 통과(실제 `Keyboard`/`Mouse` 장치를 쓰는 `Input_KeyboardAndMouse_*`, `Combat_*_SpaceFires*` 포함) + 신규 `ChainRushInputSourceTests` 7개(장치 없이 스크립트 소스로 조향·점프·공격). Console error 0.
+- **이번에 하지 않은 것·미확인**: 터치·온스크린 컨트롤, `InputAction`/리바인딩(`Assets/InputSystem_Actions.inputactions` 는 `EditorBuildSettings.asset:13` 에 등록된 템플릿이고 우리 코드는 쓰지 않는다. §0 때문에 텍스트 수정 불가), 메뉴 입력 추상화, 네트워크 직렬화, 리플레이. 모바일에서 `Keyboard.current` 가 null 일 때와 IMGUI 버튼 동작은 확인 못 했다. `ChainRushHud.cs:207` 버튼의 핸들러는 읽지 않았다.
+- **발견 (다음 작업 후보, 이번 범위 밖)**: `RunnerMotor.Step` 이 `bodyVisual.localRotation` 을 직접 쓴다(표현이 시뮬 틱 안에 있음). 헤드리스 서버에는 시각물이 없고 아트 교체 때 시뮬 코드가 건드려진다. RacerState 분리(P1-3)에서 표현 컴포넌트로 빼는 것을 권고한다.
+
 ## 2026-10-02 · 고정 틱 (P1-1): 시뮬은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행
 
 - **결정**: ① **정수 틱.** `ChainRushGame.Tick`(int)이 시간이고 `Elapsed = Tick * 0.02f` 는 파생값. 쿨다운·무적·조우 타이머·그래플 빗나감 표시는 틱 마감 값으로 저장. ② **중앙 틱 구동.** `ChainRushGame.FixedUpdate` 만 진입점이고 순서를 코드로 고정(래치 입력 → `RunnerMotor.Step` → 접촉 → 완주 → `EnemyDirector.Step` → `EndlessCourse.Step`). 각 단계 뒤 `IsRunning` 을 다시 본다. ③ **공개 시그니처 유지.** `PrimaryAction`/`TryAttach`/`Release`/`Attack` 은 즉시 실행 그대로. 키보드·마우스 경로만 `Update` 에서 래치하고 다음 틱에 같은 메서드를 호출한다.

@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-10-02 · 병합 조건 강화: PlayMode 연속 2회 통과, 간헐 실패 기록
+
+- **결정**: 병합 조건을 "컴파일 0 + EditMode 통과 + **같은 코드에서 PlayMode 연속 2회 통과**"로 바꾼다. 병합 보고에는 각 실행의 결과 XML 값을 모두 적고, 한 번이라도 실패하면 원문과 함께 보고하며 원인을 설명하지 못하면 병합하지 않는다. 규칙 본문은 `CLAUDE.md` §9-2.
+- **이유**: P0(`103270b`), P1-1(`6ed7676`), P1-2(`8520a1c`)를 PlayMode **1회 통과**로 병합했다. 그 뒤 같은 코드(`Assets` 차이 0, `git diff 8520a1c HEAD -- Assets`)에서 1회 실패가 나왔다. 아래 표가 근거다.
+
+  | 시각 | 에디터 세션 | PlayMode 결과 | 비고 |
+  |---|---|---|---|
+  | 01:04 | A | `24/24` | 병합 근거 |
+  | 01:22:56~01:24:32 | B(01:21:02 시작), 첫 실행 | `result="Failed(Child)" total="24" passed="22" failed="2"` | 사용자가 평소와 같은 방식으로 실행 |
+  | 01:28 | B | `24/24` | `isApplicationActive=False` 에서 시작 |
+  | 01:30 | B | `24/24` | 동일 |
+  | 01:33:47~01:35:26 | C(01:32:59 시작), 첫 실행 | `24/24` | 에디터 재시작 직후 |
+
+- **실패 원문**: `Combat_EachDirection_SpaceFiresConnectsAndRetracts` — `Expected: Firing / But was: Vulnerable` (`ChainRushEndlessTests.cs:92`). `Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts` — `Expected: True / But was: False` (`ChainRushTests.cs:123`, `Enter` 후 `game.IsRunning`). 둘 다 `InputSystem.AddDevice<Keyboard>()` 가상 장치로 이벤트를 넣는 테스트이고, 각자 **첫 키보드 단계**에서 멈췄다.
+- **원인은 확인하지 못했다.** 확인된 사실: 입력 설정은 `PointersAndKeyboardsRespectGameViewFocus`(`InputSystem.settings.editorInputBehaviorInPlayMode`로 읽음). Console 에러와 `error CS` 없음. `Enter` 경로(`ChainRushGame.Update` 의 `Keyboard.current` 직접 읽기)는 입력 추상화 이전부터 있던 코드라 P1-2 회귀로 설명되지 않는다.
+- **기각된 가설**: ① 에디터 창이 비활성이라서 — 01:28, 01:30 은 비활성에서 시작해도 통과. ② 에디터 재시작 직후 첫 실행이라서 — 01:33 첫 실행이 통과. ③ 도메인 리로드·강제 재컴파일 — 모든 실행(통과 포함)에 똑같이 있음(`Editor-prev.log` 3235, 3711, 4639줄 / `Editor.log` 956줄). ④ 실행 방식 — 사용자 확인: 같은 방식이었다.
+- **남은 추정(미확인)**: 실패한 세션은 시작 직후 스크립트 23개를 임포트한 상태였다(`Editor-prev.log`). 첫 프레임 끊김이 가상 장치 이벤트 처리 시점을 흔들었을 가능성이 있으나 실험하지 않았다. 01:22:07 에 뜬 Unity 프로세스 2개는 세션 종료와 함께 사라져 명령줄을 확인하지 못했다(임포트 보조 프로세스로 추정).
+- **하지 않은 것**: 테스트 수정, `ProjectSettings` 수정. 재현이 안 되는 상태에서 고치면 효과를 확인할 방법이 없다. 실패가 다시 나오면 그때 별도 합의로 올린다. 실패율 측정을 위한 추가 반복 실행도 하지 않았다.
+- **알아둘 점**: 결과 XML 은 EditMode·PlayMode 가 같은 파일(`C:\Users\Public\Documents\ESTsoft\CreatorTemp\ChainRush-PlayMode-results.xml`)을 덮어쓴다. 실행마다 값을 바로 읽어 기록한다.
+
 ## 2026-10-02 · 입력 추상화 (P1-2): 시뮬은 장치가 아니라 `TickInput` 을 받는다
 
 - **결정**: ① `Runtime/ChainRush/Control/` (네임스페이스 `ProtoHarness.ChainRush.Control`) 에 `TickInput`(readonly struct), `IInputSource`, `InputLatch`, `KeyboardMouseInputSource` 를 둔다. ② `RunnerMotor.Update` 의 장치 읽기를 제거하고 `Step(in TickInput)` 이 입력을 받는다. `ChainRushGame` 이 소스를 갖고 `Update` 에서 `Poll()`(실행 중일 때만), `FixedUpdate` 에서 `Consume()`, `StartRun` 에서 `Clear()` 를 부른다. ③ 기본 소스는 `Awake` 에서 코드로 만든다(직렬화 참조 없음, 씬 수정 없음). `SetInputSource(IInputSource)` 로 교체하며 null 이면 `ArgumentNullException`. ④ 조향은 `float`, 범위 [-1,1] 밖·NaN 은 예외(보정하지 않음, §5). 양자화는 P3 에서 소스의 `Consume()` 안에서 한다. ⑤ 메뉴 입력(R·Enter·Esc·M, HUD 버튼)은 이번에 소스에 넣지 않았다.
@@ -41,7 +61,7 @@
 
 - **결정**: `main`(안정, 마일스톤 태그) ← `dev`(통합) ← `feature/<영역>-<내용>`. 병합은 **`--no-ff`**(기능 단위로 묶임). `main`·`dev` 직접 커밋 금지. 규칙 본문은 `CLAUDE.md` §9, 이 문서는 이유만 기록한다.
 - **이유**: 지금까지 `main` 하나로만 작업했다(브랜치·태그·워크트리 없음, `git branch -a` 로 확인). 앞으로 P1 이 고정 틱·입력 추상화·레이서 상태 분리처럼 서로 얽힌 큰 변경이라 검증 전 코드가 기준선에 섞이면 안 된다. 씬 YAML 이 최대 30만 줄이라 병합 충돌 비용이 크다.
-- **병합 조건**: 컴파일 0 + EditMode + PlayMode 통과. CI 없이 로컬 검증.
+- ~~**병합 조건**: 컴파일 0 + EditMode + PlayMode 통과. CI 없이 로컬 검증.~~ → 2026-10-02 "병합 조건 강화" 항목으로 대체(PlayMode 연속 2회).
 - **GitHub 보호 설정은 하지 않는다** (사용자 결정, 단독 개발). 저장소는 PUBLIC, 사용자는 ADMIN, `main` 은 현재 보호되지 않음(`Branch not protected`).
 - **병합 드라이버는 등록하지 않는다**: `.gitattributes` 가 Unity YAML 에 `merge=unityyamlmerge` 를 지정하지만 git config 에는 드라이버가 없다. 임시 저장소 실험(같은 줄을 양쪽에서 수정, 드라이버 속성만 지정)에서 git 은 기본 텍스트 병합으로 되돌아가 `CONFLICT (content)` 와 `<<<<<<<` 마커를 남겼다. 즉 **조용히 망가지지 않고 시끄럽게 실패**한다(§5). 검증하지 않은 드라이버 설정이 오히려 조용한 오병합 위험이므로 등록하지 않는다. `UnityYAMLMerge.exe` 의 올바른 인자는 확인 못 했다. 씬·프리팹 충돌 때는 병합을 중단하고 에디터에서 다시 작업한다(`CLAUDE.md` §9-3).
 - **에이전트**: `unity-implementer` 에 브랜치 관문 추가(`main`/`dev` 이면 거부, 파견 프롬프트의 `브랜치:` 줄과 대조). `CLAUDE.md` §9-2 와 같이 고쳤다.

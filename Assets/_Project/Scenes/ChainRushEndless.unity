@@ -299386,6 +299386,7 @@ MonoBehaviour:
   endlessMode: 1
   endlessCourse: {fileID: 396773514}
   enemies: {fileID: 2105445616}
+  rules: {fileID: 11400000, guid: f34ba709e923c5340943b923a8c4c359, type: 2}
   enhancedPresentation: 1
   presentationAudio: {fileID: 2105445617}
   presentationAnimation: {fileID: 1925527729}

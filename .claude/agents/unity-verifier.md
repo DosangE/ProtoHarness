@@ -32,7 +32,7 @@ model: sonnet
 ## MCP가 안 붙어 있을 때
 
 - Editor가 **닫혀** 있으면 batch mode:
-  `Unity.exe -batchmode -quit -nographics -projectPath "C:/PCube/ProtoHarness" -logFile <로그>`
+  `Unity.exe -batchmode -quit -nographics -projectPath "D:/PCUBE/ProtoHarness" -logFile <로그>`
   이후 `grep -nE "error CS|Compilation failed|Exiting batchmode"` 로 근거를 뽑는다.
 - Editor가 **열려** 있으면 batch mode를 실행하지 마라. 락이 충돌한다. 사용자에게 Console 결과를 요청한다.
 

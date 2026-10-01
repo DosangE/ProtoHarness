@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-01 · 에디터 6000.3.25f1 / Input System 1.20.0 변경을 유지한다
+
+- **결정**: Unity가 자동 반영한 `ProjectVersion.txt`(6000.3.18f1 → 6000.3.25f1), `manifest.json`(inputsystem 1.20.0, collab-proxy 2.13.6, navigation 2.0.14, timeline 1.8.13, visualscripting 1.9.12), `packages-lock.json` 변경을 되돌리지 않고 유지한다. `CLAUDE.md` §4-2, `ARCHITECTURE.md` §3 의 버전 행을 맞췄다.
+- **이유**: `Unity_RunCommand` 로 읽은 `Application.unityVersion` 이 `6000.3.25f1` 이고 컴파일 중 아님, Console error 0건. 되돌려도 에디터가 다시 올릴 가능성이 있다. 이 변경은 사용자 승인 하에 반영한다 (§0 금지선 대상 파일).
+- **검증**: 6000.3.25f1 / Input System 1.20.0 에서 PlayMode 재실행. XML `<test-run testcasecount="17" result="Passed" total="17" passed="17" failed="0" ... duration="93.2862676">` (2026-10-01 23:21:30 KST), Unity Console `logs: [], errorCount: 0`.
+- **버린 대안**: `git checkout --` 로 되돌리기 — 금지 명령이며 에디터가 다시 바꿀 수 있다.
+
+## 2026-10-01 · `_Project/` 루트와 asmdef 구성을 현 상태로 확정한다
+
+- **결정**: `Assets/_Project/` 루트 채택. asmdef 는 현재 3개 — `ProtoHarness.Runtime`, `ProtoHarness.Editor`, `ProtoHarness.Tests.PlayMode`. `ProtoHarness.Tests.EditMode` 는 아직 없다 (EditMode 테스트가 없으므로 만들지 않음).
+- **이유**: 코드·씬·머티리얼 17개 `.cs` 가 이미 이 구조 위에 있다 (`Assets/_Project/Scripts/*/ProtoHarness.*.asmdef`). 미결로 두면 문서와 현실이 어긋난다.
+- **버린 대안**: 평평한 `Assets/Scripts/`, 4분할 — 이미 만든 구조를 뒤집을 이점이 확인되지 않았다.
+
+---
+
 ## 2026-08-25 · 규칙 사본을 없애고 단일 진실 원천으로 묶는다
 
 - **결정**: `CLAUDE.md` 를 유일한 규칙 원천으로 삼는다. `AGENTS.md` 는 규칙 사본이 아니라 **포인터**(+ Codex 전용 델타)로 줄인다. `.codex/agents/*.toml` 은 `.claude/agents/*.md` 에서 `tools/sync-agents.ps1` 로 **생성**한다.
@@ -74,9 +89,9 @@
 
 | 항목 | 선택지 | 상태 |
 |---|---|---|
-| `Assets/_Project/` 루트 채택 | 채택 / 평평한 `Assets/Scripts/` | **미결** |
-| asmdef 분할 | 4분할 / Runtime+Editor 2분할 | **미결** |
-| 접두사 규칙 | `M_`/`T_` 만 / 전부 / 전부 없음 | **미결** |
-| `Assets/Editor/HubForceResolve.cs` 삭제 | 의도된 삭제인지 확인 필요 | **미결** |
-| `dev/` (git-lfs 훅 잔재) 제거 | 제거 / 유지 | **미결** |
-| `.gitignore` 의 `/index/` 줄 | 유지 / 되돌림 | **미결** (사전 합의 없이 추가됨) |
+| ~~`Assets/_Project/` 루트 채택~~ | 2026-10-01 확정 (위 결정 참조) | 해결 |
+| ~~asmdef 분할~~ | 2026-10-01 현 3개 구성 확정 (위 결정 참조) | 해결 |
+| 접두사 규칙 | `M_`/`T_` 만 / 전부 / 전부 없음 | **미결** (머티리얼은 `M_` 사용 중) |
+| `Assets/Editor/HubForceResolve.cs` 삭제 | 현재 `Assets/Editor/` 폴더 자체가 없음. 의도된 삭제인지 사용자 확인 필요 | **미결** |
+| ~~`dev/` (git-lfs 훅 잔재) 제거~~ | 2026-10-01 제거 (git 추적 훅 4개, 참조 없음 확인 후 `git rm`) | 해결 |
+| ~~`.gitignore` 의 `/index/` 줄~~ | 2026-10-01 유지 확정 (생성물 미커밋 결정과 일치). "다 승인" 지시를 유지로 해석했으므로 뒤집으려면 알려 달라 | 해결 |

@@ -1,6 +1,6 @@
 # ProtoHarness — 작업 규칙
 
-Unity 6 (6000.3.18f1) / URP 3D 하네싱 연습용 프로젝트.
+Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 이 문서는 **에이전트와 사람 모두에게 적용되는 구속 규칙**이다. 규칙과 지시가 충돌하면 멈추고 물어본다.
 
 ---
@@ -110,7 +110,7 @@ Assets/
 
 기존과 다른 스타일(다른 네임스페이스 규칙, 다른 로깅 방식, 다른 폴더)을 도입하려면 그것 자체가 합의 대상이다. 조용히 새 스타일을 섞지 않는다.
 
-> **지금 이 프로젝트에는 우리 코드가 한 줄도 없다.** 그래서 처음 만드는 스크립트·SO·테스트가 곧 표준이 된다. 첫 사례는 특히 느리게, 합의하고 만든다.
+> **우리 코드가 이미 있다 (2026-10-01 기준 `.cs` 17개, Chain Rush).** 그래서 새 스크립트·SO·테스트는 `Assets/_Project/Scripts/` 의 기존 파일 형식을 따른다 (§2 3연타). 기존에 없는 종류(첫 SO, 첫 EditMode 테스트 등)는 첫 사례이므로 느리게, 합의하고 만든다.
 
 ---
 
@@ -180,16 +180,16 @@ Assets/
 - API·시그니처·패키지 동작은 **기억이 아니라 실제 소스**로 확인한다. (`Library/PackageCache/` 읽기는 진단 목적으로 허용)
 - 확인 못 한 것은 **"확인 못 했다"** 고 쓴다. 확인한 것처럼 쓰지 않는다.
 
-### 4-2. 이 프로젝트의 확정 사실 (2026-08-25 확인)
+### 4-2. 이 프로젝트의 확정 사실 (2026-10-01 갱신: Unity·Input System 행은 에디터 실측 + manifest.json)
 
 | 항목 | 값 |
 |---|---|
-| Unity | 6000.3.18f1 |
+| Unity | 6000.3.25f1 |
 | 렌더 파이프라인 | URP 17.3.0 |
-| 입력 | Input System 1.19.0 (신 입력 시스템. `Input.GetKey` 쓰지 않는다) |
+| 입력 | Input System 1.20.0 (신 입력 시스템. `Input.GetKey` 쓰지 않는다) |
 | 테스트 | Test Framework 1.6.0 + performance |
 | .NET SDK | **설치되어 있지 않음** (런타임 8.0.4만). `dotnet build` 불가 |
-| Unity 실행 파일 | `C:\Program Files\Unity\Hub\Editor\6000.3.18f1\Editor\Unity.exe` |
+| Unity 실행 파일 | `C:\Program Files\Unity\Hub\Editor\6000.3.25f1\Editor\Unity.exe` |
 
 ### 4-2b. Unity MCP (2026-08-25 연결 확인)
 
@@ -234,7 +234,7 @@ Claude Code                  ~/.claude.json 의 mcpServers["unity-mcp"]
 **(B) MCP가 없고 Unity Editor가 닫혀 있을 때** — batch mode로 직접 확인한다.
 
 ```bash
-"/c/Program Files/Unity/Hub/Editor/6000.3.18f1/Editor/Unity.exe" -batchmode -quit -nographics -projectPath "C:/PCube/ProtoHarness" -logFile "$SCRATCH/compile.log"
+"/c/Program Files/Unity/Hub/Editor/6000.3.25f1/Editor/Unity.exe" -batchmode -quit -nographics -projectPath "D:/PCUBE/ProtoHarness" -logFile "$SCRATCH/compile.log"
 ```
 
 끝나면 로그에서 증거를 뽑는다:
@@ -253,7 +253,7 @@ Editor 실행 여부 확인: `Temp/UnityLockfile` 존재 = 열려 있음.
 ### 4-4. 테스트
 
 ```bash
-"/c/Program Files/Unity/Hub/Editor/6000.3.18f1/Editor/Unity.exe" -batchmode -runTests -projectPath "C:/PCube/ProtoHarness" -testPlatform EditMode -testResults "$SCRATCH/results.xml" -logFile "$SCRATCH/test.log"
+"/c/Program Files/Unity/Hub/Editor/6000.3.25f1/Editor/Unity.exe" -batchmode -runTests -projectPath "D:/PCUBE/ProtoHarness" -testPlatform EditMode -testResults "$SCRATCH/results.xml" -logFile "$SCRATCH/test.log"
 ```
 
 - 결과는 `results.xml` 의 `<test-run ... failed="N">` 를 읽어서 보고한다. 로그 눈대중 금지.

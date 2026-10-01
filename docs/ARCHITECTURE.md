@@ -3,7 +3,7 @@
 > **A모드 진입점.** 구조·시스템·진입점을 묻는 질문은 코드를 뒤지기 전에 이 문서부터 읽는다.
 > 이 문서가 코드와 다르면 **문서가 틀린 것**이다. 발견 즉시 고치고 §5대로 알린다.
 
-**최종 갱신**: 2026-09-09 · Chain Rush 3D 무한 전투 프로토타입 작업 트리 (미커밋)
+**최종 갱신**: 2026-10-01 · Chain Rush 3D 무한 전투 프로토타입 (커밋 `4e6f12b` 에 포함). 기술 스택 행은 2026-10-01 에디터 실측.
 
 ---
 
@@ -29,9 +29,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 층 | 선택 | 비고 |
 |---|---|---|
-| 엔진 | Unity 6000.3.18f1 | |
+| 엔진 | Unity 6000.3.25f1 | 에디터 실측 `Application.unityVersion` (2026-10-01). 이전 6000.3.18f1 |
 | 렌더 | URP 17.3.0 | 설정은 `Assets/Settings/` — Unity 템플릿 소유 |
-| 입력 | Input System 1.19.0 | **신 입력 시스템.** `Input.GetKey` 금지 |
+| 입력 | Input System 1.20.0 | **신 입력 시스템.** `Input.GetKey` 금지. 이전 1.19.0 |
 | 테스트 | Test Framework 1.6.0 | PlayMode / Editor TestRunnerApi |
 | 직렬화 | Newtonsoft Json 3.2.1 | 패키지 의존으로 이미 존재 |
 

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using ProtoHarness.ChainRush.Endless;
 using ProtoHarness.ChainRush.Combat;
+using ProtoHarness.ChainRush.Control;
 
 namespace ProtoHarness.ChainRush
 {
@@ -30,7 +31,7 @@ namespace ProtoHarness.ChainRush
         private int damageUntilTick;
         private int attackUntilTick;
         private int nextAttackTick;
-        private bool attackQueued;
+        private IInputSource inputSource;
         private AudioClip[] cues;
 
         public bool IsRunning => phase == Phase.Running;
@@ -101,7 +102,16 @@ namespace ProtoHarness.ChainRush
                 cues[i].SetData(samples, 0);
             }
             health = rules.MaxHealth;
+            inputSource = new KeyboardMouseInputSource();
             attackVisual.gameObject.SetActive(false);
+        }
+
+        // Replaces where gameplay controls come from (touch, replay, network). Menu keys are not part of it.
+        public void SetInputSource(IInputSource source)
+        {
+            if (source == null) throw new System.ArgumentNullException(nameof(source));
+            source.Clear();
+            inputSource = source;
         }
 
         private void OnValidate()
@@ -117,9 +127,9 @@ namespace ProtoHarness.ChainRush
                 if (keyboard.rKey.wasPressedThisFrame) StartRun();
                 else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused) StartRun();
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
-                if (keyboard.spaceKey.wasPressedThisFrame && IsRunning) attackQueued = true;
             }
             if (!IsRunning) return;
+            inputSource.Poll();
             float elapsed = Elapsed;
             for (int i = 0; i < targets.Length; i++) targets[i].Animate(elapsed);
             attackVisual.gameObject.SetActive(AttackActive);
@@ -127,17 +137,14 @@ namespace ProtoHarness.ChainRush
         }
 
         // The only simulation entry point. One call is one tick, and the order below is the
-        // contract: latched input, runner, hazards, finish, enemies, course recycling.
+        // contract: consumed input, runner, hazards, finish, enemies, course recycling.
         private void FixedUpdate()
         {
             if (!IsRunning) return;
             tick++;
-            if (attackQueued)
-            {
-                attackQueued = false;
-                Attack();
-            }
-            player.Step();
+            TickInput input = inputSource.Consume();
+            if (input.AttackPressed) Attack();
+            player.Step(input);
             if (!IsRunning) return;
             Vector3 position = player.transform.position;
             for (int i = 0; i < targets.Length; i++)
@@ -165,7 +172,7 @@ namespace ProtoHarness.ChainRush
             damageUntilTick = 0;
             attackUntilTick = 0;
             nextAttackTick = 0;
-            attackQueued = false;
+            inputSource.Clear();
             if (endlessMode) enemies.ResetEncounters();
             attackVisual.gameObject.SetActive(false);
             phase = Phase.Running;

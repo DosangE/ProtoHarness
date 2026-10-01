@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
+using ProtoHarness.ChainRush.Control;
 
 namespace ProtoHarness.ChainRush
 {
@@ -18,8 +18,6 @@ namespace ProtoHarness.ChainRush
         private Vector3 velocity;
         private float steer;
         private bool jumpQueued;
-        private bool primaryLatched;
-        private bool releaseLatched;
         private float coyoteTime;
 
         public Vector3 Velocity => velocity;
@@ -43,23 +41,6 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
         }
 
-        private void Update()
-        {
-            if (!game.IsRunning) return;
-            var keyboard = Keyboard.current;
-            steer = 0f;
-            if (keyboard != null)
-            {
-                if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) steer -= 1f;
-                if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) steer += 1f;
-            }
-            var mouse = Mouse.current;
-            // Button edges are only latched here; the next tick applies them in Step.
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame) primaryLatched = true;
-            if (mouse != null && (mouse.leftButton.wasReleasedThisFrame || mouse.rightButton.wasPressedThisFrame))
-                releaseLatched = true;
-        }
-
         public void PrimaryAction()
         {
             if (!game.IsRunning) return;
@@ -68,19 +49,12 @@ namespace ProtoHarness.ChainRush
         }
 
         // One simulation tick, called only by ChainRushGame.FixedUpdate.
-        public void Step()
+        public void Step(in TickInput input)
         {
             if (!game.IsRunning) return;
-            if (primaryLatched)
-            {
-                primaryLatched = false;
-                PrimaryAction();
-            }
-            if (releaseLatched)
-            {
-                releaseLatched = false;
-                grapple.Release(true);
-            }
+            steer = input.Steer;
+            if (input.PrimaryPressed) PrimaryAction();
+            if (input.ReleasePressed) grapple.Release(true);
             float dt = Ticks.Seconds;
             bool grounded = controller.isGrounded;
             coyoteTime = grounded ? 0.1f : Mathf.Max(0f, coyoteTime - dt);
@@ -136,8 +110,6 @@ namespace ProtoHarness.ChainRush
             velocity = Vector3.zero;
             steer = 0f;
             jumpQueued = false;
-            primaryLatched = false;
-            releaseLatched = false;
             coyoteTime = 0f;
             bodyVisual.localRotation = Quaternion.identity;
         }

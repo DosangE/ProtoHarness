@@ -12,6 +12,7 @@
 - **결정**: Unity가 자동 반영한 `ProjectVersion.txt`(6000.3.18f1 → 6000.3.25f1), `manifest.json`(inputsystem 1.20.0, collab-proxy 2.13.6, navigation 2.0.14, timeline 1.8.13, visualscripting 1.9.12), `packages-lock.json` 변경을 되돌리지 않고 유지한다. `CLAUDE.md` §4-2, `ARCHITECTURE.md` §3 의 버전 행을 맞췄다.
 - **이유**: `Unity_RunCommand` 로 읽은 `Application.unityVersion` 이 `6000.3.25f1` 이고 컴파일 중 아님, Console error 0건. 되돌려도 에디터가 다시 올릴 가능성이 있다. 이 변경은 사용자 승인 하에 반영한다 (§0 금지선 대상 파일).
 - **검증**: 6000.3.25f1 / Input System 1.20.0 에서 PlayMode 재실행. XML `<test-run testcasecount="17" result="Passed" total="17" passed="17" failed="0" ... duration="93.2862676">` (2026-10-01 23:21:30 KST), Unity Console `logs: [], errorCount: 0`.
+- **함께 커밋**: `Assets/Settings/Mobile_RPAsset.asset` — URP 에셋 자동 마이그레이션(`k_AssetVersion` 12→13, Prefilter/ReflectionProbeAtlas 필드 추가). Unity가 쓴 결과이며 텍스트로 편집하지 않았다. `PC_RPAsset.asset` 은 이미 `k_AssetVersion: 13` 이며 변경 없음 (grep 확인), 즉 Mobile 쪽만 뒤처져 있다가 이번에 따라잡았다.
 - **버린 대안**: `git checkout --` 로 되돌리기 — 금지 명령이며 에디터가 다시 바꿀 수 있다.
 
 ## 2026-10-01 · `_Project/` 루트와 asmdef 구성을 현 상태로 확정한다
@@ -91,7 +92,7 @@
 |---|---|---|
 | ~~`Assets/_Project/` 루트 채택~~ | 2026-10-01 확정 (위 결정 참조) | 해결 |
 | ~~asmdef 분할~~ | 2026-10-01 현 3개 구성 확정 (위 결정 참조) | 해결 |
-| 접두사 규칙 | `M_`/`T_` 만 / 전부 / 전부 없음 | **미결** (머티리얼은 `M_` 사용 중) |
-| `Assets/Editor/HubForceResolve.cs` 삭제 | 현재 `Assets/Editor/` 폴더 자체가 없음. 의도된 삭제인지 사용자 확인 필요 | **미결** |
+| ~~접두사 규칙~~ | 2026-10-01 `CLAUDE.md` §1-3 확정: 머티리얼 `M_`, 텍스처 `T_..._BaseColor` 만. `Art/Materials/` 15개가 이미 준수 | 해결 |
+| ~~`Assets/Editor/HubForceResolve.cs` 삭제~~ | 2026-10-01 의도된 삭제로 판단: Unity Hub 가 주입하는 자기삭제 헬퍼(파일 내 `k_ScriptPath`). 삭제는 커밋 `75d3454`(DosangE)에서 수행, 참조 없음 | 해결 |
 | ~~`dev/` (git-lfs 훅 잔재) 제거~~ | 2026-10-01 제거 (git 추적 훅 4개, 참조 없음 확인 후 `git rm`) | 해결 |
 | ~~`.gitignore` 의 `/index/` 줄~~ | 2026-10-01 유지 확정 (생성물 미커밋 결정과 일치). "다 승인" 지시를 유지로 해석했으므로 뒤집으려면 알려 달라 | 해결 |

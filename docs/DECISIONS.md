@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-10-02 · 고정 틱 (P1-1): 시뮬은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행
+
+- **결정**: ① **정수 틱.** `ChainRushGame.Tick`(int)이 시간이고 `Elapsed = Tick * 0.02f` 는 파생값. 쿨다운·무적·조우 타이머·그래플 빗나감 표시는 틱 마감 값으로 저장. ② **중앙 틱 구동.** `ChainRushGame.FixedUpdate` 만 진입점이고 순서를 코드로 고정(래치 입력 → `RunnerMotor.Step` → 접촉 → 완주 → `EnemyDirector.Step` → `EndlessCourse.Step`). 각 단계 뒤 `IsRunning` 을 다시 본다. ③ **공개 시그니처 유지.** `PrimaryAction`/`TryAttach`/`Release`/`Attack` 은 즉시 실행 그대로. 키보드·마우스 경로만 `Update` 에서 래치하고 다음 틱에 같은 메서드를 호출한다.
+- **이유**: 서버·클라가 같은 입력으로 같은 결과를 내려면 시간과 상태 변경 순서가 프레임율에 독립이어야 한다(DESIGN C2). 이전에는 `elapsed`·적 타이머가 `Time.deltaTime`, 모터만 `fixedDeltaTime` 이었고 순서는 `DefaultExecutionOrder` 에 암묵적으로 기댔다.
+- **초→틱 환산**: `Ticks.FromSeconds` 는 올림이며, float 나눗셈이 정확한 배수 바로 위로 떨어지는 경우를 막는 허용 오차(1e-3)를 둔다. 이 때문에 값이 최대 1틱(0.02s) 길어진다: 무적 1.25→1.26s(63틱), 공격 쿨다운 0.35→0.36s(18틱), 공격 시각 0.18s(9틱, 불변), 조우 비행 0.15→0.16s(8틱). `0.3→15틱`, `0.4→20틱`, `1.2→60틱` 은 불변. 경계값은 `TicksTests` 로 고정.
+- **안전장치**: `Time.fixedDeltaTime` ≠ `Ticks.Seconds` 면 `ChainRushGame` Awake 가 LogError 후 비활성화(ProjectSettings 변경 금지라 값을 맞추지 않고 감지만 한다). `Ticks.FromSeconds` 는 음수·NaN·무한에 `ArgumentOutOfRangeException`.
+- **추가된 공개 API**: `ChainRushGame.Tick`, `RunnerMotor.Step()`, `EnemyDirector.Step()`, `EndlessCourse.Step()`(각각 `FixedUpdate`/`Update`/`LateUpdate` 대체), `GrappleController.ClearMiss()`(틱이 매 판 0으로 돌아가므로 이전 판의 빗나감 마감 제거), `RunRules`·`EncounterTuning` 의 `*Ticks` 프로퍼티. 기존 시그니처 변경 없음.
+- **제거**: `EndlessCourse` 의 `[DefaultExecutionOrder(100)]`(더 이상 `LateUpdate` 가 없다). `GrappleController` 의 `[DefaultExecutionOrder(150)]` 은 `LateUpdate` 가 남아 있어 그대로 둔다.
+- **검증**: EditMode `testcasecount="22" result="Passed" total="22" passed="22" failed="0"` (00:52 KST). PlayMode `testcasecount="17" result="Passed" total="17" passed="17" failed="0" duration="94.8717957"` (00:54 KST), **기존 테스트 무수정**. Console error 0.
+- **한계 (확인 못 한 것·안 한 것)**: 틱 밖 직접 호출(테스트나 외부 코드가 `PrimaryAction` 등을 부르는 경우)은 막지 않는다 — 입력 추상화(P1-2)에서 다룬다. `steer` 는 틱마다 샘플한 값이 아니라 `Update` 가 마지막으로 읽은 값이다. 적·발판이 50Hz 로만 갱신되고 카메라는 보간이 없어 화면 끊김이 생길 수 있으나 체감은 확인 못 했다. `CharacterController.Move` 의 재현성은 P2 에서 증명한다(미확인). 같은 입력 → 같은 결과를 보이는 결정성 테스트는 아직 없다.
+
 ## 2026-10-02 · 두 번째 SO `RunRules` 를 고정 틱보다 먼저 도입
 
 - **결정**: `ChainRushGame` 의 체력(3), 피격 무적(1.25s), 공격 쿨다운(0.35s), 공격 시각 지속(0.18s)을 `RunRules` SO 로 이동. 형식은 위 `EncounterTuning` 결정을 그대로 따른다. 에셋 `Data/RunRules_Default.asset`, 값은 기존 코드와 동일. 공개 시그니처 불변.

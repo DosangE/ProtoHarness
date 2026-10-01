@@ -1,0 +1,9 @@
+{
+  "name": "ProtoHarness.Tests.EditMode",
+  "rootNamespace": "ProtoHarness.Tests.EditMode",
+  "references": ["ProtoHarness.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "autoReferenced": false
+}

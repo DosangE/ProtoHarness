@@ -14,12 +14,15 @@ namespace ProtoHarness.Editor.ChainRush
     public static class ChainRushEndlessSceneBuilder
     {
         public const string EndlessScenePath = "Assets/_Project/Scenes/ChainRushEndless.unity";
+        public const string TuningPath = "Assets/_Project/Data/EncounterTuning_Default.asset";
 
         [MenuItem("ProtoHarness/Chain Rush/Create Endless Scene %#e")]
         public static void CreateEndlessScene()
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before scene creation.");
             if (File.Exists(EndlessScenePath)) throw new InvalidOperationException("Endless scene already exists; open it instead.");
+            var tuning = AssetDatabase.LoadAssetAtPath<EncounterTuning>(TuningPath);
+            if (tuning == null) throw new InvalidOperationException("Encounter tuning asset is missing: " + TuningPath);
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             var scene = EditorSceneManager.OpenScene(ScenePath);
             // Save a separate copy before changing any objects in the editor.
@@ -96,7 +99,7 @@ namespace ProtoHarness.Editor.ChainRush
             ChainVisual grappleChain = CreateChain("Grapple Chain", game, hand, metal, mint);
             Assign(course, "game", game, "player", player, "followCamera", follow);
             AssignArray(course, "chunks", chunks);
-            Assign(director, "game", game, "player", player, "course", course, "enemy", enemy, "warning", warning, "impact", impact, "chain", attackChain);
+            Assign(director, "game", game, "player", player, "course", course, "tuning", tuning, "enemy", enemy, "warning", warning, "impact", impact, "chain", attackChain);
             Assign(game, "endlessCourse", course, "enemies", director);
             AssignArray(game, "targets", Array.Empty<CourseTarget>());
             Assign(grapple, "chainVisual", grappleChain);

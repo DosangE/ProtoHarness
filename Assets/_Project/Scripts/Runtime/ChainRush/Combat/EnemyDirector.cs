@@ -15,11 +15,7 @@ namespace ProtoHarness.ChainRush.Combat
         [SerializeField] private Transform warning;
         [SerializeField] private Transform impact;
         [SerializeField] private ChainVisual chain;
-        [SerializeField] private float warningDuration = 0.3f;
-        [SerializeField] private float entranceDuration = 0.4f;
-        [SerializeField] private float attackWindow = 1.2f;
-        [SerializeField] private float flightDuration = 0.15f;
-        [SerializeField] private float recoveryDuration = 0.3f;
+        [SerializeField] private EncounterTuning tuning;
         private float timer;
         private float nextEncounter;
         private int sequence;
@@ -29,14 +25,14 @@ namespace ProtoHarness.ChainRush.Combat
         public Entrance Direction { get; private set; }
         public bool CanAttack => State == EncounterState.Vulnerable;
         public bool HasEncounter => State != EncounterState.Idle;
-        public float Remaining => CanAttack ? Mathf.Max(0f, attackWindow - timer) : 0f;
-        public float WindowFraction => Remaining / attackWindow;
+        public float Remaining => CanAttack ? Mathf.Max(0f, tuning.AttackWindow - timer) : 0f;
+        public float WindowFraction => Remaining / tuning.AttackWindow;
         public Transform Target => enemy;
-        public float EncounterDuration => warningDuration + entranceDuration + attackWindow + flightDuration + recoveryDuration;
+        public float EncounterDuration => tuning.EncounterDuration;
 
         private void Awake()
         {
-            if (game == null || player == null || course == null || enemy == null || warning == null || impact == null || chain == null)
+            if (game == null || player == null || course == null || tuning == null || enemy == null || warning == null || impact == null || chain == null)
             {
                 Debug.LogError("EnemyDirector: all scene references are required.", this);
                 enabled = false;
@@ -46,12 +42,6 @@ namespace ProtoHarness.ChainRush.Combat
             enemy.gameObject.SetActive(false);
             warning.gameObject.SetActive(false);
             impact.gameObject.SetActive(false);
-        }
-
-        private void OnValidate()
-        {
-            if (warningDuration <= 0f || entranceDuration <= 0f || attackWindow <= 0f || flightDuration <= 0f || recoveryDuration <= 0f)
-                Debug.LogError("EnemyDirector: all encounter durations must be positive.", this);
         }
 
         private void Update()
@@ -76,21 +66,21 @@ namespace ProtoHarness.ChainRush.Combat
             {
                 case EncounterState.Warning:
                     warning.localScale = Vector3.one * (1f + Mathf.Sin(timer * 25f) * 0.15f);
-                    if (timer >= warningDuration) { SetState(EncounterState.Entering); enemy.gameObject.SetActive(true); }
+                    if (timer >= tuning.WarningDuration) { SetState(EncounterState.Entering); enemy.gameObject.SetActive(true); }
                     break;
                 case EncounterState.Entering:
-                    enemy.position = Vector3.Lerp(player.transform.position + entranceOffset, target, Mathf.SmoothStep(0f, 1f, timer / entranceDuration));
-                    if (timer >= entranceDuration) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
+                    enemy.position = Vector3.Lerp(player.transform.position + entranceOffset, target, Mathf.SmoothStep(0f, 1f, timer / tuning.EntranceDuration));
+                    if (timer >= tuning.EntranceDuration) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
                     break;
                 case EncounterState.Vulnerable:
                     enemy.position = target;
                     enemy.rotation = Quaternion.Euler(0f, 0f, Mathf.Sin(timer * 7f) * 8f);
-                    if (timer >= attackWindow) { SetState(EncounterState.Striking); warning.gameObject.SetActive(false); }
+                    if (timer >= tuning.AttackWindow) { SetState(EncounterState.Striking); warning.gameObject.SetActive(false); }
                     break;
                 case EncounterState.Firing:
                     enemy.position = target;
-                    chain.Present(enemy.position, timer / flightDuration);
-                    if (timer >= flightDuration)
+                    chain.Present(enemy.position, timer / tuning.FlightDuration);
+                    if (timer >= tuning.FlightDuration)
                     {
                         game.RegisterEnemyHit();
                         enemy.gameObject.SetActive(false);
@@ -102,12 +92,12 @@ namespace ProtoHarness.ChainRush.Combat
                 case EncounterState.Retracting:
                     impact.position = target;
                     impact.localScale = Vector3.one * (1f + timer * 6f);
-                    chain.Present(target, 1f - timer / recoveryDuration);
-                    if (timer >= recoveryDuration) ClearEncounter();
+                    chain.Present(target, 1f - timer / tuning.RecoveryDuration);
+                    if (timer >= tuning.RecoveryDuration) ClearEncounter();
                     break;
                 case EncounterState.Striking:
-                    enemy.position = Vector3.Lerp(target, player.transform.position, timer / recoveryDuration);
-                    if (timer >= recoveryDuration)
+                    enemy.position = Vector3.Lerp(target, player.transform.position, timer / tuning.RecoveryDuration);
+                    if (timer >= tuning.RecoveryDuration)
                     {
                         ClearEncounter();
                         game.TakeDamage();
@@ -133,7 +123,7 @@ namespace ProtoHarness.ChainRush.Combat
 
         public bool TryAttack()
         {
-            if (!game.IsRunning || !CanAttack || timer >= attackWindow) return false;
+            if (!game.IsRunning || !CanAttack || timer >= tuning.AttackWindow) return false;
             warning.gameObject.SetActive(false);
             SetState(EncounterState.Firing);
             game.PlayCue(2);
@@ -149,7 +139,7 @@ namespace ProtoHarness.ChainRush.Combat
             warning.gameObject.SetActive(false);
             impact.gameObject.SetActive(false);
             chain.Hide();
-            nextEncounter = game.Elapsed + Mathf.Max(0.6f, 2.5f - (float)course.Distance / 1200f);
+            nextEncounter = game.Elapsed + tuning.NextGap(course.Distance);
         }
 
         public void ResetEncounters()

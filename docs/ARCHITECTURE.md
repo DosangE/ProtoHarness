@@ -15,9 +15,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **11** (`Scripts/Runtime/ChainRush/` 및 하위 폴더) |
+| 우리 런타임 스크립트 | **12** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 1개(`EncounterTuning`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | **3 파일 / 17 PlayMode 테스트** |
+| 우리 테스트 | PlayMode **3 파일 / 17 테스트**, EditMode **1 파일 / 3 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`) |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -52,7 +52,8 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
 | 씬 생성·열기·테스트 실행 메뉴 | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
 | 발판 풀 재배치·원점 이동·누적 거리 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game, Motor, Camera, 직렬화 구간 배열 |
-| 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual |
+| 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
+| 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 금속 체인 링크·갈고리·발사 및 회수 | `Runtime/ChainRush/Visuals/ChainVisual.cs` | Game, 손 Transform, 미리 만든 링크 배열 |
 | 별도 무한 씬 제작 | `Editor/ChainRush/ChainRushEndlessSceneBuilder.cs` | 기존 테스트 씬, 공용 생성기 도형/참조 연결 함수 |
 | 신스 음악·9종 효과음·바람·음소거 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개 |

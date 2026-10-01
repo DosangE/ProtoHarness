@@ -299536,11 +299536,7 @@ MonoBehaviour:
   warning: {fileID: 1418342154}
   impact: {fileID: 1544243356}
   chain: {fileID: 156660457}
-  warningDuration: 0.3
-  entranceDuration: 0.4
-  attackWindow: 1.2
-  flightDuration: 0.15
-  recoveryDuration: 0.3
+  tuning: {fileID: 11400000, guid: 22c9506f38afb4d44849f29f36c337e2, type: 2}
 --- !u!114 &2105445617
 MonoBehaviour:
   m_ObjectHideFlags: 0

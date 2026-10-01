@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-02 · 첫 ScriptableObject 형식: `EncounterTuning`
+
+- **결정**: SO 형식을 다음으로 정한다. ① `[CreateAssetMenu(menuName = "ProtoHarness/ChainRush/<이름>")]` ② 필드는 `[SerializeField] private` + 읽기 전용 프로퍼티 ③ 검증은 `OnValidate()` 에서 `Debug.LogError(msg, this)` ④ 순수 계산은 SO 의 메서드로 두어 EditMode 에서 테스트 ⑤ 사용처는 직렬화 참조 + 비어 있으면 LogError 후 비활성화(기본값 fallback 없음, §5) ⑥ 에셋 이름 `<타입명>_Default`, 위치 `Assets/_Project/Data/`.
+- **적용**: `EnemyDirector` 의 조우 시간 5종과 간격 공식(2.5 / 0.6 / 1200)을 `EncounterTuning` 으로 이동. 공개 시그니처 불변. 에셋 값은 기존 씬 값과 동일.
+- **EditMode 도입**: `ProtoHarness.Tests.EditMode` asmdef (키는 Test Framework 1.6.0 샘플 `EditModeTests_11.asmdef` 로 확인).
+- **검증**: EditMode `<test-run testcasecount="3" result="Passed" total="3" passed="3" failed="0">` (2026-10-01 23:52 KST). 씬 연결 후 PlayMode `testcasecount="17" result="Passed" total="17" passed="17" failed="0" duration="93.5058803"` (2026-10-02 00:01 KST), 기존 테스트 무수정. Console error 0.
+- **알아둘 점**: `ChainRushSceneBuilder` 의 `[InitializeOnLoad]` 콜백이 **모든 테스트 실행**(EditMode 포함)의 결과를 `ChainRush-PlayMode-results.xml` 한 파일에 덮어쓴다. 읽을 때 `testcasecount` 로 어떤 실행인지 구분한다.
+- **씬 변화**: Unity 가 저장하며 `ChainRushEndless.unity` 의 고아 필드 5개(`warningDuration` 등)가 사라지고 `tuning` 참조 1줄이 추가됐다.
+- **미해결**: `ProjectSettings/ProjectSettings.asset` 에 Unity 6000.3.25f1 이 iOS 열 상태 필드 3개를 자동 추가했다 (§0 대상, 커밋 여부는 사용자 결정).
+
 ## 2026-10-01 · 최종 목표는 서버 권위 공유 월드 레이스(C)다
 
 - **결정**: 최종 목표를 카트라이더식 서버 권위 공유 월드 레이스로 한다. 서로 앞지르고 방해하는 요소를 포함한다. 순서는 무한 모드 → SO → 오프라인 결정성(시드·고정 틱·입력 추상화·레이서 상태 분리·리플레이) → 서버 권위 레이스를 최소 형태부터. 상세는 `docs/DESIGN.md`.

@@ -7,6 +7,67 @@
 
 ---
 
+## 2026-10-02 · 병합 조건 강화: PlayMode 연속 2회 통과, 간헐 실패 기록
+
+- **결정**: 병합 조건을 "컴파일 0 + EditMode 통과 + **같은 코드에서 PlayMode 연속 2회 통과**"로 바꾼다. 병합 보고에는 각 실행의 결과 XML 값을 모두 적고, 한 번이라도 실패하면 원문과 함께 보고하며 원인을 설명하지 못하면 병합하지 않는다. 규칙 본문은 `CLAUDE.md` §9-2.
+- **이유**: P0(`103270b`), P1-1(`6ed7676`), P1-2(`8520a1c`)를 PlayMode **1회 통과**로 병합했다. 그 뒤 같은 코드(`Assets` 차이 0, `git diff 8520a1c HEAD -- Assets`)에서 1회 실패가 나왔다. 아래 표가 근거다.
+
+  | 시각 | 에디터 세션 | PlayMode 결과 | 비고 |
+  |---|---|---|---|
+  | 01:04 | A | `24/24` | 병합 근거 |
+  | 01:22:56~01:24:32 | B(01:21:02 시작), 첫 실행 | `result="Failed(Child)" total="24" passed="22" failed="2"` | 사용자가 평소와 같은 방식으로 실행 |
+  | 01:28 | B | `24/24` | `isApplicationActive=False` 에서 시작 |
+  | 01:30 | B | `24/24` | 동일 |
+  | 01:33:47~01:35:26 | C(01:32:59 시작), 첫 실행 | `24/24` | 에디터 재시작 직후 |
+
+- **실패 원문**: `Combat_EachDirection_SpaceFiresConnectsAndRetracts` — `Expected: Firing / But was: Vulnerable` (`ChainRushEndlessTests.cs:92`). `Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts` — `Expected: True / But was: False` (`ChainRushTests.cs:123`, `Enter` 후 `game.IsRunning`). 둘 다 `InputSystem.AddDevice<Keyboard>()` 가상 장치로 이벤트를 넣는 테스트이고, 각자 **첫 키보드 단계**에서 멈췄다.
+- **원인은 확인하지 못했다.** 확인된 사실: 입력 설정은 `PointersAndKeyboardsRespectGameViewFocus`(`InputSystem.settings.editorInputBehaviorInPlayMode`로 읽음). Console 에러와 `error CS` 없음. `Enter` 경로(`ChainRushGame.Update` 의 `Keyboard.current` 직접 읽기)는 입력 추상화 이전부터 있던 코드라 P1-2 회귀로 설명되지 않는다.
+- **기각된 가설**: ① 에디터 창이 비활성이라서 — 01:28, 01:30 은 비활성에서 시작해도 통과. ② 에디터 재시작 직후 첫 실행이라서 — 01:33 첫 실행이 통과. ③ 도메인 리로드·강제 재컴파일 — 모든 실행(통과 포함)에 똑같이 있음(`Editor-prev.log` 3235, 3711, 4639줄 / `Editor.log` 956줄). ④ 실행 방식 — 사용자 확인: 같은 방식이었다.
+- **남은 추정(미확인)**: 실패한 세션은 시작 직후 스크립트 23개를 임포트한 상태였다(`Editor-prev.log`). 첫 프레임 끊김이 가상 장치 이벤트 처리 시점을 흔들었을 가능성이 있으나 실험하지 않았다. 01:22:07 에 뜬 Unity 프로세스 2개는 세션 종료와 함께 사라져 명령줄을 확인하지 못했다(임포트 보조 프로세스로 추정).
+- **하지 않은 것**: 테스트 수정, `ProjectSettings` 수정. 재현이 안 되는 상태에서 고치면 효과를 확인할 방법이 없다. 실패가 다시 나오면 그때 별도 합의로 올린다. 실패율 측정을 위한 추가 반복 실행도 하지 않았다.
+- **알아둘 점**: 결과 XML 은 EditMode·PlayMode 가 같은 파일(`C:\Users\Public\Documents\ESTsoft\CreatorTemp\ChainRush-PlayMode-results.xml`)을 덮어쓴다. 실행마다 값을 바로 읽어 기록한다.
+
+## 2026-10-02 · 입력 추상화 (P1-2): 시뮬은 장치가 아니라 `TickInput` 을 받는다
+
+- **결정**: ① `Runtime/ChainRush/Control/` (네임스페이스 `ProtoHarness.ChainRush.Control`) 에 `TickInput`(readonly struct), `IInputSource`, `InputLatch`, `KeyboardMouseInputSource` 를 둔다. ② `RunnerMotor.Update` 의 장치 읽기를 제거하고 `Step(in TickInput)` 이 입력을 받는다. `ChainRushGame` 이 소스를 갖고 `Update` 에서 `Poll()`(실행 중일 때만), `FixedUpdate` 에서 `Consume()`, `StartRun` 에서 `Clear()` 를 부른다. ③ 기본 소스는 `Awake` 에서 코드로 만든다(직렬화 참조 없음, 씬 수정 없음). `SetInputSource(IInputSource)` 로 교체하며 null 이면 `ArgumentNullException`. ④ 조향은 `float`, 범위 [-1,1] 밖·NaN 은 예외(보정하지 않음, §5). 양자화는 P3 에서 소스의 `Consume()` 안에서 한다. ⑤ 메뉴 입력(R·Enter·Esc·M, HUD 버튼)은 이번에 소스에 넣지 않았다.
+- **이유**: 서버에 보낼 입력, 터치, 리플레이가 같은 자리(`TickInput`)에 꽂혀야 한다. 시뮬이 `Keyboard.current` 를 직접 읽으면 서버(헤드리스)에는 입력 장치가 없다. 폴더 이름을 `Input` 이 아닌 `Control` 로 한 것은 `ProtoHarness.ChainRush.Input` 네임스페이스가 하위 코드에서 `UnityEngine.Input` 을 가리기 때문이다.
+- **의미가 안 바뀐 것**: 키 매핑(A/D·←/→, 좌클릭, 좌클릭 뗌·우클릭, Space), 실행 중이 아닐 때 눌린 입력은 버림, 한 틱 구간에 누름과 뗌이 같이 오면 "누름 → 뗌" 순서로 둘 다 적용, 입력 지연(프레임에서 읽고 다음 틱에 적용). 공개 시그니처 중 바뀐 것은 이전 커밋에서 만든 `RunnerMotor.Step()` → `Step(in TickInput)` 하나이고 테스트가 직접 부르지 않는다.
+- **검증**: EditMode `testcasecount="39" result="Passed" total="39" passed="39" failed="0"` (01:02 KST, 신규 `InputLatchTests` 8 + `TickInputTests` 9). PlayMode `testcasecount="24" result="Passed" total="24" passed="24" failed="0" duration="101.0614821"` (01:04 KST): 기존 17개 **무수정** 통과(실제 `Keyboard`/`Mouse` 장치를 쓰는 `Input_KeyboardAndMouse_*`, `Combat_*_SpaceFires*` 포함) + 신규 `ChainRushInputSourceTests` 7개(장치 없이 스크립트 소스로 조향·점프·공격). Console error 0.
+- **이번에 하지 않은 것·미확인**: 터치·온스크린 컨트롤, `InputAction`/리바인딩(`Assets/InputSystem_Actions.inputactions` 는 `EditorBuildSettings.asset:13` 에 등록된 템플릿이고 우리 코드는 쓰지 않는다. §0 때문에 텍스트 수정 불가), 메뉴 입력 추상화, 네트워크 직렬화, 리플레이. 모바일에서 `Keyboard.current` 가 null 일 때와 IMGUI 버튼 동작은 확인 못 했다. `ChainRushHud.cs:207` 버튼의 핸들러는 읽지 않았다.
+- **발견 (다음 작업 후보, 이번 범위 밖)**: `RunnerMotor.Step` 이 `bodyVisual.localRotation` 을 직접 쓴다(표현이 시뮬 틱 안에 있음). 헤드리스 서버에는 시각물이 없고 아트 교체 때 시뮬 코드가 건드려진다. RacerState 분리(P1-3)에서 표현 컴포넌트로 빼는 것을 권고한다.
+
+## 2026-10-02 · 고정 틱 (P1-1): 시뮬은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행
+
+- **결정**: ① **정수 틱.** `ChainRushGame.Tick`(int)이 시간이고 `Elapsed = Tick * 0.02f` 는 파생값. 쿨다운·무적·조우 타이머·그래플 빗나감 표시는 틱 마감 값으로 저장. ② **중앙 틱 구동.** `ChainRushGame.FixedUpdate` 만 진입점이고 순서를 코드로 고정(래치 입력 → `RunnerMotor.Step` → 접촉 → 완주 → `EnemyDirector.Step` → `EndlessCourse.Step`). 각 단계 뒤 `IsRunning` 을 다시 본다. ③ **공개 시그니처 유지.** `PrimaryAction`/`TryAttach`/`Release`/`Attack` 은 즉시 실행 그대로. 키보드·마우스 경로만 `Update` 에서 래치하고 다음 틱에 같은 메서드를 호출한다.
+- **이유**: 서버·클라가 같은 입력으로 같은 결과를 내려면 시간과 상태 변경 순서가 프레임율에 독립이어야 한다(DESIGN C2). 이전에는 `elapsed`·적 타이머가 `Time.deltaTime`, 모터만 `fixedDeltaTime` 이었고 순서는 `DefaultExecutionOrder` 에 암묵적으로 기댔다.
+- **초→틱 환산**: `Ticks.FromSeconds` 는 올림이며, float 나눗셈이 정확한 배수 바로 위로 떨어지는 경우를 막는 허용 오차(1e-3)를 둔다. 이 때문에 값이 최대 1틱(0.02s) 길어진다: 무적 1.25→1.26s(63틱), 공격 쿨다운 0.35→0.36s(18틱), 공격 시각 0.18s(9틱, 불변), 조우 비행 0.15→0.16s(8틱). `0.3→15틱`, `0.4→20틱`, `1.2→60틱` 은 불변. 경계값은 `TicksTests` 로 고정.
+- **안전장치**: `Time.fixedDeltaTime` ≠ `Ticks.Seconds` 면 `ChainRushGame` Awake 가 LogError 후 비활성화(ProjectSettings 변경 금지라 값을 맞추지 않고 감지만 한다). `Ticks.FromSeconds` 는 음수·NaN·무한에 `ArgumentOutOfRangeException`.
+- **추가된 공개 API**: `ChainRushGame.Tick`, `RunnerMotor.Step()`, `EnemyDirector.Step()`, `EndlessCourse.Step()`(각각 `FixedUpdate`/`Update`/`LateUpdate` 대체), `GrappleController.ClearMiss()`(틱이 매 판 0으로 돌아가므로 이전 판의 빗나감 마감 제거), `RunRules`·`EncounterTuning` 의 `*Ticks` 프로퍼티. 기존 시그니처 변경 없음.
+- **제거**: `EndlessCourse` 의 `[DefaultExecutionOrder(100)]`(더 이상 `LateUpdate` 가 없다). `GrappleController` 의 `[DefaultExecutionOrder(150)]` 은 `LateUpdate` 가 남아 있어 그대로 둔다.
+- **검증**: EditMode `testcasecount="22" result="Passed" total="22" passed="22" failed="0"` (00:52 KST). PlayMode `testcasecount="17" result="Passed" total="17" passed="17" failed="0" duration="94.8717957"` (00:54 KST), **기존 테스트 무수정**. Console error 0.
+- **한계 (확인 못 한 것·안 한 것)**: 틱 밖 직접 호출(테스트나 외부 코드가 `PrimaryAction` 등을 부르는 경우)은 막지 않는다 — 입력 추상화(P1-2)에서 다룬다. `steer` 는 틱마다 샘플한 값이 아니라 `Update` 가 마지막으로 읽은 값이다. 적·발판이 50Hz 로만 갱신되고 카메라는 보간이 없어 화면 끊김이 생길 수 있으나 체감은 확인 못 했다. `CharacterController.Move` 의 재현성은 P2 에서 증명한다(미확인). 같은 입력 → 같은 결과를 보이는 결정성 테스트는 아직 없다.
+
+## 2026-10-02 · 두 번째 SO `RunRules` 를 고정 틱보다 먼저 도입
+
+- **결정**: `ChainRushGame` 의 체력(3), 피격 무적(1.25s), 공격 쿨다운(0.35s), 공격 시각 지속(0.18s)을 `RunRules` SO 로 이동. 형식은 위 `EncounterTuning` 결정을 그대로 따른다. 에셋 `Data/RunRules_Default.asset`, 값은 기존 코드와 동일. 공개 시그니처 불변.
+- **이유**: 위 네 값 중 시간 값 셋은 고정 틱 전환(P1)에서 틱 수로 환산할 대상이다. 한 곳에 모아 두면 환산이 한 곳에서 끝난다. 고정 틱은 공개 API 4개(`PrimaryAction`, `TryAttach`, `Release`, `Attack`)와 PlayMode 테스트 3개 파일을 건드리므로 SO 이동과 한 변경에 섞지 않았다. 섞으면 실패 원인을 가를 수 없다.
+- **연결**: `ChainRushGame.rules` 직렬화 참조. 비어 있으면 Awake 에서 LogError 후 비활성화. 신규 씬 생성 빌더(`ChainRushSceneBuilder`)는 에셋이 없으면 예외. 기존 씬 2개(`ChainRushPrototype`, `ChainRushEndless`)는 에디터에서 연결했다.
+- **검증**: EditMode `testcasecount="4" result="Passed" total="4" passed="4" failed="0"` (2026-10-02 00:41 KST). PlayMode `testcasecount="17" result="Passed" total="17" passed="17" failed="0" duration="94.6350045"` (00:44 KST), 기존 테스트 무수정. Console error 0.
+- **씬 변화**: `ChainRushPrototype.unity` 에 `rules` 외에 필드 7줄(`chainVisual`, `endlessMode`, `endlessCourse`, `enemies`, `enhancedPresentation`, `presentationAudio`, `presentationAnimation`)이 Unity 저장 시 기본값으로 추가됐다. 오래된 씬을 재직렬화한 결과이며 동작 변화는 없다(PlayMode 통과).
+- **이번에 하지 않은 것**: 이동·그래플 수치(`RunnerMotor`, `GrappleController`), `CourseLayout`, `finishZ`. `CourseLayout` 은 시드 코스(P1)와 함께 한다.
+- **조사 기록** (고정 틱 합의의 근거, 코드 변경 없음): 시뮬 상태가 틱 밖에서 바뀌는 곳은 `RunnerMotor.cs:44-58`(입력·점프·그래플·해제를 `Update` 에서 처리), `GrappleController.cs:95-110,124-135`(`TryAttach`/`Release` 가 `Update` 경로에서 상태·속도 변경), `ChainRushGame.cs:102-123`(`elapsed` 가 `Time.deltaTime`, 피격 판정과 공격 입력이 `Update`), `EnemyDirector.cs:47-107`(`timer` 가 `Time.deltaTime`), `EndlessCourse.cs:49-69`(`LateUpdate` 에서 재활용·원점 이동). 이동 적분만 이미 `FixedUpdate` 다(`RunnerMotor.cs:67-97`, 0.02s).
+
+## 2026-10-02 · 브랜치 전략: main / dev / feature 3단
+
+- **결정**: `main`(안정, 마일스톤 태그) ← `dev`(통합) ← `feature/<영역>-<내용>`. 병합은 **`--no-ff`**(기능 단위로 묶임). `main`·`dev` 직접 커밋 금지. 규칙 본문은 `CLAUDE.md` §9, 이 문서는 이유만 기록한다.
+- **이유**: 지금까지 `main` 하나로만 작업했다(브랜치·태그·워크트리 없음, `git branch -a` 로 확인). 앞으로 P1 이 고정 틱·입력 추상화·레이서 상태 분리처럼 서로 얽힌 큰 변경이라 검증 전 코드가 기준선에 섞이면 안 된다. 씬 YAML 이 최대 30만 줄이라 병합 충돌 비용이 크다.
+- ~~**병합 조건**: 컴파일 0 + EditMode + PlayMode 통과. CI 없이 로컬 검증.~~ → 2026-10-02 "병합 조건 강화" 항목으로 대체(PlayMode 연속 2회).
+- **GitHub 보호 설정은 하지 않는다** (사용자 결정, 단독 개발). 저장소는 PUBLIC, 사용자는 ADMIN, `main` 은 현재 보호되지 않음(`Branch not protected`).
+- **병합 드라이버는 등록하지 않는다**: `.gitattributes` 가 Unity YAML 에 `merge=unityyamlmerge` 를 지정하지만 git config 에는 드라이버가 없다. 임시 저장소 실험(같은 줄을 양쪽에서 수정, 드라이버 속성만 지정)에서 git 은 기본 텍스트 병합으로 되돌아가 `CONFLICT (content)` 와 `<<<<<<<` 마커를 남겼다. 즉 **조용히 망가지지 않고 시끄럽게 실패**한다(§5). 검증하지 않은 드라이버 설정이 오히려 조용한 오병합 위험이므로 등록하지 않는다. `UnityYAMLMerge.exe` 의 올바른 인자는 확인 못 했다. 씬·프리팹 충돌 때는 병합을 중단하고 에디터에서 다시 작업한다(`CLAUDE.md` §9-3).
+- **에이전트**: `unity-implementer` 에 브랜치 관문 추가(`main`/`dev` 이면 거부, 파견 프롬프트의 `브랜치:` 줄과 대조). `CLAUDE.md` §9-2 와 같이 고쳤다.
+- **버린 대안**: squash 병합(기능 1커밋으로 압축) — 기능 안의 검증 이력이 사라진다. 워크트리 병렬 작업 — Unity 프로젝트가 둘이 되어 `Library/` 를 따로 만들어야 한다.
+- **원격**: `origin/dev` 를 `main`(`9f5a96f`) 에서 분기해 푸시했다. 기본 브랜치는 `main` 유지.
+
 ## 2026-10-02 · 첫 ScriptableObject 형식: `EncounterTuning`
 
 - **결정**: SO 형식을 다음으로 정한다. ① `[CreateAssetMenu(menuName = "ProtoHarness/ChainRush/<이름>")]` ② 필드는 `[SerializeField] private` + 읽기 전용 프로퍼티 ③ 검증은 `OnValidate()` 에서 `Debug.LogError(msg, this)` ④ 순수 계산은 SO 의 메서드로 두어 EditMode 에서 테스트 ⑤ 사용처는 직렬화 참조 + 비어 있으면 LogError 후 비활성화(기본값 fallback 없음, §5) ⑥ 에셋 이름 `<타입명>_Default`, 위치 `Assets/_Project/Data/`.
@@ -26,7 +87,7 @@
 - **서버**: 전용 서버 + 서버 권위 방향을 추천(조사 결과와 근거 등급은 `DESIGN.md` §7). **네트워크 라이브러리는 미선정** — P1 에서 시뮬 코어를 네트워크 비의존으로 만들고, C1 직전 NGO vs Photon Fusion 2 스파이크로 확정. manifest 변경은 별도 승인.
 - **모드 확정 (같은 날, 쿠키런 + 카트라이더 참고)**: ① 무한(쿠키런식, 생존 + 점수 먹기) ② 속도전(카트라이더식, 랩타임) ③ 아이템전(카트라이더식, 아이템 경쟁이 주). 앞의 "유한 트랙 / 무한" 2분류를 대체한다.
 - **그래플 확정**: 기본(환경) 그래플은 현행 유지. **다른 유저를 대상으로 하는 그래플은 아이템으로만** 가능(카트라이더 자석식).
-- **미결**: 무한 모드의 멀티 여부, 순환 트랙(랩) 여부, 속도전의 접촉 여부, 아이템 종류, 점수 규칙. (`DESIGN.md` §8). P0 는 이들과 무관하게 진행 가능.
+- **~~미결~~ 2026-10-02 위임 처리**: 무한 모드의 멀티 여부, 순환 트랙(랩), 속도전의 접촉, 아이템 종류, 점수 규칙은 사용자가 "판단하고 추천하는 대로"를 위임해 **권고 기본값**으로 정했다 (싱글+랭킹 / 순환 트랙 신설 / 접촉 ON / 아이템 3종 / 거리+아이템+처치 점수). 요구가 아니라 기본값이므로 뒤집을 수 있다. 근거는 `DESIGN.md` §8.
 
 ## 2026-10-01 · 에디터 6000.3.25f1 / Input System 1.20.0 변경을 유지한다
 

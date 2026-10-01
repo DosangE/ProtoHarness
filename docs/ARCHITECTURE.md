@@ -15,7 +15,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **12** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 1개(`EncounterTuning`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **18** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
 | 우리 테스트 | PlayMode **3 파일 / 17 테스트**, EditMode **1 파일 / 3 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`) |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
@@ -44,9 +44,13 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
-| 입력·자동 전진·점프·중력·충돌 | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Input System, Game, Grapple |
+| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음) | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game, Grapple, `TickInput` |
+| 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
+| 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
+| 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
+| 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
-| 준비·진행·정지·실패·완주·공격·체력 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource |
+| 준비·진행·정지·실패·완주·공격·체력 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules |
 | 추적 카메라·속도에 따른 FOV | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game, Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
@@ -54,13 +58,15 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 발판 풀 재배치·원점 이동·누적 거리 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game, Motor, Camera, 직렬화 구간 배열 |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
+| 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 금속 체인 링크·갈고리·발사 및 회수 | `Runtime/ChainRush/Visuals/ChainVisual.cs` | Game, 손 Transform, 미리 만든 링크 배열 |
 | 별도 무한 씬 제작 | `Editor/ChainRush/ChainRushEndlessSceneBuilder.cs` | 기존 테스트 씬, 공용 생성기 도형/참조 연결 함수 |
 | 신스 음악·9종 효과음·바람·음소거 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개 |
 | 달리기·점프·착지·그래플·공격 관절 자세 | `Runtime/ChainRush/Visuals/RunnerAnimation.cs` | Game, Motor, Grapple, Audio, 직렬화 관절 Transform |
 | 아트→사운드→애니메이션 순차 적용 | `Editor/ChainRush/ChainRushPresentationBuilder.cs` | 기존 무한 씬, 공용 도형/머티리얼 생성 함수 |
 
-CharacterController.Move로 충돌을 처리하고, FixedUpdate에서 중력과 전진 속도를 적분한다.
+**고정 틱 (2026-10-02)**: 시뮬레이션의 진입점은 `ChainRushGame.FixedUpdate` 하나이고 한 호출이 한 틱(`Ticks.Seconds` = 0.02s)이다. 틱 안의 순서는 `IInputSource.Consume()` 로 받은 `TickInput` → 공격 → `RunnerMotor.Step(input)`(점프·그래플·해제 포함) → 장애물 접촉 → 완주 판정 → `EnemyDirector.Step` → `EndlessCourse.Step`(재활용·원점 이동). `Update`/`LateUpdate`는 입력 `Poll`(실행 중일 때만), 메뉴 키(R·Enter·Esc, 음소거 M)와 표현(카메라·애니메이션·HUD·체인 시각물·오디오)만 한다. 시뮬은 장치를 직접 읽지 않고 `ChainRushGame.SetInputSource` 로 입력 출처를 바꿀 수 있다(기본값 `KeyboardMouseInputSource`, `Awake` 에서 코드로 생성). 시간은 정수 틱(`ChainRushGame.Tick`)으로 세고 `Elapsed` 는 파생값이다. 초 단위 수치는 `Ticks.FromSeconds` 로 올림 환산한다(`RunRules`, `EncounterTuning` 의 `*Ticks` 프로퍼티). `Time.fixedDeltaTime` 이 `Ticks.Seconds` 와 다르면 `ChainRushGame` 이 LogError 후 비활성화된다.
+CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중력과 전진 속도를 적분한다.
 그래플링은 길이 제한 구면으로 예상 위치를 투영하고 바깥쪽 방사 속도를 제거한다. 줄은 초당 3m씩 감긴다. 해제 시 최소 상승 속도는 지상 점프와 동일한 11.5m/s이다.
 3D Joint 컴포넌트는 사용하지 않는다. 동적 Rigidbody 물체를 끌거나 줄이 장애물에 감기는 동작은 현재 범위 밖이다.
 장애물은 박스 범위 접촉으로 체력을 줄이며 물리적으로 플레이어를 막지 않는다. 앵커 시야 검사는 Physics.Linecast를 사용한다.

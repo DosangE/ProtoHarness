@@ -19,13 +19,13 @@ namespace ProtoHarness.ChainRush
         private Transform attachedAnchor;
         private Transform candidate;
         private float ropeLength;
-        private float missUntil;
+        private int missUntilTick;
 
         public bool IsAttached => attachedAnchor != null;
         public Vector3 AnchorPosition => attachedAnchor != null ? attachedAnchor.position : Vector3.zero;
         public Transform Candidate => candidate;
         public float RopeLength => ropeLength;
-        public bool JustMissed => Time.time < missUntil;
+        public bool JustMissed => game.Tick < missUntilTick;
 
         private void Awake()
         {
@@ -98,7 +98,7 @@ namespace ProtoHarness.ChainRush
             candidate = SelectCandidate();
             if (candidate == null)
             {
-                missUntil = Time.time + 0.75f;
+                missUntilTick = game.Tick + Ticks.FromSeconds(0.75f);
                 return false;
             }
             attachedAnchor = candidate;
@@ -133,6 +133,9 @@ namespace ProtoHarness.ChainRush
             rope.enabled = false;
             if (boost && game.IsRunning) motor.AddReleaseBoost();
         }
+
+        // Ticks restart at zero with each run, so a stale miss deadline must not carry over.
+        public void ClearMiss() => missUntilTick = 0;
 
         public void ShiftOrigin(Vector3 offset)
         {

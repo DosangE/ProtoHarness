@@ -20,6 +20,12 @@ namespace ProtoHarness.ChainRush.Combat
         public float FlightDuration => flightDuration;
         public float RecoveryDuration => recoveryDuration;
         public float EncounterDuration => warningDuration + entranceDuration + attackWindow + flightDuration + recoveryDuration;
+        public int WarningTicks => Ticks.FromSeconds(warningDuration);
+        public int EntranceTicks => Ticks.FromSeconds(entranceDuration);
+        public int AttackWindowTicks => Ticks.FromSeconds(attackWindow);
+        public int FlightTicks => Ticks.FromSeconds(flightDuration);
+        public int RecoveryTicks => Ticks.FromSeconds(recoveryDuration);
+        public int NextGapTicks(double distance) => Ticks.FromSeconds(NextGap(distance));
 
         // Seconds to wait after an encounter ends; shrinks with distance down to gapMin.
         public float NextGap(double distance) => Mathf.Max(gapMin, gapStart - (float)distance / gapDistanceScale);

@@ -2,7 +2,6 @@ using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Endless
 {
-    [DefaultExecutionOrder(100)]
     public sealed class EndlessCourse : MonoBehaviour
     {
         [SerializeField] private ChainRushGame game;
@@ -46,7 +45,8 @@ namespace ProtoHarness.ChainRush.Endless
                 Debug.LogError("EndlessCourse: segment length must exceed positive deck length.", this);
         }
 
-        private void LateUpdate()
+        // One simulation tick, called only by ChainRushGame.FixedUpdate.
+        public void Step()
         {
             if (!game.IsRunning) return;
             float z = player.transform.position.z;

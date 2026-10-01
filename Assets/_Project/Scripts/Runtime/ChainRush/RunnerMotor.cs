@@ -18,6 +18,8 @@ namespace ProtoHarness.ChainRush
         private Vector3 velocity;
         private float steer;
         private bool jumpQueued;
+        private bool primaryLatched;
+        private bool releaseLatched;
         private float coyoteTime;
 
         public Vector3 Velocity => velocity;
@@ -52,9 +54,10 @@ namespace ProtoHarness.ChainRush
                 if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) steer += 1f;
             }
             var mouse = Mouse.current;
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame) PrimaryAction();
+            // Button edges are only latched here; the next tick applies them in Step.
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame) primaryLatched = true;
             if (mouse != null && (mouse.leftButton.wasReleasedThisFrame || mouse.rightButton.wasPressedThisFrame))
-                grapple.Release(true);
+                releaseLatched = true;
         }
 
         public void PrimaryAction()
@@ -64,10 +67,21 @@ namespace ProtoHarness.ChainRush
             else grapple.TryAttach();
         }
 
-        private void FixedUpdate()
+        // One simulation tick, called only by ChainRushGame.FixedUpdate.
+        public void Step()
         {
             if (!game.IsRunning) return;
-            float dt = Time.fixedDeltaTime;
+            if (primaryLatched)
+            {
+                primaryLatched = false;
+                PrimaryAction();
+            }
+            if (releaseLatched)
+            {
+                releaseLatched = false;
+                grapple.Release(true);
+            }
+            float dt = Ticks.Seconds;
             bool grounded = controller.isGrounded;
             coyoteTime = grounded ? 0.1f : Mathf.Max(0f, coyoteTime - dt);
             if (grounded && velocity.y < 0f) velocity.y = -2f;
@@ -114,6 +128,7 @@ namespace ProtoHarness.ChainRush
         public void ResetAtSpawn()
         {
             grapple.Release(false);
+            grapple.ClearMiss();
             controller.enabled = false;
             transform.position = spawnPosition;
             controller.enabled = true;
@@ -121,6 +136,8 @@ namespace ProtoHarness.ChainRush
             velocity = Vector3.zero;
             steer = 0f;
             jumpQueued = false;
+            primaryLatched = false;
+            releaseLatched = false;
             coyoteTime = 0f;
             bodyVisual.localRotation = Quaternion.identity;
         }

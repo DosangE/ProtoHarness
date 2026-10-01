@@ -14,6 +14,9 @@ namespace ProtoHarness.ChainRush
         public float DamageInvulnerability => damageInvulnerability;
         public float AttackCooldown => attackCooldown;
         public float AttackVisualDuration => attackVisualDuration;
+        public int DamageInvulnerabilityTicks => Ticks.FromSeconds(damageInvulnerability);
+        public int AttackCooldownTicks => Ticks.FromSeconds(attackCooldown);
+        public int AttackVisualTicks => Ticks.FromSeconds(attackVisualDuration);
 
         private void OnValidate()
         {

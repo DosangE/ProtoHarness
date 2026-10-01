@@ -26,10 +26,11 @@ namespace ProtoHarness.ChainRush
         private int health;
         private int hits;
         private int grapples;
-        private float elapsed;
-        private float damageUntil;
-        private float attackUntil;
-        private float nextAttackTime;
+        private int tick;
+        private int damageUntilTick;
+        private int attackUntilTick;
+        private int nextAttackTick;
+        private bool attackQueued;
         private AudioClip[] cues;
 
         public bool IsRunning => phase == Phase.Running;
@@ -40,11 +41,12 @@ namespace ProtoHarness.ChainRush
         public int Health => health;
         public int Hits => hits;
         public int Grapples => grapples;
-        public float Elapsed => elapsed;
+        public int Tick => tick;
+        public float Elapsed => Ticks.ToSeconds(tick);
         public float Progress => Mathf.Clamp01(player.transform.position.z / finishZ);
         public float FinishZ => finishZ;
-        public bool DamageFlash => elapsed < damageUntil && IsRunning;
-        public bool AttackActive => elapsed < attackUntil;
+        public bool DamageFlash => tick < damageUntilTick && IsRunning;
+        public bool AttackActive => tick < attackUntilTick;
         public bool IsEndless => endlessMode;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
@@ -65,6 +67,12 @@ namespace ProtoHarness.ChainRush
                     enabled = false;
                     return;
                 }
+            if (!Mathf.Approximately(Time.fixedDeltaTime, Ticks.Seconds))
+            {
+                Debug.LogError($"ChainRushGame: Time.fixedDeltaTime ({Time.fixedDeltaTime}) must equal Ticks.Seconds ({Ticks.Seconds}). The simulation advances one tick per FixedUpdate.", this);
+                enabled = false;
+                return;
+            }
             if (endlessMode && (endlessCourse == null || enemies == null))
             {
                 Debug.LogError("ChainRushGame: endless mode requires course and enemy director.", this);
@@ -109,19 +117,37 @@ namespace ProtoHarness.ChainRush
                 if (keyboard.rKey.wasPressedThisFrame) StartRun();
                 else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused) StartRun();
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
-                if (keyboard.spaceKey.wasPressedThisFrame && IsRunning) Attack();
+                if (keyboard.spaceKey.wasPressedThisFrame && IsRunning) attackQueued = true;
             }
             if (!IsRunning) return;
-            elapsed += Time.deltaTime;
+            float elapsed = Elapsed;
+            for (int i = 0; i < targets.Length; i++) targets[i].Animate(elapsed);
+            attackVisual.gameObject.SetActive(AttackActive);
+            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(attackUntilTick - tick) * 4f);
+        }
+
+        // The only simulation entry point. One call is one tick, and the order below is the
+        // contract: latched input, runner, hazards, finish, enemies, course recycling.
+        private void FixedUpdate()
+        {
+            if (!IsRunning) return;
+            tick++;
+            if (attackQueued)
+            {
+                attackQueued = false;
+                Attack();
+            }
+            player.Step();
+            if (!IsRunning) return;
             Vector3 position = player.transform.position;
             for (int i = 0; i < targets.Length; i++)
-            {
-                targets[i].Animate(elapsed);
                 if (targets[i].Touches(position)) TakeDamage();
-            }
-            attackVisual.gameObject.SetActive(AttackActive);
-            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + (attackUntil - elapsed) * 4f);
+            if (!IsRunning) return;
             if (!endlessMode && position.z >= finishZ) CompleteRun();
+            if (!IsRunning || !endlessMode) return;
+            enemies.Step();
+            if (!IsRunning) return;
+            endlessCourse.Step();
         }
 
         public void StartRun()
@@ -135,10 +161,11 @@ namespace ProtoHarness.ChainRush
             health = rules.MaxHealth;
             hits = 0;
             grapples = 0;
-            elapsed = 0f;
-            damageUntil = 0f;
-            attackUntil = 0f;
-            nextAttackTime = 0f;
+            tick = 0;
+            damageUntilTick = 0;
+            attackUntilTick = 0;
+            nextAttackTick = 0;
+            attackQueued = false;
             if (endlessMode) enemies.ResetEncounters();
             attackVisual.gameObject.SetActive(false);
             phase = Phase.Running;
@@ -155,14 +182,14 @@ namespace ProtoHarness.ChainRush
 
         public void Attack()
         {
-            if (!IsRunning || elapsed < nextAttackTime) return;
+            if (!IsRunning || tick < nextAttackTick) return;
             if (endlessMode)
             {
-                if (enemies.TryAttack()) nextAttackTime = elapsed + rules.AttackCooldown;
+                if (enemies.TryAttack()) nextAttackTick = tick + rules.AttackCooldownTicks;
                 return;
             }
-            attackUntil = elapsed + rules.AttackVisualDuration;
-            nextAttackTime = elapsed + rules.AttackCooldown;
+            attackUntilTick = tick + rules.AttackVisualTicks;
+            nextAttackTick = tick + rules.AttackCooldownTicks;
             PlayCue(2);
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].TryHit(player.transform.position)) hits++;
@@ -170,9 +197,9 @@ namespace ProtoHarness.ChainRush
 
         public void TakeDamage()
         {
-            if (!IsRunning || elapsed < damageUntil) return;
+            if (!IsRunning || tick < damageUntilTick) return;
             health--;
-            damageUntil = elapsed + rules.DamageInvulnerability;
+            damageUntilTick = tick + rules.DamageInvulnerabilityTicks;
             PlayCue(3);
             if (health <= 0) FailRun();
         }

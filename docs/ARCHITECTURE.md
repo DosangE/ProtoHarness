@@ -15,7 +15,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **13** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **14** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
 | 우리 테스트 | PlayMode **3 파일 / 17 테스트**, EditMode **1 파일 / 3 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`) |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
@@ -61,7 +61,8 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 달리기·점프·착지·그래플·공격 관절 자세 | `Runtime/ChainRush/Visuals/RunnerAnimation.cs` | Game, Motor, Grapple, Audio, 직렬화 관절 Transform |
 | 아트→사운드→애니메이션 순차 적용 | `Editor/ChainRush/ChainRushPresentationBuilder.cs` | 기존 무한 씬, 공용 도형/머티리얼 생성 함수 |
 
-CharacterController.Move로 충돌을 처리하고, FixedUpdate에서 중력과 전진 속도를 적분한다.
+**고정 틱 (2026-10-02)**: 시뮬레이션의 진입점은 `ChainRushGame.FixedUpdate` 하나이고 한 호출이 한 틱(`Ticks.Seconds` = 0.02s)이다. 틱 안의 순서는 래치된 공격 입력 → `RunnerMotor.Step`(래치된 점프·그래플·해제 포함) → 장애물 접촉 → 완주 판정 → `EnemyDirector.Step` → `EndlessCourse.Step`(재활용·원점 이동). `Update`/`LateUpdate`는 입력 래치와 표현(카메라·애니메이션·HUD·체인 시각물·오디오)만 한다. 시간은 정수 틱(`ChainRushGame.Tick`)으로 세고 `Elapsed` 는 파생값이다. 초 단위 수치는 `Ticks.FromSeconds` 로 올림 환산한다(`RunRules`, `EncounterTuning` 의 `*Ticks` 프로퍼티). `Time.fixedDeltaTime` 이 `Ticks.Seconds` 와 다르면 `ChainRushGame` 이 LogError 후 비활성화된다.
+CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중력과 전진 속도를 적분한다.
 그래플링은 길이 제한 구면으로 예상 위치를 투영하고 바깥쪽 방사 속도를 제거한다. 줄은 초당 3m씩 감긴다. 해제 시 최소 상승 속도는 지상 점프와 동일한 11.5m/s이다.
 3D Joint 컴포넌트는 사용하지 않는다. 동적 Rigidbody 물체를 끌거나 줄이 장애물에 감기는 동작은 현재 범위 밖이다.
 장애물은 박스 범위 접촉으로 체력을 줄이며 물리적으로 플레이어를 막지 않는다. 앵커 시야 검사는 Physics.Linecast를 사용한다.

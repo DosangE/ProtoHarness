@@ -16,8 +16,8 @@ namespace ProtoHarness.ChainRush.Combat
         [SerializeField] private Transform impact;
         [SerializeField] private ChainVisual chain;
         [SerializeField] private EncounterTuning tuning;
-        private float timer;
-        private float nextEncounter;
+        private int timer;
+        private int nextEncounterTick;
         private int sequence;
         private Vector3 entranceOffset;
         private Vector3 targetOffset;
@@ -25,8 +25,9 @@ namespace ProtoHarness.ChainRush.Combat
         public Entrance Direction { get; private set; }
         public bool CanAttack => State == EncounterState.Vulnerable;
         public bool HasEncounter => State != EncounterState.Idle;
-        public float Remaining => CanAttack ? Mathf.Max(0f, tuning.AttackWindow - timer) : 0f;
-        public float WindowFraction => Remaining / tuning.AttackWindow;
+        public float Remaining => CanAttack ? Ticks.ToSeconds(RemainingTicks) : 0f;
+        public float WindowFraction => CanAttack ? (float)RemainingTicks / tuning.AttackWindowTicks : 0f;
+        private int RemainingTicks => Mathf.Max(0, tuning.AttackWindowTicks - timer);
         public Transform Target => enemy;
         public float EncounterDuration => tuning.EncounterDuration;
 
@@ -44,12 +45,13 @@ namespace ProtoHarness.ChainRush.Combat
             impact.gameObject.SetActive(false);
         }
 
-        private void Update()
+        // One simulation tick, called only by ChainRushGame.FixedUpdate.
+        public void Step()
         {
             if (!game.IsRunning) return;
             if (State == EncounterState.Idle)
             {
-                if (game.Elapsed >= nextEncounter && course.CanStartEncounter(EncounterDuration))
+                if (game.Tick >= nextEncounterTick && course.CanStartEncounter(EncounterDuration))
                     BeginEncounter((Entrance)(sequence++ % 3));
                 return;
             }
@@ -59,28 +61,29 @@ namespace ProtoHarness.ChainRush.Combat
                 ClearEncounter();
                 return;
             }
-            timer += Time.deltaTime;
+            timer++;
+            float seconds = Ticks.ToSeconds(timer);
             Vector3 target = player.transform.position + targetOffset;
             warning.position = target;
             switch (State)
             {
                 case EncounterState.Warning:
-                    warning.localScale = Vector3.one * (1f + Mathf.Sin(timer * 25f) * 0.15f);
-                    if (timer >= tuning.WarningDuration) { SetState(EncounterState.Entering); enemy.gameObject.SetActive(true); }
+                    warning.localScale = Vector3.one * (1f + Mathf.Sin(seconds * 25f) * 0.15f);
+                    if (timer >= tuning.WarningTicks) { SetState(EncounterState.Entering); enemy.gameObject.SetActive(true); }
                     break;
                 case EncounterState.Entering:
-                    enemy.position = Vector3.Lerp(player.transform.position + entranceOffset, target, Mathf.SmoothStep(0f, 1f, timer / tuning.EntranceDuration));
-                    if (timer >= tuning.EntranceDuration) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
+                    enemy.position = Vector3.Lerp(player.transform.position + entranceOffset, target, Mathf.SmoothStep(0f, 1f, (float)timer / tuning.EntranceTicks));
+                    if (timer >= tuning.EntranceTicks) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
                     break;
                 case EncounterState.Vulnerable:
                     enemy.position = target;
-                    enemy.rotation = Quaternion.Euler(0f, 0f, Mathf.Sin(timer * 7f) * 8f);
-                    if (timer >= tuning.AttackWindow) { SetState(EncounterState.Striking); warning.gameObject.SetActive(false); }
+                    enemy.rotation = Quaternion.Euler(0f, 0f, Mathf.Sin(seconds * 7f) * 8f);
+                    if (timer >= tuning.AttackWindowTicks) { SetState(EncounterState.Striking); warning.gameObject.SetActive(false); }
                     break;
                 case EncounterState.Firing:
                     enemy.position = target;
-                    chain.Present(enemy.position, timer / tuning.FlightDuration);
-                    if (timer >= tuning.FlightDuration)
+                    chain.Present(enemy.position, (float)timer / tuning.FlightTicks);
+                    if (timer >= tuning.FlightTicks)
                     {
                         game.RegisterEnemyHit();
                         enemy.gameObject.SetActive(false);
@@ -91,13 +94,13 @@ namespace ProtoHarness.ChainRush.Combat
                     break;
                 case EncounterState.Retracting:
                     impact.position = target;
-                    impact.localScale = Vector3.one * (1f + timer * 6f);
-                    chain.Present(target, 1f - timer / tuning.RecoveryDuration);
-                    if (timer >= tuning.RecoveryDuration) ClearEncounter();
+                    impact.localScale = Vector3.one * (1f + seconds * 6f);
+                    chain.Present(target, 1f - (float)timer / tuning.RecoveryTicks);
+                    if (timer >= tuning.RecoveryTicks) ClearEncounter();
                     break;
                 case EncounterState.Striking:
-                    enemy.position = Vector3.Lerp(target, player.transform.position, timer / tuning.RecoveryDuration);
-                    if (timer >= tuning.RecoveryDuration)
+                    enemy.position = Vector3.Lerp(target, player.transform.position, (float)timer / tuning.RecoveryTicks);
+                    if (timer >= tuning.RecoveryTicks)
                     {
                         ClearEncounter();
                         game.TakeDamage();
@@ -123,14 +126,14 @@ namespace ProtoHarness.ChainRush.Combat
 
         public bool TryAttack()
         {
-            if (!game.IsRunning || !CanAttack || timer >= tuning.AttackWindow) return false;
+            if (!game.IsRunning || !CanAttack || timer >= tuning.AttackWindowTicks) return false;
             warning.gameObject.SetActive(false);
             SetState(EncounterState.Firing);
             game.PlayCue(2);
             return true;
         }
 
-        private void SetState(EncounterState state) { State = state; timer = 0f; }
+        private void SetState(EncounterState state) { State = state; timer = 0; }
 
         public void ClearEncounter()
         {
@@ -139,14 +142,14 @@ namespace ProtoHarness.ChainRush.Combat
             warning.gameObject.SetActive(false);
             impact.gameObject.SetActive(false);
             chain.Hide();
-            nextEncounter = game.Elapsed + tuning.NextGap(course.Distance);
+            nextEncounterTick = game.Tick + tuning.NextGapTicks(course.Distance);
         }
 
         public void ResetEncounters()
         {
             ClearEncounter();
             sequence = 0;
-            nextEncounter = 0.2f;
+            nextEncounterTick = Ticks.FromSeconds(0.2f);
         }
 
         public void ShiftOrigin(Vector3 offset)

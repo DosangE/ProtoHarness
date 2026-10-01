@@ -22,5 +22,13 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(rules.AttackCooldown, Is.EqualTo(0.35f).Within(1e-5f));
             Assert.That(rules.AttackVisualDuration, Is.EqualTo(0.18f).Within(1e-5f));
         }
+
+        [Test]
+        public void Ticks_Defaults_RoundUpToWholeTicks()
+        {
+            Assert.That(rules.DamageInvulnerabilityTicks, Is.EqualTo(63));
+            Assert.That(rules.AttackCooldownTicks, Is.EqualTo(18));
+            Assert.That(rules.AttackVisualTicks, Is.EqualTo(9));
+        }
     }
 }

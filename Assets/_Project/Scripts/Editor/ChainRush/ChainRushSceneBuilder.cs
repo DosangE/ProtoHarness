@@ -15,6 +15,7 @@ namespace ProtoHarness.Editor.ChainRush
     public static class ChainRushSceneBuilder
     {
         public const string ScenePath = "Assets/_Project/Scenes/ChainRushPrototype.unity";
+        public const string RulesPath = "Assets/_Project/Data/RunRules_Default.asset";
         private const string MaterialFolder = "Assets/_Project/Art/Materials";
 
         static ChainRushSceneBuilder()
@@ -28,6 +29,8 @@ namespace ProtoHarness.Editor.ChainRush
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before creating the scene.");
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) != null)
                 throw new InvalidOperationException("ChainRushPrototype already exists. Open it instead of overwriting it.");
+            var rules = AssetDatabase.LoadAssetAtPath<RunRules>(RulesPath);
+            if (rules == null) throw new InvalidOperationException("Run rules asset is missing: " + RulesPath);
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EnsureFolder("Assets/_Project/Scenes");
             EnsureFolder(MaterialFolder);
@@ -172,7 +175,7 @@ namespace ProtoHarness.Editor.ChainRush
             Assign(grapple, "game", game, "motor", motor, "rope", rope, "ropeOrigin", hand);
             AssignArray(grapple, "anchors", anchors.ToArray());
             Assign(follow, "target", motor, "game", game, "viewCamera", camera);
-            Assign(game, "player", motor, "grapple", grapple, "followCamera", follow, "attackVisual", strike, "audioSource", audio);
+            Assign(game, "player", motor, "grapple", grapple, "followCamera", follow, "attackVisual", strike, "audioSource", audio, "rules", rules);
             AssignArray(game, "targets", targets.ToArray());
             Assign(hud, "game", game, "player", motor, "grapple", grapple, "viewCamera", camera);
 

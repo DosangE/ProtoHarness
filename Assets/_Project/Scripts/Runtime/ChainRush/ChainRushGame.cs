@@ -18,11 +18,12 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private bool endlessMode;
         [SerializeField] private EndlessCourse endlessCourse;
         [SerializeField] private EnemyDirector enemies;
+        [SerializeField] private RunRules rules;
         [SerializeField] private bool enhancedPresentation;
         [SerializeField] private Audio.ChainRushAudio presentationAudio;
         [SerializeField] private Visuals.RunnerAnimation presentationAnimation;
         private Phase phase;
-        private int health = 3;
+        private int health;
         private int hits;
         private int grapples;
         private float elapsed;
@@ -51,7 +52,7 @@ namespace ProtoHarness.ChainRush
 
         private void Awake()
         {
-            if (player == null || grapple == null || followCamera == null || targets == null || attackVisual == null || audioSource == null)
+            if (player == null || grapple == null || followCamera == null || targets == null || attackVisual == null || audioSource == null || rules == null)
             {
                 Debug.LogError("ChainRushGame: all scene references must be assigned.", this);
                 enabled = false;
@@ -91,6 +92,7 @@ namespace ProtoHarness.ChainRush
                 cues[i] = AudioClip.Create("ChainRush cue " + i, samples.Length, 1, SampleRate, false);
                 cues[i].SetData(samples, 0);
             }
+            health = rules.MaxHealth;
             attackVisual.gameObject.SetActive(false);
         }
 
@@ -130,7 +132,7 @@ namespace ProtoHarness.ChainRush
             player.ResetAtSpawn();
             followCamera.Snap();
             for (int i = 0; i < targets.Length; i++) targets[i].Restore();
-            health = 3;
+            health = rules.MaxHealth;
             hits = 0;
             grapples = 0;
             elapsed = 0f;
@@ -156,11 +158,11 @@ namespace ProtoHarness.ChainRush
             if (!IsRunning || elapsed < nextAttackTime) return;
             if (endlessMode)
             {
-                if (enemies.TryAttack()) nextAttackTime = elapsed + 0.35f;
+                if (enemies.TryAttack()) nextAttackTime = elapsed + rules.AttackCooldown;
                 return;
             }
-            attackUntil = elapsed + 0.18f;
-            nextAttackTime = elapsed + 0.35f;
+            attackUntil = elapsed + rules.AttackVisualDuration;
+            nextAttackTime = elapsed + rules.AttackCooldown;
             PlayCue(2);
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].TryHit(player.transform.position)) hits++;
@@ -170,7 +172,7 @@ namespace ProtoHarness.ChainRush
         {
             if (!IsRunning || elapsed < damageUntil) return;
             health--;
-            damageUntil = elapsed + 1.25f;
+            damageUntil = elapsed + rules.DamageInvulnerability;
             PlayCue(3);
             if (health <= 0) FailRun();
         }

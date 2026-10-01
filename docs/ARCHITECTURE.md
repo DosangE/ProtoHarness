@@ -15,7 +15,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **12** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 1개(`EncounterTuning`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **13** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
 | 우리 테스트 | PlayMode **3 파일 / 17 테스트**, EditMode **1 파일 / 3 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`) |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
@@ -46,7 +46,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 |---|---|---|
 | 입력·자동 전진·점프·중력·충돌 | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Input System, Game, Grapple |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
-| 준비·진행·정지·실패·완주·공격·체력 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource |
+| 준비·진행·정지·실패·완주·공격·체력 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules |
 | 추적 카메라·속도에 따른 FOV | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game, Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
@@ -54,6 +54,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 발판 풀 재배치·원점 이동·누적 거리 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game, Motor, Camera, 직렬화 구간 배열 |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
+| 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 금속 체인 링크·갈고리·발사 및 회수 | `Runtime/ChainRush/Visuals/ChainVisual.cs` | Game, 손 Transform, 미리 만든 링크 배열 |
 | 별도 무한 씬 제작 | `Editor/ChainRush/ChainRushEndlessSceneBuilder.cs` | 기존 테스트 씬, 공용 생성기 도형/참조 연결 함수 |
 | 신스 음악·9종 효과음·바람·음소거 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개 |

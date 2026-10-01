@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-02 · 두 번째 SO `RunRules` 를 고정 틱보다 먼저 도입
+
+- **결정**: `ChainRushGame` 의 체력(3), 피격 무적(1.25s), 공격 쿨다운(0.35s), 공격 시각 지속(0.18s)을 `RunRules` SO 로 이동. 형식은 위 `EncounterTuning` 결정을 그대로 따른다. 에셋 `Data/RunRules_Default.asset`, 값은 기존 코드와 동일. 공개 시그니처 불변.
+- **이유**: 위 네 값 중 시간 값 셋은 고정 틱 전환(P1)에서 틱 수로 환산할 대상이다. 한 곳에 모아 두면 환산이 한 곳에서 끝난다. 고정 틱은 공개 API 4개(`PrimaryAction`, `TryAttach`, `Release`, `Attack`)와 PlayMode 테스트 3개 파일을 건드리므로 SO 이동과 한 변경에 섞지 않았다. 섞으면 실패 원인을 가를 수 없다.
+- **연결**: `ChainRushGame.rules` 직렬화 참조. 비어 있으면 Awake 에서 LogError 후 비활성화. 신규 씬 생성 빌더(`ChainRushSceneBuilder`)는 에셋이 없으면 예외. 기존 씬 2개(`ChainRushPrototype`, `ChainRushEndless`)는 에디터에서 연결했다.
+- **검증**: EditMode `testcasecount="4" result="Passed" total="4" passed="4" failed="0"` (2026-10-02 00:41 KST). PlayMode `testcasecount="17" result="Passed" total="17" passed="17" failed="0" duration="94.6350045"` (00:44 KST), 기존 테스트 무수정. Console error 0.
+- **씬 변화**: `ChainRushPrototype.unity` 에 `rules` 외에 필드 7줄(`chainVisual`, `endlessMode`, `endlessCourse`, `enemies`, `enhancedPresentation`, `presentationAudio`, `presentationAnimation`)이 Unity 저장 시 기본값으로 추가됐다. 오래된 씬을 재직렬화한 결과이며 동작 변화는 없다(PlayMode 통과).
+- **이번에 하지 않은 것**: 이동·그래플 수치(`RunnerMotor`, `GrappleController`), `CourseLayout`, `finishZ`. `CourseLayout` 은 시드 코스(P1)와 함께 한다.
+- **조사 기록** (고정 틱 합의의 근거, 코드 변경 없음): 시뮬 상태가 틱 밖에서 바뀌는 곳은 `RunnerMotor.cs:44-58`(입력·점프·그래플·해제를 `Update` 에서 처리), `GrappleController.cs:95-110,124-135`(`TryAttach`/`Release` 가 `Update` 경로에서 상태·속도 변경), `ChainRushGame.cs:102-123`(`elapsed` 가 `Time.deltaTime`, 피격 판정과 공격 입력이 `Update`), `EnemyDirector.cs:47-107`(`timer` 가 `Time.deltaTime`), `EndlessCourse.cs:49-69`(`LateUpdate` 에서 재활용·원점 이동). 이동 적분만 이미 `FixedUpdate` 다(`RunnerMotor.cs:67-97`, 0.02s).
+
 ## 2026-10-02 · 브랜치 전략: main / dev / feature 3단
 
 - **결정**: `main`(안정, 마일스톤 태그) ← `dev`(통합) ← `feature/<영역>-<내용>`. 병합은 **`--no-ff`**(기능 단위로 묶임). `main`·`dev` 직접 커밋 금지. 규칙 본문은 `CLAUDE.md` §9, 이 문서는 이유만 기록한다.

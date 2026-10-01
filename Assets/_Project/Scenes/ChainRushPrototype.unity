@@ -72742,6 +72742,7 @@ MonoBehaviour:
   - {fileID: 312372732}
   maxRange: 32
   retractSpeed: 3
+  chainVisual: {fileID: 0}
 --- !u!114 &1925527727
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -80305,6 +80306,13 @@ MonoBehaviour:
   attackVisual: {fileID: 1038373642}
   audioSource: {fileID: 2105445613}
   finishZ: 496
+  endlessMode: 0
+  endlessCourse: {fileID: 0}
+  enemies: {fileID: 0}
+  rules: {fileID: 11400000, guid: f34ba709e923c5340943b923a8c4c359, type: 2}
+  enhancedPresentation: 0
+  presentationAudio: {fileID: 0}
+  presentationAnimation: {fileID: 0}
 --- !u!82 &2105445613
 AudioSource:
   m_ObjectHideFlags: 0

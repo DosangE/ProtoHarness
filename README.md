@@ -74,7 +74,7 @@ Assets/_Project/        우리가 만드는 모든 것
   Scripts/Tests/        EditMode / PlayMode 테스트
   Data/                 ScriptableObject 인스턴스
   Scenes/               ChainRushPrototype, ChainRushEndless
-docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵)
+docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵) · RULES/(작업별 규칙)
 index/, tools/          심볼 인덱스와 재생성 스크립트
 ```
 
@@ -85,6 +85,7 @@ index/, tools/          심볼 인덱스와 재생성 스크립트
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 시스템 지도, 진입점, 검증 기록 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 왜 이렇게 했나 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 최종 목표와 단계별 로드맵 (초안) |
-| [`CLAUDE.md`](CLAUDE.md) | 작업 규칙 |
+| [`CLAUDE.md`](CLAUDE.md) | 작업 규칙 (항상 지킬 것) |
+| [`docs/RULES/`](docs/RULES/) | 작업별 규칙 — 형태·검증·조회·서브에이전트·브랜치. 언제 읽는지는 `CLAUDE.md` 맨 위 표 |
 
 원작 참조: [DosangE/Chain-Rush](https://github.com/DosangE/Chain-Rush)

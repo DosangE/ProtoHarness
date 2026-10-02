@@ -76,7 +76,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 
 | 무엇 | 어디 |
 |---|---|
-| 작업 규칙 | `CLAUDE.md` |
+| 작업 규칙 | `CLAUDE.md` (항상 지킬 것) + `docs/RULES/*.md` (작업별, 읽는 시점은 `CLAUDE.md` 맨 위 표) |
 | 결정 이력 | `docs/DECISIONS.md` |
 | 심볼 인덱스 (B모드) | `index/symbols.tsv` — 생성물, `tools/reindex.ps1` 로 재생성 |
 | 서브에이전트 정의 | `.claude/agents/*.md` (5종) |

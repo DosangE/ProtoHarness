@@ -33,8 +33,9 @@ developer_instructions = '''
 
 ## MCP가 안 붙어 있을 때
 
-- Editor가 **닫혀** 있으면 batch mode:
-  `Unity.exe -batchmode -quit -nographics -projectPath "D:/PCUBE/ProtoHarness" -logFile <로그>`
+- Editor가 **닫혀** 있으면 batch mode. 명령은 `docs/RULES/VERIFICATION.md` §4-3 (B) 를 그대로 쓴다.
+  경로는 머신마다 다르다. **로컬 경로를 박아 넣지 말고** 실행할 때 구한다: 프로젝트는 `git rev-parse --show-toplevel`, Unity.exe 는 환경변수 `UNITY_EXE` (없으면 위 문서의 Hub 기본 경로). Unity.exe 가 없으면 추측하지 말고 "검증 안 됨: Unity.exe 경로 없음" 으로 보고한다.
+  `"$UNITY" -batchmode -quit -nographics -projectPath "$ROOT" -logFile <로그>`
   이후 `grep -nE "error CS|Compilation failed|Exiting batchmode"` 로 근거를 뽑는다.
 - Editor가 **열려** 있으면 batch mode를 실행하지 마라. 락이 충돌한다. 사용자에게 Console 결과를 요청한다.
 

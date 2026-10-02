@@ -3,6 +3,23 @@
 Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 이 문서는 **에이전트와 사람 모두에게 적용되는 구속 규칙**이다. 규칙과 지시가 충돌하면 멈추고 물어본다.
 
+## 작업별 규칙 — 해당 작업 전에 읽는다
+
+이 파일에는 **항상 지킬 것**(금지선·관문·형식)만 둔다. 특정 작업에서만 필요한 절차와 사실은 `docs/RULES/` 에 있고, **구속력은 이 파일과 같다.** 아래 작업을 시작하기 전에 해당 문서를 읽는다. 읽지 않고 진행하지 않는다.
+
+| 이 작업을 하기 전에 | 읽는다 | 들어 있는 절 |
+|---|---|---|
+| 파일·폴더를 새로 만들 때 (스크립트·SO·프리팹·씬·테스트) | `docs/RULES/CONVENTIONS.md` | §1-2 폴더 지도, §1-3 형태 규칙 |
+| 컴파일·테스트를 돌리거나, "된다"·"통과"를 보고하기 전 | `docs/RULES/VERIFICATION.md` | §4-2 확정 사실, §4-2b Unity MCP, §4-3 컴파일, §4-4 테스트 |
+| `index/symbols.tsv` 를 쓰기 전 (B모드) | `docs/RULES/LOOKUP.md` | §6-2 인덱스 신선도, §6-3 C모드 보류 |
+| 서브에이전트를 파견하기 전 | `docs/RULES/SUBAGENTS.md` | §7-1 5종, §7-2 병렬 OK·직렬 필수, §7-4 파견할 때 |
+| 브랜치를 만들거나 병합하기 전 | `docs/RULES/BRANCHING.md` | §9-1 이름, §9-3 알아둘 것 |
+
+- § 번호는 옮겨도 바뀌지 않는다. 옮긴 절은 본문 자리에 `→` 한 줄로 남는다.
+- 같은 규칙을 두 곳에 쓰지 않는다. 규칙을 고칠 때는 그 규칙이 있는 **한 곳만** 고친다. (`docs/DECISIONS.md` 2026-08-25 "단일 진실 원천")
+- 경로·실행 파일 위치처럼 **머신마다 다른 값은 규칙 문서에 박아 넣지 않는다.** 실행할 때 구한다 (§4-3).
+- 프로젝트 구조·결정·로드맵은 규칙이 아니다. §6-1 라우터대로 `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DESIGN.md` 를 본다.
+
 ---
 
 ## 0. 금지선 — 먼저 읽는다
@@ -51,48 +68,11 @@ Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 
 ```
 목적: 무엇을 해결하는가 (한 줄, "~하기 위해")
-경로: Assets/_Project/... (아래 지도의 어느 칸인지)
+경로: Assets/_Project/... (§1-2 지도의 어느 칸인지)
 형태: MonoBehaviour | ScriptableObject | static class | struct | interface | 프리팹 | 씬 | 테스트
 ```
 
-### 1-2. 폴더 지도
-
-우리가 만드는 모든 것은 `Assets/_Project/` 아래에 둔다. 그 바깥은 Unity 템플릿·패키지 영역이다.
-
-```
-Assets/
-  _Project/
-    Scripts/
-      Runtime/        런타임 코드      → ProtoHarness.Runtime.asmdef
-      Editor/         에디터 전용 코드  → ProtoHarness.Editor.asmdef
-      Tests/
-        EditMode/     → ProtoHarness.Tests.EditMode.asmdef
-        PlayMode/     → ProtoHarness.Tests.PlayMode.asmdef
-    Scenes/           씬
-    Prefabs/          프리팹
-    Data/             ScriptableObject 인스턴스(.asset)
-    Art/              Models / Textures / Materials
-    Audio/
-  Settings/           URP 렌더 파이프라인 설정 (Unity 템플릿 소유, 건드리지 않음)
-  TutorialInfo/       템플릿 잔재 (건드리지 않음)
-```
-
-- 새 기능 묶음은 `Scripts/Runtime/<기능>/` 로 폴더를 만든다. 파일 15개 넘어가면 하위 분리.
-- Editor 전용 코드가 Runtime 폴더에 들어가면 빌드가 깨진다. 반드시 `Editor/` 아래.
-
-### 1-3. 형태 규칙
-
-| 대상 | 규칙 |
-|---|---|
-| 스크립트 파일명 | 타입명과 **정확히** 일치. 파일 하나에 public 타입 하나. |
-| 타입명 | PascalCase. 인터페이스 `I` 접두. |
-| 네임스페이스 | 폴더 경로를 따른다. `ProtoHarness.Combat`, `ProtoHarness.Editor.Tools` |
-| 필드 | `[SerializeField] private` + camelCase. 상수는 PascalCase. |
-| ScriptableObject | `[CreateAssetMenu(menuName = "ProtoHarness/<범주>/<이름>")]` 필수 |
-| 프리팹 / 씬 | PascalCase (`PlayerRig.prefab`, `Sandbox.unity`) |
-| 머티리얼 / 텍스처 | `M_이름`, `T_이름_BaseColor` |
-| 테스트 | `<대상>Tests.cs`, 메서드는 `대상_조건_기대결과` |
-| asmdef | 파일명 = 어셈블리명 = `ProtoHarness.<영역>` |
+- §1-2 폴더 지도, §1-3 형태 규칙 → `docs/RULES/CONVENTIONS.md` (새로 만들기 전에 읽는다)
 
 ---
 
@@ -111,7 +91,7 @@ Assets/
 
 기존과 다른 스타일(다른 네임스페이스 규칙, 다른 로깅 방식, 다른 폴더)을 도입하려면 그것 자체가 합의 대상이다. 조용히 새 스타일을 섞지 않는다.
 
-> **우리 코드가 이미 있다 (2026-10-01 기준 `.cs` 17개, Chain Rush).** 그래서 새 스크립트·SO·테스트는 `Assets/_Project/Scripts/` 의 기존 파일 형식을 따른다 (§2 3연타). 기존에 없는 종류(첫 SO, 첫 EditMode 테스트 등)는 첫 사례이므로 느리게, 합의하고 만든다.
+> **우리 코드가 이미 있다 (Chain Rush).** 그래서 새 스크립트·SO·테스트는 `Assets/_Project/Scripts/` 의 기존 파일 형식을 따른다 (§2 3연타). 기존에 없는 종류(첫 SO, 첫 EditMode 테스트 등)는 첫 사례이므로 느리게, 합의하고 만든다.
 
 ---
 
@@ -181,84 +161,7 @@ Assets/
 - API·시그니처·패키지 동작은 **기억이 아니라 실제 소스**로 확인한다. (`Library/PackageCache/` 읽기는 진단 목적으로 허용)
 - 확인 못 한 것은 **"확인 못 했다"** 고 쓴다. 확인한 것처럼 쓰지 않는다.
 
-### 4-2. 이 프로젝트의 확정 사실 (2026-10-01 갱신: Unity·Input System 행은 에디터 실측 + manifest.json)
-
-| 항목 | 값 |
-|---|---|
-| Unity | 6000.3.25f1 |
-| 렌더 파이프라인 | URP 17.3.0 |
-| 입력 | Input System 1.20.0 (신 입력 시스템. `Input.GetKey` 쓰지 않는다) |
-| 테스트 | Test Framework 1.6.0 + performance |
-| .NET SDK | **설치되어 있지 않음** (런타임 8.0.4만). `dotnet build` 불가 |
-| Unity 실행 파일 | `C:\Program Files\Unity\Hub\Editor\6000.3.25f1\Editor\Unity.exe` |
-
-### 4-2b. Unity MCP (2026-08-25 연결 확인)
-
-Unity 공식 `com.unity.ai.assistant` 패키지가 제공하는 MCP. 체인은 3단이다.
-
-```
-Unity Editor (Bridge V2)  →  \.\pipe\unity-mcp-<id>-<pid>
-        ↓
-relay_win.exe --mcp          C:\Users\User\.unity\relay\relay_win.exe  (stdio MCP 서버)
-        ↓
-Claude Code                  ~/.claude.json 의 mcpServers["unity-mcp"]
-```
-
-- 연결 정보는 `~/.unity/mcp/connections/bridge-*.json` 에 쓰인다. relay가 이걸 보고 자동 탐지한다.
-- Editor를 닫거나 Bridge를 끄면 모든 도구가 죽는다. 도구 호출이 실패하면 먼저 Bridge 상태를 의심한다.
-- **등록은 세션 시작 시점에 읽힌다.** 새로 등록했으면 Claude Code를 재시작해야 도구가 붙는다.
-
-사용 가능한 도구 7개 (`tools/list` 응답으로 확인):
-
-| 도구 | 용도 | 주의 |
-|---|---|---|
-| `Unity_RunCommand` | C# 컴파일 + 에디터에서 즉시 실행 | 상태 변경은 승인 필요 → §0 |
-| `Unity_GetConsoleLogs` | Console 로그/에러/스택 트레이스 | 검증 1순위 수단 |
-| `Unity_SceneView_CaptureMultiAngleSceneView` | 3D 배치 검증 (4방향 2x2) | 3D 전용 |
-| `Unity_SceneView_Capture2DScene` | 2D 영역 오소 캡처 | 이 프로젝트엔 거의 불필요 |
-| `Unity_Camera_Capture` | 특정 카메라 렌더 | 비용 큰 작업 |
-| `Unity_AssetGeneration_GenerateAsset` | 생성형 AI 에셋 생성 | **명시적 요청 시에만** → §0 |
-| `Unity_AssetGeneration_GetModels` | 생성 모델 목록 | — |
-
-### 4-3. 컴파일을 "된다"고 말하려면
-
-`dotnet build` 는 이 머신에서 못 쓴다(§4-2). 증거는 셋 중 하나다.
-
-**(A) Unity MCP가 붙어 있을 때 — 이게 1순위다.**
-
-1. `Unity_RunCommand` 로 컴파일 상태를 확인한다. 이 도구는 실행 전에 컴파일을 검증하고 그 결과를 돌려준다.
-2. `Unity_GetConsoleLogs` 로 `logTypes: Error` 를 읽어 남은 에러를 확인한다.
-3. 보고에는 **로그 원문**을 붙인다. "에러 없음"만 쓰지 않는다.
-
-씬/배치 결과를 눈으로 확인해야 하면 `Unity_SceneView_CaptureMultiAngleSceneView` (3D 배치 검증) 또는 `Unity_Camera_Capture` 를 쓴다.
-
-**(B) MCP가 없고 Unity Editor가 닫혀 있을 때** — batch mode로 직접 확인한다.
-
-```bash
-"/c/Program Files/Unity/Hub/Editor/6000.3.25f1/Editor/Unity.exe" -batchmode -quit -nographics -projectPath "D:/PCUBE/ProtoHarness" -logFile "$SCRATCH/compile.log"
-```
-
-끝나면 로그에서 증거를 뽑는다:
-
-```bash
-grep -nE "error CS|Compilation failed|Exiting batchmode" "$SCRATCH/compile.log"
-```
-
-> 위 두 명령은 2026-08-25에 이 프로젝트에서 실제로 실행해 확인했다 (exit 0, `error CS` 없음, `Exiting batchmode successfully`).
-> 부작용 주의: batch 실행 중 Unity의 VCS 연동이 프로젝트 루트에 `dev/null/` (git-lfs 훅 잔재)를 만들 수 있다. 발견하면 보고하고 정리한다.
-
-**(C) MCP도 없고 Unity Editor가 열려 있을 때** — batch mode를 실행하지 않는다(§0). 사용자에게 Console 결과를 요청하고, 받은 내용을 근거로 적는다. 상상해서 채우지 않는다.
-
-Editor 실행 여부 확인: `Temp/UnityLockfile` 존재 = 열려 있음.
-
-### 4-4. 테스트
-
-```bash
-"/c/Program Files/Unity/Hub/Editor/6000.3.25f1/Editor/Unity.exe" -batchmode -runTests -projectPath "D:/PCUBE/ProtoHarness" -testPlatform EditMode -testResults "$SCRATCH/results.xml" -logFile "$SCRATCH/test.log"
-```
-
-- 결과는 `results.xml` 의 `<test-run ... failed="N">` 를 읽어서 보고한다. 로그 눈대중 금지.
-- 버그를 고쳤다고 말하려면, **고치기 전에 실패하는 테스트**가 있어야 한다.
+- §4-2 확정 사실, §4-2b Unity MCP, §4-3 컴파일을 "된다"고 말하려면, §4-4 테스트 → `docs/RULES/VERIFICATION.md` (컴파일·테스트를 돌리거나 결과를 보고하기 전에 읽는다)
 
 ### 4-5. 막혔을 때
 
@@ -318,32 +221,7 @@ private void Awake()
 
 **D모드의 규칙**: 위 순서를 건너뛰지 않는다. 코드부터 뒤지는 것이 가장 비싸다.
 
-### 6-2. 인덱스 신선도 — 쓰기 전에 반드시 확인
-
-`index/symbols.tsv` 헤더를 먼저 본다.
-
-- `git-head` 가 현재 `git rev-parse HEAD` 와 **다르면 인덱스를 쓰지 않는다.** 재생성하거나, 못 하면 그 사실을 보고한다.
-- `symbols: 0` 이면 **"해당 심볼 없음"이라고 결론내지 않는다.** 코드가 아직 없다는 뜻일 뿐이다.
-- 재생성:
-
-```bash
-powershell -ExecutionPolicy Bypass -File tools/reindex.ps1
-```
-
-> 낡거나 빈 인덱스는 인덱스가 아예 없는 것보다 **나쁘다.** 자신 있는 오답을 만들기 때문이다. → §5
-
-### 6-3. C모드 상태 — 보류 (2026-08-25)
-
-호출/참조 그래프는 만들지 않았다. C모드가 필요한 질문이 오면 **미구현임을 먼저 알린다.**
-
-재논의 트리거: 우리 `.cs` 가 **60개를 넘거나**, 리팩터링 영향 범위가 손으로 감당이 안 될 때.
-
-| 안 | 방식 | 정확도 | 비용 |
-|---|---|---|---|
-| C1 | mono-cecil 1.11.5 로 `Library/ScriptAssemblies/Assembly-CSharp.dll` IL 순회 (`Unity_RunCommand`) | 진짜 호출 간선 | 도구 제작이 별도 작업 |
-| C2 | ripgrep 역참조 | 근사. 호출 방향·오버로드 구분 불가 | 즉시 |
-
-C2를 만들더라도 이름은 **"참조 그래프"** 다. "호출 그래프"라고 부르지 않는다. → §4-1
+- §6-2 인덱스 신선도, §6-3 C모드 보류 → `docs/RULES/LOOKUP.md` (인덱스를 쓰기 전에 읽는다)
 
 ### 6-4. 모드와 무관하게 항상 적용
 
@@ -355,26 +233,9 @@ C2를 만들더라도 이름은 **"참조 그래프"** 다. "호출 그래프"�
 
 ## 7. 서브에이전트
 
-### 7-1. 5종
-
-| 에이전트 | 작업 | 쓰기 | 모델 |
-|---|---|---|---|
-| `unity-explorer` | 탐색 | ❌ | sonnet |
-| `unity-architect` | 구조 분석 | `docs/` 만 | opus |
-| `unity-reviewer` | 리뷰 (§0/§1/§5 체크리스트) | ❌ | opus |
-| `unity-implementer` | 생성 | `Assets/` | opus |
-| `unity-verifier` | 검증 (Unity MCP) | ❌ | sonnet |
-
 정의는 `.claude/agents/<이름>.md`. 규칙을 바꾸면 **CLAUDE.md와 에이전트 정의를 같이** 고친다. 한쪽만 고치면 조용히 어긋난다.
 
-### 7-2. 병렬 / 직렬
-
-**병렬 OK** — 읽기 전용이고 영역이 겹치지 않을 때만.
-- 탐색 여러 갈래, 파일별 리뷰, 서로 다른 시스템 조사
-
-**직렬 필수** — 앞의 결과가 뒤의 입력일 때.
-- `구조 분석 → 생성 → 검증`. 뒤집으면 근거 없는 코드가 나온다.
-- `리뷰 → 수정 → 재검증`
+- §7-1 5종, §7-2 의 병렬 OK·직렬 필수, §7-4 파견할 때 지키는 것 → `docs/RULES/SUBAGENTS.md` (파견하기 전에 읽는다). §7-2 의 병렬 절대 금지는 아래에 남긴다.
 
 **병렬 절대 금지**
 1. 같은 파일에 쓰는 작업 2개 — 충돌한다.
@@ -394,12 +255,6 @@ C2를 만들더라도 이름은 **"참조 그래프"** 다. "호출 그래프"�
 - 1–2 파일이면 그냥 읽는다
 - 이미 이 대화에서 읽은 것
 - **사용자가 파견을 지시하지 않았을 때** ← 현재 기본값
-
-### 7-4. 파견할 때 지키는 것
-
-- 에이전트는 이 대화를 모른다. 파견 프롬프트에 **경로·범위·판정 기준·안 할 것**을 전부 적는다. "아까 그거" 같은 지시는 통하지 않는다.
-- 돌아온 결과를 그대로 믿지 않는다. **`경로:줄` 근거가 없는 주장은 되묻는다.** → §4-1
-- 에이전트가 규칙 위반을 저질렀으면 결과를 버리고 보고한다. 조용히 고쳐 쓰지 않는다.
 
 ---
 
@@ -426,14 +281,7 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
      └ feature/<영역>-<내용>   기능별 작업. dev 에서 분기하고 dev 로 병합한다
 ```
 
-### 9-1. 이름
-
-| 접두사 | 용도 | 예 |
-|---|---|---|
-| `feature/` | 기능 | `feature/p1-fixed-tick` |
-| `fix/` | 버그 수정 | `fix/grapple-release-boost` |
-| `docs/` | 문서·규칙 | `docs/branch-strategy` |
-| `spike/` | 버려도 되는 실험 | `spike/netcode-ngo-vs-fusion` |
+- §9-1 이름, §9-3 알아둘 것 → `docs/RULES/BRANCHING.md` (브랜치를 만들거나 병합하기 전에 읽는다)
 
 ### 9-2. 규칙
 
@@ -443,16 +291,13 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
   - PlayMode 에는 가상 키보드 장치 이벤트에 기대는 테스트가 있어 한 번의 통과로는 부족하다 (간헐 실패 이력: `docs/DECISIONS.md` 2026-10-02 "병합 조건 강화").
   - 병합 보고에는 **각 실행**의 결과 XML 값(`testcasecount`, `result`, `passed`/`failed`, 시각)을 모두 적는다. 통과한 실행만 골라 적지 않는다.
   - 한 번이라도 실패하면 실패한 테스트와 원문 메시지를 보고하고, 원인을 설명하지 못하면 병합하지 않는다. 코드를 바꾸지 않고 다시 돌려 통과한 것만으로 실패를 없던 일로 하지 않는다.
+- **병합 조건의 적용 범위**: 위 병합 조건은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 중 하나라도 닿을 때 적용한다. 셋 다 닿지 않는 브랜치(Unity 가 읽지 않는 `docs/`, `tools/`, `.claude/`, `.codex/`, 루트 `.md` 만 바꾼 것)는 Unity 검증 대신 **문서 검증**으로 병합한다. 조용히 건너뛰지 않고 아래 증거를 병합 보고에 붙인다.
+  - 닿지 않았다는 증거: `git diff --name-only <병합 대상>...HEAD` 출력 전체.
+  - 문서 검증: ① 규칙·에이전트 정의·docs 의 `§` 참조가 모두 CLAUDE.md 또는 `docs/RULES/` 의 제목으로 해석된다. ② `.claude/agents/` 를 바꿨으면 `tools/sync-agents.ps1` 로 재생성하고 `git diff -- .codex` 에 의도한 변경만 있다. ③ 내용을 옮겼으면 원본의 줄이 누락·중복 없이 한 곳에 있다(의도한 수정은 줄마다 밝힌다).
+  - `tools/` 의 스크립트를 바꿨으면 그 스크립트를 실제로 실행한 결과를 붙인다.
 - **병합·푸시는 사용자가 시킬 때만** (§0 Git 과 같다). `dev → main` 병합과 태그도 마찬가지다.
 - 리베이스·스쿼시는 **아직 푸시하지 않은 로컬 브랜치에서만**. 푸시한 브랜치의 이력은 고치지 않는다. 강제 푸시 금지 (§0).
 - **씬·프리팹을 건드리는 브랜치는 동시에 1개만** (§7-2). 병합 충돌 때 YAML 을 손으로 고치지 않는다.
 - `Packages/manifest.json`, `ProjectSettings/` 변경은 **그것만 담은 브랜치**로 분리한다. Unity 가 자동으로 바꾼 파일은 그렇게 기록한다.
 - **서브에이전트 파견 프롬프트에 `브랜치: <이름>` 줄을 `승인:` 줄과 함께 적는다** (§3-4). `unity-implementer` 는 `main`/`dev` 이거나 이름이 다르면 거부한다.
 - 병렬 작업을 위한 워크트리는 쓰지 않는다. 직렬로 진행한다. (Unity 프로젝트가 둘이 되면 `Library/` 를 따로 만든다.)
-
-### 9-3. 알아둘 것
-
-- 에디터가 열린 채로 브랜치를 전환하면 재임포트가 일어난다. 전환은 에디터가 한가할 때 한다.
-- Unity 가 자동으로 바꾸는 파일(`ProjectSettings/`, `ProtoHarness.slnx`, `.codex` 줄바꿈)은 브랜치 전환 때 같이 따라온다.
-- `.gitattributes` 는 `.unity/.prefab/.asset/.mat` 에 `merge=unityyamlmerge` 를 지정하지만 git config 에 병합 드라이버가 **등록되어 있지 않다.** 임시 저장소 실험(2026-10-02)에서 미등록 드라이버는 기본 텍스트 병합으로 되돌아가 **일반 충돌 마커를 남겼다.** 그래서 씬·프리팹이 충돌하면 마커를 손으로 고치지 않고 병합을 중단(`git merge --abort`)한 뒤 에디터에서 다시 작업한다. 드라이버 등록은 검증 없이 하지 않는다.
-- GitHub 브랜치 보호는 설정하지 않았다 (2026-10-02 결정, 단독 개발).

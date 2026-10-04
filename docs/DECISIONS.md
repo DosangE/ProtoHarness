@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-04 · 표현 분리 (P1-3b): 몸체 기울이기는 `RunnerTilt` 가 한다
+
+- **결정**: ① `Runtime/ChainRush/Visuals/RunnerTilt.cs`(MonoBehaviour, `[DefaultExecutionOrder(100)]`)가 `LateUpdate` 에서 `body.localRotation = Evaluate(motor.Velocity, motor.Steer)` 를 쓴다. 공식은 기존 `RunnerMotor.Step` 의 `Quaternion.Euler(velocity.y * -0.9f, steer * 12f, steer * -16f)` 를 그대로 옮긴 정적 순수 함수다. ② `RunnerMotor` 에서 `bodyVisual` 필드·검사·쓰기를 지웠다. 대신 `public float Steer` 를 추가했다(공개 API 추가). ③ 실행 순서 100 은 `RunnerAnimation`(120)과 `GrappleController`(150)보다 앞이다. 손에 달린 체인이 그 프레임의 기울기를 보도록 하려는 것이다. ④ 빌더 두 개를 고쳤다. `ChainRushSceneBuilder` 는 러너에 `RunnerTilt` 를 붙인다. `ChainRushPresentationBuilder` 는 기존 몸체를 `RunnerTilt.body` 에서 읽고 새 모델로 바꿔 연결한다.
+- **이유**: 시뮬레이션 틱 안에서 시각물 Transform 을 쓰면 두 가지 문제가 생긴다. 헤드리스 서버에는 시각물이 없고, 아트를 교체할 때 시뮬 코드를 건드려야 한다(2026-10-02 P1-2 항목의 "발견"). 모터 상태는 틱에서만 바뀐다. 그래서 매 프레임 다시 계산해도 값은 틱의 값과 같다. 정지·실패 중에는 유지되고, 재시작하면 속도·조향이 0이 되어 identity 가 된다.
+- **씬 수정** (에디터에서 했고 YAML 은 텍스트로 수정하지 않았다): `Unity_RunCommand` 로 두 씬의 러너에 `RunnerTilt` 를 붙였다(Undo 등록). `body` 에는 모터의 기존 `bodyVisual` 값을 그대로 연결했다. 프로토타입은 `Runner Visual`(fileID 1122326606), 무한은 `Armored Runner`(fileID 1415225579)다. 저장은 사용자가 Ctrl+S 로 했다(§0).
+- **Unity 자동 변경**: 프로토타입 씬을 저장할 때 라이트 하나(GameObject fileID 266071145)에 URP `UniversalAdditionalLightData` 가 기본값으로 붙었다(30줄). 우리가 만든 것이 아니며 그대로 커밋한다.
+- **옛 줄 정리**: 코드에서 필드를 지운 뒤에도 두 씬 YAML 에 `bodyVisual:` 줄이 남았다. `Unity_RunCommand` 로 `RunnerMotor` 를 `SetDirty` 하고 사용자가 저장해 Unity 가 다시 쓰게 했다. diff 상 삭제는 두 씬 모두 그 한 줄뿐이다. 텍스트로 지우지 않았다(§0). 참고로 dirty 표시 없이 저장하면 파일이 바뀌지 않는다(실제로 한 번 그랬다).
+- **검증** (`feature/p1-body-tilt`, 6000.3.19f1, KST): 컴파일 `Tundra build success`, Console Error/Exception/Warning 0. EditMode `testcasecount="54" result="Passed" passed="54" failed="0"` (14:35, 신규 `RunnerTiltTests` 4). PlayMode(Device 제외) 1회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="112.26"` (14:36:07~14:37:59). 2회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="113.04"` (14:38:31~14:40:24). 옛 줄 정리로 씬이 바뀐 뒤 같은 상태로 다시 돌렸다: 1회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="112.65"` (14:44:36~14:46:28), 2회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="113.66"` (14:47:00~14:48:53). 신규 `Tilt_ScriptedSteerLeft_LeansBodyFromMotorState` 포함, 기존 테스트 무수정. 입력 장치 경로는 바꾸지 않아 Device 실행은 해당 없다.
+- **하지 않은 것**: P1-3c(모터·그래플 운동 상태 이전), 기울이기 공식·수치 변경, `RunnerAnimation` 과 통합.
+
 ## 2026-10-04 · 레이서 상태 분리 (P1-3a): 레이서 한 명분 상태를 `RacerState` 로 꺼낸다
 
 - **결정**: ① `Runtime/ChainRush/RacerState.cs` (네임스페이스 `ProtoHarness.ChainRush`, 순수 C# `sealed class`)에 레이서 한 명의 체력·적중 수·그래플 수·무적 마감 틱·공격 시각 마감 틱·다음 공격 가능 틱을 둔다. ② 시간 질의는 모두 현재 틱을 인자로 받는다(`IsInvulnerable(tick)`, `CanAttack(tick)` 등). 시계를 직접 읽지 않는다. ③ 공격의 "쿨다운"(`BeginAttackCooldown`)과 "시각"(`ShowAttack`)은 메서드를 나눴다. 무한 모드는 적이 맞았을 때만 쿨다운을 걸고, 일반 모드는 둘 다 건다(`ChainRushGame.Attack`). ④ `ChainRushGame` 은 필드 6개 대신 `RacerState` 하나를 갖는다. `Health`/`Hits`/`Grapples`/`DamageFlash`/`AttackActive` 등 **공개 시그니처는 그대로**이고 `racer` 에 위임한다. ⑤ 계약 위반(`rules` null, 음수 틱)은 예외로 즉시 던진다(§5).

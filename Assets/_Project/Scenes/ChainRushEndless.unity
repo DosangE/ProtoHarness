@@ -273050,6 +273050,7 @@ GameObject:
   - component: {fileID: 1925527727}
   - component: {fileID: 1925527726}
   - component: {fileID: 1925527729}
+  - component: {fileID: 1925527730}
   m_Layer: 0
   m_Name: Runner
   m_TagString: Untagged
@@ -273119,7 +273120,6 @@ MonoBehaviour:
   controller: {fileID: 1925527728}
   game: {fileID: 2105445612}
   grapple: {fileID: 1925527726}
-  bodyVisual: {fileID: 1415225579}
   runSpeed: 10
   jumpSpeed: 11.5
   gravity: 22
@@ -273171,6 +273171,20 @@ MonoBehaviour:
   rightArm: {fileID: 1673714787}
   leftLeg: {fileID: 1798900006}
   rightLeg: {fileID: 1673167332}
+--- !u!114 &1925527730
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1925527724}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d339f42e8cd732841a9582abdf965600, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Visuals.RunnerTilt
+  motor: {fileID: 1925527727}
+  body: {fileID: 1415225579}
 --- !u!1 &1927402893
 GameObject:
   m_ObjectHideFlags: 0

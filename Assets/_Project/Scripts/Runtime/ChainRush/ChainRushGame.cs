@@ -24,13 +24,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private Audio.ChainRushAudio presentationAudio;
         [SerializeField] private Visuals.RunnerAnimation presentationAnimation;
         private Phase phase;
-        private int health;
-        private int hits;
-        private int grapples;
+        private RacerState racer;
         private int tick;
-        private int damageUntilTick;
-        private int attackUntilTick;
-        private int nextAttackTick;
         private IInputSource inputSource;
         private AudioClip[] cues;
 
@@ -39,15 +34,15 @@ namespace ProtoHarness.ChainRush
         public bool IsReady => phase == Phase.Ready;
         public bool HasFailed => phase == Phase.Failed;
         public bool HasFinished => phase == Phase.Complete;
-        public int Health => health;
-        public int Hits => hits;
-        public int Grapples => grapples;
+        public int Health => racer.Health;
+        public int Hits => racer.Hits;
+        public int Grapples => racer.Grapples;
         public int Tick => tick;
         public float Elapsed => Ticks.ToSeconds(tick);
         public float Progress => Mathf.Clamp01(player.transform.position.z / finishZ);
         public float FinishZ => finishZ;
-        public bool DamageFlash => tick < damageUntilTick && IsRunning;
-        public bool AttackActive => tick < attackUntilTick;
+        public bool DamageFlash => racer.IsInvulnerable(tick) && IsRunning;
+        public bool AttackActive => racer.IsAttackShown(tick);
         public bool IsEndless => endlessMode;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
@@ -101,7 +96,7 @@ namespace ProtoHarness.ChainRush
                 cues[i] = AudioClip.Create("ChainRush cue " + i, samples.Length, 1, SampleRate, false);
                 cues[i].SetData(samples, 0);
             }
-            health = rules.MaxHealth;
+            racer = new RacerState(rules);
             inputSource = new KeyboardMouseInputSource();
             attackVisual.gameObject.SetActive(false);
         }
@@ -133,7 +128,7 @@ namespace ProtoHarness.ChainRush
             float elapsed = Elapsed;
             for (int i = 0; i < targets.Length; i++) targets[i].Animate(elapsed);
             attackVisual.gameObject.SetActive(AttackActive);
-            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(attackUntilTick - tick) * 4f);
+            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(racer.AttackTicksLeft(tick)) * 4f);
         }
 
         // The only simulation entry point. One call is one tick, and the order below is the
@@ -165,13 +160,8 @@ namespace ProtoHarness.ChainRush
             player.ResetAtSpawn();
             followCamera.Snap();
             for (int i = 0; i < targets.Length; i++) targets[i].Restore();
-            health = rules.MaxHealth;
-            hits = 0;
-            grapples = 0;
+            racer.Reset();
             tick = 0;
-            damageUntilTick = 0;
-            attackUntilTick = 0;
-            nextAttackTick = 0;
             inputSource.Clear();
             if (endlessMode) enemies.ResetEncounters();
             attackVisual.gameObject.SetActive(false);
@@ -184,31 +174,29 @@ namespace ProtoHarness.ChainRush
             else if (phase == Phase.Paused) phase = Phase.Running;
         }
 
-        public void RegisterGrapple() => grapples++;
-        public void RegisterEnemyHit() { if (IsRunning) { hits++; PlayPresentationCue(5); } }
+        public void RegisterGrapple() => racer.AddGrapple();
+        public void RegisterEnemyHit() { if (IsRunning) { racer.AddHit(); PlayPresentationCue(5); } }
 
         public void Attack()
         {
-            if (!IsRunning || tick < nextAttackTick) return;
+            if (!IsRunning || !racer.CanAttack(tick)) return;
             if (endlessMode)
             {
-                if (enemies.TryAttack()) nextAttackTick = tick + rules.AttackCooldownTicks;
+                if (enemies.TryAttack()) racer.BeginAttackCooldown(tick);
                 return;
             }
-            attackUntilTick = tick + rules.AttackVisualTicks;
-            nextAttackTick = tick + rules.AttackCooldownTicks;
+            racer.ShowAttack(tick);
+            racer.BeginAttackCooldown(tick);
             PlayCue(2);
             for (int i = 0; i < targets.Length; i++)
-                if (targets[i].TryHit(player.transform.position)) hits++;
+                if (targets[i].TryHit(player.transform.position)) racer.AddHit();
         }
 
         public void TakeDamage()
         {
-            if (!IsRunning || tick < damageUntilTick) return;
-            health--;
-            damageUntilTick = tick + rules.DamageInvulnerabilityTicks;
+            if (!IsRunning || !racer.TryTakeDamage(tick)) return;
             PlayCue(3);
-            if (health <= 0) FailRun();
+            if (racer.IsDown) FailRun();
         }
 
         public void FailRun()

@@ -15,9 +15,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **18** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **19** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | PlayMode **3 파일 / 17 테스트**, EditMode **1 파일 / 3 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`) |
+| 우리 테스트 | PlayMode **4 파일 / 24 테스트** (그중 `Device` 카테고리 1개), EditMode **6 파일 / 50 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-04 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -50,7 +50,8 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
 | 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
-| 준비·진행·정지·실패·완주·공격·체력 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules |
+| 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState` |
+| 레이서 한 명분 상태: 체력·적중 수·그래플 수·무적/공격 마감 틱. 시간 질의는 현재 틱을 인자로 받는다. 순수 로직 | `Runtime/ChainRush/RacerState.cs` | `RunRules` (생성자 인자, null 이면 `ArgumentNullException`) |
 | 추적 카메라·속도에 따른 FOV | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game, Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
@@ -89,7 +90,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 실행 | Play → Enter 또는 START RUN 버튼 |
 | 조작 | A/D 또는 방향키 좌우 이동, 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, R 재시작, Esc 일시정지 |
 | 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device` 카테고리 제외) / `Run Device Input Tests` (가상 키보드·마우스 테스트만) |
-| 테스트 결과 | OS 임시 폴더 `ChainRush-PlayMode-results.xml` |
+| 테스트 결과 | Unity 프로세스의 `Path.GetTempPath()` 아래 `ChainRush-PlayMode-results.xml` (EditMode 결과도 같은 파일에 덮어쓴다). 경로는 머신마다 다르므로 실행할 때 `Unity_RunCommand` 로 `Path.GetTempPath()` 를 읽어 확인한다 |
 
 코스: 9개 플랫폼, 8개 낭떠러지와 앵커, 결승 z=496. 노란 점프선은 각 가장자리 4m 앞이다.
 첫 점프는 z=44, 첫 앵커는 (0, 10, 56), 첫 착지 플랫폼은 z=64에서 시작한다.
@@ -133,7 +134,7 @@ HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 �
 
 - Unity MCP 명령 컴파일/실행 성공. 최종 Console 응답: `logs: [], totalCount: 0, errorCount: 0`.
 - 최종 PlayMode XML: `result="Passed" total="8" passed="8" failed="0"` (23:41:35 KST).
-- 이 머신에서 Unity의 임시 경로는 `C:/Users/Public/Documents/ESTsoft/CreatorTemp/`. 결과 파일은 `ChainRush-PlayMode-results.xml`.
+- ~~이 머신에서 Unity의 임시 경로는 `C:/Users/Public/Documents/ESTsoft/CreatorTemp/`.~~ 당시 머신의 값이다. 경로는 머신마다 다르다(2026-10-04 다른 머신에서 `C:\Users\User\AppData\Local\Temp\` 확인). 위 "테스트 결과" 행대로 실행할 때 확인한다. 결과 파일은 `ChainRush-PlayMode-results.xml`.
 - 같은 폴더의 시작·달리기·그래플링 PNG를 실제로 열어 한글 HUD, 캐릭터, 코스, 체인 연결을 확인했다.
 - 재현된 착지 실패는 해제 부스트를 지상 점프 속도로 올린 후 완주 테스트로 검증했다. A→D 전환 테스트에서 확인한 느린 반응은 지상 좌우 가속도를 60m/s²로 높여 검증했다.
 - Unity가 `ProtoHarness.slnx`에 새 어셈블리를 추가하고 `ProjectSettings/SceneTemplateSettings.json`을 생성했다. 직접 ProjectSettings를 편집하지 않았다. 작업 시작 전부터 수정되어 있던 AI Assistant Settings.json은 유지했다.

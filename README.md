@@ -28,7 +28,8 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 | P0 | 수치를 ScriptableObject로 분리 (`RunRules`, `EncounterTuning`), 첫 EditMode 테스트 | 완료 (dev 병합) |
 | P1-1 | 고정 틱 — 시뮬레이션은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행 | 완료 (dev 병합) |
 | P1-2 | 입력 추상화 — 시뮬레이션이 장치가 아니라 `TickInput`을 받는다 | 완료 (dev 병합) |
-| P1 이후 | 시드 기반 코스, 레이서 상태 분리, 적 다변화, 점수·결과 화면 | 예정 |
+| P1-3a | 레이서 상태 분리 — 레이서 한 명분 상태(체력·적중·쿨다운)를 `RacerState`로 꺼낸다 | 완료 (dev 병합) |
+| P1 이후 | 레이서 상태 분리 나머지(표현 분리 P1-3b, 모터·그래플 상태 P1-3c), 시드 기반 코스, 적 다변화, 점수·결과 화면 | 예정 |
 
 ## 방향 (초안, 합의 대기)
 

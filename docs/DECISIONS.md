@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-10-04 · 운동 상태 분리 (P1-3c): 모터·그래플 상태를 `RacerState` 로, 접근은 `ref`
+
+- **결정**: ① 다음 필드를 `RacerState` 로 옮겼다. `RunnerMotor` 의 `velocity`·`steer`·`jumpQueued`·`coyoteTime`, `GrappleController` 의 `ropeLength`·`missUntilTick`, 붙은 앵커. 앵커는 `Transform` 대신 `anchors` 배열 인덱스(`int`, `RacerState.NoAnchor` = -1)로 저장한다. ② 운동 값(`Velocity`, `Steer`, `JumpQueued`, `CoyoteTime`, `RopeLength`)은 **`ref` 반환**으로 노출한다(사용자 선택 A). 모터는 `Step` 첫 줄에서 `ref` 로컬로 받고 나머지 코드는 글자 그대로 뒀다. ③ 앵커·빗나감은 메서드로만 바꾼다(`Attach(index, length)`, `Detach()`, `MarkMiss(tick)`, `ClearMiss()`). 음수 인덱스, 0 이하·NaN 줄 길이, 음수 틱은 예외다(§5). ④ `ChainRushGame.Racer` 를 공개했다(공개 API 추가). 모터·그래플의 기존 공개 시그니처(`Velocity`, `Steer`, `Speed`, `IsAttached`, `AnchorPosition`, `RopeLength`, `JustMissed`, `TryAttach`, `Release`, `ConstrainMotion`, `ClearMiss` 등)는 그대로다. ⑤ `Reset()` 은 운동 상태도 0으로 만든다.
+- **이유**: 레이서 한 명의 시뮬 상태가 한 객체에 있어야 레이서를 여럿 두고, 나중에 스냅샷·보정(P3)을 할 수 있다(`DESIGN.md` §3). 앵커를 인덱스로 둔 것은 상태가 엔진 참조 없이 값으로만 이뤄지게 하려는 것이다.
+- **A 를 고른 이유와 대가**: Step 도중 `Release(true)` → `AddReleaseBoost` 와 `PrimaryAction` 이 같은 속도·점프 예약을 고친다(`RunnerMotor` Step 의 입력 처리, 이동 뒤 해제). 그래서 복사 후 되쓰기(B)는 순서가 엇갈릴 위험이 있었다. `ref` 는 같은 메모리를 가리키므로 순서가 지금과 같다. 대가로 `game.Racer` 를 가진 누구나 운동 값을 바꿀 수 있다(이전에는 모터의 private 필드였다).
+- **작은 차이**: `RopeLength` 는 이전에 해제 뒤에도 마지막 값이 남았다. 이제 `Reset()`(새 판 시작)에서 0이 된다. 해제만으로는 값이 유지되는 것은 같다. 붙어 있지 않을 때 이 값을 읽는 곳은 테스트의 실패 메시지 문자열(`ChainRushTests.cs:222`)뿐이다.
+- **남긴 것**: 위치(`Transform`·`CharacterController`). 그래플의 `candidate`(매 프레임 계산, HUD 표시), `lastAnchor`·`visualExtension`(표현). 모터의 `spawnPosition`(설정값). `coyoteTime` 은 초 단위 그대로다(틱 환산 안 함).
+- **검증** (`feature/p1-racer-motion`, 6000.3.19f1, KST): 컴파일 `Tundra build success (7.69 seconds)`, Console Error/Exception 0. EditMode `testcasecount="60" result="Passed" passed="60" failed="0"` (15:05, `RacerStateTests` 11→17). PlayMode(Device 제외) 1회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="101.73"` (15:05:35~15:07:16). 2회차 `testcasecount="24" result="Passed" passed="24" failed="0" duration="101.41"` (15:07:41~15:09:22). 기존 테스트 무수정. 입력 장치 경로는 바꾸지 않아 Device 실행은 해당 없다. 씬·프리팹 변경 없음.
+- **Console 경고 (이번 변경과 무관으로 판단)**: 도메인 리로드(15:01:18) 때 `Deleting invalid font reference.` (`UnityEditor.ScriptReloadProperties:Load`) 경고가 20건 이상 나왔다. 같은 경고가 이번 에디터 세션 Editor.log 에서 6419줄부터 261회 나왔다(P1-3a 때부터). 직전 세션 로그(`Editor-prev.log`)에는 0회다. 원인은 확인하지 못했다.
+- **하지 않은 것**: 위치 이전, 레이서 여럿, 스냅샷·직렬화, `Phase` 를 레이서별로 나누기.
+
 ## 2026-10-04 · 표현 분리 (P1-3b): 몸체 기울이기는 `RunnerTilt` 가 한다
 
 - **결정**: ① `Runtime/ChainRush/Visuals/RunnerTilt.cs`(MonoBehaviour, `[DefaultExecutionOrder(100)]`)가 `LateUpdate` 에서 `body.localRotation = Evaluate(motor.Velocity, motor.Steer)` 를 쓴다. 공식은 기존 `RunnerMotor.Step` 의 `Quaternion.Euler(velocity.y * -0.9f, steer * 12f, steer * -16f)` 를 그대로 옮긴 정적 순수 함수다. ② `RunnerMotor` 에서 `bodyVisual` 필드·검사·쓰기를 지웠다. 대신 `public float Steer` 를 추가했다(공개 API 추가). ③ 실행 순서 100 은 `RunnerAnimation`(120)과 `GrappleController`(150)보다 앞이다. 손에 달린 체인이 그 프레임의 기울기를 보도록 하려는 것이다. ④ 빌더 두 개를 고쳤다. `ChainRushSceneBuilder` 는 러너에 `RunnerTilt` 를 붙인다. `ChainRushPresentationBuilder` 는 기존 몸체를 `RunnerTilt.body` 에서 읽고 새 모델로 바꿔 연결한다.

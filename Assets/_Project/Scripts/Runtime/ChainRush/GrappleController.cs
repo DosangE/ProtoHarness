@@ -16,16 +16,14 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private ChainVisual chainVisual;
         private float visualExtension;
         private Vector3 lastAnchor;
-        private Transform attachedAnchor;
         private Transform candidate;
-        private float ropeLength;
-        private int missUntilTick;
 
-        public bool IsAttached => attachedAnchor != null;
-        public Vector3 AnchorPosition => attachedAnchor != null ? attachedAnchor.position : Vector3.zero;
+        // Attachment, rope length and the miss deadline live in the racer's RacerState.
+        public bool IsAttached => game.Racer.HasAnchor;
+        public Vector3 AnchorPosition => IsAttached ? anchors[game.Racer.AnchorIndex].position : Vector3.zero;
         public Transform Candidate => candidate;
-        public float RopeLength => ropeLength;
-        public bool JustMissed => game.Tick < missUntilTick;
+        public float RopeLength => game.Racer.RopeLength;
+        public bool JustMissed => game.Tick < game.Racer.MissUntilTick;
 
         private void Awake()
         {
@@ -61,22 +59,25 @@ namespace ProtoHarness.ChainRush
         private void LateUpdate()
         {
             if (game.IsPaused) return;
-            candidate = SelectCandidate();
+            candidate = AnchorAt(SelectCandidate());
             if (game.IsEndless)
             {
-                if (IsAttached) lastAnchor = attachedAnchor.position;
+                if (IsAttached) lastAnchor = AnchorPosition;
                 visualExtension = Mathf.MoveTowards(visualExtension, IsAttached ? 1f : 0f, Time.deltaTime * 8f);
                 if (visualExtension > 0f) chainVisual.Present(lastAnchor, visualExtension);
                 else chainVisual.Hide();
             }
             if (!IsAttached) return;
             rope.SetPosition(0, ropeOrigin.position);
-            rope.SetPosition(1, attachedAnchor.position);
+            rope.SetPosition(1, AnchorPosition);
         }
 
-        private Transform SelectCandidate()
+        private Transform AnchorAt(int index) => index == RacerState.NoAnchor ? null : anchors[index];
+
+        // Returns the best anchor's index, or RacerState.NoAnchor.
+        private int SelectCandidate()
         {
-            Transform best = null;
+            int best = RacerState.NoAnchor;
             float bestScore = float.PositiveInfinity;
             Vector3 origin = transform.position + Vector3.up * 0.4f;
             for (int i = 0; i < anchors.Length; i++)
@@ -87,7 +88,7 @@ namespace ProtoHarness.ChainRush
                 float score = offset.sqrMagnitude + offset.x * offset.x * 3f;
                 if (score >= bestScore) continue;
                 bestScore = score;
-                best = anchors[i];
+                best = i;
             }
             return best;
         }
@@ -95,14 +96,14 @@ namespace ProtoHarness.ChainRush
         public bool TryAttach()
         {
             if (!game.IsRunning || motor.IsGrounded || IsAttached) return false;
-            candidate = SelectCandidate();
-            if (candidate == null)
+            int index = SelectCandidate();
+            candidate = AnchorAt(index);
+            if (index == RacerState.NoAnchor)
             {
-                missUntilTick = game.Tick + Ticks.FromSeconds(0.75f);
+                game.Racer.MarkMiss(game.Tick + Ticks.FromSeconds(0.75f));
                 return false;
             }
-            attachedAnchor = candidate;
-            ropeLength = Mathf.Max(5f, Vector3.Distance(transform.position, attachedAnchor.position));
+            game.Racer.Attach(index, Mathf.Max(5f, Vector3.Distance(transform.position, anchors[index].position)));
             rope.enabled = !game.IsEndless;
             game.RegisterGrapple();
             game.PlayCue(1);
@@ -112,11 +113,13 @@ namespace ProtoHarness.ChainRush
         public void ConstrainMotion(Vector3 position, ref Vector3 displacement, ref Vector3 velocity, float dt)
         {
             if (!IsAttached) return;
+            ref float ropeLength = ref game.Racer.RopeLength;
             ropeLength = Mathf.Max(5f, ropeLength - retractSpeed * dt);
-            Vector3 radial = position + displacement - attachedAnchor.position;
+            Vector3 anchor = AnchorPosition;
+            Vector3 radial = position + displacement - anchor;
             if (radial.sqrMagnitude <= ropeLength * ropeLength) return;
             Vector3 normal = radial.normalized;
-            displacement = attachedAnchor.position + normal * ropeLength - position;
+            displacement = anchor + normal * ropeLength - position;
             float outwardSpeed = Vector3.Dot(velocity, normal);
             if (outwardSpeed > 0f) velocity -= normal * outwardSpeed;
         }
@@ -129,13 +132,13 @@ namespace ProtoHarness.ChainRush
                 chainVisual.Hide();
             }
             if (!IsAttached) return;
-            attachedAnchor = null;
+            game.Racer.Detach();
             rope.enabled = false;
             if (boost && game.IsRunning) motor.AddReleaseBoost();
         }
 
         // Ticks restart at zero with each run, so a stale miss deadline must not carry over.
-        public void ClearMiss() => missUntilTick = 0;
+        public void ClearMiss() => game.Racer.ClearMiss();
 
         public void ShiftOrigin(Vector3 offset)
         {

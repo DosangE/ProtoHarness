@@ -122,6 +122,76 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Constructor_Created_StartsAtRestWithoutAnchor()
+        {
+            Assert.That(racer.Velocity, Is.EqualTo(Vector3.zero));
+            Assert.That(racer.Steer, Is.Zero);
+            Assert.That(racer.JumpQueued, Is.False);
+            Assert.That(racer.CoyoteTime, Is.Zero);
+            Assert.That(racer.HasAnchor, Is.False);
+            Assert.That(racer.AnchorIndex, Is.EqualTo(RacerState.NoAnchor));
+            Assert.That(racer.MissUntilTick, Is.Zero);
+        }
+
+        [Test]
+        public void Velocity_WrittenByRef_IsSeenThroughProperty()
+        {
+            ref Vector3 velocity = ref racer.Velocity;
+            velocity.y = 4f;
+            Assert.That(racer.Velocity.y, Is.EqualTo(4f));
+        }
+
+        [Test]
+        public void AttachThenDetach_TracksAnchorAndRope()
+        {
+            racer.Attach(2, 7.5f);
+            Assert.That(racer.HasAnchor, Is.True);
+            Assert.That(racer.AnchorIndex, Is.EqualTo(2));
+            Assert.That(racer.RopeLength, Is.EqualTo(7.5f));
+            racer.Detach();
+            Assert.That(racer.HasAnchor, Is.False);
+            Assert.That(racer.AnchorIndex, Is.EqualTo(RacerState.NoAnchor));
+        }
+
+        [Test]
+        public void Attach_InvalidArguments_Throw()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => racer.Attach(-1, 5f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => racer.Attach(0, 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => racer.Attach(0, float.NaN));
+            Assert.That(racer.HasAnchor, Is.False);
+        }
+
+        [Test]
+        public void MarkMissThenClear_TracksDeadline()
+        {
+            racer.MarkMiss(40);
+            Assert.That(racer.MissUntilTick, Is.EqualTo(40));
+            racer.ClearMiss();
+            Assert.That(racer.MissUntilTick, Is.Zero);
+            Assert.Throws<ArgumentOutOfRangeException>(() => racer.MarkMiss(-1));
+        }
+
+        [Test]
+        public void Reset_AfterMotion_ClearsMotionAndAnchor()
+        {
+            racer.Velocity = new Vector3(1f, 2f, 3f);
+            racer.Steer = -1f;
+            racer.JumpQueued = true;
+            racer.CoyoteTime = 0.1f;
+            racer.Attach(1, 6f);
+            racer.MarkMiss(30);
+            racer.Reset();
+            Assert.That(racer.Velocity, Is.EqualTo(Vector3.zero));
+            Assert.That(racer.Steer, Is.Zero);
+            Assert.That(racer.JumpQueued, Is.False);
+            Assert.That(racer.CoyoteTime, Is.Zero);
+            Assert.That(racer.HasAnchor, Is.False);
+            Assert.That(racer.RopeLength, Is.Zero);
+            Assert.That(racer.MissUntilTick, Is.Zero);
+        }
+
+        [Test]
         public void Queries_NegativeTick_Throw()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => racer.IsInvulnerable(-1));

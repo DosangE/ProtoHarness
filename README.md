@@ -63,7 +63,7 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 
 **조작**: A/D 또는 방향키 좌우 이동 · 좌클릭 지상 점프, 공중에서 재클릭 시 그래플(유지하면 스윙, 놓거나 우클릭하면 해제) · Space 공격 · R 재시작 · Esc 일시정지 · M 음소거
 
-**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests`, 또는 Test Runner 창에서 EditMode / PlayMode 실행.
+**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (가상 장치 테스트 제외), `Run Device Input Tests` (가상 키보드·마우스 테스트만), 또는 Test Runner 창에서 EditMode / PlayMode 실행.
 
 ## 폴더
 

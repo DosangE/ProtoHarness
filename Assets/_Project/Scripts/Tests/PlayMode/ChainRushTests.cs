@@ -109,7 +109,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Health, Is.EqualTo(1));
         }
 
+        // Device: depends on virtual Keyboard/Mouse event delivery, which failed repeatedly in the editor
+        // (docs/DECISIONS.md 2026-10-04). Excluded from the merge gate run; run it with the Device menu.
         [UnityTest]
+        [Category("Device")]
         public IEnumerator Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts()
         {
             Keyboard originalKeyboard = Keyboard.current;

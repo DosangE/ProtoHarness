@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-10-04 · 장치 입력 테스트 분리: 가상 키보드 테스트는 병합 조건에서 뺀다
+
+- **결정**: ① `Combat_EachDirection_SpaceFiresConnectsAndRetracts` 는 가상 키보드 대신 스크립트 입력 소스(`SetInputSource`)로 공격을 넣는다. 이름은 `Combat_EachDirection_AttackFiresConnectsAndRetracts`. 방향별 단언(`Firing` → 비행 뒤 적중 1 → 체력 3 → 조우 종료)은 그대로 뒀다. ② `Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts` 는 본문을 고치지 않고 `[Category("Device")]` 만 붙였다. ③ 메뉴 `Run PlayMode Tests` 는 `categoryNames = { "!Device" }` 로 Device 를 빼고 돌린다. 새 메뉴 `Run Device Input Tests` 는 Device 만 돌린다. ④ 병합 조건은 "PlayMode(Device 제외) 연속 2회"로 바꾼다. 입력 장치 경로를 바꾼 브랜치는 Device 실행 결과를 붙인다. 규칙 본문은 `CLAUDE.md` §9-2.
+- **계기**: P1-3a(`feature/p1-racer-state`, WIP `a65404f`) 검증 중에 PlayMode 가 3회 연속으로 같은 2개 실패를 냈다. 이 머신, 에디터 6000.3.19f1, Input System 1.20.0, KST 기준이다.
+
+  | 시각 | 조건 | 결과 |
+  |---|---|---|
+  | 13:36:16~13:38:21 | 스크립트 임포트·컴파일 직후 첫 실행, 에디터 비활성 | `testcasecount="24" result="Failed(Child)" passed="22" failed="2" duration="124.42"` |
+  | 13:40:02~13:42:07 | 같은 코드, 에디터 비활성 | `testcasecount="24" result="Failed(Child)" passed="22" failed="2" duration="124.97"` |
+  | 13:46:23~13:48:16 | 같은 코드, 에디터 활성(`isApplicationActive=True` 확인 후 시작) | `testcasecount="24" result="Failed(Child)" passed="22" failed="2" duration="113.79"` |
+
+  실패 원문은 2026-10-02 기록과 같다. `Combat_…SpaceFires…`: `Expected: Firing / But was: Vulnerable`(`:92`, 첫 방향 `Above` 에서 멈춤). `Input_KeyboardAndMouse_…`: `Expected: True / But was: False`(`:123`, Enter 뒤 `IsRunning`). 사용자에 따르면 원래 환경(6000.3.25f1)에서도 실패한 적이 있다.
+- **이유**: 두 테스트가 지키는 것은 대부분 시뮬레이션이다. 장치 이벤트 전달은 그 앞단에서 흔들린다. 전달이 흔들리면 시뮬레이션이 바뀌지 않아도 병합 조건이 막힌다. P1-3a 처럼 입력 경로를 건드리지 않은 변경까지 막는다. 장치 없는 경로는 `ChainRushInputSourceTests` 7개가 이미 같은 환경에서 매번 통과했다.
+- **원인은 확인하지 못했다.** 확인한 것: ① 실행 중 Console Error/Exception 0건(그래서 `StartRun` 예외로 `IsRunning=False` 가 된 것은 아니다). ② 설정은 `editorInputBehaviorInPlayMode=PointersAndKeyboardsRespectGameViewFocus`, `backgroundBehavior=ResetAndDisableNonBackgroundDevices`. Input System 은 Play 중 **Game 뷰**에 포커스가 없으면 키보드·포인터 이벤트를 player 업데이트에서 처리하지 않고 editor 업데이트로 넘긴다(`InputManager.cs:3647-3663`, 패키지 소스). ③ 에디터 창이 활성이어도 실패했다(3회차). Game 뷰 포커스 자체는 측정하지 못했으므로 포커스 가설은 기각도 확인도 아니다. ④ **Device 테스트만 단독으로 돌리면 통과했다**(아래 검증, 05:02). 전체 실행 안에서만 실패하는지, 단순 간헐인지는 가르지 못했다.
+- **검증** (`fix/playmode-device-input-tests`, 6000.3.19f1): EditMode `testcasecount="39" result="Passed" passed="39" failed="0"` (13:57). PlayMode(Device 제외) 1회차 `testcasecount="23" result="Passed" total="23" passed="23" failed="0" duration="104.70"` (13:57:49~13:59:34). 2회차 `testcasecount="23" result="Passed" total="23" passed="23" failed="0" duration="103.68"` (14:00:00~14:01:44). Device 1회 `testcasecount="1" result="Passed" passed="1" failed="0" duration="3.15"` (14:02:12). 컴파일 `Tundra build success`, Console Error 0.
+- **버린 대안**: 두 테스트 삭제(사용자 제안). 키 매핑(`KeyboardMouseInputSource`)과 메뉴 키(Enter/R)를 지키는 유일한 테스트이고, 방향별 전투 순서를 지키는 유일한 테스트라서 버렸다. `InputTestFixture` 도입은 manifest `testables` 변경이 필요할 수 있어(§0) 하지 않았다(필요 여부는 확인 못 함).
+- **하지 않은 것**: 가상 장치 실패의 근본 원인 조사. Device 테스트 본문 수정.
+
 ## 2026-10-02 · 병합 조건은 Unity 가 읽는 곳을 바꾼 브랜치에만 적용한다
 
 - **결정**: §9-2 병합 조건(컴파일 0 + EditMode + PlayMode 연속 2회)은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 에 닿을 때 적용한다. 닿지 않는 브랜치는 **문서 검증**(§ 참조 해석, `.codex` 재생성 diff, 이동 시 줄 대조)으로 병합하고, 닿지 않았다는 증거로 `git diff --name-only <병합 대상>...HEAD` 출력을 붙인다. 규칙 본문은 `CLAUDE.md` §9-2.

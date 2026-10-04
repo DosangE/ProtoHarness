@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-10-04 · 코스 설계 방향: 트랙 좌표계, 커브·경사, 이어진 도로
+
+- **결정** (사용자, 설계서 `docs/COURSE.md` 11절): ① 커브는 트랙 좌표계(`s` 진행 거리, `d` 좌우, `h` 높이)로 만든다. ② 중심선은 자체 해석 조각(직선·수평 원호·종단 곡선)으로 정의한다. Unity Splines 패키지는 쓰지 않는다. ③ 노면 메시·콜라이더는 중심선 + 단면을 따라 절차 생성하고, 장식만 프리팹이다. ④ 노면은 이어진 도로가 기본이고 틈은 틈 모듈로만 나온다. ⑤ 무한 모드에도 커브를 넣는다. 원점 이동은 벡터 기반으로 바꾸고 자기 교차 방지 제약을 둔다. ⑥ 경사 속도 보정을 넣는다(시작값 k = 1.5, 테스트 후 조절). ⑦ 원심력은 계수를 데이터로 두고(기본 0) 테스트 후 결정한다.
+- **미결**: 커브 조작 모델(자동 추종 / 자유 조향). 기본값 자동 추종으로 설계를 진행하고 T2 전에 확정한다.
+- **이유**: 최종 목표가 순환 트랙 레이스라서 진행도·순위를 `s` 하나로 재는 트랙 좌표계가 결국 필요하다(교차로 90° 회전이나 화면만 휘기로는 레이스가 안 된다). 해석 조각은 길이·좌표가 닫힌 식이라 결정적이고 패키지가 필요 없다.
+- **버린 대안**: 교차로 90° 회전(템플 런식), 커브드 월드 셰이더만 쓰기(장식으로는 나중에 가능), Unity Splines(manifest 변경 + 결정성 미확인).
+- **다음**: 구현은 `COURSE.md` 10절의 T0(직선 상태에서 좌표계만 교체, 기존 테스트 무수정 통과)부터 단계마다 합의한다. P1 "시드 기반 코스"는 T3 에 흡수된다.
+
 ## 2026-10-04 · 운동 상태 분리 (P1-3c): 모터·그래플 상태를 `RacerState` 로, 접근은 `ref`
 
 - **결정**: ① 다음 필드를 `RacerState` 로 옮겼다. `RunnerMotor` 의 `velocity`·`steer`·`jumpQueued`·`coyoteTime`, `GrappleController` 의 `ropeLength`·`missUntilTick`, 붙은 앵커. 앵커는 `Transform` 대신 `anchors` 배열 인덱스(`int`, `RacerState.NoAnchor` = -1)로 저장한다. ② 운동 값(`Velocity`, `Steer`, `JumpQueued`, `CoyoteTime`, `RopeLength`)은 **`ref` 반환**으로 노출한다(사용자 선택 A). 모터는 `Step` 첫 줄에서 `ref` 로컬로 받고 나머지 코드는 글자 그대로 뒀다. ③ 앵커·빗나감은 메서드로만 바꾼다(`Attach(index, length)`, `Detach()`, `MarkMiss(tick)`, `ClearMiss()`). 음수 인덱스, 0 이하·NaN 줄 길이, 음수 틱은 예외다(§5). ④ `ChainRushGame.Racer` 를 공개했다(공개 API 추가). 모터·그래플의 기존 공개 시그니처(`Velocity`, `Steer`, `Speed`, `IsAttached`, `AnchorPosition`, `RopeLength`, `JustMissed`, `TryAttach`, `Release`, `ConstrainMotion`, `ClearMiss` 등)는 그대로다. ⑤ `Reset()` 은 운동 상태도 0으로 만든다.

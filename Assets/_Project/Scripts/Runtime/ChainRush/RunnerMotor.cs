@@ -9,7 +9,6 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private CharacterController controller;
         [SerializeField] private ChainRushGame game;
         [SerializeField] private GrappleController grapple;
-        [SerializeField] private Transform bodyVisual;
         [SerializeField] private float runSpeed = 10f;
         [SerializeField] private float jumpSpeed = 11.5f;
         [SerializeField] private float gravity = 22f;
@@ -21,14 +20,15 @@ namespace ProtoHarness.ChainRush
         private float coyoteTime;
 
         public Vector3 Velocity => velocity;
+        public float Steer => steer;
         public bool IsGrounded => controller.isGrounded;
         public float Speed => velocity.magnitude;
 
         private void Awake()
         {
-            if (controller == null || game == null || grapple == null || bodyVisual == null)
+            if (controller == null || game == null || grapple == null)
             {
-                Debug.LogError("RunnerMotor: controller, game, grapple and bodyVisual must be assigned.", this);
+                Debug.LogError("RunnerMotor: controller, game and grapple must be assigned.", this);
                 enabled = false;
                 return;
             }
@@ -80,7 +80,6 @@ namespace ProtoHarness.ChainRush
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && transform.position.z > grapple.AnchorPosition.z + 0.5f)
                 grapple.Release(true);
-            bodyVisual.localRotation = Quaternion.Euler(velocity.y * -0.9f, steer * 12f, steer * -16f);
             if (transform.position.y < -12f) game.FailRun();
         }
 
@@ -111,7 +110,6 @@ namespace ProtoHarness.ChainRush
             steer = 0f;
             jumpQueued = false;
             coyoteTime = 0f;
-            bodyVisual.localRotation = Quaternion.identity;
         }
     }
 }

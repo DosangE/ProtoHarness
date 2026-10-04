@@ -3,6 +3,7 @@ using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -148,6 +149,26 @@ namespace ProtoHarness.Tests.PlayMode
             source.Attack = true;
             yield return new WaitForSeconds(0.05f);
             Assert.That(game.Hits, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator Tilt_ScriptedSteerLeft_LeansBodyFromMotorState()
+        {
+            Assert.That(player.GetComponent<RunnerTilt>(), Is.Not.Null, "RunnerTilt must sit on the runner.");
+            Transform body = player.transform.Find("Runner Visual");
+            Assert.That(body, Is.Not.Null);
+            game.StartRun();
+            source.Steer = -1f;
+            yield return new WaitForSeconds(0.3f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.Steer, Is.EqualTo(-1f));
+            Quaternion expected = RunnerTilt.Evaluate(player.Velocity, player.Steer);
+            Assert.That(Quaternion.Angle(body.localRotation, expected), Is.LessThan(0.01f));
+            Assert.That(Quaternion.Angle(body.localRotation, Quaternion.identity), Is.GreaterThan(10f));
+            source.Steer = 0f;
+            game.StartRun();
+            yield return new WaitForEndOfFrame();
+            Assert.That(Quaternion.Angle(body.localRotation, Quaternion.identity), Is.LessThan(0.01f), "Restart must return the body upright.");
         }
     }
 }

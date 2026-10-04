@@ -51,8 +51,9 @@ namespace ProtoHarness.Editor.ChainRush
             trim.SetFloat("_Metallic", 0.8f);
             floor.SetFloat("_Metallic", 0.35f);
             floor.SetFloat("_Smoothness", 0.65f);
-            var motorData = new SerializedObject(runner);
-            Transform oldBody = (Transform)motorData.FindProperty("bodyVisual").objectReferenceValue;
+            var tilt = runner.GetComponent<RunnerTilt>();
+            if (tilt == null) throw new InvalidOperationException("RunnerTilt is missing on the runner.");
+            Transform oldBody = (Transform)new SerializedObject(tilt).FindProperty("body").objectReferenceValue;
             var grapple = runner.GetComponent<GrappleController>();
             var grappleData = new SerializedObject(grapple);
             Transform hand = (Transform)grappleData.FindProperty("ropeOrigin").objectReferenceValue;
@@ -88,7 +89,7 @@ namespace ProtoHarness.Editor.ChainRush
             hand.SetParent(joints[3], false);
             hand.localPosition = new Vector3(0f, -0.58f, 0.18f);
             oldBody.gameObject.SetActive(false);
-            Assign(runner, "bodyVisual", model);
+            Assign(tilt, "body", model);
             for (int sector = 0; sector < world.childCount; sector++)
             {
                 Transform chunk = world.GetChild(sector);

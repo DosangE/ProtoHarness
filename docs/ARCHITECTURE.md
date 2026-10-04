@@ -15,9 +15,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **19** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **20** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | PlayMode **4 파일 / 24 테스트** (그중 `Device` 카테고리 1개), EditMode **6 파일 / 50 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-04 실행 XML 기준 |
+| 우리 테스트 | PlayMode **4 파일 / 25 테스트** (그중 `Device` 카테고리 1개), EditMode **7 파일 / 54 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-04 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -44,7 +44,8 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
-| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음) | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game, Grapple, `TickInput` |
+| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음) | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game, Grapple, `TickInput` |
+| 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate` | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |

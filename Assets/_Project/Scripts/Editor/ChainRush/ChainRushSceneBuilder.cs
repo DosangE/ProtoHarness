@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.TestTools.TestRunner.Api;
@@ -131,6 +132,7 @@ namespace ProtoHarness.Editor.ChainRush
             controller.stepOffset = 0.2f;
             var motor = playerObject.AddComponent<RunnerMotor>();
             var grapple = playerObject.AddComponent<GrappleController>();
+            var tilt = playerObject.AddComponent<RunnerTilt>();
             var model = new GameObject("Runner Visual").transform;
             model.SetParent(playerObject.transform, false);
             Primitive("Torso", PrimitiveType.Capsule, model, new Vector3(0f, -0.05f, 0f), new Vector3(0.62f, 0.52f, 0.48f), suit);
@@ -171,7 +173,8 @@ namespace ProtoHarness.Editor.ChainRush
             camera.transform.position = playerObject.transform.position + new Vector3(0f, 5.5f, -10f);
             camera.transform.LookAt(playerObject.transform.position + Vector3.up * 1.5f + Vector3.forward * 9f);
             var hud = gameObject.AddComponent<ChainRushHud>();
-            Assign(motor, "controller", controller, "game", game, "grapple", grapple, "bodyVisual", model);
+            Assign(motor, "controller", controller, "game", game, "grapple", grapple);
+            Assign(tilt, "motor", motor, "body", model);
             Assign(grapple, "game", game, "motor", motor, "rope", rope, "ropeOrigin", hand);
             AssignArray(grapple, "anchors", anchors.ToArray());
             Assign(follow, "target", motor, "game", game, "viewCamera", camera);

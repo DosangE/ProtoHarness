@@ -88,7 +88,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |
 | 조작 | A/D 또는 방향키 좌우 이동, 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, R 재시작, Esc 일시정지 |
-| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` |
+| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device` 카테고리 제외) / `Run Device Input Tests` (가상 키보드·마우스 테스트만) |
 | 테스트 결과 | OS 임시 폴더 `ChainRush-PlayMode-results.xml` |
 
 코스: 9개 플랫폼, 8개 낭떠러지와 앵커, 결승 z=496. 노란 점프선은 각 가장자리 4m 앞이다.

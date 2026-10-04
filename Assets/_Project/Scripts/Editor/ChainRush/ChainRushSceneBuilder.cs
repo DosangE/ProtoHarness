@@ -206,11 +206,18 @@ namespace ProtoHarness.Editor.ChainRush
             EditorSceneManager.OpenScene(ScenePath);
         }
 
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device category.
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests()
+        public static void RunTests() => RunPlayMode("!Device");
+
+        // Tests that need virtual Keyboard/Mouse devices. Not part of the merge gate.
+        [MenuItem("ProtoHarness/Chain Rush/Run Device Input Tests")]
+        public static void RunDeviceTests() => RunPlayMode("Device");
+
+        private static void RunPlayMode(string category)
         {
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" } }));
+            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, categoryNames = new[] { category } }));
         }
 
         private sealed class TestCallbacks : ICallbacks

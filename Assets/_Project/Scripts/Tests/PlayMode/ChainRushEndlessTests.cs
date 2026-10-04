@@ -2,10 +2,9 @@ using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Combat;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Endless;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
@@ -16,6 +15,24 @@ namespace ProtoHarness.Tests.PlayMode
 {
     public sealed class ChainRushEndlessTests
     {
+        // Attack-only scripted source, so combat does not depend on virtual device event delivery.
+        // The keyboard mapping itself is covered by the Device-category test in ChainRushTests.
+        private sealed class AttackInputSource : IInputSource
+        {
+            public bool Attack;
+
+            public void Poll() { }
+
+            public TickInput Consume()
+            {
+                var input = new TickInput(0f, false, false, Attack);
+                Attack = false;
+                return input;
+            }
+
+            public void Clear() => Attack = false;
+        }
+
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
@@ -76,33 +93,24 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Combat_EachDirection_SpaceFiresConnectsAndRetracts()
+        public IEnumerator Combat_EachDirection_AttackFiresConnectsAndRetracts()
         {
-            Keyboard original = Keyboard.current;
-            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
-            try
+            var source = new AttackInputSource();
+            game.SetInputSource(source);
+            foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
             {
-                foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
-                {
-                    yield return Prepare(direction);
-                    ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-enemy-" + direction + ".png"));
-                    yield return null;
-                    InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Space));
-                    yield return new WaitForSeconds(0.07f);
-                    Assert.That(enemies.State, Is.EqualTo(EnemyDirector.EncounterState.Firing));
-                    Assert.That(game.Hits, Is.Zero, "Hit must occur after chain flight, not on key press.");
-                    ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-chain-" + direction + ".png"));
-                    InputSystem.QueueStateEvent(keyboard, new KeyboardState());
-                    yield return new WaitForSeconds(0.5f);
-                    Assert.That(game.Hits, Is.EqualTo(1));
-                    Assert.That(game.Health, Is.EqualTo(3));
-                    Assert.That(enemies.HasEncounter, Is.False);
-                }
-            }
-            finally
-            {
-                InputSystem.RemoveDevice(keyboard);
-                if (original != null) original.MakeCurrent();
+                yield return Prepare(direction);
+                ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-enemy-" + direction + ".png"));
+                yield return null;
+                source.Attack = true;
+                yield return new WaitForSeconds(0.07f);
+                Assert.That(enemies.State, Is.EqualTo(EnemyDirector.EncounterState.Firing));
+                Assert.That(game.Hits, Is.Zero, "Hit must occur after chain flight, not on attack input.");
+                ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-chain-" + direction + ".png"));
+                yield return new WaitForSeconds(0.5f);
+                Assert.That(game.Hits, Is.EqualTo(1));
+                Assert.That(game.Health, Is.EqualTo(3));
+                Assert.That(enemies.HasEncounter, Is.False);
             }
         }
 

@@ -14,15 +14,12 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float gravity = 22f;
         [SerializeField] private float lateralSpeed = 7f;
         private Vector3 spawnPosition;
-        private Vector3 velocity;
-        private float steer;
-        private bool jumpQueued;
-        private float coyoteTime;
 
-        public Vector3 Velocity => velocity;
-        public float Steer => steer;
+        // Motion state lives in the racer's RacerState; the motor only integrates it.
+        public Vector3 Velocity => game.Racer.Velocity;
+        public float Steer => game.Racer.Steer;
         public bool IsGrounded => controller.isGrounded;
-        public float Speed => velocity.magnitude;
+        public float Speed => game.Racer.Velocity.magnitude;
 
         private void Awake()
         {
@@ -44,7 +41,8 @@ namespace ProtoHarness.ChainRush
         public void PrimaryAction()
         {
             if (!game.IsRunning) return;
-            if (IsGrounded || coyoteTime > 0f) jumpQueued = true;
+            RacerState racer = game.Racer;
+            if (IsGrounded || racer.CoyoteTime > 0f) racer.JumpQueued = true;
             else grapple.TryAttach();
         }
 
@@ -52,6 +50,11 @@ namespace ProtoHarness.ChainRush
         public void Step(in TickInput input)
         {
             if (!game.IsRunning) return;
+            RacerState racer = game.Racer;
+            ref Vector3 velocity = ref racer.Velocity;
+            ref float steer = ref racer.Steer;
+            ref bool jumpQueued = ref racer.JumpQueued;
+            ref float coyoteTime = ref racer.CoyoteTime;
             steer = input.Steer;
             if (input.PrimaryPressed) PrimaryAction();
             if (input.ReleasePressed) grapple.Release(true);
@@ -86,6 +89,7 @@ namespace ProtoHarness.ChainRush
         public void AddReleaseBoost()
         {
             // A full takeoff impulse keeps the capsule above the next platform lip.
+            ref Vector3 velocity = ref game.Racer.Velocity;
             velocity.y = Mathf.Max(velocity.y, jumpSpeed);
             velocity.z = Mathf.Max(velocity.z, 13f);
         }
@@ -106,10 +110,11 @@ namespace ProtoHarness.ChainRush
             transform.position = spawnPosition;
             controller.enabled = true;
             controller.Move(Vector3.down * 0.3f);
-            velocity = Vector3.zero;
-            steer = 0f;
-            jumpQueued = false;
-            coyoteTime = 0f;
+            RacerState racer = game.Racer;
+            racer.Velocity = Vector3.zero;
+            racer.Steer = 0f;
+            racer.JumpQueued = false;
+            racer.CoyoteTime = 0f;
         }
     }
 }

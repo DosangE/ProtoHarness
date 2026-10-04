@@ -1,11 +1,15 @@
 using System;
+using UnityEngine;
 
 namespace ProtoHarness.ChainRush
 {
-    // One racer's combat state, kept apart from the session so a race can hold several racers.
-    // Times are tick deadlines; every query takes the current tick instead of reading a clock.
+    // One racer's simulation state, kept apart from the session so a race can hold several racers.
+    // Combat times are tick deadlines; every query takes the current tick instead of reading a clock.
+    // Position stays on the Transform/CharacterController for now.
     public sealed class RacerState
     {
+        public const int NoAnchor = -1;
+
         private readonly RunRules rules;
         private int health;
         private int hits;
@@ -13,6 +17,13 @@ namespace ProtoHarness.ChainRush
         private int damageUntilTick;
         private int attackUntilTick;
         private int nextAttackTick;
+        private Vector3 velocity;
+        private float steer;
+        private bool jumpQueued;
+        private float coyoteTime;
+        private int anchorIndex;
+        private float ropeLength;
+        private int missUntilTick;
 
         public RacerState(RunRules rules)
         {
@@ -26,6 +37,19 @@ namespace ProtoHarness.ChainRush
         public int Grapples => grapples;
         public bool IsDown => health <= 0;
 
+        // Motion is exposed by ref: the motor writes velocity components in place, and the grapple's
+        // mid-tick release boost must hit the same memory the motor is integrating.
+        public ref Vector3 Velocity => ref velocity;
+        public ref float Steer => ref steer;
+        public ref bool JumpQueued => ref jumpQueued;
+        public ref float CoyoteTime => ref coyoteTime;
+        public ref float RopeLength => ref ropeLength;
+
+        // Index into the grapple's anchor array rather than a Transform, so the state stays plain data.
+        public int AnchorIndex => anchorIndex;
+        public bool HasAnchor => anchorIndex != NoAnchor;
+        public int MissUntilTick => missUntilTick;
+
         public void Reset()
         {
             health = rules.MaxHealth;
@@ -34,7 +58,26 @@ namespace ProtoHarness.ChainRush
             damageUntilTick = 0;
             attackUntilTick = 0;
             nextAttackTick = 0;
+            velocity = Vector3.zero;
+            steer = 0f;
+            jumpQueued = false;
+            coyoteTime = 0f;
+            anchorIndex = NoAnchor;
+            ropeLength = 0f;
+            missUntilTick = 0;
         }
+
+        public void Attach(int index, float length)
+        {
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index), index, "Anchor index cannot be negative.");
+            if (!(length > 0f)) throw new ArgumentOutOfRangeException(nameof(length), length, "Rope length must be positive.");
+            anchorIndex = index;
+            ropeLength = length;
+        }
+
+        public void Detach() => anchorIndex = NoAnchor;
+        public void MarkMiss(int untilTick) => missUntilTick = RequireTick(untilTick);
+        public void ClearMiss() => missUntilTick = 0;
 
         public bool IsInvulnerable(int tick) => RequireTick(tick) < damageUntilTick;
 

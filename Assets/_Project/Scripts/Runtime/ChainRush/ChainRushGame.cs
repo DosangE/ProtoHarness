@@ -46,6 +46,7 @@ namespace ProtoHarness.ChainRush
         public bool IsEndless => endlessMode;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
+        public RacerState Racer => racer;
         public double Distance => endlessMode ? endlessCourse.Distance : System.Math.Max(0d, player.transform.position.z - 5d);
 
         private void Awake()

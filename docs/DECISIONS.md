@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-10-04 · 레이서 상태 분리 (P1-3a): 레이서 한 명분 상태를 `RacerState` 로 꺼낸다
+
+- **결정**: ① `Runtime/ChainRush/RacerState.cs` (네임스페이스 `ProtoHarness.ChainRush`, 순수 C# `sealed class`)에 레이서 한 명의 체력·적중 수·그래플 수·무적 마감 틱·공격 시각 마감 틱·다음 공격 가능 틱을 둔다. ② 시간 질의는 모두 현재 틱을 인자로 받는다(`IsInvulnerable(tick)`, `CanAttack(tick)` 등). 시계를 직접 읽지 않는다. ③ 공격의 "쿨다운"(`BeginAttackCooldown`)과 "시각"(`ShowAttack`)은 메서드를 나눴다. 무한 모드는 적이 맞았을 때만 쿨다운을 걸고, 일반 모드는 둘 다 건다(`ChainRushGame.Attack`). ④ `ChainRushGame` 은 필드 6개 대신 `RacerState` 하나를 갖는다. `Health`/`Hits`/`Grapples`/`DamageFlash`/`AttackActive` 등 **공개 시그니처는 그대로**이고 `racer` 에 위임한다. ⑤ 계약 위반(`rules` null, 음수 틱)은 예외로 즉시 던진다(§5).
+- **이유**: 한 월드에 레이서가 여럿이 되려면 레이서별 상태가 세션(`ChainRushGame`)에서 떨어져 있어야 한다(`DESIGN.md` C1, §3). 첫 단계는 "우선 한 명이어도 `RacerState` 를 꺼낸다"(`DESIGN.md` P1). 공개 시그니처를 유지해 HUD(`ChainRushHud.cs:95,135,162,204`)와 PlayMode 테스트를 무수정으로 둔다. 무수정 통과가 곧 동작 불변의 증거다.
+- **검증** (`feature/p1-racer-state`, `dev` `7feadfa` 위로 리베이스 후, 6000.3.19f1, KST): 컴파일 `Tundra build success`, Console Error/Exception 0. EditMode `testcasecount="50" result="Passed" passed="50" failed="0"` (14:09, 신규 `RacerStateTests` 11). PlayMode(Device 제외) 1회차 `testcasecount="23" result="Passed" passed="23" failed="0" duration="100.81"` (14:10:18~14:11:58). 2회차 `testcasecount="23" result="Passed" passed="23" failed="0" duration="102.67"` (14:12:24~14:14:07). 기존 PlayMode 테스트 무수정.
+- **경과**: 리베이스 전 이 브랜치에서 PlayMode(전체 24) 를 3회 돌려 모두 같은 2개가 실패했다. 이 실패는 아래 "장치 입력 테스트 분리" 항목에 기록하고 처리했다. 실패한 두 테스트는 이번 변경이 닿지 않는 키 입력 단계에서 멈췄다.
+- **이번에 하지 않은 것 (다음 후보)**: **P1-3b** — `RunnerMotor.Step` 의 `bodyVisual.localRotation` 쓰기(`RunnerMotor.cs:83,114`)를 표현 컴포넌트로 옮긴다. 두 씬과 빌더 두 개(`ChainRushSceneBuilder.cs:174`, `ChainRushPresentationBuilder.cs:55,91`)를 수정해야 하므로 분리했다. **P1-3c** — 모터·그래플 운동 상태(`velocity`, `coyoteTime`, `jumpQueued`, `ropeLength`, `attachedAnchor`)를 레이서 상태로 옮긴다. `Phase`(Running/Failed/Complete)는 세션 상태로 남겼다. 레이서별 분리는 다인 레이스에서 한다.
+
 ## 2026-10-04 · 장치 입력 테스트 분리: 가상 키보드 테스트는 병합 조건에서 뺀다
 
 - **결정**: ① `Combat_EachDirection_SpaceFiresConnectsAndRetracts` 는 가상 키보드 대신 스크립트 입력 소스(`SetInputSource`)로 공격을 넣는다. 이름은 `Combat_EachDirection_AttackFiresConnectsAndRetracts`. 방향별 단언(`Firing` → 비행 뒤 적중 1 → 체력 3 → 조우 종료)은 그대로 뒀다. ② `Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts` 는 본문을 고치지 않고 `[Category("Device")]` 만 붙였다. ③ 메뉴 `Run PlayMode Tests` 는 `categoryNames = { "!Device" }` 로 Device 를 빼고 돌린다. 새 메뉴 `Run Device Input Tests` 는 Device 만 돌린다. ④ 병합 조건은 "PlayMode(Device 제외) 연속 2회"로 바꾼다. 입력 장치 경로를 바꾼 브랜치는 Device 실행 결과를 붙인다. 규칙 본문은 `CLAUDE.md` §9-2.

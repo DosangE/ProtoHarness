@@ -166,5 +166,86 @@ namespace ProtoHarness.Tests.EditMode
             Centerline line = StraightAlongZ(10f);
             Assert.Throws<ArgumentOutOfRangeException>(() => line.FrameAt(double.NaN));
         }
+
+        [Test]
+        public void FrameAt_FlatLine_KeepsStartHeightExactly()
+        {
+            var line = new Centerline(new Vector3(0f, 1.25f, 0f), 0f);
+            line.AppendStraight(56f);
+            line.AppendStraight(56f);
+            TrackFrame frame = line.FrameAt(80d);
+            Assert.That(frame.Position.y, Is.EqualTo(1.25f));
+            Assert.That(frame.Grade, Is.EqualTo(0f));
+            Assert.That(line.Project(new Vector3(0f, 3f, 80f)).H, Is.EqualTo(3f - 1.25f));
+        }
+
+        [Test]
+        public void FrameAt_VerticalCurve_FollowsParabola()
+        {
+            Centerline line = StraightAlongZ(40f, 0.1f);
+            TrackFrame middle = line.FrameAt(20d);
+            Assert.That(middle.Position.y, Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(middle.Grade, Is.EqualTo(0.05f).Within(Tolerance));
+            TrackFrame end = line.FrameAt(40d);
+            Assert.That(end.Position.y, Is.EqualTo(2f).Within(Tolerance));
+            Assert.That(end.Grade, Is.EqualTo(0.1f).Within(Tolerance));
+        }
+
+        [Test]
+        public void AppendStraight_AfterCurve_KeepsGradeAndHeightContinuous()
+        {
+            Centerline line = StraightAlongZ(40f, 0.1f);
+            line.AppendStraight(20f);
+            Assert.That(line.EndGrade, Is.EqualTo(0.1f));
+            Assert.That(line.FrameAt(40d).Position.y, Is.EqualTo(2f).Within(Tolerance));
+            Assert.That(line.FrameAt(50d).Position.y, Is.EqualTo(3f).Within(Tolerance));
+            Assert.That(line.FrameAt(50d).Grade, Is.EqualTo(0.1f).Within(Tolerance));
+            Assert.That(line.FrameAt(60d).Position.y, Is.EqualTo(4f).Within(Tolerance));
+        }
+
+        [Test]
+        public void FrameAt_PastEnd_ExtendsAlongEndGrade()
+        {
+            Centerline line = StraightAlongZ(40f, -0.2f);
+            TrackFrame frame = line.FrameAt(50d);
+            Assert.That(frame.Position.y, Is.EqualTo(-4f - 2f).Within(Tolerance));
+            Assert.That(frame.Grade, Is.EqualTo(-0.2f).Within(Tolerance));
+        }
+
+        [Test]
+        public void Project_OnSlope_HeightIsAboveCenterline()
+        {
+            Centerline line = StraightAlongZ(40f, 0.1f);
+            TrackCoord coord = line.Project(new Vector3(0.5f, 1.5f, 20f));
+            Assert.That(coord.S, Is.EqualTo(20d).Within(Tolerance));
+            Assert.That(coord.H, Is.EqualTo(1f).Within(Tolerance));
+        }
+
+        [Test]
+        public void Clear_AfterSlope_RestartsFlat()
+        {
+            Centerline line = StraightAlongZ(40f, 0.2f);
+            line.Clear();
+            line.AppendStraight(10f);
+            Assert.That(line.EndGrade, Is.EqualTo(0f));
+            Assert.That(line.FrameAt(10d).Position.y, Is.EqualTo(0f));
+        }
+
+        [TestCase(1.01f)]
+        [TestCase(-1.01f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.NegativeInfinity)]
+        public void AppendStraight_InvalidGrade_Throws(float grade)
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AppendStraight(10f, grade));
+        }
+
+        private static Centerline StraightAlongZ(float length, float toGrade)
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(length, toGrade);
+            return line;
+        }
     }
 }

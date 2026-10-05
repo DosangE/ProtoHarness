@@ -88,7 +88,8 @@ namespace ProtoHarness.ChainRush
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
-            if (transform.position.y < -12f) game.FailRun();
+            // Falling is measured from the track surface, so a long downhill is not a fall.
+            if (game.Track.Project(transform.position).H < -12f) game.FailRun();
         }
 
         public void AddReleaseBoost()

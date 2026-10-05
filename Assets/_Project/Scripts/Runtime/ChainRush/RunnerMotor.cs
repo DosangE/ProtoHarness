@@ -1,5 +1,6 @@
 using UnityEngine;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush
 {
@@ -72,16 +73,20 @@ namespace ProtoHarness.ChainRush
                 }
                 jumpQueued = false;
             }
-            velocity.x = Mathf.MoveTowards(velocity.x, steer * lateralSpeed, (grounded ? 60f : 18f) * dt);
-            velocity.z = Mathf.MoveTowards(velocity.z, grapple.IsAttached ? 16f : runSpeed,
+            // Steering and running act along the track (x = right, z = forward), not world x/z.
+            TrackFrame frame = game.Track.Frame(transform.position);
+            Vector3 local = frame.InverseTransformDirection(velocity);
+            local.x = Mathf.MoveTowards(local.x, steer * lateralSpeed, (grounded ? 60f : 18f) * dt);
+            local.z = Mathf.MoveTowards(local.z, grapple.IsAttached ? 16f : runSpeed,
                 (grounded ? 30f : 5f) * dt);
+            velocity = frame.TransformDirection(local);
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
             CollisionFlags flags = controller.Move(displacement);
             if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
-            if (grapple.IsAttached && transform.position.z > grapple.AnchorPosition.z + 0.5f)
+            if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
             if (transform.position.y < -12f) game.FailRun();
         }
@@ -90,8 +95,11 @@ namespace ProtoHarness.ChainRush
         {
             // A full takeoff impulse keeps the capsule above the next platform lip.
             ref Vector3 velocity = ref game.Racer.Velocity;
-            velocity.y = Mathf.Max(velocity.y, jumpSpeed);
-            velocity.z = Mathf.Max(velocity.z, 13f);
+            TrackFrame frame = game.Track.Frame(transform.position);
+            Vector3 local = frame.InverseTransformDirection(velocity);
+            local.y = Mathf.Max(local.y, jumpSpeed);
+            local.z = Mathf.Max(local.z, 13f);
+            velocity = frame.TransformDirection(local);
         }
 
         public void ShiftOrigin(Vector3 offset)

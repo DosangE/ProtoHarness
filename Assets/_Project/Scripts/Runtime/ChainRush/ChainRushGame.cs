@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using ProtoHarness.ChainRush.Endless;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush
 {
@@ -25,6 +26,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private Visuals.RunnerAnimation presentationAnimation;
         private Phase phase;
         private RacerState racer;
+        private Centerline track;
         private int tick;
         private IInputSource inputSource;
         private AudioClip[] cues;
@@ -39,7 +41,7 @@ namespace ProtoHarness.ChainRush
         public int Grapples => racer.Grapples;
         public int Tick => tick;
         public float Elapsed => Ticks.ToSeconds(tick);
-        public float Progress => Mathf.Clamp01(player.transform.position.z / finishZ);
+        public float Progress => Mathf.Clamp01((float)(PlayerS / finishZ));
         public float FinishZ => finishZ;
         public bool DamageFlash => racer.IsInvulnerable(tick) && IsRunning;
         public bool AttackActive => racer.IsAttackShown(tick);
@@ -47,7 +49,9 @@ namespace ProtoHarness.ChainRush
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
         public RacerState Racer => racer;
-        public double Distance => endlessMode ? endlessCourse.Distance : System.Math.Max(0d, player.transform.position.z - 5d);
+        public Centerline Track => track;
+        public double Distance => endlessMode ? endlessCourse.Distance : System.Math.Max(0d, PlayerS - 5d);
+        private double PlayerS => track.Project(player.transform.position).S;
 
         private void Awake()
         {
@@ -98,6 +102,10 @@ namespace ProtoHarness.ChainRush
                 cues[i].SetData(samples, 0);
             }
             racer = new RacerState(rules);
+            // T0: both scenes are laid out along +z from the world origin. A track definition asset replaces this (COURSE.md T4).
+            track = new Centerline(Vector3.zero, 0f);
+            if (endlessMode) endlessCourse.SeedTrack(track);
+            else track.AppendStraight(finishZ);
             inputSource = new KeyboardMouseInputSource();
             attackVisual.gameObject.SetActive(false);
         }
@@ -146,7 +154,7 @@ namespace ProtoHarness.ChainRush
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].Touches(position)) TakeDamage();
             if (!IsRunning) return;
-            if (!endlessMode && position.z >= finishZ) CompleteRun();
+            if (!endlessMode && track.Project(position).S >= finishZ) CompleteRun();
             if (!IsRunning || !endlessMode) return;
             enemies.Step();
             if (!IsRunning) return;

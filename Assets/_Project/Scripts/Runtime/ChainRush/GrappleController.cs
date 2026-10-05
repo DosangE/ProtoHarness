@@ -1,4 +1,5 @@
 using UnityEngine;
+using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.ChainRush
@@ -80,12 +81,15 @@ namespace ProtoHarness.ChainRush
             int best = RacerState.NoAnchor;
             float bestScore = float.PositiveInfinity;
             Vector3 origin = transform.position + Vector3.up * 0.4f;
+            TrackFrame frame = game.Track.Frame(transform.position);
             for (int i = 0; i < anchors.Length; i++)
             {
                 Vector3 offset = anchors[i].position - origin;
-                if (offset.z < 1f || offset.y < 0f || offset.sqrMagnitude > maxRange * maxRange) continue;
+                // "Ahead" and "off to the side" are measured along the track, not world z/x.
+                Vector3 local = frame.InverseTransformDirection(offset);
+                if (local.z < 1f || local.y < 0f || offset.sqrMagnitude > maxRange * maxRange) continue;
                 if (Physics.Linecast(origin, anchors[i].position, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
-                float score = offset.sqrMagnitude + offset.x * offset.x * 3f;
+                float score = offset.sqrMagnitude + local.x * local.x * 3f;
                 if (score >= bestScore) continue;
                 bestScore = score;
                 best = i;

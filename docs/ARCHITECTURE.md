@@ -15,9 +15,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 항목 | 수 |
 |---|---|
-| 우리 런타임 스크립트 | **20** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
+| 우리 런타임 스크립트 | **23** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | PlayMode **4 파일 / 25 테스트** (그중 `Device` 카테고리 1개), EditMode **7 파일 / 60 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-04 실행 XML 기준 |
+| 우리 테스트 | PlayMode **4 파일 / 25 테스트** (그중 `Device` 카테고리 1개), EditMode **8 파일 / 78 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-05 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -51,13 +51,14 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
 | 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
-| 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점 | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState` |
+| 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |
+| 트랙 좌표계: 직선 조각을 이은 중심선. 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축(`TrackFrame`). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
 | 레이서 한 명분 시뮬 상태(위치 제외): 체력·적중 수·그래플 수·무적/공격 마감 틱, 속도·조향·점프 예약·코요테 시간, 그래플 앵커 인덱스·줄 길이·빗나감 마감 틱. 운동 값은 `ref` 로 노출한다(모터가 성분을 제자리에서 고치고, 그래플의 해제 부스트가 같은 메모리를 고친다). 순수 로직. `ChainRushGame.Racer` 로 접근 | `Runtime/ChainRush/RacerState.cs` | `RunRules` (생성자 인자, null 이면 `ArgumentNullException`) |
-| 추적 카메라·속도에 따른 FOV | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game, Camera |
+| 추적 카메라·속도에 따른 FOV. 오프셋은 트랙 프레임 기준. 첫 맞춤은 `Start`(트랙이 `Awake` 에서 생기므로) | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game(`Track`), Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
 | 씬 생성·열기·테스트 실행 메뉴 | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
-| 발판 풀 재배치·원점 이동·누적 거리 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game, Motor, Camera, 직렬화 구간 배열 |
+| 발판 풀 재배치·원점 이동·중심선 조각 잇기/버리기. 거리는 트랙 `S` | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game(`Track`), Motor, Camera, 직렬화 구간 배열 |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
@@ -103,7 +104,7 @@ HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 �
 ### 무한 전투 모드
 
 - `ChainRushGame.endlessMode`가 켜진 씬만 EndlessCourse/EnemyDirector 참조를 요구한다. 기존 씬은 완주·CourseTarget 공격을 유지한다.
-- 검증된 두 번째 발판 기하를 복제해 40m 발판 + 16m 갭을 8개 미리 배치한다. 구간 뒤 56m를 지나면 구간을 448m 앞에 옮긴다. 플레이어 z가 448m를 넘으면 구간·플레이어·카메라·전투 시각물을 함께 이동하며 누적 거리는 double로 보존한다.
+- 검증된 두 번째 발판 기하를 복제해 40m 발판 + 16m 갭을 8개 미리 배치한다. 구간 뒤 56m를 지나면 구간을 448m 앞에 옮긴다. 플레이어가 트랙 앞 방향으로 448m를 넘으면 구간·플레이어·카메라·전투 시각물·트랙 중심선을 함께 이동한다. 거리는 트랙 `S`(double)라 원점 이동 뒤에도 이어진다 (2026-10-05 T0, 이전에는 `EndlessCourse` 의 double 누적값).
 - 기존 테스트 월드는 새 씬에서 비활성 보관한다. 런타임에 구간/적/체인을 Instantiate하지 않는다. 배경 건물도 구간과 함께 재활용한다.
 - 적은 상공→왼쪽→오른쪽 순환. 0.3초 경고, 0.4초 진입, 1.2초 공격 가능, 0.15초 체인 비행, 0.3초 회수/적 돌진이다. Inspector에서 조정 가능하다.
 - 안전 발판 잔여 길이가 전체 조우 시간 × 속도 + 5m를 확보해야 등장한다. 경고·진입·대기 중 점프하면 피해 없이 취소한다. Space는 공격 가능 상태에서만 발사하며 갈고리 도착 때 명중 1회를 기록한다. 제한시간 초과 후 적 돌진이 체력 1칸을 감소시킨다.

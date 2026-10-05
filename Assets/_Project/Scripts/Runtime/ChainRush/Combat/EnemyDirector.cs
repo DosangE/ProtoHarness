@@ -1,5 +1,6 @@
 using UnityEngine;
 using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.ChainRush.Combat
@@ -63,7 +64,9 @@ namespace ProtoHarness.ChainRush.Combat
             }
             timer++;
             float seconds = Ticks.ToSeconds(timer);
-            Vector3 target = player.transform.position + targetOffset;
+            Vector3 playerPosition = player.transform.position;
+            TrackFrame frame = game.Track.Frame(playerPosition);
+            Vector3 target = playerPosition + frame.TransformDirection(targetOffset);
             warning.position = target;
             switch (State)
             {
@@ -72,7 +75,7 @@ namespace ProtoHarness.ChainRush.Combat
                     if (timer >= tuning.WarningTicks) { SetState(EncounterState.Entering); enemy.gameObject.SetActive(true); }
                     break;
                 case EncounterState.Entering:
-                    enemy.position = Vector3.Lerp(player.transform.position + entranceOffset, target, Mathf.SmoothStep(0f, 1f, (float)timer / tuning.EntranceTicks));
+                    enemy.position = Vector3.Lerp(playerPosition + frame.TransformDirection(entranceOffset), target, Mathf.SmoothStep(0f, 1f, (float)timer / tuning.EntranceTicks));
                     if (timer >= tuning.EntranceTicks) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
                     break;
                 case EncounterState.Vulnerable:
@@ -99,7 +102,7 @@ namespace ProtoHarness.ChainRush.Combat
                     if (timer >= tuning.RecoveryTicks) ClearEncounter();
                     break;
                 case EncounterState.Striking:
-                    enemy.position = Vector3.Lerp(target, player.transform.position, (float)timer / tuning.RecoveryTicks);
+                    enemy.position = Vector3.Lerp(target, playerPosition, (float)timer / tuning.RecoveryTicks);
                     if (timer >= tuning.RecoveryTicks)
                     {
                         ClearEncounter();
@@ -116,9 +119,11 @@ namespace ProtoHarness.ChainRush.Combat
             Direction = direction;
             game.PlayPresentationCue(4);
             float side = direction == Entrance.Left ? -1f : direction == Entrance.Right ? 1f : 0f;
+            // Offsets are in track terms (x = right, y = up, z = ahead) and turned into world space each tick.
             targetOffset = new Vector3(side * 2f, 1.6f, 8f);
             entranceOffset = direction == Entrance.Above ? new Vector3(0f, 16f, 8f) : new Vector3(side * 17f, 1.6f, 8f);
-            enemy.position = player.transform.position + entranceOffset;
+            Vector3 playerPosition = player.transform.position;
+            enemy.position = playerPosition + game.Track.Frame(playerPosition).TransformDirection(entranceOffset);
             warning.gameObject.SetActive(true);
             SetState(EncounterState.Warning);
             return true;

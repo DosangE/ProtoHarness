@@ -1,10 +1,13 @@
 using UnityEngine;
+using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush
 {
     [RequireComponent(typeof(Camera))]
     public sealed class FollowCamera : MonoBehaviour
     {
+        // The point the camera looks at, relative to the runner in track terms.
+        private static readonly Vector3 LookAhead = new Vector3(0f, 1.5f, 9f);
         [SerializeField] private RunnerMotor target;
         [SerializeField] private ChainRushGame game;
         [SerializeField] private Camera viewCamera;
@@ -19,17 +22,23 @@ namespace ProtoHarness.ChainRush
                 enabled = false;
                 return;
             }
-            Snap();
         }
+
+        // The game builds its track in Awake, so the first snap waits until every Awake has run.
+        private void Start() => Snap();
 
         private void LateUpdate()
         {
             if (game.IsPaused) return;
-            Vector3 desired = target.transform.position + offset;
-            desired.x = target.transform.position.x * 0.55f;
+            Vector3 targetPosition = target.transform.position;
+            TrackFrame frame = game.Track.Frame(targetPosition);
+            // Offsets are in track terms: x = right of the centerline, y = up, z = along the track.
+            Vector3 local = frame.InverseTransformPoint(targetPosition);
+            Vector3 desired = local + offset;
+            desired.x = local.x * 0.55f;
             desired.y = Mathf.Max(5.5f, desired.y);
-            transform.position = Vector3.SmoothDamp(transform.position, desired, ref smoothingVelocity, 0.16f);
-            Vector3 lookPoint = target.transform.position + Vector3.up * 1.5f + Vector3.forward * 9f;
+            transform.position = Vector3.SmoothDamp(transform.position, frame.TransformPoint(desired), ref smoothingVelocity, 0.16f);
+            Vector3 lookPoint = targetPosition + frame.TransformDirection(LookAhead);
             transform.rotation = Quaternion.Slerp(transform.rotation,
                 Quaternion.LookRotation(lookPoint - transform.position), 8f * Time.deltaTime);
             viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 20f) * 0.5f, Time.deltaTime * 3f);
@@ -40,8 +49,10 @@ namespace ProtoHarness.ChainRush
         public void Snap()
         {
             smoothingVelocity = Vector3.zero;
-            transform.position = target.transform.position + offset;
-            transform.LookAt(target.transform.position + Vector3.up * 1.5f + Vector3.forward * 9f);
+            Vector3 targetPosition = target.transform.position;
+            TrackFrame frame = game.Track.Frame(targetPosition);
+            transform.position = targetPosition + frame.TransformDirection(offset);
+            transform.LookAt(targetPosition + frame.TransformDirection(LookAhead));
         }
     }
 }

@@ -116,16 +116,18 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Steer_ScriptedLeftThenRight_MovesPlayerWithoutDevices()
+        // Free steering (2026-10-05, T2a): steering turns the facing; the runner moves the way it faces.
+        public IEnumerator Steer_ScriptedLeftThenRight_TurnsFacingWithoutDevices()
         {
             game.StartRun();
             source.Steer = -1f;
             yield return new WaitForSeconds(0.3f);
-            float leftX = player.transform.position.x;
-            Assert.That(leftX, Is.LessThan(-0.5f));
+            float leftHeading = player.Heading;
+            Assert.That(leftHeading, Is.LessThan(-10f), "Steering left must turn the facing left.");
+            Assert.That(player.transform.position.x, Is.LessThan(0f), "Facing left must carry the runner left.");
             source.Steer = 1f;
             yield return new WaitForSeconds(0.4f);
-            Assert.That(player.transform.position.x, Is.GreaterThan(leftX + 0.5f));
+            Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f), "Steering right must turn the facing back right.");
         }
 
         [UnityTest]

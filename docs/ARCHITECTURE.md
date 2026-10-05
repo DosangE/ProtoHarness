@@ -17,7 +17,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 |---|---|
 | 우리 런타임 스크립트 | **23** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | PlayMode **5 파일 / 29 테스트** (그중 `Device` 카테고리 1개), EditMode **8 파일 / 88 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-05 실행 XML 기준 |
+| 우리 테스트 | PlayMode **6 파일 / 32 테스트** (그중 `Device` 카테고리 1개), EditMode **8 파일 / 88 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-05 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -44,7 +44,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
-| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 앞·옆은 트랙 프레임 기준. 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
+| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
 | 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate` | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
@@ -54,10 +54,10 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |
 | 트랙 좌표계: 직선 조각을 이은 중심선, 조각마다 종단 곡선(경사 연속, 높이 포물선). 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축·높이·경사(`TrackFrame`). `ChainRushGame.SetTrack` 으로 교체 가능(유한 모드만). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
 | 레이서 한 명분 시뮬 상태(위치 제외): 체력·적중 수·그래플 수·무적/공격 마감 틱, 속도·조향·점프 예약·코요테 시간, 그래플 앵커 인덱스·줄 길이·빗나감 마감 틱. 운동 값은 `ref` 로 노출한다(모터가 성분을 제자리에서 고치고, 그래플의 해제 부스트가 같은 메모리를 고친다). 순수 로직. `ChainRushGame.Racer` 로 접근 | `Runtime/ChainRush/RacerState.cs` | `RunRules` (생성자 인자, null 이면 `ArgumentNullException`) |
-| 추적 카메라·속도에 따른 FOV. 오프셋은 트랙 프레임 기준. 첫 맞춤은 `Start`(트랙이 `Awake` 에서 생기므로) | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game(`Track`), Camera |
+| 추적 카메라·속도에 따른 FOV. 러너 헤딩 뒤를 따르고 yaw 회전은 `maxYawSpeed`(180°/s) 상한. 높이 하한은 중심선 높이 기준. 첫 맞춤은 `Start`(트랙이 `Awake` 에서 생기므로) | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game(`Track`), Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
-| 씬 생성·열기·테스트 실행 메뉴 | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
+| 씬 생성·열기·테스트 실행 메뉴. 발판 양쪽 가드 난간(`AddGuards`, 충돌 4m)과 기존 씬용 메뉴 `Add Deck Guards To Open Scene` | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
 | 발판 풀 재배치·원점 이동·중심선 조각 잇기/버리기. 거리는 트랙 `S` | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game(`Track`), Motor, Camera, 직렬화 구간 배열 |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
@@ -90,7 +90,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 무한 씬 만들기 | `ProtoHarness > Chain Rush > Create Endless Scene` (Ctrl+Shift+E). 기존 테스트 씬을 복사한 후 별도 경로에만 저장. 재생성으로 덮어쓰지 않음. |
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |
-| 조작 | A/D 또는 방향키 좌우 이동, 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, R 재시작, Esc 일시정지 |
+| 조작 | A/D 또는 방향키로 진행 방향 틀기(자유 조향, 2026-10-05), 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, R 재시작, Esc 일시정지 |
 | 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device` 카테고리 제외) / `Run Device Input Tests` (가상 키보드·마우스 테스트만) |
 | 테스트 결과 | Unity 프로세스의 `Path.GetTempPath()` 아래 `ChainRush-PlayMode-results.xml` (EditMode 결과도 같은 파일에 덮어쓴다). 경로는 머신마다 다르므로 실행할 때 `Unity_RunCommand` 로 `Path.GetTempPath()` 를 읽어 확인한다 |
 

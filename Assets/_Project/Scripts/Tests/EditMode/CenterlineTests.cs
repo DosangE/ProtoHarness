@@ -241,6 +241,116 @@ namespace ProtoHarness.Tests.EditMode
             Assert.Throws<ArgumentOutOfRangeException>(() => line.AppendStraight(10f, grade));
         }
 
+        private static readonly float QuarterR30 = 30f * Mathf.PI / 2f;
+
+        private static Centerline ArcR30(float degrees)
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendArc(30f, degrees);
+            return line;
+        }
+
+        [Test]
+        public void AppendArc_RightQuarterR30_EndsTurnedRight()
+        {
+            Centerline line = ArcR30(90f);
+            Assert.That(line.EndS, Is.EqualTo((double)QuarterR30).Within(Tolerance));
+            TrackFrame end = line.FrameAt(line.EndS);
+            Assert.That(Vector3.Distance(end.Position, new Vector3(30f, 0f, 30f)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(end.Forward, Vector3.right), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(end.Right, Vector3.back), Is.LessThan(Tolerance));
+        }
+
+        [Test]
+        public void FrameAt_MidArc_LiesOnCircleWithCurvature()
+        {
+            TrackFrame middle = ArcR30(90f).FrameAt(QuarterR30 / 2f);
+            float half = 30f * Mathf.Sqrt(0.5f);
+            Assert.That(Vector3.Distance(middle.Position, new Vector3(30f - half, 0f, half)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(middle.Forward, new Vector3(Mathf.Sqrt(0.5f), 0f, Mathf.Sqrt(0.5f))), Is.LessThan(Tolerance));
+            Assert.That(middle.Curvature, Is.EqualTo(1f / 30f).Within(Tolerance));
+        }
+
+        [Test]
+        public void AppendArc_LeftQuarter_MirrorsRight()
+        {
+            Centerline line = ArcR30(-90f);
+            TrackFrame end = line.FrameAt(line.EndS);
+            Assert.That(Vector3.Distance(end.Position, new Vector3(-30f, 0f, 30f)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(end.Forward, Vector3.left), Is.LessThan(Tolerance));
+            Assert.That(line.FrameAt(10d).Curvature, Is.EqualTo(-1f / 30f).Within(Tolerance));
+        }
+
+        [TestCase(90f, 2f)]
+        [TestCase(90f, -2f)]
+        [TestCase(-90f, 2f)]
+        [TestCase(-90f, -2f)]
+        public void Project_OnArc_RoundTripsThroughFrame(float degrees, float right)
+        {
+            Centerline line = ArcR30(degrees);
+            double s = QuarterR30 * 0.3f;
+            Vector3 world = line.FrameAt(s).TransformPoint(new Vector3(right, 1.5f, 0f));
+            TrackCoord coord = line.Project(world);
+            Assert.That(coord.S, Is.EqualTo(s).Within(Tolerance));
+            Assert.That(coord.D, Is.EqualTo(right).Within(Tolerance));
+            Assert.That(coord.H, Is.EqualTo(1.5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void Chain_StraightArcStraight_StaysContinuous()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(20f);
+            line.AppendArc(30f, 90f);
+            line.AppendStraight(40f);
+            double exitS = 20d + QuarterR30;
+            Assert.That(Vector3.Distance(line.FrameAt(exitS).Position, new Vector3(30f, 0f, 50f)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(line.FrameAt(exitS + 10d).Position, new Vector3(40f, 0f, 50f)), Is.LessThan(Tolerance));
+            Assert.That(line.FrameAt(exitS + 10d).Curvature, Is.Zero);
+            Assert.That(line.Project(new Vector3(40f, 0f, 49f)).S, Is.EqualTo(exitS + 10d).Within(Tolerance));
+            Assert.That(line.Project(new Vector3(40f, 0f, 49f)).D, Is.EqualTo(1f).Within(Tolerance));
+        }
+
+        [Test]
+        public void Project_PastArcEnd_ExtendsAlongEndTangent()
+        {
+            Centerline line = ArcR30(90f);
+            TrackCoord coord = line.Project(new Vector3(35f, 0f, 29f));
+            Assert.That(coord.S, Is.EqualTo(QuarterR30 + 5d).Within(Tolerance));
+            Assert.That(coord.D, Is.EqualTo(1f).Within(Tolerance));
+        }
+
+        [Test]
+        public void AppendArc_WithGrade_RisesAlongArcLength()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendArc(30f, 90f, 0.1f);
+            Assert.That(line.FrameAt(line.EndS).Position.y, Is.EqualTo(0.05f * QuarterR30).Within(Tolerance));
+        }
+
+        [Test]
+        public void ShiftOrigin_OnArc_KeepsSameS()
+        {
+            Centerline line = ArcR30(90f);
+            var point = new Vector3(10f, 0f, 20f);
+            double before = line.Project(point).S;
+            var shift = new Vector3(-448f, 0f, 12f);
+            line.ShiftOrigin(shift);
+            Assert.That(line.Project(point + shift).S, Is.EqualTo(before).Within(Tolerance));
+        }
+
+        [TestCase(0f, 90f)]
+        [TestCase(-5f, 90f)]
+        [TestCase(float.NaN, 90f)]
+        [TestCase(30f, 0f)]
+        [TestCase(30f, 181f)]
+        [TestCase(30f, float.NaN)]
+        public void AppendArc_InvalidRadiusOrTurn_Throws(float radius, float degrees)
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AppendArc(radius, degrees));
+        }
+
         private static Centerline StraightAlongZ(float length, float toGrade)
         {
             var line = new Centerline(Vector3.zero, 0f);

@@ -13,14 +13,17 @@ namespace ProtoHarness.ChainRush.Track
         public readonly Vector3 Forward;
         public readonly Vector3 Right;
         public readonly float Grade;
+        // Signed 1/radius of the centerline here: positive turns right, negative left, zero on straights.
+        public readonly float Curvature;
 
-        public TrackFrame(double s, Vector3 position, Vector3 forward, Vector3 right, float grade)
+        public TrackFrame(double s, Vector3 position, Vector3 forward, Vector3 right, float grade, float curvature)
         {
             S = s;
             Position = position;
             Forward = forward;
             Right = right;
             Grade = grade;
+            Curvature = curvature;
         }
 
         public Vector3 TransformDirection(Vector3 local) => Right * local.x + Vector3.up * local.y + Forward * local.z;

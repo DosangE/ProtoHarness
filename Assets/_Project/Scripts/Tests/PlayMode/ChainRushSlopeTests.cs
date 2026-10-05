@@ -159,7 +159,7 @@ namespace ProtoHarness.Tests.PlayMode
 
         private IEnumerator StartOn(Centerline line, double roadEndS)
         {
-            BuildRoad(line, -5d, roadEndS);
+            TestRoad.Build(line, -5d, roadEndS, RoadHalfWidth, false, built);
             game.SetTrack(line);
             game.StartRun();
             Vector3 start = line.FrameAt(5d).TransformPoint(new Vector3(0f, 1.2f, 0f));
@@ -179,39 +179,5 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private double S(Centerline line) => line.Project(player.transform.position).S;
-
-        // A road strip along the centerline, sampled every 0.5 m, faces up (clockwise seen from above).
-        private void BuildRoad(Centerline line, double fromS, double toS)
-        {
-            int segments = Mathf.CeilToInt((float)((toS - fromS) / 0.5d));
-            var vertices = new Vector3[(segments + 1) * 2];
-            var triangles = new int[segments * 6];
-            for (int i = 0; i <= segments; i++)
-            {
-                TrackFrame frame = line.FrameAt(fromS + (toS - fromS) * i / segments);
-                vertices[i * 2] = frame.TransformPoint(new Vector3(-RoadHalfWidth, 0f, 0f));
-                vertices[i * 2 + 1] = frame.TransformPoint(new Vector3(RoadHalfWidth, 0f, 0f));
-            }
-            for (int i = 0; i < segments; i++)
-            {
-                int left = i * 2;
-                int t = i * 6;
-                triangles[t] = left;
-                triangles[t + 1] = left + 2;
-                triangles[t + 2] = left + 1;
-                triangles[t + 3] = left + 1;
-                triangles[t + 4] = left + 2;
-                triangles[t + 5] = left + 3;
-            }
-            var mesh = new Mesh { name = "Slope test road" };
-            mesh.vertices = vertices;
-            mesh.triangles = triangles;
-            mesh.RecalculateNormals();
-            var road = new GameObject("Slope Test Road");
-            road.AddComponent<MeshCollider>().sharedMesh = mesh;
-            built.Add(road);
-            built.Add(mesh);
-            Physics.SyncTransforms();
-        }
     }
 }

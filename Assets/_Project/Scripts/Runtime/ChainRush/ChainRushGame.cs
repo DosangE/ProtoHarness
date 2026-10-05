@@ -118,6 +118,16 @@ namespace ProtoHarness.ChainRush
             inputSource = source;
         }
 
+        // Replaces the course centerline (test roads now, hand-built circuits later). The finish line stays
+        // at finishZ along it. Endless mode streams its own track, so it refuses a replacement.
+        public void SetTrack(Centerline replacement)
+        {
+            if (replacement == null) throw new System.ArgumentNullException(nameof(replacement));
+            if (replacement.PieceCount == 0) throw new System.ArgumentException("Track needs at least one piece.", nameof(replacement));
+            if (endlessMode) throw new System.InvalidOperationException("ChainRushGame: endless mode builds its own track; SetTrack is for finite courses.");
+            track = replacement;
+        }
+
         private void OnValidate()
         {
             if (finishZ <= 0f) Debug.LogError("ChainRushGame: finishZ must be positive.", this);

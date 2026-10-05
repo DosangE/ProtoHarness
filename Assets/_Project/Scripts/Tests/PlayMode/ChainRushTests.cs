@@ -124,15 +124,17 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
                 yield return new WaitForSeconds(0.15f);
                 Assert.That(game.IsRunning, Is.True);
+                // Free steering (2026-10-05, T2a): A/D turn the facing.
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.A));
                 yield return new WaitForSeconds(0.3f);
-                float leftX = player.transform.position.x;
-                Assert.That(leftX, Is.LessThan(-0.5f));
+                float leftHeading = player.Heading;
+                Assert.That(leftHeading, Is.LessThan(-10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.D));
                 yield return new WaitForSeconds(0.4f);
-                Assert.That(player.transform.position.x, Is.GreaterThan(leftX + 0.5f));
+                Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 MovePlayer(new Vector3(0f, 1f, 44f));
+                player.FaceTrack();
                 yield return new WaitForFixedUpdate();
                 InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
                 yield return new WaitForSeconds(0.15f);

@@ -13,7 +13,16 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float runSpeed = 10f;
         [SerializeField] private float jumpSpeed = 11.5f;
         [SerializeField] private float gravity = 22f;
-        [SerializeField] private float lateralSpeed = 7f;
+        // Steering turns the runner (free steering, COURSE.md 4-3): input sets a target turn rate, the rate
+        // follows it by turnAcceleration, and running follows the facing. Air control is scaled down.
+        [SerializeField] private float maxTurnRate = 120f;
+        [SerializeField] private float turnAcceleration = 1200f;
+        [SerializeField] private float airTurnScale = 0.5f;
+        // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
+        [SerializeField] private float sideGrip = 60f;
+        [SerializeField] private float airSideGrip = 18f;
+        // Share of speed lost in a head-on guard hit; glancing hits lose proportionally less.
+        [SerializeField] private float guardSpeedLoss = 0.15f;
         // Grounded run speed scales by 1 - factor * grade, clamped: uphill slows, downhill speeds up.
         [SerializeField] private float slopeSpeedFactor = 1.5f;
         [SerializeField] private float minSlopeSpeedScale = 0.7f;
@@ -21,10 +30,17 @@ namespace ProtoHarness.ChainRush
         // How far below the capsule a downhill road may drop in one tick and still be followed.
         [SerializeField] private float groundSnapDistance = 0.3f;
         private Vector3 spawnPosition;
+        // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
+        private Vector3 guardNormal;
+        private bool hitGuard;
 
         // Motion state lives in the racer's RacerState; the motor only integrates it.
         public Vector3 Velocity => game.Racer.Velocity;
         public float Steer => game.Racer.Steer;
+        public float Heading => game.Racer.Heading;
+        public Vector3 Facing => FacingOf(game.Racer.Heading);
+        public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
+        public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RightOf(game.Racer.Heading));
         public bool IsGrounded => controller.isGrounded;
         public float Speed => game.Racer.Velocity.magnitude;
 
@@ -41,8 +57,12 @@ namespace ProtoHarness.ChainRush
 
         private void OnValidate()
         {
-            if (runSpeed <= 0f || jumpSpeed <= 0f || gravity <= 0f || lateralSpeed <= 0f)
+            if (runSpeed <= 0f || jumpSpeed <= 0f || gravity <= 0f)
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
+            if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f)
+                Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1].", this);
+            if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f)
+                Debug.LogError("RunnerMotor: grips cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
             if (groundSnapDistance < 0f)
@@ -83,21 +103,29 @@ namespace ProtoHarness.ChainRush
                 }
                 jumpQueued = false;
             }
-            // Steering and running act along the track (x = right, z = forward), not world x/z.
+            // Free steering: input turns the facing, and running and grip act along the facing. The track
+            // only supplies the grade here; it no longer decides which way is ahead.
+            ref float heading = ref racer.Heading;
+            ref float turnRate = ref racer.TurnRate;
+            turnRate = Mathf.MoveTowards(turnRate, steer * maxTurnRate * (grounded ? 1f : airTurnScale), turnAcceleration * dt);
+            heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             TrackFrame frame = game.Track.Frame(transform.position);
-            Vector3 local = frame.InverseTransformDirection(velocity);
-            local.x = Mathf.MoveTowards(local.x, steer * lateralSpeed, (grounded ? 60f : 18f) * dt);
+            Vector3 facing = FacingOf(heading);
+            Vector3 right = RightOf(heading);
+            float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, (grounded ? sideGrip : airSideGrip) * dt);
             float runTarget = grounded
                 ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
                 : runSpeed;
-            local.z = Mathf.MoveTowards(local.z, grapple.IsAttached ? 16f : runTarget,
+            float forwardSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, facing), grapple.IsAttached ? 16f : runTarget,
                 (grounded ? 30f : 5f) * dt);
-            velocity = frame.TransformDirection(local);
+            velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
+            hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
             if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
+            if (hitGuard) GlanceOffGuard(ref velocity, ref heading, frame.Forward);
             if (grounded && !controller.isGrounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
@@ -123,11 +151,63 @@ namespace ProtoHarness.ChainRush
         {
             // A full takeoff impulse keeps the capsule above the next platform lip.
             ref Vector3 velocity = ref game.Racer.Velocity;
-            TrackFrame frame = game.Track.Frame(transform.position);
-            Vector3 local = frame.InverseTransformDirection(velocity);
-            local.y = Mathf.Max(local.y, jumpSpeed);
-            local.z = Mathf.Max(local.z, 13f);
-            velocity = frame.TransformDirection(local);
+            float heading = game.Racer.Heading;
+            Vector3 facing = FacingOf(heading);
+            Vector3 right = RightOf(heading);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), 13f);
+            velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
+        }
+
+        // Turns the facing to the track's direction here. StartRun calls it after the racer state resets.
+        public void FaceTrack()
+        {
+            Vector3 forward = game.Track.Frame(transform.position).Forward;
+            game.Racer.Heading = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+            game.Racer.TurnRate = 0f;
+        }
+
+        // Guards are the walls along the road edges. A contact counts when its normal is level and runs
+        // across the track; deck lips and fronts face along the track and are left to the controller.
+        private void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            Vector3 normal = hit.normal;
+            if (Mathf.Abs(normal.y) > 0.3f) return;
+            normal.y = 0f;
+            normal.Normalize();
+            if (Mathf.Abs(Vector3.Dot(normal, game.Track.Frame(transform.position).Forward)) > 0.5f) return;
+            if (hitGuard && Vector3.Dot(normal, Facing) >= Vector3.Dot(guardNormal, Facing)) return;
+            guardNormal = normal;
+            hitGuard = true;
+        }
+
+        // Removes the push into the guard, loses speed by how head-on the hit was, and turns a facing that
+        // points into the guard to run along it in the track's direction.
+        private void GlanceOffGuard(ref Vector3 velocity, ref float heading, Vector3 trackForward)
+        {
+            var flat = new Vector3(velocity.x, 0f, velocity.z);
+            float speed = flat.magnitude;
+            float into = -Vector3.Dot(flat, guardNormal);
+            if (speed > 0f && into > 0f)
+            {
+                flat = (flat + guardNormal * into) * (1f - guardSpeedLoss * into / speed);
+                velocity = new Vector3(flat.x, velocity.y, flat.z);
+            }
+            if (Vector3.Dot(FacingOf(heading), guardNormal) >= 0f) return;
+            Vector3 along = Vector3.Cross(Vector3.up, guardNormal);
+            if (Vector3.Dot(along, trackForward) < 0f) along = -along;
+            heading = Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg;
+        }
+
+        private static Vector3 FacingOf(float heading)
+        {
+            float radians = heading * Mathf.Deg2Rad;
+            return new Vector3(Mathf.Sin(radians), 0f, Mathf.Cos(radians));
+        }
+
+        private static Vector3 RightOf(float heading)
+        {
+            float radians = heading * Mathf.Deg2Rad;
+            return new Vector3(Mathf.Cos(radians), 0f, -Mathf.Sin(radians));
         }
 
         public void ShiftOrigin(Vector3 offset)

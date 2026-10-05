@@ -55,7 +55,7 @@ namespace ProtoHarness.ChainRush.Visuals
             if (ground && !wasGrounded && game.Elapsed > 0.2f) { landing = 1f; sound.PlayCue(8); }
             wasGrounded = ground;
             landing = Mathf.MoveTowards(landing, 0f, dt * 5f);
-            if (ground) phase += dt * Mathf.Max(0f, player.Velocity.z) * 1.65f;
+            if (ground) phase += dt * Mathf.Max(0f, player.ForwardSpeed) * 1.65f;
             int step = Mathf.FloorToInt(phase / Mathf.PI);
             if (ground && step != lastStep) { sound.PlayCue(7); lastStep = step; }
             float stride = Mathf.Sin(phase) * 38f;
@@ -73,7 +73,7 @@ namespace ProtoHarness.ChainRush.Visuals
             float blend = 1f - Mathf.Exp(-dt * 18f);
             Pose(leftArm, armLeft, -7f, blend); Pose(rightArm, armRight, 7f, blend);
             Pose(leftLeg, legLeft + landing * 22f, 0f, blend); Pose(rightLeg, legRight + landing * 22f, 0f, blend);
-            Pose(torso, lean + landing * 14f, -player.Velocity.x * 1.2f, blend);
+            Pose(torso, lean + landing * 14f, -player.SideSpeed * 1.2f, blend);
             Vector3 position = modelRest;
             position.y += (ground ? Mathf.Abs(Mathf.Sin(phase)) * 0.045f : 0f) - landing * 0.1f;
             model.localPosition = position;

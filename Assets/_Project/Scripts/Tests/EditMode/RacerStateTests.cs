@@ -126,6 +126,8 @@ namespace ProtoHarness.Tests.EditMode
         {
             Assert.That(racer.Velocity, Is.EqualTo(Vector3.zero));
             Assert.That(racer.Steer, Is.Zero);
+            Assert.That(racer.Heading, Is.Zero);
+            Assert.That(racer.TurnRate, Is.Zero);
             Assert.That(racer.JumpQueued, Is.False);
             Assert.That(racer.CoyoteTime, Is.Zero);
             Assert.That(racer.HasAnchor, Is.False);
@@ -177,6 +179,8 @@ namespace ProtoHarness.Tests.EditMode
         {
             racer.Velocity = new Vector3(1f, 2f, 3f);
             racer.Steer = -1f;
+            racer.Heading = -35f;
+            racer.TurnRate = -120f;
             racer.JumpQueued = true;
             racer.CoyoteTime = 0.1f;
             racer.Attach(1, 6f);
@@ -184,6 +188,8 @@ namespace ProtoHarness.Tests.EditMode
             racer.Reset();
             Assert.That(racer.Velocity, Is.EqualTo(Vector3.zero));
             Assert.That(racer.Steer, Is.Zero);
+            Assert.That(racer.Heading, Is.Zero);
+            Assert.That(racer.TurnRate, Is.Zero);
             Assert.That(racer.JumpQueued, Is.False);
             Assert.That(racer.CoyoteTime, Is.Zero);
             Assert.That(racer.HasAnchor, Is.False);

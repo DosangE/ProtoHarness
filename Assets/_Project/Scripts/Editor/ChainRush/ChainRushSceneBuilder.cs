@@ -55,7 +55,8 @@ namespace ProtoHarness.Editor.ChainRush
                 var chunk = new GameObject("Sector " + (section + 1).ToString("00")).transform;
                 chunk.SetParent(world);
                 float center = (start + end) * 0.5f;
-                Cube("Deck", chunk, new Vector3(0f, -0.6f, center), new Vector3(12f, 1.2f, end - start), deck, true);
+                GameObject deckObject = Cube("Deck", chunk, new Vector3(0f, -0.6f, center), new Vector3(12f, 1.2f, end - start), deck, true);
+                AddGuards(deckObject.transform, frame, mint);
                 Cube("Undercarriage", chunk, new Vector3(0f, -2f, center), new Vector3(10.8f, 1.7f, end - start - 2f), frame);
                 for (int side = -1; side <= 1; side += 2)
                 {
@@ -207,6 +208,62 @@ namespace ProtoHarness.Editor.ChainRush
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(ScenePath);
+        }
+
+        // Adds the same deck guards the builder now makes to an existing, open scene (both ChainRush scenes
+        // predate them). Skips decks that already have guards. Inactive copies are included: called on an
+        // inactive root, GetComponentsInChildren still returns its children, so the endless scene's stored
+        // prototype course gets guards too and keeps matching the prototype scene. Undo-able; the scene is
+        // marked dirty and must be saved.
+        [MenuItem("ProtoHarness/Chain Rush/Add Deck Guards To Open Scene")]
+        public static void AddDeckGuardsToOpenScene()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before editing the scene.");
+            Scene scene = SceneManager.GetActiveScene();
+            Material rail = Material("Frame", new Color(0.035f, 0.09f, 0.12f), 0f);
+            Material light = Material("Link", new Color(0.25f, 0.95f, 0.72f), 1.7f);
+            int added = 0;
+            foreach (GameObject root in scene.GetRootGameObjects())
+                foreach (Transform item in root.GetComponentsInChildren<Transform>())
+                {
+                    if (item.name != "Deck" || item.GetComponent<BoxCollider>() == null || item.parent == null) continue;
+                    if (item.parent.Find(GuardRailName) != null) continue;
+                    foreach (GameObject created in AddGuards(item, rail, light)) Undo.RegisterCreatedObjectUndo(created, "Add deck guards");
+                    added++;
+                }
+            EditorSceneManager.MarkSceneDirty(scene);
+            Debug.Log("ChainRush: added guards to " + added + " decks in " + scene.path + ". Save the scene to keep them.");
+        }
+
+        private const string GuardRailName = "Guard rail";
+        private const float GuardRailHeight = 1.1f;
+        private const float GuardRailThickness = 0.3f;
+        // Taller than the 2.9 m jump apex, so a jump cannot clear a guard sideways.
+        private const float GuardBlockHeight = 4f;
+
+        // A visible rail just outside each long edge of a deck, as siblings of the deck. The rail's collider
+        // reaches GuardBlockHeight above the deck top; the light strip on top has none. Gaps between decks
+        // get no guards, so falling there stays possible (COURSE.md T2a).
+        internal static List<GameObject> AddGuards(Transform deck, Material rail, Material light)
+        {
+            Transform parent = deck.parent;
+            Vector3 size = deck.localScale;
+            float top = deck.localPosition.y + size.y * 0.5f;
+            var created = new List<GameObject>(4);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float x = deck.localPosition.x + side * (size.x + GuardRailThickness) * 0.5f;
+                Vector3 railCenter = parent.TransformPoint(new Vector3(x, top + GuardRailHeight * 0.5f, deck.localPosition.z));
+                GameObject guard = Cube(GuardRailName, parent, railCenter, new Vector3(GuardRailThickness, GuardRailHeight, size.z), rail, true);
+                var box = guard.GetComponent<BoxCollider>();
+                float localTop = (GuardBlockHeight - GuardRailHeight * 0.5f) / GuardRailHeight;
+                box.size = new Vector3(1f, localTop + 0.5f, 1f);
+                box.center = new Vector3(0f, (localTop - 0.5f) * 0.5f, 0f);
+                created.Add(guard);
+                Vector3 lightCenter = parent.TransformPoint(new Vector3(x, top + GuardRailHeight + 0.03f, deck.localPosition.z));
+                created.Add(Cube("Guard light", parent, lightCenter, new Vector3(0.12f, 0.06f, size.z), light));
+            }
+            return created;
         }
 
         // Merge gate run (CLAUDE.md §9-2): everything except the Device category.

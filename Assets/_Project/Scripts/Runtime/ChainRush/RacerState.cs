@@ -19,6 +19,8 @@ namespace ProtoHarness.ChainRush
         private int nextAttackTick;
         private Vector3 velocity;
         private float steer;
+        private float heading;
+        private float turnRate;
         private bool jumpQueued;
         private float coyoteTime;
         private int anchorIndex;
@@ -41,6 +43,10 @@ namespace ProtoHarness.ChainRush
         // mid-tick release boost must hit the same memory the motor is integrating.
         public ref Vector3 Velocity => ref velocity;
         public ref float Steer => ref steer;
+        // Facing as world yaw in degrees (0 = +z, positive turns right) and its rate in degrees per second.
+        // Steering turns the facing; running follows it.
+        public ref float Heading => ref heading;
+        public ref float TurnRate => ref turnRate;
         public ref bool JumpQueued => ref jumpQueued;
         public ref float CoyoteTime => ref coyoteTime;
         public ref float RopeLength => ref ropeLength;
@@ -60,6 +66,8 @@ namespace ProtoHarness.ChainRush
             nextAttackTick = 0;
             velocity = Vector3.zero;
             steer = 0f;
+            heading = 0f;
+            turnRate = 0f;
             jumpQueued = false;
             coyoteTime = 0f;
             anchorIndex = NoAnchor;

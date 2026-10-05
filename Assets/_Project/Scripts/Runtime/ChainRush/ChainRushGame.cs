@@ -180,6 +180,7 @@ namespace ProtoHarness.ChainRush
             followCamera.Snap();
             for (int i = 0; i < targets.Length; i++) targets[i].Restore();
             racer.Reset();
+            player.FaceTrack();
             tick = 0;
             inputSource.Clear();
             if (endlessMode) enemies.ResetEncounters();

@@ -14,6 +14,12 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float jumpSpeed = 11.5f;
         [SerializeField] private float gravity = 22f;
         [SerializeField] private float lateralSpeed = 7f;
+        // Grounded run speed scales by 1 - factor * grade, clamped: uphill slows, downhill speeds up.
+        [SerializeField] private float slopeSpeedFactor = 1.5f;
+        [SerializeField] private float minSlopeSpeedScale = 0.7f;
+        [SerializeField] private float maxSlopeSpeedScale = 1.3f;
+        // How far below the capsule a downhill road may drop in one tick and still be followed.
+        [SerializeField] private float groundSnapDistance = 0.3f;
         private Vector3 spawnPosition;
 
         // Motion state lives in the racer's RacerState; the motor only integrates it.
@@ -37,6 +43,10 @@ namespace ProtoHarness.ChainRush
         {
             if (runSpeed <= 0f || jumpSpeed <= 0f || gravity <= 0f || lateralSpeed <= 0f)
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
+            if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
+                Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
+            if (groundSnapDistance < 0f)
+                Debug.LogError("RunnerMotor: ground snap distance cannot be negative.", this);
         }
 
         public void PrimaryAction()
@@ -77,7 +87,10 @@ namespace ProtoHarness.ChainRush
             TrackFrame frame = game.Track.Frame(transform.position);
             Vector3 local = frame.InverseTransformDirection(velocity);
             local.x = Mathf.MoveTowards(local.x, steer * lateralSpeed, (grounded ? 60f : 18f) * dt);
-            local.z = Mathf.MoveTowards(local.z, grapple.IsAttached ? 16f : runSpeed,
+            float runTarget = grounded
+                ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
+                : runSpeed;
+            local.z = Mathf.MoveTowards(local.z, grapple.IsAttached ? 16f : runTarget,
                 (grounded ? 30f : 5f) * dt);
             velocity = frame.TransformDirection(local);
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
@@ -85,10 +98,25 @@ namespace ProtoHarness.ChainRush
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
             CollisionFlags flags = controller.Move(displacement);
             if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
+            if (grounded && !controller.isGrounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
-            if (transform.position.y < -12f) game.FailRun();
+            // Falling is measured from the track surface, so a long downhill is not a fall.
+            if (game.Track.Project(transform.position).H < -12f) game.FailRun();
+        }
+
+        // Downhill the road can drop away faster than one tick of grounded fall. When ground is still within
+        // reach, pull the capsule back onto it so grounded checks (jump, encounters) do not flicker.
+        // Past a ledge the cast finds nothing and the runner falls as before.
+        private void SnapToGround()
+        {
+            float radius = controller.radius;
+            Vector3 bottom = transform.TransformPoint(controller.center) + Vector3.down * (controller.height * 0.5f - radius);
+            float reach = groundSnapDistance + controller.skinWidth;
+            if (!Physics.SphereCast(bottom, radius, Vector3.down, out RaycastHit hit, reach,
+                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return;
+            controller.Move(Vector3.down * (hit.distance + controller.skinWidth));
         }
 
         public void AddReleaseBoost()

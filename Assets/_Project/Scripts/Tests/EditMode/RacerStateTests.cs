@@ -198,6 +198,57 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void AddGauge_PastMax_ClampsAtTwoSlots()
+        {
+            racer.AddGauge(1.5f);
+            racer.AddGauge(1.5f);
+            Assert.That(racer.Gauge, Is.EqualTo(RacerState.MaxGauge));
+        }
+
+        [TestCase(-0.1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void AddGauge_InvalidAmount_Throws(float slots)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => racer.AddGauge(slots));
+        }
+
+        [Test]
+        public void TrySpendGaugeSlot_PartialSlot_SpendsNothing()
+        {
+            racer.AddGauge(0.9f);
+            Assert.That(racer.TrySpendGaugeSlot(), Is.False);
+            Assert.That(racer.Gauge, Is.EqualTo(0.9f));
+            racer.AddGauge(0.3f);
+            Assert.That(racer.TrySpendGaugeSlot(), Is.True);
+            Assert.That(racer.Gauge, Is.EqualTo(0.2f).Within(1e-5f));
+        }
+
+        [Test]
+        public void EmpowerGrapple_DetachedOrAfterDetach_IsRefusedOrCleared()
+        {
+            Assert.Throws<InvalidOperationException>(() => racer.EmpowerGrapple());
+            racer.Attach(0, 8f);
+            racer.EmpowerGrapple();
+            Assert.That(racer.GrappleEmpowered, Is.True);
+            racer.Detach();
+            Assert.That(racer.GrappleEmpowered, Is.False);
+        }
+
+        [Test]
+        public void Reset_AfterChainUse_ClearsGaugeSlingAndEmpower()
+        {
+            racer.AddGauge(2f);
+            racer.SlingTicks = 30;
+            racer.Attach(0, 8f);
+            racer.EmpowerGrapple();
+            racer.Reset();
+            Assert.That(racer.Gauge, Is.Zero);
+            Assert.That(racer.SlingTicks, Is.Zero);
+            Assert.That(racer.GrappleEmpowered, Is.False);
+        }
+
+        [Test]
         public void Queries_NegativeTick_Throw()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => racer.IsInvulnerable(-1));

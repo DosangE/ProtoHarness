@@ -34,6 +34,17 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Constructor_DriftAndChainAction_DefaultFalseAndExposeWhenGiven()
+        {
+            var plain = new TickInput(0f, false, false, false);
+            Assert.That(plain.Drift, Is.False);
+            Assert.That(plain.ChainActionPressed, Is.False);
+            var full = new TickInput(0.5f, false, false, false, true, true);
+            Assert.That(full.Drift, Is.True);
+            Assert.That(full.ChainActionPressed, Is.True);
+        }
+
+        [Test]
         public void Default_Value_IsNeutral()
         {
             TickInput input = default;

@@ -139,7 +139,9 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(32, height - 220, 168, 105), Ink);
             GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
             GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
+            DrawGauge(height);
             string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  좌클릭으로 앵커 잡기";
+            if (player.IsDrifting) status = "DRIFT  /  미끄러지며 체인 게이지 충전";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
             Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);
             GUI.Label(new Rect(width / 2f - 220, height - 145, 450, 28), status, body);
@@ -165,6 +167,21 @@ namespace ProtoHarness.ChainRush
                 flash.a = Mathf.PingPong(Time.time * 2f, 0.25f);
                 Block(new Rect(0, 0, 9, height), flash);
                 Block(new Rect(width - 9, 0, 9, height), flash);
+            }
+        }
+
+        // Chain gauge under the speed box: one bar per slot, filled by drifting, spent by Ctrl.
+        private void DrawGauge(float height)
+        {
+            Block(new Rect(32, height - 108, 168, 46), Ink);
+            GUI.Label(new Rect(54, height - 104, 140, 20), "CHAIN  /  CTRL", small);
+            float gauge = player.Gauge;
+            for (int slot = 0; slot < (int)RacerState.MaxGauge; slot++)
+            {
+                var bar = new Rect(54 + slot * 64, height - 80, 58, 8);
+                Block(bar, new Color(0.2f, 0.3f, 0.33f));
+                bar.width *= Mathf.Clamp01(gauge - slot);
+                Block(bar, Mint);
             }
         }
 

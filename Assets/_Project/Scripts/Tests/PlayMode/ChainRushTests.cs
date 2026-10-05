@@ -169,6 +169,39 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // Device: left Shift held drifts and fills the gauge; left Ctrl spends a slot (T2c, KartRider keys).
+        [UnityTest]
+        [Category("Device")]
+        public IEnumerator Input_ShiftAndCtrl_DriftsAndFiresChainAction()
+        {
+            Keyboard originalKeyboard = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return new WaitForSeconds(0.5f);
+                Assert.That(game.IsRunning, Is.True);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.D));
+                yield return new WaitForSeconds(0.4f);
+                Assert.That(player.IsDrifting, Is.True, "Holding left Shift on the ground must drift.");
+                Assert.That(game.Racer.Gauge, Is.GreaterThan(0f), "Drifting must fill the chain gauge.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return new WaitForSeconds(0.1f);
+                Assert.That(player.IsDrifting, Is.False);
+                game.Racer.AddGauge(1f);
+                float before = game.Racer.Gauge;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftCtrl));
+                yield return new WaitForSeconds(0.1f);
+                Assert.That(game.Racer.Gauge, Is.EqualTo(before - 1f).Within(0.05f), "Left Ctrl must spend one slot.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                if (originalKeyboard != null) originalKeyboard.MakeCurrent();
+            }
+        }
+
         [UnityTest]
         public IEnumerator Restart_AfterAttackAndFall_ResetsCourseAndState()
         {

@@ -10,8 +10,13 @@ namespace ProtoHarness.ChainRush.Control
         public bool PrimaryPressed { get; }
         public bool ReleasePressed { get; }
         public bool AttackPressed { get; }
+        // Held: drift (lower grip, sharper turn, fills the chain gauge).
+        public bool Drift { get; }
+        // Edge: spend a gauge slot on the chain action that fits the moment.
+        public bool ChainActionPressed { get; }
 
-        public TickInput(float steer, bool primaryPressed, bool releasePressed, bool attackPressed)
+        public TickInput(float steer, bool primaryPressed, bool releasePressed, bool attackPressed,
+            bool drift = false, bool chainActionPressed = false)
         {
             // NaN fails both comparisons, so it is rejected here too.
             if (!(steer >= -1f && steer <= 1f))
@@ -20,6 +25,8 @@ namespace ProtoHarness.ChainRush.Control
             PrimaryPressed = primaryPressed;
             ReleasePressed = releasePressed;
             AttackPressed = attackPressed;
+            Drift = drift;
+            ChainActionPressed = chainActionPressed;
         }
     }
 }

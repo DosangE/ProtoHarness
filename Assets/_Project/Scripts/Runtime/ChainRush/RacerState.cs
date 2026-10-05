@@ -9,8 +9,13 @@ namespace ProtoHarness.ChainRush
     public sealed class RacerState
     {
         public const int NoAnchor = -1;
+        // The chain gauge holds up to two slots (KartRider keeps two boosters); one chain action costs one.
+        public const float MaxGauge = 2f;
 
         private readonly RunRules rules;
+        private float gauge;
+        private int slingTicks;
+        private bool grappleEmpowered;
         private int health;
         private int hits;
         private int grapples;
@@ -56,6 +61,33 @@ namespace ProtoHarness.ChainRush
         public bool HasAnchor => anchorIndex != NoAnchor;
         public int MissUntilTick => missUntilTick;
 
+        public float Gauge => gauge;
+        // Ticks left in the current chain slingshot (pull, then carry); zero when none is running.
+        public ref int SlingTicks => ref slingTicks;
+        // The current grapple was empowered by a chain action: faster reel, stronger release.
+        public bool GrappleEmpowered => grappleEmpowered;
+
+        public void AddGauge(float slots)
+        {
+            if (!(slots >= 0f) || float.IsInfinity(slots))
+                throw new ArgumentOutOfRangeException(nameof(slots), slots, "Gauge gain must be finite and not negative.");
+            gauge = Mathf.Min(MaxGauge, gauge + slots);
+        }
+
+        // Spends one whole slot; returns false and spends nothing when less than one is stored.
+        public bool TrySpendGaugeSlot()
+        {
+            if (gauge < 1f) return false;
+            gauge -= 1f;
+            return true;
+        }
+
+        public void EmpowerGrapple()
+        {
+            if (!HasAnchor) throw new InvalidOperationException("Only an attached grapple can be empowered.");
+            grappleEmpowered = true;
+        }
+
         public void Reset()
         {
             health = rules.MaxHealth;
@@ -68,6 +100,9 @@ namespace ProtoHarness.ChainRush
             steer = 0f;
             heading = 0f;
             turnRate = 0f;
+            gauge = 0f;
+            slingTicks = 0;
+            grappleEmpowered = false;
             jumpQueued = false;
             coyoteTime = 0f;
             anchorIndex = NoAnchor;
@@ -83,7 +118,11 @@ namespace ProtoHarness.ChainRush
             ropeLength = length;
         }
 
-        public void Detach() => anchorIndex = NoAnchor;
+        public void Detach()
+        {
+            anchorIndex = NoAnchor;
+            grappleEmpowered = false;
+        }
         public void MarkMiss(int untilTick) => missUntilTick = RequireTick(untilTick);
         public void ClearMiss() => missUntilTick = 0;
 

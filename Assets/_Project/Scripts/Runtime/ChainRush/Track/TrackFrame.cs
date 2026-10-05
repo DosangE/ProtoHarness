@@ -26,6 +26,16 @@ namespace ProtoHarness.ChainRush.Track
             Curvature = curvature;
         }
 
+        // Center of the arc this point lies on, at the centerline's height. Only arcs have one.
+        public Vector3 CurveCenter
+        {
+            get
+            {
+                if (Curvature == 0f) throw new System.InvalidOperationException("A straight frame has no curve center.");
+                return Position + Right / Curvature;
+            }
+        }
+
         public Vector3 TransformDirection(Vector3 local) => Right * local.x + Vector3.up * local.y + Forward * local.z;
 
         public Vector3 InverseTransformDirection(Vector3 world) =>

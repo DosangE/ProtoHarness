@@ -65,9 +65,10 @@ namespace ProtoHarness.ChainRush
         {
             if (game.IsPaused) return;
             candidate = AnchorAt(SelectCandidate());
-            bool slinging = game.IsRunning && !IsAttached && motor.IsSlingPulling;
-            bool linked = IsAttached || slinging;
-            Vector3 target = IsAttached ? AnchorPosition : motor.SlingTarget;
+            bool swinging = game.IsRunning && !IsAttached && motor.IsSwinging;
+            bool slinging = game.IsRunning && !IsAttached && !swinging && motor.IsSlingPulling;
+            bool linked = IsAttached || swinging || slinging;
+            Vector3 target = IsAttached ? AnchorPosition : swinging ? motor.SwingAnchor : motor.SlingTarget;
             if (game.IsEndless)
             {
                 if (linked) lastAnchor = target;

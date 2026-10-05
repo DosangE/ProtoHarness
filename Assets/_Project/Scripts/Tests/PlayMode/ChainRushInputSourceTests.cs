@@ -169,8 +169,15 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(body.localRotation, Quaternion.identity), Is.GreaterThan(10f));
             source.Steer = 0f;
             game.StartRun();
+            // Whether a tick lands before the next end of frame depends on frame timing; force one so the
+            // check below sees the same state every run.
+            yield return new WaitForFixedUpdate();
             yield return new WaitForEndOfFrame();
-            Assert.That(Quaternion.Angle(body.localRotation, Quaternion.identity), Is.LessThan(0.01f), "Restart must return the body upright.");
+            // That tick adds gravity (velocity.y -0.44, a 0.4 degree pitch), so "upright" means the steering
+            // lean is gone: no steer, and no yaw or roll beyond what velocity alone gives.
+            Assert.That(player.Steer, Is.Zero);
+            Assert.That(Quaternion.Angle(body.localRotation, RunnerTilt.Evaluate(player.Velocity, 0f)), Is.LessThan(0.01f),
+                "Restart must clear the steering lean.");
         }
     }
 }

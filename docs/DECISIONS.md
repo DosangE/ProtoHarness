@@ -7,6 +7,13 @@
 
 ---
 
+## 2026-10-05 · 테스트 수정: 몸 기울기 재시작 단언의 프레임 타이밍 의존 제거
+
+- **문제**: `ChainRushInputSourceTests.Tilt_ScriptedSteerLeft_LeansBodyFromMotorState` 의 마지막 단언("재시작 뒤 몸이 똑바르다", 각도 < 0.01°)이 `StartRun()` 다음 프레임에 시뮬 틱이 끼면 실패했다. 중력 한 틱(`velocity.y` −0.44) × 기울기 공식 −0.9 = 0.396°. 아래 "코스 T2c" 의 실패 기록이 그것이다.
+- **결정 (사용자 승인: 커밋 먼저, 수정은 별도 `fix/` 브랜치)**: ① 재시작 뒤 `WaitForFixedUpdate` 로 틱을 **반드시 한 번** 돌려 매 실행 같은 상태를 보게 한다. ② 단언을 의도대로 바꾼다: 조향이 0 이고, 몸 회전이 `RunnerTilt.Evaluate(velocity, 0)`(속도에서 오는 앞뒤 기울기만)과 같다 = 조향 기울기(yaw·roll)가 사라졌다. 앞 단계(조향 중 기울기 단언)는 그대로다.
+- **고치기 전 실패 (결정적 재현)**: ①만 넣고 기존 단언으로 실행 → `testcasecount="1" result="Failed(Child)" failed="1"`, `Restart must return the body upright. Expected: less than 0.00999999978f But was: 0.395647019f` (21:16:41~21:16:42). 부분 실행에서 본 값과 같다. ② 적용 후 `testcasecount="1" result="Passed"` (21:17:21~21:17:23).
+- **검증** (`fix/tilt-test-timing`, 6000.3.25f1, MCP, KST): PlayMode(Device 제외) 1회차 `testcasecount="38" result="Passed" passed="38" failed="0" duration="166.61"` (21:17:38~21:20:25), 2회차 `testcasecount="38" result="Passed" passed="38" failed="0" duration="166.53"` (21:20:40~21:23:27). 런타임 코드 무변경이라 EditMode·Device 는 해당 없음(입력 장치 경로 미변경).
+
 ## 2026-10-05 · 코스 T2c: 드리프트, 체인 게이지, 체인 액션(슬링샷·그래플 강화)
 
 - **사용자 결정**: ① 부스트 대신 **체인 그래플로 표현하는 가속**을 쓴다. ② 제안한 세 안(슬링샷 / 코너 앵커 스윙 / 그래플 강화)을 **모두** 쓴다 → 같은 게이지·같은 키(체인 액션)로 상황별로 나가게 하고, 코너 스윙은 가장 복잡해 T2d 로 나눈다(승인). ③ 키는 카트라이더 배치: 왼쪽 Shift 드리프트, 왼쪽 Ctrl 체인 액션.

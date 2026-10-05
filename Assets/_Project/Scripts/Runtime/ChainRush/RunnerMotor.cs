@@ -29,10 +29,30 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float maxSlopeSpeedScale = 1.3f;
         // How far below the capsule a downhill road may drop in one tick and still be followed.
         [SerializeField] private float groundSnapDistance = 0.3f;
+        // Drift (KartRider style, held on the ground): grip drops so turns slide, turning sharpens, run speed
+        // eases, and sliding sideways fills the chain gauge (one slot per slideMetersPerSlot of slide).
+        [SerializeField] private float driftGrip = 12f;
+        [SerializeField] private float driftTurnScale = 1.3f;
+        [SerializeField] private float driftSpeedScale = 0.9f;
+        [SerializeField] private float slideMetersPerSlot = 6f;
+        // Chain slingshot (chain action when not grappling): the chain hooks a point slingLead ahead on the
+        // centerline and pulls hard, turning the runner toward it, then extra speed carries for a moment.
+        [SerializeField] private float slingLead = 18f;
+        [SerializeField] private float slingPullTime = 0.4f;
+        [SerializeField] private float slingPullAcceleration = 45f;
+        [SerializeField] private float slingTopSpeed = 20f;
+        [SerializeField] private float slingTurnRate = 90f;
+        [SerializeField] private float slingCarryTime = 0.8f;
+        [SerializeField] private float slingCarrySpeed = 16f;
+        // Empowered grapple (chain action while attached): the release throws harder along the facing.
+        [SerializeField] private float empoweredReleaseSpeed = 18f;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
         private bool hitGuard;
+        // Presentation reads these; the simulation recomputes them every tick.
+        private bool drifting;
+        private Vector3 slingTarget;
 
         // Motion state lives in the racer's RacerState; the motor only integrates it.
         public Vector3 Velocity => game.Racer.Velocity;
@@ -43,6 +63,10 @@ namespace ProtoHarness.ChainRush
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RightOf(game.Racer.Heading));
         public bool IsGrounded => controller.isGrounded;
         public float Speed => game.Racer.Velocity.magnitude;
+        public bool IsDrifting => drifting;
+        public float Gauge => game.Racer.Gauge;
+        public bool IsSlingPulling => game.Racer.SlingTicks > Ticks.FromSeconds(slingCarryTime);
+        public Vector3 SlingTarget => slingTarget;
 
         private void Awake()
         {
@@ -67,6 +91,11 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
             if (groundSnapDistance < 0f)
                 Debug.LogError("RunnerMotor: ground snap distance cannot be negative.", this);
+            if (driftGrip < 0f || driftTurnScale <= 0f || driftSpeedScale <= 0f || driftSpeedScale > 1f || slideMetersPerSlot <= 0f)
+                Debug.LogError("RunnerMotor: drift grip cannot be negative, turn scale and slide per slot must be positive, speed scale within (0, 1].", this);
+            if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
+                || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
+                Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
         }
 
         public void PrimaryAction()
@@ -103,21 +132,43 @@ namespace ProtoHarness.ChainRush
                 }
                 jumpQueued = false;
             }
+            drifting = input.Drift && grounded;
+            ref int slingTicks = ref racer.SlingTicks;
+            if (input.ChainActionPressed) ChainAction();
+            int carryTicks = Ticks.FromSeconds(slingCarryTime);
+            bool pulling = slingTicks > carryTicks;
+            bool carrying = slingTicks > 0 && !pulling;
             // Free steering: input turns the facing, and running and grip act along the facing. The track
             // only supplies the grade here; it no longer decides which way is ahead.
             ref float heading = ref racer.Heading;
             ref float turnRate = ref racer.TurnRate;
-            turnRate = Mathf.MoveTowards(turnRate, steer * maxTurnRate * (grounded ? 1f : airTurnScale), turnAcceleration * dt);
+            float turnScale = grounded ? (drifting ? driftTurnScale : 1f) : airTurnScale;
+            turnRate = Mathf.MoveTowards(turnRate, steer * maxTurnRate * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             TrackFrame frame = game.Track.Frame(transform.position);
+            if (pulling)
+            {
+                // The hook point rides the centerline ahead, so the pull follows curves.
+                slingTarget = game.Track.FrameAt(frame.S + slingLead).Position + Vector3.up * (transform.position.y - frame.Position.y);
+                Vector3 toward = slingTarget - transform.position;
+                toward.y = 0f;
+                if (toward.sqrMagnitude > 0.01f)
+                    heading = Mathf.Repeat(Mathf.MoveTowardsAngle(heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, slingTurnRate * dt) + 180f, 360f) - 180f;
+            }
             Vector3 facing = FacingOf(heading);
             Vector3 right = RightOf(heading);
-            float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, (grounded ? sideGrip : airSideGrip) * dt);
+            float grip = grounded ? (drifting ? driftGrip : sideGrip) : airSideGrip;
+            float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
+            if (drifting) racer.AddGauge(Mathf.Abs(sideSpeed) * dt / slideMetersPerSlot);
             float runTarget = grounded
                 ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
                 : runSpeed;
+            if (drifting) runTarget *= driftSpeedScale;
+            if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
+            if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
+            float acceleration = pulling ? slingPullAcceleration : grounded ? 30f : 5f;
             float forwardSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, facing), grapple.IsAttached ? 16f : runTarget,
-                (grounded ? 30f : 5f) * dt);
+                acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
             Vector3 displacement = velocity * dt;
@@ -130,8 +181,27 @@ namespace ProtoHarness.ChainRush
             if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
+            if (slingTicks > 0) slingTicks--;
             // Falling is measured from the track surface, so a long downhill is not a fall.
             if (game.Track.Project(transform.position).H < -12f) game.FailRun();
+        }
+
+        // One gauge slot buys the chain action that fits the moment: while grappling it empowers the grapple,
+        // otherwise it fires the slingshot. Without a whole slot, or with the same action already running,
+        // nothing happens and nothing is spent. (The corner swing joins in T2d, between these two.)
+        private void ChainAction()
+        {
+            RacerState racer = game.Racer;
+            if (grapple.IsAttached)
+            {
+                if (racer.GrappleEmpowered || !racer.TrySpendGaugeSlot()) return;
+                racer.EmpowerGrapple();
+                game.PlayCue(1);
+                return;
+            }
+            if (racer.SlingTicks > 0 || !racer.TrySpendGaugeSlot()) return;
+            racer.SlingTicks = Ticks.FromSeconds(slingPullTime) + Ticks.FromSeconds(slingCarryTime);
+            game.PlayCue(1);
         }
 
         // Downhill the road can drop away faster than one tick of grounded fall. When ground is still within
@@ -147,14 +217,15 @@ namespace ProtoHarness.ChainRush
             controller.Move(Vector3.down * (hit.distance + controller.skinWidth));
         }
 
-        public void AddReleaseBoost()
+        // empowered: the grapple was empowered by a chain action before this release.
+        public void AddReleaseBoost(bool empowered)
         {
             // A full takeoff impulse keeps the capsule above the next platform lip.
             ref Vector3 velocity = ref game.Racer.Velocity;
             float heading = game.Racer.Heading;
             Vector3 facing = FacingOf(heading);
             Vector3 right = RightOf(heading);
-            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), 13f);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? empoweredReleaseSpeed : 13f);
             velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
         }
 

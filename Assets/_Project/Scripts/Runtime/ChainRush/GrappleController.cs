@@ -14,6 +14,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private Transform[] anchors;
         [SerializeField] private float maxRange = 32f;
         [SerializeField] private float retractSpeed = 3f;
+        // Reel speed once a chain action has empowered the current grapple.
+        [SerializeField] private float empoweredRetractSpeed = 12f;
         [SerializeField] private ChainVisual chainVisual;
         private float visualExtension;
         private Vector3 lastAnchor;
@@ -53,24 +55,31 @@ namespace ProtoHarness.ChainRush
 
         private void OnValidate()
         {
-            if (maxRange <= 5f || retractSpeed < 0f)
-                Debug.LogError("GrappleController: range must exceed 5 and retract speed cannot be negative.", this);
+            if (maxRange <= 5f || retractSpeed < 0f || empoweredRetractSpeed < retractSpeed)
+                Debug.LogError("GrappleController: range must exceed 5, retract speed cannot be negative, and the empowered reel cannot be slower.", this);
         }
 
+        // The chain shows for a grapple and for the motor's slingshot pull: the chain visual in endless
+        // mode, the rope line otherwise.
         private void LateUpdate()
         {
             if (game.IsPaused) return;
             candidate = AnchorAt(SelectCandidate());
+            bool slinging = game.IsRunning && !IsAttached && motor.IsSlingPulling;
+            bool linked = IsAttached || slinging;
+            Vector3 target = IsAttached ? AnchorPosition : motor.SlingTarget;
             if (game.IsEndless)
             {
-                if (IsAttached) lastAnchor = AnchorPosition;
-                visualExtension = Mathf.MoveTowards(visualExtension, IsAttached ? 1f : 0f, Time.deltaTime * 8f);
+                if (linked) lastAnchor = target;
+                visualExtension = Mathf.MoveTowards(visualExtension, linked ? 1f : 0f, Time.deltaTime * 8f);
                 if (visualExtension > 0f) chainVisual.Present(lastAnchor, visualExtension);
                 else chainVisual.Hide();
+                return;
             }
-            if (!IsAttached) return;
+            rope.enabled = linked;
+            if (!linked) return;
             rope.SetPosition(0, ropeOrigin.position);
-            rope.SetPosition(1, AnchorPosition);
+            rope.SetPosition(1, target);
         }
 
         private Transform AnchorAt(int index) => index == RacerState.NoAnchor ? null : anchors[index];
@@ -118,7 +127,7 @@ namespace ProtoHarness.ChainRush
         {
             if (!IsAttached) return;
             ref float ropeLength = ref game.Racer.RopeLength;
-            ropeLength = Mathf.Max(5f, ropeLength - retractSpeed * dt);
+            ropeLength = Mathf.Max(5f, ropeLength - (game.Racer.GrappleEmpowered ? empoweredRetractSpeed : retractSpeed) * dt);
             Vector3 anchor = AnchorPosition;
             Vector3 radial = position + displacement - anchor;
             if (radial.sqrMagnitude <= ropeLength * ropeLength) return;
@@ -136,9 +145,11 @@ namespace ProtoHarness.ChainRush
                 chainVisual.Hide();
             }
             if (!IsAttached) return;
+            // Detach clears the empowered flag, so read it first.
+            bool empowered = game.Racer.GrappleEmpowered;
             game.Racer.Detach();
             rope.enabled = false;
-            if (boost && game.IsRunning) motor.AddReleaseBoost();
+            if (boost && game.IsRunning) motor.AddReleaseBoost(empowered);
         }
 
         // Ticks restart at zero with each run, so a stale miss deadline must not carry over.

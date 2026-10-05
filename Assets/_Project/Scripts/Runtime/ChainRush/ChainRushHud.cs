@@ -142,6 +142,7 @@ namespace ProtoHarness.ChainRush
             DrawGauge(height);
             string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  좌클릭으로 앵커 잡기";
             if (player.IsDrifting) status = "DRIFT  /  미끄러지며 체인 게이지 충전";
+            if (player.IsSwinging) status = "SWING  /  SHIFT 를 떼면 튀어 나간다";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
             Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);
             GUI.Label(new Rect(width / 2f - 220, height - 145, 450, 28), status, body);

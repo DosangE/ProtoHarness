@@ -339,6 +339,21 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(line.Project(point + shift).S, Is.EqualTo(before).Within(Tolerance));
         }
 
+        [Test]
+        public void CurveCenter_OnArcs_IsTheCircleCenter()
+        {
+            Assert.That(Vector3.Distance(ArcR30(90f).FrameAt(10d).CurveCenter, new Vector3(30f, 0f, 0f)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(ArcR30(90f).FrameAt(40d).CurveCenter, new Vector3(30f, 0f, 0f)), Is.LessThan(Tolerance));
+            Assert.That(Vector3.Distance(ArcR30(-90f).FrameAt(25d).CurveCenter, new Vector3(-30f, 0f, 0f)), Is.LessThan(Tolerance));
+        }
+
+        [Test]
+        public void CurveCenter_OnStraight_Throws()
+        {
+            TrackFrame frame = StraightAlongZ(10f).FrameAt(5d);
+            Assert.Throws<InvalidOperationException>(() => { Vector3 unused = frame.CurveCenter; });
+        }
+
         [TestCase(0f, 90f)]
         [TestCase(-5f, 90f)]
         [TestCase(float.NaN, 90f)]

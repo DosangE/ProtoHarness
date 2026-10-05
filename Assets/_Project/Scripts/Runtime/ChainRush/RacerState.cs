@@ -15,6 +15,8 @@ namespace ProtoHarness.ChainRush
         private readonly RunRules rules;
         private float gauge;
         private int slingTicks;
+        private int swingTicks;
+        private float swingRadius;
         private bool grappleEmpowered;
         private int health;
         private int hits;
@@ -64,6 +66,10 @@ namespace ProtoHarness.ChainRush
         public float Gauge => gauge;
         // Ticks left in the current chain slingshot (pull, then carry); zero when none is running.
         public ref int SlingTicks => ref slingTicks;
+        // Ticks left in the current corner swing (zero when none) and its rope length, signed by the turn:
+        // positive swings around a right-hand curve's center, negative a left-hand one.
+        public ref int SwingTicks => ref swingTicks;
+        public ref float SwingRadius => ref swingRadius;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
 
@@ -102,6 +108,8 @@ namespace ProtoHarness.ChainRush
             turnRate = 0f;
             gauge = 0f;
             slingTicks = 0;
+            swingTicks = 0;
+            swingRadius = 0f;
             grappleEmpowered = false;
             jumpQueued = false;
             coyoteTime = 0f;

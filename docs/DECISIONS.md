@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-10-05 · 코스 T2d: 코너 앵커 스윙
+
+- **결정 (사용자 승인한 계획)**: 체인 액션 우선순위 두 번째(그래플 강화 다음, 슬링샷 앞)에 코너 스윙. 조건: 드리프트 중(접지 + Shift), 원호 위, 조향이 그 커브 쪽(`Steer × Curvature > 0`), 스윙 중 아님. 게이지 1칸. 앵커는 원호 **중심**(`TrackFrame.CurveCenter` = 위치 + 오른쪽 / 곡률, 직선에서 읽으면 예외). 줄 길이 = 발동 순간 중심까지 수평 거리(`RacerState.SwingRadius`, 부호 = 커브 방향)로 고정해 지금 라인 그대로 원을 돈다. 스윙 중: 헤딩·속도를 원의 접선(트랙 진행 쪽)으로, 매 틱 원 위로 되돌림, 목표 `swingSpeed` 14 를 `swingAcceleration` 20 m/s² 로, 게이지 충전 없음. 끝: Shift 를 떼거나, 그래플이 붙거나, 원호를 벗어나거나(곡률 0 또는 반대), `swingMaxTime` 2초 → 헤딩 방향 최소 `swingExitSpeed` 17, 이어 슬링샷의 유지 단계로 `swingExitCarryTime` 0.6초 동안 16. 체인 시각물은 스윙 중 앵커(중심, 0.5m 위)까지. HUD 상태 "SWING". 공개 API 추가: `IsSwinging`, `SwingAnchor`, `TrackFrame.CurveCenter`, `RacerState.SwingTicks`·`SwingRadius`. 체인 액션 없으면 기존과 같은 값.
+- **테스트 헬퍼**: `ChainRushCurveTests` 안의 조향 봇을 공용 `Tests/PlayMode/TrackFollower.cs` 로 옮기고 드리프트·체인 액션 입력을 더했다(커브 테스트 단언 무변경).
+- **구현 중 발견한 버그와 고치기 전 실패**: 처음 구현은 스윙 가속을 원운동 단계에서 따로 더했는데, 같은 틱의 일반 주행 계산이 먼저 드리프트 목표(9 m/s)로 0.6/틱 끌어내려 +0.4/틱 가속과 맞서 **약 9.4 m/s 에서 평형**이 됐다. 느슨한 첫 단언("평지보다 빠르다")은 4.32 s < 4.62 s 로 통과해 놓칠 뻔했다. 단언을 의도대로 강화("스윙 최고 속도 > 13", "평지의 85% 미만")하자 고치기 전 `The swing must speed up toward 14 m/s. Expected: greater than 13.0f But was: 9.39996529f` (21:33:21~21:33:43, 계산한 평형값과 일치). 수정: 스윙 중에는 일반 계산의 목표 속도·가속을 스윙 값으로 바꾸고, 원운동 단계는 방향만 접선으로 돌린다. 수정 후 3/3 통과 (21:34:27~21:34:47).
+- **실측** (R30 오른쪽 90° 시험 도로, 커브 시작 + 1m 부터 끝까지): 봇 평지 주행 **4.62 s**, 드리프트 + 코너 스윙 **3.46 s**(25% 빠름), 스윙 최고 속도 14.0 m/s, 중심선에서 최대 0.05 m(가드 무접촉). 두 번의 전체 실행에서 같은 값. 직선에서 드리프트 중 체인 액션은 스윙이 아니라 슬링샷. Shift 를 떼면 다음 틱에 끝나고 앞 속도 > 15.5.
+- **검증** (`feature/course-t2d-corner-swing`, 6000.3.25f1, MCP, KST): 컴파일 확인, Console Error/Exception 0. EditMode `testcasecount="117" result="Passed" passed="117" failed="0"` (21:35:05, `CurveCenter` +2). PlayMode(Device 제외) 1회차 `testcasecount="41" result="Passed" passed="41" failed="0" duration="188.58"` (21:35:24~21:38:33), 2회차 `testcasecount="41" result="Passed" passed="41" failed="0" duration="187.76"` (21:38:54~21:42:02). 입력 장치 경로 미변경이라 Device 실행은 해당 없다.
+- **하지 않은 것**: 줄 감기로 안쪽 라인 타기, 씬 코스 커브(T3), 수치 체감 튜닝, 스윙 중 다른 레이서와의 상호작용(P3).
+
 ## 2026-10-05 · 테스트 수정: 몸 기울기 재시작 단언의 프레임 타이밍 의존 제거
 
 - **문제**: `ChainRushInputSourceTests.Tilt_ScriptedSteerLeft_LeansBodyFromMotorState` 의 마지막 단언("재시작 뒤 몸이 똑바르다", 각도 < 0.01°)이 `StartRun()` 다음 프레임에 시뮬 틱이 끼면 실패했다. 중력 한 틱(`velocity.y` −0.44) × 기울기 공식 −0.9 = 0.396°. 아래 "코스 T2c" 의 실패 기록이 그것이다.

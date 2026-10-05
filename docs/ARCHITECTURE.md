@@ -17,7 +17,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 |---|---|
 | 우리 런타임 스크립트 | **23** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
 | 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
-| 우리 테스트 | PlayMode **9 파일 / 40 테스트** (그중 `Device` 카테고리 2개, 공용 시험 도로 헬퍼 `TestRoad.cs` 포함), EditMode **8 파일 / 115 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-05 실행 XML 기준 |
+| 우리 테스트 | PlayMode **11 파일 / 43 테스트** (그중 `Device` 카테고리 2개, 공용 헬퍼 `TestRoad.cs`·`TrackFollower.cs` 포함), EditMode **8 파일 / 117 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-05 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
 | 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
@@ -44,7 +44,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
-| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 드리프트(그립 저하·게이지 충전)와 체인 액션(슬링샷 / 그래플 강화, 게이지 1칸). 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
+| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 드리프트(그립 저하·게이지 충전)와 체인 액션(우선순위: 그래플 강화 → 커브 드리프트 중 코너 스윙 → 슬링샷, 게이지 1칸). 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
 | 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate` | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
@@ -52,7 +52,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격, 왼쪽 Shift 드리프트, 왼쪽 Ctrl 체인 액션) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트. 체인 액션으로 강화되면 빨리 감고 세게 던진다. 슬링샷 당김 동안 체인 시각물 표시 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
 | 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |
-| 트랙 좌표계: 직선 조각과 수평 원호(`AppendArc`, 곡률 `TrackFrame.Curvature`)를 이은 중심선, 조각마다 종단 곡선(경사 연속, 높이 포물선). 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축·높이·경사(`TrackFrame`). `ChainRushGame.SetTrack` 으로 교체 가능(유한 모드만). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
+| 트랙 좌표계: 직선 조각과 수평 원호(`AppendArc`, 곡률 `TrackFrame.Curvature`, 원호 중심 `CurveCenter`)를 이은 중심선, 조각마다 종단 곡선(경사 연속, 높이 포물선). 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축·높이·경사(`TrackFrame`). `ChainRushGame.SetTrack` 으로 교체 가능(유한 모드만). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
 | 레이서 한 명분 시뮬 상태(위치 제외): 체력·적중 수·그래플 수·무적/공격 마감 틱, 속도·조향·점프 예약·코요테 시간, 그래플 앵커 인덱스·줄 길이·빗나감 마감 틱. 운동 값은 `ref` 로 노출한다(모터가 성분을 제자리에서 고치고, 그래플의 해제 부스트가 같은 메모리를 고친다). 순수 로직. `ChainRushGame.Racer` 로 접근 | `Runtime/ChainRush/RacerState.cs` | `RunRules` (생성자 인자, null 이면 `ArgumentNullException`) |
 | 추적 카메라·속도에 따른 FOV. 러너 헤딩 뒤를 따르고 yaw 회전은 `maxYawSpeed`(180°/s) 상한. 높이 하한은 중심선 높이 기준. 첫 맞춤은 `Start`(트랙이 `Awake` 에서 생기므로) | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game(`Track`), Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |

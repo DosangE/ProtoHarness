@@ -34,6 +34,13 @@ namespace ProtoHarness.ChainRush.Race
         private bool initialized;
         private double lastS;
 
+        // The race's state between ticks: the lap counter and where the runner was last seen.
+        public struct Snapshot
+        {
+            public LapCounter.Snapshot Laps;
+            public double LastS;
+        }
+
         public LapCounter Laps => counter;
         public TrackDefinition Definition => definition;
         public Centerline Track => track;
@@ -100,6 +107,15 @@ namespace ProtoHarness.ChainRush.Race
             counter.Begin(lastS, 0);
             track.SetFocus(lastS);
             MaxStepMilliseconds = 0d;
+        }
+
+        public Snapshot Capture() => new Snapshot { Laps = counter.Capture(), LastS = lastS };
+
+        public void Restore(in Snapshot snapshot)
+        {
+            counter.Restore(snapshot.Laps);
+            lastS = snapshot.LastS;
+            track.SetFocus(lastS);
         }
 
         public Transform AnchorAt(int index)

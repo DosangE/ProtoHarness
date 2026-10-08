@@ -71,7 +71,7 @@ namespace ProtoHarness.ChainRush
         public Vector3 Facing => FacingOf(game.Racer.Heading);
         public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RightOf(game.Racer.Heading));
-        public bool IsGrounded => controller.isGrounded;
+        public bool IsGrounded => game.Racer.Grounded;
         public float Speed => game.Racer.Velocity.magnitude;
         public bool IsDrifting => drifting;
         public float Gauge => game.Racer.Gauge;
@@ -124,6 +124,7 @@ namespace ProtoHarness.ChainRush
         public void Step(in TickInput input)
         {
             if (!game.IsRunning) return;
+            NormalizeController();
             RacerState racer = game.Racer;
             ref Vector3 velocity = ref racer.Velocity;
             ref float steer = ref racer.Steer;
@@ -133,7 +134,7 @@ namespace ProtoHarness.ChainRush
             if (input.PrimaryPressed) PrimaryAction();
             if (input.ReleasePressed) grapple.Release(true);
             float dt = Ticks.Seconds;
-            bool grounded = controller.isGrounded;
+            bool grounded = racer.Grounded;
             coyoteTime = grounded ? 0.1f : Mathf.Max(0f, coyoteTime - dt);
             if (grounded && velocity.y < 0f) velocity.y = -2f;
             if (jumpQueued)
@@ -201,10 +202,11 @@ namespace ProtoHarness.ChainRush
             if (swinging) SwingStep(frame, ref velocity, ref heading, ref displacement, dt);
             hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
+            SyncGrounded();
             if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
             if (hitGuard) GlanceOffGuard(ref velocity, ref heading, frame.Forward);
-            if (grounded && !controller.isGrounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
-            if (controller.isGrounded && grapple.IsAttached) grapple.Release(false);
+            if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
+            if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
             if (slingTicks > 0) slingTicks--;
@@ -294,7 +296,23 @@ namespace ProtoHarness.ChainRush
             if (!Physics.SphereCast(bottom, radius, Vector3.down, out RaycastHit hit, reach,
                     Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return;
             controller.Move(Vector3.down * (hit.distance + controller.skinWidth));
+            SyncGrounded();
         }
+
+        // The physics controller keeps its own position at higher precision than transform.position, so a runner put
+        // back at a saved transform position (a rollback) would start the next Move from a slightly different place
+        // than the run that was saved. Re-enabling the controller makes its position exactly the transform's, so
+        // every tick starts from the float position alone and a restored tick is the same tick.
+        // Grounded is not touched: it is the racer's copy, taken after the last Move.
+        private void NormalizeController()
+        {
+            controller.enabled = false;
+            controller.enabled = true;
+        }
+
+        // The racer's copy of the controller's grounded answer (see RacerState.Grounded). Call it right after anything
+        // that moves or re-enables the controller.
+        private void SyncGrounded() => game.Racer.Grounded = controller.isGrounded;
 
         // empowered: the grapple was empowered by a chain action before this release.
         public void AddReleaseBoost(bool empowered)
@@ -365,7 +383,19 @@ namespace ProtoHarness.ChainRush
             controller.enabled = false;
             transform.position += offset;
             controller.enabled = true;
+            SyncGrounded();
             grapple.ShiftOrigin(offset);
+        }
+
+        // Puts the runner at a position without moving it through the world (a rollback, a test). The grounded
+        // copy is refreshed from the controller; a rollback then overwrites it with the saved answer.
+        public void SetPosition(Vector3 position)
+        {
+            controller.enabled = false;
+            transform.position = position;
+            controller.enabled = true;
+            SyncGrounded();
+            Physics.SyncTransforms();
         }
 
         public void ResetAtSpawn()
@@ -376,6 +406,7 @@ namespace ProtoHarness.ChainRush
             transform.position = spawnPosition;
             controller.enabled = true;
             controller.Move(Vector3.down * 0.3f);
+            SyncGrounded();
             RacerState racer = game.Racer;
             racer.Velocity = Vector3.zero;
             racer.Steer = 0f;

@@ -169,15 +169,20 @@ namespace ProtoHarness.ChainRush
             if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(racer.AttackTicksLeft(tick)) * 4f);
         }
 
+        private void FixedUpdate() => StepTick(inputSource);
+
         // The only simulation entry point. One call is one tick, and the order below is the
-        // contract: consumed input, runner, hazards, finish, enemies, course recycling.
-        private void FixedUpdate()
+        // contract: consumed input, runner, hazards, finish, enemies, course recycling. FixedUpdate calls it
+        // with the game's input source; a test or a rollback can call it directly, as often as it likes, with
+        // another source (the phase must be Running, so the caller stops FixedUpdate with Time.timeScale = 0).
+        public void StepTick(IInputSource source)
         {
+            if (source == null) throw new System.ArgumentNullException(nameof(source));
             if (!IsRunning) return;
             tick++;
             // The closed track looks for the runner near where it was, so a return leg is not mistaken for the start.
             if (circuit != null) circuit.PrepareTick();
-            TickInput input = inputSource.Consume();
+            TickInput input = source.Consume();
             if (input.AttackPressed) Attack();
             player.Step(input);
             if (!IsRunning) return;
@@ -195,6 +200,32 @@ namespace ProtoHarness.ChainRush
             enemies.Step();
             if (!IsRunning) return;
             endlessCourse.Step();
+        }
+
+        // Everything the simulation carries from one tick to the next, as of now (between ticks). Only a circuit
+        // race has a fixed world to roll back in, so other modes throw (DESIGN.md P3, DECISIONS "롤백 안전성").
+        public SimSnapshot CaptureSnapshot()
+        {
+            RequireSnapshotSupport();
+            if (phase != Phase.Running) throw new System.InvalidOperationException("ChainRushGame: take a snapshot while the run is going.");
+            return new SimSnapshot(tick, racer.Capture(), player.transform.position, circuit.Capture());
+        }
+
+        // Puts the simulation back to a snapshot. A fall or a finish after the snapshot is undone too: the run is going again.
+        public void RestoreSnapshot(in SimSnapshot snapshot)
+        {
+            RequireSnapshotSupport();
+            player.SetPosition(snapshot.Position);
+            racer.Restore(snapshot.Racer);
+            circuit.Restore(snapshot.Circuit);
+            tick = snapshot.Tick;
+            phase = Phase.Running;
+        }
+
+        private void RequireSnapshotSupport()
+        {
+            if (circuit == null || endlessMode)
+                throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race (a fixed world); the endless course moves the world.");
         }
 
         public void StartRun()

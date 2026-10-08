@@ -4,6 +4,7 @@ using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -13,8 +14,16 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    public sealed class ChainRushEndlessTests
+    // Encounters, the chain attack and the grapple on the procedural course. These are the combat tests of
+    // the old straight endless course, moved here with the same assertions: only where the runner starts
+    // changed (the spawn rest instead of a z value on the old decks, a laid gap instead of its fixed place).
+    public sealed class ChainRushCombatTests
     {
+        private const string ScenePath = "Assets/_Project/Scenes/ChainRushProcedural.unity";
+        // The first module is a 60 m rest and no gap comes before S 75, so an encounter can start at the spawn.
+        private const ulong SpawnSeed = 3UL;
+        private const float StandingHeight = 1.05f;
+
         // Attack-only scripted source, so combat does not depend on virtual device event delivery.
         // The keyboard mapping itself is covered by the Device-category test in ChainRushTests.
         private sealed class AttackInputSource : IInputSource
@@ -36,25 +45,23 @@ namespace ProtoHarness.Tests.PlayMode
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
-        private EndlessCourse course;
+        private ProceduralCourse course;
         private EnemyDirector enemies;
-        private float timeScale;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            timeScale = Time.timeScale;
 #if UNITY_EDITOR
-            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushEndless.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(ScenePath, new LoadSceneParameters(LoadSceneMode.Single));
 #else
-            Assert.Fail("Endless prototype tests require the Unity Editor.");
+            Assert.Fail("Combat tests require the Unity Editor.");
             yield break;
 #endif
             foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
             {
                 if (root.TryGetComponent(out ChainRushGame g)) game = g;
                 if (root.TryGetComponent(out RunnerMotor p)) { player = p; grapple = p.GetComponent<GrappleController>(); }
-                if (root.TryGetComponent(out EndlessCourse c)) course = c;
+                if (root.TryGetComponent(out ProceduralCourse c)) course = c;
             }
             Assert.That(game, Is.Not.Null);
             Assert.That(course, Is.Not.Null);
@@ -65,25 +72,15 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Time.timeScale = timeScale;
             yield return null;
             LogAssert.NoUnexpectedReceived();
         }
 
-        private void MovePlayer(float z)
-        {
-            var controller = player.GetComponent<CharacterController>();
-            controller.enabled = false;
-            player.transform.position = new Vector3(0f, 1f, z);
-            controller.enabled = true;
-            controller.Move(Vector3.down * 0.2f);
-        }
-
         private IEnumerator Prepare(EnemyDirector.Entrance direction)
         {
+            course.SetSeed(SpawnSeed);
             game.StartRun();
-            MovePlayer(-5f);
-            yield return new WaitForFixedUpdate();
+            yield return LandOnRoad();
             Assert.That(enemies.BeginEncounter(direction), Is.True);
             Assert.That(enemies.TryAttack(), Is.False, "Warnings are not attackable yet.");
             float deadline = Time.realtimeSinceStartup + 3f;
@@ -153,9 +150,11 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Combat_GapAndJump_DoesNotRequireAttack()
         {
-            game.StartRun();
-            MovePlayer(29f);
-            yield return new WaitForFixedUpdate();
+            double gapStart = FindGapSpot(false);
+            Assert.That(gapStart, Is.GreaterThan(0d), "No seed below 100 lays a gap in its first 300 m.");
+            // Ten metres before a gap there is no room for an encounter.
+            Teleport(gapStart - 10d);
+            yield return LandOnRoad();
             Assert.That(enemies.BeginEncounter(EnemyDirector.Entrance.Above), Is.False);
             yield return Prepare(EnemyDirector.Entrance.Right);
             player.PrimaryAction();
@@ -168,9 +167,11 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest, Timeout(120000)]
         public IEnumerator Grapple_RestartWhileAttached_ClearsOldChainImmediately()
         {
-            game.StartRun();
-            MovePlayer(28f);
-            yield return new WaitForFixedUpdate();
+            double gapStart = FindGapSpot(true);
+            Assert.That(gapStart, Is.GreaterThan(0d), "No seed below 100 lays a grapple gap in its first 300 m.");
+            // Four metres before the edge, like the old deck test: jump, then grab the anchor over the gap.
+            Teleport(gapStart - 4d);
+            yield return LandOnRoad();
             player.PrimaryAction();
             yield return new WaitForSeconds(0.25f);
             Assert.That(grapple.TryAttach(), Is.True);
@@ -186,43 +187,36 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(grapple.IsAttached, Is.False);
         }
 
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Endless_LongRun_RecyclesRebasesAndRestartsWithoutGrowingPool()
+        // ---- helpers (the same shapes as ChainRushProceduralTests) --------------------------------------
+
+        // Seeds 0..99 until a gap (with an anchor when asked) shows up in the first 300 m, past S 40; returns
+        // its start S. The course is left laid for that seed with the run started.
+        private double FindGapSpot(bool needAnchor)
         {
-            int objects = CountObjects();
-            Time.timeScale = 3f;
-            game.StartRun();
-            float deadline = Time.realtimeSinceStartup + 100f;
-            double lastDistance = 0d;
-            while (game.IsRunning && course.Distance < 1400d && Time.realtimeSinceStartup < deadline)
+            for (ulong seed = 0; seed < 100; seed++)
             {
-                float edge = course.DistanceToEdge();
-                if (player.IsGrounded && edge >= 0f && edge <= 4.5f) player.PrimaryAction();
-                if (!player.IsGrounded && player.transform.position.y > 2.6f && !grapple.IsAttached) grapple.TryAttach();
-                if (enemies.CanAttack) game.Attack();
-                Assert.That(course.Distance, Is.GreaterThanOrEqualTo(lastDistance - 0.01d));
-                lastDistance = course.Distance;
-                yield return null;
+                course.SetSeed(seed);
+                game.StartRun();
+                if (course.TryGetNextGap(out double startS, out _, out bool hasAnchor) && (!needAnchor || hasAnchor) && startS > 40d) return startS;
             }
-            Assert.That(game.IsRunning, Is.True, "Failed at " + course.Distance + "m; player=" + player.transform.position + "; health=" + game.Health);
-            Assert.That(course.Distance, Is.GreaterThanOrEqualTo(1400d));
-            Assert.That(course.RebaseCount, Is.GreaterThanOrEqualTo(3));
-            Assert.That(course.RecycledCount, Is.GreaterThan(16));
-            Assert.That(game.Hits, Is.GreaterThan(3), "Safe-platform encounters must actually spawn.");
-            Assert.That(course.PoolSize, Is.EqualTo(8));
-            Assert.That(CountObjects(), Is.EqualTo(objects));
-            game.StartRun();
-            Assert.That(course.RebaseCount, Is.Zero);
-            Assert.That(course.RecycledCount, Is.Zero);
-            Assert.That(course.Distance, Is.EqualTo(0d).Within(0.1d));
-            Assert.That(player.IsGrounded, Is.True);
+            return 0d;
         }
 
-        private static int CountObjects()
+        private void Teleport(double s)
         {
-            int count = 0;
-            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects()) count += root.GetComponentsInChildren<Transform>(true).Length;
-            return count;
+            TrackFrame frame = game.Track.FrameAt(s);
+            player.ShiftOrigin(frame.TransformPoint(new Vector3(0f, StandingHeight, 0f)) - player.transform.position);
+            player.FaceTrack();
+            Physics.SyncTransforms();
+        }
+
+        // IsGrounded still reports the spawn road until the controller has moved once on the new one.
+        private IEnumerator LandOnRoad()
+        {
+            yield return new WaitForFixedUpdate();
+            float deadline = Time.time + 2f;
+            while (!player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.True, "Runner never landed on the procedural road.");
         }
     }
 }

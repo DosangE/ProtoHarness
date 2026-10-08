@@ -7,6 +7,20 @@
 
 ---
 
+## 2026-10-08 · 코스 T3d: 낡은 직선 무한 코스 정리
+
+- **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 요청서 질문 1~7 전부 추천대로, 파일 삭제는 지우기 직전 목록 확인 뒤 승인)**: T3c 의 `ChainRushProcedural` 이 무한 모드를 대체했으므로 직선 풀 코스와 그 도구를 지운다. 무한 모드 동작은 바뀌지 않는다(`ProceduralCourse`·`CircuitRace`·`CourseGenerator` 는 안 건드렸다).
+  - **지운 것 (12개 파일)**: `Scenes/ChainRushEndless.unity`(31만 줄) · `Endless/EndlessCourse.cs` · 씬 제작 도구 3개(`ChainRushEndlessSceneBuilder`, `ChainRushProceduralSceneBuilder`, `ChainRushPresentationBuilder`) · `Tests/PlayMode/ChainRushEndlessTests.cs` (+ 각 `.meta`). 씬 제작 도구는 Prototype → Endless → Procedural 로 이어진 복사 사슬이었고 두 번째 이후는 원본 씬이 없어지므로 실행할 수 없게 돼 같이 지웠다. **이제 씬은 YAML 이 원본이다**: 다시 만들려면 git 이력의 씬·도구를 되살린다(`Circuit` 빌더는 `ChainRushProcedural` 씬이 있는 한 남아 있다).
+  - **테스트 이전 (단언 그대로, 위치 설정만 새 코스 기준)**: 옛 `ChainRushEndlessTests` 의 조우·공격·그래플 5건을 새 `ChainRushCombatTests`(`ChainRushProcedural` 씬)로 옮겼다. 옛 테스트는 `MovePlayer(-5/29/28)` 처럼 옛 발판·틈의 z 값에 섰다: 새 테스트는 스폰(첫 모듈 60m 쉼터, `SetSeed(3)`)에서 시작하거나, 시드를 훑어 찾은 틈 4~10m 앞으로 순간이동한다(`ChainRushProceduralTests` 와 같은 도우미 모양). `ChainRushPresentationTests` 는 씬 경로를 바꾸고 `Animation_JumpAndGrapple_…` 의 시작 위치를 "그래플 틈 4m 앞" 으로. `ChainRushSteeringTests` 의 `Guards_BothScenes_LineEveryDeck` 는 `Guards_PrototypeDecksAndProceduralRoad_AreGuarded` 로: 프로토타입 발판 검사는 그대로, 옛 씬의 "Deck" 대신 절차 노면 조각마다 가드 벽·노면 콜라이더 메시가 있는지 본다(처음 300m 는 벽 없는 가장자리가 없다).
+  - **지운 테스트 1건**: `Endless_LongRun_RecyclesRebasesAndRestartsWithoutGrowingPool`. 옛 직선 풀 전용(`RecycledCount`, `PoolSize == 8` 청크, 448m 투영 원점 이동)이라 새 코스에 같은 의미가 없다. 같은 일을 `ChainRushProceduralTests` 의 게이트 시드 3개가 이미 단언한다(1400m 완주, 원점 이동 ≥ 1, 조각 24·앵커 10 풀 크기와 씬 오브젝트 수 불변, 재시작 뒤 초기화). 옛 테스트에만 있던 "조우가 실제로 일어난다(격파 > 3)" 는 `RunSeed` 에 단언으로 옮겼다(전에는 로그만 남겼다).
+  - **`CourseStream` 유지**: 구현이 `ProceduralCourse` 하나지만 두 필드 타입과 두 씬의 직렬화 참조를 안 건드린다(주석만 고침).
+  - **장식은 이번에도 안 함**: 옛 씬의 네온 타워는 옛 씬과 함께 사라졌다(`ChainRushProcedural`·`ChainRushCircuit` 은 T3c 때부터 장식 없음). 곡선·언덕 코스 옆 장식은 별도 설계라 다음 단계 후보(T3e)로 둔다. `Art/Materials` 의 옛 장식용 재질(`M_City` 등)은 그대로 남겼다.
+- **검증** (`feature/course-t3d-cleanup`, **6000.3.19f1**(이 머신 에디터), MCP, KST)
+  - 옛 씬이 **남은 채로**, 옮긴 테스트 11건(Combat 5, Presentation 3, Steering 3)을 새 씬에서 실행: `testcasecount="11" result="Passed" passed="11" failed="0" duration="31.30"` (17:21:43~17:22:14). 이 실행에서는 새 단언이 처음부터 통과했다(고치기 전 실패 증거는 해당 없음: 동작을 바꾸지 않는 이전).
+  - 삭제 뒤: 컴파일 확인, Console Error 0. EditMode `testcasecount="213" result="Passed" passed="213" failed="0"` (17:23:49). PlayMode(Device·Sweep 제외) 1회차 `testcasecount="58" result="Passed" passed="58" failed="0" duration="402.59"` (17:24:06~17:30:48), 2회차 `testcasecount="58" result="Passed" passed="58" failed="0" duration="402.68"` (17:31:06~17:37:49). 58 = 이전 59 − 지운 1건. `RunSeed` 단언을 바꿨으므로 20 시드 스윕 `testcasecount="1" result="Passed" passed="1" failed="0" duration="932.81"` (17:38:08~17:53:41): 모두 완주, 격파 39~46회(새 단언 > 3 통과), 탈출구 0회, 그래플 합계 37회, 가장 느린 `Step` 1.56ms. 입력 장치 경로 미변경이라 Device 실행은 해당 없다.
+  - 눈으로 보는 확인은 하지 않았다(코스·씬 코드는 안 바뀌었고 두 씬 파일은 변경 없음): 검증 안 됨.
+- **하지 않은 것**: `ChainRushProcedural`·`ChainRushCircuit`·`ChainRushPrototype` 씬 수정, `ProceduralCourse`·`CircuitRace`·`CourseGenerator` 변경, `CourseStream` 제거, 장식, 안 쓰는 재질 정리, 과거 결정(DECISIONS 옛 항목)·`COURSE.md`/`DESIGN.md` 본문의 옛 줄 번호 고치기(당시 분석이라 둠, `COURSE.md` 진행 줄에 표시), push.
+
 ## 2026-10-08 · 코스 T4: 수제 서킷 + 랩 (새 씬 `ChainRushCircuit`)
 
 - **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 요청서 질문 1~9 전부 추천대로)**

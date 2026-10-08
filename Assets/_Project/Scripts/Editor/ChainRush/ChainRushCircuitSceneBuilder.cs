@@ -19,6 +19,7 @@ namespace ProtoHarness.Editor.ChainRush
     {
         public const string CircuitScenePath = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         public const string DefinitionPath = "Assets/_Project/Data/Circuit_Stadium.asset";
+        private const string SourceScenePath = "Assets/_Project/Scenes/ChainRushProcedural.unity";
         private const string MaterialFolder = "Assets/_Project/Art/Materials/";
         // One grapple gap in the stadium; four is room for edits.
         private const int AnchorCount = 4;
@@ -31,8 +32,8 @@ namespace ProtoHarness.Editor.ChainRush
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before scene creation.");
             if (File.Exists(CircuitScenePath)) throw new InvalidOperationException("Circuit scene already exists; open it instead.");
-            if (!File.Exists(ChainRushProceduralSceneBuilder.ProceduralScenePath))
-                throw new InvalidOperationException("The procedural scene is the source and is missing: " + ChainRushProceduralSceneBuilder.ProceduralScenePath);
+            if (!File.Exists(SourceScenePath))
+                throw new InvalidOperationException("The procedural scene is the source and is missing: " + SourceScenePath);
             for (int i = 0; i < SceneManager.sceneCount; i++)
                 if (SceneManager.GetSceneAt(i).isDirty) throw new InvalidOperationException("Save or discard the open scene's changes first.");
 
@@ -46,7 +47,7 @@ namespace ProtoHarness.Editor.ChainRush
             Material rail = RequireMaterial("M_Frame");
             Material mint = RequireMaterial("M_Link");
 
-            var scene = EditorSceneManager.OpenScene(ChainRushProceduralSceneBuilder.ProceduralScenePath);
+            var scene = EditorSceneManager.OpenScene(SourceScenePath);
             // Save As: from here on the open scene is the new file and the procedural scene stays as it was.
             if (!EditorSceneManager.SaveScene(scene, CircuitScenePath)) throw new IOException("Could not create the circuit scene copy.");
             // Opening a scene unloads unused assets, which killed an asset object held across it before

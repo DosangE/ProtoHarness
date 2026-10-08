@@ -4,8 +4,9 @@ using ProtoHarness.ChainRush.Track;
 namespace ProtoHarness.ChainRush.Endless
 {
     // What the game and the enemy director need from an endless course, whichever way it lays its road:
-    // EndlessCourse recycles fixed straight sectors, ProceduralCourse streams generated modules. Step runs
-    // once per simulation tick and is called only by ChainRushGame.FixedUpdate.
+    // ProceduralCourse streams generated modules (the straight sector course that was the other
+    // implementation was removed in T3d). Step runs once per simulation tick and is called only by
+    // ChainRushGame.FixedUpdate.
     public abstract class CourseStream : MonoBehaviour
     {
         // Metres run since the start of the run.

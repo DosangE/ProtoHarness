@@ -16,10 +16,10 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 항목 | 수 |
 |---|---|
 | 우리 런타임 스크립트 | **26** (`Scripts/Runtime/ChainRush/` 및 하위 폴더). 그중 ScriptableObject 2개(`EncounterTuning`, `RunRules`), 인스턴스는 `Assets/_Project/Data/` |
-| 우리 에디터 스크립트 | **3** (`ChainRushSceneBuilder`, `ChainRushEndlessSceneBuilder`, `ChainRushPresentationBuilder`) |
+| 우리 에디터 스크립트 | **2** (`ChainRushSceneBuilder`, `ChainRushCircuitSceneBuilder`) |
 | 우리 테스트 | PlayMode **12 파일 / 46 테스트** (그중 `Device` 카테고리 2개, 공용 헬퍼 `TestRoad.cs`·`TrackFollower.cs` 포함), EditMode **9 파일 / 131 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-07 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (기존 테스트 맵), `ChainRushEndless.unity` (별도 무한 전투 맵) |
+| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (직선 유한 테스트 맵), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제 |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
 
 참조 게임: https://github.com/DosangE/Chain-Rush · 조사 기준 커밋 `17294d85943dfa9fecd6a70272411e035b1ca6bf`.
@@ -61,8 +61,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD(체인 게이지 2칸 포함)·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
 | 씬 생성·열기·테스트 실행 메뉴. 발판 양쪽 가드 난간(`AddGuards`, 충돌 4m)과 기존 씬용 메뉴 `Add Deck Guards To Open Scene` | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
-| 발판 풀 재배치·원점 이동·중심선 조각 잇기/버리기. 거리는 트랙 `S`. 직선 코스(`ChainRushEndless` 씬). `CourseStream` 을 상속한다 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game(`Track`), Motor, Camera, 직렬화 구간 배열 |
-| 무한 코스가 게임·적 감독에게 내미는 면: `Distance`, `Step`(틱당 1회), `SeedTrack`, `ResetCourse`, `CanStartEncounter`. `ChainRushGame.endlessCourse`·`EnemyDirector.course` 가 이 타입으로 받는다 (T3c, 2026-10-08) | `Runtime/ChainRush/Endless/CourseStream.cs` (abstract) | `Centerline` |
+| 무한 코스가 게임·적 감독에게 내미는 면: `Distance`, `Step`(틱당 1회), `SeedTrack`, `ResetCourse`, `CanStartEncounter`. `ChainRushGame.endlessCourse`·`EnemyDirector.course` 가 이 타입으로 받는다. 구현은 `ProceduralCourse` 하나(옛 직선 풀 `EndlessCourse` 는 T3d 에서 삭제) (T3c, 2026-10-08) | `Runtime/ChainRush/Endless/CourseStream.cs` (abstract) | `Centerline` |
 | 절차 코스 스트리밍 (T3c): `CourseGenerator` 모듈을 플레이어 앞 300m 까지 중심선에 붙이고(`AppendTo`), 모듈마다 `RoadPiece` 풀(24칸)로 노면을 깐다(틈 모듈은 틈 앞뒤 두 구간, 50m 초과는 나눔, 틱당 `Build` 1회). 그래플 앵커 풀(10칸, `GrappleController.anchors` 와 같은 배열)에 `AnchorS`·`AnchorOffset`·`AnchorHeight` 로 앵커를 놓는다. 뒤쪽 60m 밖은 풀로 반환(붙어 있는 앵커는 유지). 플레이어 수평 위치가 원점에서 400m 이상이면 전부 `-(x, 0, z)` 이동. 런마다 새 무작위 시드(`SetSeed` 로 지정). `ChainRushProcedural` 씬에서 쓴다 | `Runtime/ChainRush/Endless/ProceduralCourse.cs` | `CourseGenerator`, `CourseTuning`(`Data/CourseTuning_Default.asset`), `RoadPiece`, Game, Motor, Camera |
 | 수제 서킷 (T4, 2026-10-08): `TrackDefinition`(SO)이 직선·원호·종단 곡선 조각 목록(틈은 노면 없는 평지 직선) + 앵커 + 체크포인트(랩 비율) + 출발 칸 + 랩 수 + 노면 폭을 담고 `TryValidate` 로 규칙(반지름 ≥ 30m, 틈 앞뒤 평지 직선 ≥ 15m, 앵커는 틈 위)과 **닫힘**을 검증한다. 기본값은 스타디움(직선 140m 에 언덕 + 점프 틈, R40 반원, 직선 140m 에 그래플 틈, R40 반원, 한 바퀴 531m). `LapCounter`(순수 로직)가 틱마다 접힌 `S` 를 누적 진행도로 더해 체크포인트·랩 완료·랩 시간을 센다(역주행은 진행도만 줄고 이미 지난 선은 다시 세지 않는다) | `Runtime/ChainRush/Track/TrackDefinition.cs`, `LapCounter.cs` | `Centerline` |
 | 서킷 레이스 (T4): `CircuitRace` 가 정의로 닫힌 중심선을 만들어 게임에 넘기고(`BuildTrack`), 노면을 한 번만 깔고(`RoadPiece` ≤ 50m, 틈 건너뜀), 앵커·출발선·체크포인트 표지를 놓고, 매 틱 `PrepareTick`(초점 = 직전 `S`) → 입력 → 이동 → `Step`(투영 + `LapCounter`)을 돈다. 시계는 `StartRun` 틱 0, 러너는 출발선 위 `S 0`, 1랩 = 선에서 선, 완주 = 3랩. 낙사는 런 종료. 적·`CourseTarget`·`EnemyDirector` 없음. `ChainRushCircuit` 씬에서 쓴다 | `Runtime/ChainRush/Race/CircuitRace.cs` | `TrackDefinition`(`Data/Circuit_Stadium.asset`), `LapCounter`, `RoadPiece`, Game, Motor |
@@ -70,12 +69,10 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 금속 체인 링크·갈고리·발사 및 회수 | `Runtime/ChainRush/Visuals/ChainVisual.cs` | Game, 손 Transform, 미리 만든 링크 배열 |
-| 별도 무한 씬 제작 | `Editor/ChainRush/ChainRushEndlessSceneBuilder.cs` | 기존 테스트 씬, 공용 생성기 도형/참조 연결 함수 |
 | 신스 음악·9종 효과음·바람·음소거 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개 |
 | 달리기·점프·착지·그래플·공격 관절 자세 | `Runtime/ChainRush/Visuals/RunnerAnimation.cs` | Game, Motor, Grapple, Audio, 직렬화 관절 Transform |
-| 아트→사운드→애니메이션 순차 적용 | `Editor/ChainRush/ChainRushPresentationBuilder.cs` | 기존 무한 씬, 공용 도형/머티리얼 생성 함수 |
 
-**고정 틱 (2026-10-02)**: 시뮬레이션의 진입점은 `ChainRushGame.FixedUpdate` 하나이고 한 호출이 한 틱(`Ticks.Seconds` = 0.02s)이다. 틱 안의 순서는 `IInputSource.Consume()` 로 받은 `TickInput` → 공격 → `RunnerMotor.Step(input)`(점프·그래플·해제 포함) → 장애물 접촉 → 완주 판정 → `EnemyDirector.Step` → `EndlessCourse.Step`(재활용·원점 이동). `Update`/`LateUpdate`는 입력 `Poll`(실행 중일 때만), 메뉴 키(R·Enter·Esc, 음소거 M)와 표현(카메라·애니메이션·HUD·체인 시각물·오디오)만 한다. 시뮬은 장치를 직접 읽지 않고 `ChainRushGame.SetInputSource` 로 입력 출처를 바꿀 수 있다(기본값 `KeyboardMouseInputSource`, `Awake` 에서 코드로 생성). 시간은 정수 틱(`ChainRushGame.Tick`)으로 세고 `Elapsed` 는 파생값이다. 초 단위 수치는 `Ticks.FromSeconds` 로 올림 환산한다(`RunRules`, `EncounterTuning` 의 `*Ticks` 프로퍼티). `Time.fixedDeltaTime` 이 `Ticks.Seconds` 와 다르면 `ChainRushGame` 이 LogError 후 비활성화된다.
+**고정 틱 (2026-10-02)**: 시뮬레이션의 진입점은 `ChainRushGame.FixedUpdate` 하나이고 한 호출이 한 틱(`Ticks.Seconds` = 0.02s)이다. 틱 안의 순서는 `IInputSource.Consume()` 로 받은 `TickInput` → 공격 → `RunnerMotor.Step(input)`(점프·그래플·해제 포함) → 장애물 접촉 → 완주 판정 → `EnemyDirector.Step` → `CourseStream.Step`(`ProceduralCourse`: 스트리밍·재활용·원점 이동). `Update`/`LateUpdate`는 입력 `Poll`(실행 중일 때만), 메뉴 키(R·Enter·Esc, 음소거 M)와 표현(카메라·애니메이션·HUD·체인 시각물·오디오)만 한다. 시뮬은 장치를 직접 읽지 않고 `ChainRushGame.SetInputSource` 로 입력 출처를 바꿀 수 있다(기본값 `KeyboardMouseInputSource`, `Awake` 에서 코드로 생성). 시간은 정수 틱(`ChainRushGame.Tick`)으로 세고 `Elapsed` 는 파생값이다. 초 단위 수치는 `Ticks.FromSeconds` 로 올림 환산한다(`RunRules`, `EncounterTuning` 의 `*Ticks` 프로퍼티). `Time.fixedDeltaTime` 이 `Ticks.Seconds` 와 다르면 `ChainRushGame` 이 LogError 후 비활성화된다.
 CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중력과 전진 속도를 적분한다.
 그래플링은 길이 제한 구면으로 예상 위치를 투영하고 바깥쪽 방사 속도를 제거한다. 줄은 초당 3m씩 감긴다. 해제 시 최소 상승 속도는 지상 점프와 동일한 11.5m/s이다.
 3D Joint 컴포넌트는 사용하지 않는다. 동적 Rigidbody 물체를 끌거나 줄이 장애물에 감기는 동작은 현재 범위 밖이다.
@@ -110,9 +107,9 @@ HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 �
 
 ### 무한 전투 모드
 
-- `ChainRushGame.endlessMode`가 켜진 씬만 EndlessCourse/EnemyDirector 참조를 요구한다. 기존 씬은 완주·CourseTarget 공격을 유지한다.
-- 검증된 두 번째 발판 기하를 복제해 40m 발판 + 16m 갭을 8개 미리 배치한다. 구간 뒤 56m를 지나면 구간을 448m 앞에 옮긴다. 플레이어가 트랙 앞 방향으로 448m를 넘으면 구간·플레이어·카메라·전투 시각물·트랙 중심선을 함께 이동한다. 거리는 트랙 `S`(double)라 원점 이동 뒤에도 이어진다 (2026-10-05 T0, 이전에는 `EndlessCourse` 의 double 누적값).
-- 기존 테스트 월드는 새 씬에서 비활성 보관한다. 런타임에 구간/적/체인을 Instantiate하지 않는다. 배경 건물도 구간과 함께 재활용한다.
+- `ChainRushGame.endlessMode`가 켜진 씬만 `CourseStream`(`ProceduralCourse`)/`EnemyDirector` 참조를 요구한다. 유한 씬은 완주·CourseTarget 공격을 유지한다.
+- 코스는 위 `ProceduralCourse` 행의 대로 생성기 모듈을 스트리밍한다. 거리는 트랙 `S`(double)라 원점 이동 뒤에도 이어진다. (옛 직선 풀 코스 — 40m 발판 + 16m 갭을 8개 재활용하고 448m 마다 원점 이동 — 는 T3d 에서 삭제했다. 그 설명은 `DECISIONS.md` 2026-10-05 T0 이전 항목에 있다.)
+- 런타임에 구간/적/체인을 Instantiate하지 않는다(조각·앵커는 풀). 배경 장식은 아직 없다(T3e 후보).
 - 적은 상공→왼쪽→오른쪽 순환. 0.3초 경고, 0.4초 진입, 1.2초 공격 가능, 0.15초 체인 비행, 0.3초 회수/적 돌진이다. Inspector에서 조정 가능하다.
 - 안전 발판 잔여 길이가 전체 조우 시간 × 속도 + 5m를 확보해야 등장한다. 경고·진입·대기 중 점프하면 피해 없이 취소한다. Space는 공격 가능 상태에서만 발사하며 갈고리 도착 때 명중 1회를 기록한다. 제한시간 초과 후 적 돌진이 체력 1칸을 감소시킨다.
 - 처치 후 간격은 거리와 함께 2.5초에서 최소 0.6초까지 감소한다. 안전 발판 조건을 우선하며 동시에 한 마리만 등장한다.

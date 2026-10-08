@@ -146,6 +146,7 @@ namespace ProtoHarness.Tests.PlayMode
             if (report.Failure != null) yield break;
             if (!game.IsRunning) report.Failure = $"seed {seed}: the run ended at {course.Distance:F0} m. {State()}";
             else if (course.Distance < length) report.Failure = $"seed {seed}: timed out at {course.Distance:F0} m after {report.Seconds:F0} s. {State()}";
+            else if (report.Hits <= 3) report.Failure = $"seed {seed}: only {report.Hits} enemy hits in {length:F0} m; encounters must really happen.";
             else if (report.Rebases < 1) report.Failure = $"seed {seed}: {length:F0} m without a single origin shift; the shift distance may be too large.";
             else if (CountObjects() != objects) report.Failure = $"seed {seed}: the scene grew from {objects} to {CountObjects()} objects.";
             else if (course.BuiltPieces > course.PoolSize) report.Failure = $"seed {seed}: more built pieces than the pool holds.";

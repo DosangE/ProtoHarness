@@ -23,6 +23,20 @@ namespace ProtoHarness.ChainRush.Track
         private int nextCheckpoint;
         private int startTick;
 
+        // The counter's state by value (the guard test in SnapshotTests keeps it in step with the fields). The two
+        // arrays are copies. Treat it as read-only.
+        public struct Snapshot
+        {
+            public double Progress;
+            public double LastS;
+            public bool Started;
+            public int Completed;
+            public int NextCheckpoint;
+            public int StartTick;
+            public int[] LapEndTicks;
+            public int[] CheckpointTicks;
+        }
+
         // checkpoints are S values strictly inside (0, lapLength), ascending.
         public LapCounter(double lapLength, IReadOnlyList<double> checkpoints, int lapCount)
         {
@@ -98,6 +112,38 @@ namespace ProtoHarness.ChainRush.Track
                     nextCheckpoint = 0;
                 }
             }
+        }
+
+        public Snapshot Capture()
+        {
+            if (!started) throw new InvalidOperationException("LapCounter.Begin must be called before Capture.");
+            return new Snapshot
+            {
+                Progress = progress,
+                LastS = lastS,
+                Started = started,
+                Completed = completed,
+                NextCheckpoint = nextCheckpoint,
+                StartTick = startTick,
+                LapEndTicks = (int[])lapEndTicks.Clone(),
+                CheckpointTicks = (int[])checkpointTicks.Clone(),
+            };
+        }
+
+        // Puts the counter back to a Capture of a counter with the same lap count and checkpoints.
+        public void Restore(in Snapshot snapshot)
+        {
+            if (snapshot.LapEndTicks == null || snapshot.CheckpointTicks == null
+                || snapshot.LapEndTicks.Length != lapEndTicks.Length || snapshot.CheckpointTicks.Length != checkpointTicks.Length)
+                throw new ArgumentException("The snapshot comes from a counter with a different lap count or checkpoint list.", nameof(snapshot));
+            progress = snapshot.Progress;
+            lastS = snapshot.LastS;
+            started = snapshot.Started;
+            completed = snapshot.Completed;
+            nextCheckpoint = snapshot.NextCheckpoint;
+            startTick = snapshot.StartTick;
+            Array.Copy(snapshot.LapEndTicks, lapEndTicks, lapEndTicks.Length);
+            Array.Copy(snapshot.CheckpointTicks, checkpointTicks, checkpointTicks.Length);
         }
 
         // The tick on which the 1-based lap was completed.

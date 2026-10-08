@@ -89,35 +89,42 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Index of the first sample (within the first `samples`) in which the two traces differ, or -1.
-        public static int FirstDifferentSample(StateTrace a, StateTrace b, int samples)
+        public static int FirstDifferentSample(StateTrace a, StateTrace b, int samples) => FirstDifferentSample(a, 0, b, 0, samples);
+
+        // The same for `samples` samples of a starting at aStart against samples of b starting at bStart; the
+        // result counts from the start of the compared range. Lets a replay that begins at a restored snapshot
+        // be held against the original run from the same tick.
+        public static int FirstDifferentSample(StateTrace a, int aStart, StateTrace b, int bStart, int samples)
         {
             if (a.FieldCount != b.FieldCount) throw new ArgumentException("The traces carry different fields.");
-            int count = Math.Min(samples, Math.Min(a.Samples, b.Samples));
+            int count = Math.Min(samples, Math.Min(a.Samples - aStart, b.Samples - bStart));
             for (int sample = 0; sample < count; sample++)
             {
                 for (int field = 0; field < a.FieldCount; field++)
                 {
-                    int i = sample * a.FieldCount + field;
-                    if (a.bits[i] != b.bits[i]) return sample;
+                    if (a.bits[(aStart + sample) * a.FieldCount + field] != b.bits[(bStart + sample) * a.FieldCount + field]) return sample;
                 }
             }
             return -1;
         }
 
         // null when the first `samples` samples of both traces are identical, else which value differs first.
-        public static string Compare(StateTrace a, StateTrace b, int samples)
+        public static string Compare(StateTrace a, StateTrace b, int samples) => Compare(a, 0, b, 0, samples);
+
+        public static string Compare(StateTrace a, int aStart, StateTrace b, int bStart, int samples)
         {
-            if (a.Samples < samples || b.Samples < samples)
-                return $"a trace is too short: {a.Samples} and {b.Samples} samples, {samples} wanted";
-            int sample = FirstDifferentSample(a, b, samples);
+            if (a.Samples - aStart < samples || b.Samples - bStart < samples)
+                return $"a trace is too short: {a.Samples - aStart} and {b.Samples - bStart} samples from the start of the range, {samples} wanted";
+            int sample = FirstDifferentSample(a, aStart, b, bStart, samples);
             if (sample < 0) return null;
-            var text = new StringBuilder($"first difference at sample {sample} (state after {sample} ticks):");
+            var text = new StringBuilder($"first difference at sample {sample} of the range (state after {aStart + sample} ticks of the first trace):");
             for (int field = 0; field < a.FieldCount; field++)
             {
-                int i = sample * a.FieldCount + field;
-                if (a.bits[i] == b.bits[i]) continue;
+                ulong left = a.bits[(aStart + sample) * a.FieldCount + field];
+                ulong right = b.bits[(bStart + sample) * a.FieldCount + field];
+                if (left == right) continue;
                 string name = field < BaseNames.Length ? BaseNames[field] : a.extras[field - BaseNames.Length].Name;
-                text.Append($" {name} 0x{a.bits[i]:X} vs 0x{b.bits[i]:X};");
+                text.Append($" {name} 0x{left:X} vs 0x{right:X};");
             }
             if (sample > 0) text.Append(" The sample before it was identical.");
             return text.ToString();

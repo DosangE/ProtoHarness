@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-08 · P3 준비: 롤백 안전성 — 한 틱 스냅샷·복원과 되감아 재실행 증명
+
+- **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 요청서 질문 1~7 전부 추천대로. 같은 날 "한국시간 오후 10시까지 네가 생각하는 대로 자동 진행"을 위임받아, 요청서 밖의 판단이 필요했던 한 건(아래 컨트롤러 정규화)은 가장 나은 쪽으로 정하고 이 항목에 밝힌다)**
+  - **서킷(고정 월드)만 대상.** `ChainRushGame.CaptureSnapshot()` / `RestoreSnapshot(in SimSnapshot)` 는 무한(절차)·직선 모드에서 `NotSupportedException`, 런 중이 아니면 `InvalidOperationException` 으로 크게 깨진다(§5). 무한 모드의 월드 이동(원점 이동·스트리밍)은 스냅샷 대상이 아니다.
+  - **한 틱 진입점 `ChainRushGame.StepTick(IInputSource)` 공개.** `FixedUpdate` 는 `StepTick(inputSource)` 한 줄이다. 테스트는 `Time.timeScale = 0` 으로 `FixedUpdate` 를 멈추고 직접 부른다. 틱 안의 순서는 그대로다.
+  - **접지를 `RacerState.Grounded` 로.** `CharacterController.isGrounded` 는 마지막 `Move` 의 결과라 복원할 수 없는, `RacerState` 밖의 유일한 숨은 상태였다. `RunnerMotor` 가 `controller.Move` 직후(주 이동·`SnapToGround`·`ResetAtSpawn`)와 컨트롤러를 다시 켠 직후(`ShiftOrigin`·`SetPosition`)에 복사하고, 시뮬의 모든 읽기(`IsGrounded`, 틱 시작의 접지, 그래플 해제)가 이 복사본을 쓴다. `Reset()` 은 접지를 지우지 않는다(규칙이 아니라 컨트롤러의 답이다).
+  - **스냅샷 타입은 쓰는 곳 가까이**: `RacerState.Snapshot`(모든 필드, 접지 포함)·`LapCounter.Snapshot`(진행도·마지막 S·시작 여부·완료 랩·다음 체크포인트·시작 틱·랩/체크포인트 틱 배열 복사)·`CircuitRace.Snapshot`, 이들을 묶는 `SimSnapshot`(틱·레이서·러너 위치·서킷). 반사 가드 테스트(`SnapshotTests`)가 `RacerState`·`LapCounter` 에 필드가 늘고 스냅샷이 안 따라가면 실패한다.
+  - **다른 숨은 상태는 없었다**(코드 조사): `RunnerMotor` 의 `drifting`·`slingTarget`·`hitGuard`·`guardNormal` 은 틱 안에서 다시 계산되고 `swingAnchor` 는 쓰기만 하며(시각용), `GrappleController` 상태는 `RacerState`(앵커 인덱스·줄 길이)에 있다. 서킷 씬은 `targets: []`·적 없음·정적 노면이라 `CourseTarget.destroyed` 같은 상태가 해당 없다.
+- **증명이 실패해서 찾은 것: 복원한 위치에서 `CharacterController` 가 다시 출발하면 원래 런과 1 ULP 어긋난다.**
+  - 처음 구현(정규화 없음)에서 롤백 재실행 테스트 8건 중 6건이 실패했다(19:15:25~19:15:44 KST, `testcasecount="8" passed="2" failed="6"`). 복원 직후 표본(sample 0)은 비트 단위로 같고, **한 틱 뒤 위치가 1 ULP 어긋났다**: 예) 지상 스냅샷(틱 300) 다음 표본 `posZ 0x425D2CC9 vs 0x425D2CCA`, `S 0x404BA59920000000 vs 0x404BA59940000000`. 접지·속도·게이지·랩 필드는 모두 같았다.
+  - 원인: **확인한 것**은 컨트롤러를 껐다 켜서 컨트롤러 위치를 float 위치에 맞추면 어긋남이 사라진다는 것까지다(아래 실험). **확인하지 못한 것**은 컨트롤러 내부가 `transform.position`(float) 보다 정밀한 위치를 들고 있는지 여부다. 읽을 API 가 없고, 그렇다고 보는 것은 이 실험 결과와 맞는 가설일 뿐이다. 그래서 **매 틱 시작에 컨트롤러를 껐다 켜서(`RunnerMotor.NormalizeController`, `Step` 의 첫 동작) 컨트롤러 위치를 항상 float 위치와 같게** 했다. 이러면 원래 런도 복원된 런도 같은 float 위치에서 출발한다. 이 한 줄을 넣자 같은 8건 중 7건이 통과했고(19:16:46~19:17:05, 나머지 1건은 시험 봇의 문제였다) 어긋남이 사라졌다.
+  - **이것은 요청서 질문 4 가 말한 "엔진 한계" 후보였다.** 요청서의 기본 지침은 "고치지 않고 측정만 보고하고 멈춘다"였지만, 같은 날 사용자가 자동 진행을 위임했고(위) 고치는 방법이 작고(런타임 두 줄) 증거(어긋남 사라짐 + 되돌렸을 때 실패)가 있어서 고치는 쪽으로 판단했다. **되돌리려면** `NormalizeController` 호출을 지우면 되고, 그러면 롤백 테스트가 다시 같은 모습으로 실패한다.
+  - **대가**: ① 매 틱 컨트롤러 껐다 켜기 비용(**측정하지 않았다**. 게이트 소요는 약 500 → 약 520초로 늘었지만 새 테스트 8건분과 구분하지 못한다). ② **P2 의 재생 해시가 바뀌었다**: 서킷 `0x267B2F98692829F7` → `0xF9A914DA3FAA680B`, 절차 코스 `0xA79E26B06BCEB385` → `0xE81912109A2EB020`(위치가 매 틱 ≤1 ULP 흔들리므로 당연하다). 같은 입력이면 같은 결과라는 성질(재생 3건)은 새 해시로 그대로 통과했고, 절차 코스의 격파 14회·원점 이동 1회·모듈 7개는 이전과 같다. 요청서의 "해시 불변" 증거는 **이 한 건에 한해 성립하지 않으며**, 대신 20 시드 스윕·게이트 61건 무수정 통과를 동작 보존의 증거로 쓴다. ③ 컨트롤러를 끄는 순간 `isGrounded` 가 사라지지만 시뮬은 복사본(`RacerState.Grounded`)만 읽으므로 영향이 없다.
+  - **네트워크에 주는 뜻**: 서버와 클라이언트가 같은 틱에서 같은 float 위치로 출발하는 것이 예측·보정의 전제이고, 정규화 전에는 "위치를 복원해도 다음 틱이 같지 않다"가 실제로 재현됐다. 정규화 후에는 같은 머신 안에서 성립한다. 다른 기기끼리의 부동소수 일치는 여전히 **증명하지 않는다**(아래).
+- **증명한 것** (`ChainRushRollbackTests`, 서킷 씬, 같은 머신·같은 에디터): 스냅샷 → N틱 → 복원 → 같은 입력으로 N틱이 **매 표본 비트 단위로 같다.**
+  - 지상(틱 300)·공중(틱 603)·그래플에 매달림(틱 1552)에서 각각 60틱, 지상 스냅샷에서 이어 1400틱.
+  - 한 프레임(45번) 안에서 스냅샷을 번갈아 20번 복원하고 40틱씩 재실행해도 모두 같다(프레임 번호가 안 바뀜을 단언).
+  - 더 뒤의 상태에서 앞의 스냅샷으로 돌아가도 같다.
+  - 랩 이음매: 이음매(틱 2647) 80틱 전(틱 2567) 스냅샷에서 180틱, 이음매를 넘고 1랩 시간·체크포인트 틱까지 같다.
+  - 슬링(틱 10)·코너 스윙(틱 673)·드리프트(틱 802) 스냅샷에서 각 80틱.
+  - 수동 스텝 1700틱이 실시간 `FixedUpdate`(3배속)로 재생한 같은 로그와 같다.
+  - **음성 대조**: 복원 뒤 `Grounded` 만 뒤집으면 첫 표본에서 `grounded 0x0 vs 0x1` 로 어긋난다(접지를 상태로 옮긴 이유가 실제 효과임).
+  - 서킷 밖에서 `CaptureSnapshot` 은 `NotSupportedException`, 런 전에는 `InvalidOperationException`.
+- **고치기 전 실패**: `SnapshotTests` 를 먼저 쓰고 `error CS1061: 'LapCounter' does not contain a definition for 'Capture' / 'Restore'` 를 확인한 뒤 구현했다. 구현 직후 EditMode 237건이 한 번에 통과했다(19:10:07 KST).
+- **증명하지 않는 것(범위 밖)**: 무한(절차) 코스·적·스트리밍의 롤백, 네트워크 지연·입력 지연 보정, 스냅샷 링버퍼·직렬화, 여러 레이서, 다른 기기·OS·IL2CPP 의 부동소수 일치, 컨트롤러 정규화의 비용 측정.
+- **검증** (`feature/p3-rollback-safety`, **6000.3.19f1**(이 머신 에디터), MCP, 시각은 XML 의 UTC 에 9시간을 더한 KST): 컴파일 Console Error 0. EditMode `testcasecount="237" result="Passed" passed="237" failed="0"` (19:54:24, 최종 코드, 기존 227 + `SnapshotTests` 10). 롤백 테스트 첫 실행(정규화 전) `testcasecount="8" result="Failed(Child)" passed="2" failed="6"`(19:15:25), 정규화 후 `passed="7" failed="1"`(19:16:46, 나머지 1건은 봇이 항상 드리프트하다 틱 723 에서 떨어짐 → 드리프트를 커브에서만 하고 시작 게이지 2칸을 주도록 시험 봇을 고침, 게임 코드 변경 아님). PlayMode(Device·Sweep 제외) 1회차 `testcasecount="69" result="Passed" passed="69" failed="0" duration="519.70"` (19:20:19~19:28:58), 2회차 `testcasecount="69" result="Passed" passed="69" failed="0" duration="519.61"` (19:29:19~19:37:59). 69 = 이전 61 + 롤백 8. 20 시드 스윕 `testcasecount="1" result="Passed" passed="1" failed="0" duration="932.89"` (19:38:16~19:53:49, 모터·`ChainRushGame` 변경이라 돌렸다: 시드마다 `escapes 0`, `health 3`, 1400 m 완주). 입력 장치 경로 미변경이라 Device 는 해당 없다. 화면 변화가 없어 눈으로 보는 확인은 해당 없다.
+- **하지 않은 것**: 네트워크 패키지·`manifest.json`, 스냅샷 링버퍼·직렬화, 무한 모드 롤백, 씬·프리팹 수정, 이동·그래플·드리프트 수치 변경, 기존 테스트 수정(`StateTrace` 는 테스트 도구에 오프셋 비교만 더했다).
+
 ## 2026-10-08 · P2: 입력 기록·재생과 결정성 증명 (같은 시드 + 같은 입력 = 같은 런)
 
 - **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 요청서 질문 1~7 전부 추천대로)**

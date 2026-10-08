@@ -65,7 +65,8 @@ namespace ProtoHarness.ChainRush.Visuals
             float legRight = ground ? -stride : 18f;
             float lean = ground ? 8f : -5f;
             if (grapple.IsAttached) { armRight = -155f; armLeft = -75f; legLeft = -35f; legRight = 28f; lean = -12f; }
-            var encounter = game.Enemies.State;
+            // A circuit race has no enemy director.
+            var encounter = game.Enemies != null ? game.Enemies.State : EnemyDirector.EncounterState.Idle;
             if (encounter == EnemyDirector.EncounterState.Firing || encounter == EnemyDirector.EncounterState.Retracting)
             {
                 armRight = -95f; armLeft = -40f; lean = encounter == EnemyDirector.EncounterState.Firing ? 16f : -12f;

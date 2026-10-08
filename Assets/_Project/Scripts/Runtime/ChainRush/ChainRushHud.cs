@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 
 namespace ProtoHarness.ChainRush
@@ -88,7 +89,7 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(32, 26, 310, 74), Ink);
             Block(new Rect(32, 26, 5, 74), Mint);
             GUI.Label(new Rect(53, 37, 270, 38), "CHAIN / RUSH", heading);
-            GUI.Label(new Rect(55, 78, 280, 20), game.IsEndless ? "03D    /    ENDLESS PURSUIT" : "03D    /    SKYLINE TRIAL", small);
+            GUI.Label(new Rect(55, 78, 280, 20), game.IsEndless ? "03D    /    ENDLESS PURSUIT" : game.IsCircuit ? "03D    /    CIRCUIT TRIAL" : "03D    /    SKYLINE TRIAL", small);
             Block(new Rect(width - 382, 26, 350, 74), Ink);
             GUI.Label(new Rect(width - 359, 37, 155, 22), "SUIT INTEGRITY", small);
             for (int i = 0; i < 3; i++)
@@ -109,30 +110,30 @@ namespace ProtoHarness.ChainRush
         private void DrawReady(float width, float height)
         {
             Block(new Rect(32, 128, 750, height - 248), Ink);
-            GUI.Label(new Rect(69, 169, 640, 26), game.IsEndless ? "FIELD TEST  /  002                         ENDLESS COMBAT" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
+            GUI.Label(new Rect(69, 169, 640, 26), game.IsEndless ? "FIELD TEST  /  002                         ENDLESS COMBAT" : game.IsCircuit ? "FIELD TEST  /  003                         TIME ATTACK" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
             GUI.Label(new Rect(62, 222, 660, 130), "CHAIN", title);
             GUI.Label(new Rect(62, 326, 660, 130), "THE SKY.", title);
             Block(new Rect(70, 470, 65, 4), Mint);
             GUI.Label(new Rect(70, 500, 640, 37), "달리고, 걸고, 도약하세요.", heading);
-            GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
+            GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
             GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 점프 → 공중에서 다시 클릭하고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
             Block(start, Mint);
             if (GUI.Button(start, "ENTER   /   START RUN  →", button)) game.StartRun();
-            GUI.Label(new Rect(470, height - 218, 240, 24), game.IsEndless ? "무한 생존  ·  체력 3칸" : "약 50초  ·  체력 3칸", small);
+            GUI.Label(new Rect(470, height - 218, 240, 24), game.IsEndless ? "무한 생존  ·  체력 3칸" : game.IsCircuit ? game.Circuit.LapCount + "랩  ·  타임어택" : "약 50초  ·  체력 3칸", small);
 
             Block(new Rect(width - 420, height - 390, 388, 255), Ink);
             GUI.Label(new Rect(width - 391, height - 361, 320, 30), "READ THE COURSE", body);
             GUI.Label(new Rect(width - 391, height - 308, 335, 27), "01   MINT      공중 그래플 앵커", small);
-            GUI.Label(new Rect(width - 391, height - 269, 335, 27), game.IsEndless ? "02   경고      위 / 왼쪽 / 오른쪽 진입" : "02   CORAL   위험물 / 좌우 회피", small);
-            GUI.Label(new Rect(width - 391, height - 230, 335, 27), game.IsEndless ? "03   SPACE   조준 표시 후 1.2초 이내" : "03   GOLD     표적 / SPACE 공격", small);
+            GUI.Label(new Rect(width - 391, height - 269, 335, 27), game.IsEndless ? "02   경고      위 / 왼쪽 / 오른쪽 진입" : game.IsCircuit ? "02   GAP      틈은 점프 / 그래플" : "02   CORAL   위험물 / 좌우 회피", small);
+            GUI.Label(new Rect(width - 391, height - 230, 335, 27), game.IsEndless ? "03   SPACE   조준 표시 후 1.2초 이내" : game.IsCircuit ? "03   LINE     출발선 · 체크포인트" : "03   GOLD     표적 / SPACE 공격", small);
             GUI.Label(new Rect(width - 391, height - 179, 330, 24), "INSPIRED BY CHAIN-RUSH  /  DOSANGE", small);
         }
 
         private void DrawPlay(float width, float height, float scale)
         {
             Block(new Rect(width / 2f - 210, 34, 420, 62), Ink);
-            GUI.Label(new Rect(width / 2f - 184, 42, 380, 24), game.IsEndless ? "ENDLESS / " + game.Distance.ToString("0") + " M     HITS / " + game.Hits : "ROUTE  /  " + Mathf.FloorToInt(game.Progress * 496f) + " M   →   496 M", small);
+            GUI.Label(new Rect(width / 2f - 184, 42, 380, 24), game.IsEndless ? "ENDLESS / " + game.Distance.ToString("0") + " M     HITS / " + game.Hits : game.IsCircuit ? CircuitLine() : "ROUTE  /  " + Mathf.FloorToInt(game.Progress * 496f) + " M   →   496 M", small);
             Block(new Rect(width / 2f - 184, 78, 368, 4), new Color(0.2f, 0.3f, 0.33f));
             Block(new Rect(width / 2f - 184, 78, 368 * (game.IsEndless ? (float)(game.Distance % 500d / 500d) : game.Progress), 4), Mint);
             if (game.IsEndless) DrawEncounter(width, scale);
@@ -214,18 +215,41 @@ namespace ProtoHarness.ChainRush
             float y = height / 2f - 215;
             Block(new Rect(x, y, 670, 410), Ink);
             Block(new Rect(x, y, 670, 5), game.HasFailed ? Coral : Mint);
-            GUI.Label(new Rect(x + 42, y + 34, 600, 25), "SKYLINE TRIAL / MISSION STATUS", small);
-            string label = game.IsPaused ? "PAUSED" : game.HasFinished ? "ROUTE COMPLETE." : "SIGNAL LOST.";
+            GUI.Label(new Rect(x + 42, y + 34, 600, 25), game.IsCircuit ? "CIRCUIT TRIAL / RACE STATUS" : "SKYLINE TRIAL / MISSION STATUS", small);
+            string label = game.IsPaused ? "PAUSED" : game.HasFinished ? (game.IsCircuit ? "RACE COMPLETE." : "ROUTE COMPLETE.") : "SIGNAL LOST.";
             GUI.Label(new Rect(x + 40, y + 84, 610, 54), label, number);
             string subtitle = game.IsPaused ? "잠시 쉬어가세요. ESC로 계속합니다." : game.HasFinished ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 노란 선에서 점프 후 앵커를 잡으세요.";
             GUI.Label(new Rect(x + 42, y + 147, 610, 35), subtitle, body);
-            GUI.Label(new Rect(x + 42, y + 207, 600, 34), "TIME   " + game.Elapsed.ToString("0.0") + "s      LINKS   " + game.Grapples + "      HITS   " + game.Hits, body);
+            GUI.Label(new Rect(x + 42, y + 207, 600, 34), game.IsCircuit ? CircuitResult() : "TIME   " + game.Elapsed.ToString("0.0") + "s      LINKS   " + game.Grapples + "      HITS   " + game.Hits, body);
             Rect action = new Rect(x + 42, y + 283, 586, 66);
             Block(action, Mint);
             if (GUI.Button(action, game.IsPaused ? "ESC  /  CONTINUE  →" : "R  /  RUN AGAIN  →", button))
             {
                 if (game.IsPaused) game.TogglePause(); else game.StartRun();
             }
+        }
+
+        // "LAP 2 / 3   01:23.4": the lap being run and the whole race time so far.
+        private string CircuitLine()
+        {
+            LapCounter laps = game.Circuit.Laps;
+            return "LAP  " + laps.CurrentLap + " / " + laps.LapCount + "     " + FormatTime(game.Elapsed);
+        }
+
+        // Lap times (completed laps only) and the total.
+        private string CircuitResult()
+        {
+            LapCounter laps = game.Circuit.Laps;
+            var text = new System.Text.StringBuilder();
+            for (int lap = 1; lap <= laps.CompletedLaps; lap++) text.Append("L").Append(lap).Append(" ").Append(FormatTime(Ticks.ToSeconds(laps.LapTicks(lap)))).Append("   ");
+            text.Append(laps.IsFinished ? "TOTAL " + FormatTime(Ticks.ToSeconds(laps.TotalTicks)) : "TIME " + FormatTime(game.Elapsed));
+            return text.ToString();
+        }
+
+        private static string FormatTime(float seconds)
+        {
+            int minutes = Mathf.FloorToInt(seconds / 60f);
+            return minutes.ToString("00") + ":" + (seconds - minutes * 60f).ToString("00.0");
         }
 
         private void OnDestroy()

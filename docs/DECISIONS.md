@@ -7,6 +7,25 @@
 
 ---
 
+## 2026-10-08 · 코스 T4: 수제 서킷 + 랩 (새 씬 `ChainRushCircuit`)
+
+- **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 요청서 질문 1~9 전부 추천대로)**
+  - **범위**: 단일 러너 타임어택(속도전). 아이템·접촉·적·`CourseTarget`·낙사 복귀·기록 저장 없음. 낙사는 지금처럼 런 종료. 새 씬 `ChainRushCircuit`(`ChainRushProcedural` 복사)이고 기존 씬 3개는 변경 없음.
+  - **`Centerline` 루프 모드·초점**: 서킷에서는 기존 투영 규칙("앞에서부터 첫 번째로 지나지 않은 조각", `PieceAt`)이 틀린다. 출발 조각의 뒤쪽에 놓인 귀환 직선의 점이 `along ≤ Length` 라 먼저 걸리기 때문이다(`CenterlineLoopTests.ProjectWithoutLoop_PointOnReturnStraight_…` 가 옛 규칙의 오답 S 70 을 고정해 보여 준다: 실제는 S 335.7). `TryClose`/`Close` 가 끝 = 시작(위치 0.5m, 방향 1°, 높이 0.1m, 끝 경사 0)을 검증해 `IsLoop` 를 켜고, 어긋난 값을 메시지로 말한다(`the end is 1.00 m (level), … away from the start`). 루프에서는 `FrameAt`·`Project`·`Frame` 의 `S` 가 한 바퀴로 감기고 **가장 가까운 조각**(점수 = 옆 거리² + 구간 밖으로 벗어난 거리²)을 고른다. `SetFocus(s)` + `FocusWindow`(150m)는 초점 근처 조각만 보게 하고(루프에서는 이음매 양쪽), 창에 조각이 없으면 전체로 되돌아간다. 루프가 닫히면 `Append`·`TrimBefore` 는 예외, `Clear` 가 다시 연다. 호출부 12곳은 안 바꿨다. 초점·루프를 쓰지 않는 직선·무한 코스는 동작이 같다(아래 회귀).
+  - **`TrackDefinition`**(SO, `Track/`): `Segment`(직선/원호/틈, 끝 경사)·`Anchor`(S·옆·높이) 중첩 serializable struct, 체크포인트(랩 비율), 출발 칸, 랩 수, 노면 반폭·두께. `TryValidate` 가 `OnValidate` 로그·`BuildCenterline` 예외·`CircuitRace` 의 공통 원천: 반지름 ≥ 30m, 틈은 평지 직선 + 앞뒤 평지 직선 ≥ 15m(R1·R8), 앵커는 틈 위, 랩 ≥ 100m, 닫힘. 기본값은 **스타디움**: 직선 A 140m(언덕 0 → +10% → −10% → 0, 높이 2m, + 점프 틈 6m), R40 우 반원, 직선 B 140m(그래플 틈 16m, 앵커 S 318.66 · 높이 10m), R40 우 반원. 한 바퀴 531.3m(= 2 × 140 + 2π × 40), 반원 둘이 옆으로 ±80m 라 닫힘이 구성상 정확하다.
+  - **`LapCounter`**(순수 로직): 틱마다 접힌 `S` 의 변화를 (−L/2, L/2] 로 접어 누적 진행도에 더한다(한 틱 이동 ≤ 0.4m 라 모호하지 않다). 체크포인트·랩은 지나간 것을 **한 번만** 센다: 역주행은 진행도만 줄이고, 이음매에서 앞뒤로 흔들어도, 출발선 뒤로 갔다가 돌아와도 랩이 늘지 않는다. 랩별 틱·체크포인트 틱·합계.
+  - **`CircuitRace`**(`Race/`, 새 네임스페이스 `ProtoHarness.ChainRush.Race`): 정의로 중심선을 만들어 `ChainRushGame.Awake` 에 넘기고(`BuildTrack`, 지연 초기화), 노면을 한 번만 깐다(`RoadPiece` ≤ 50m 12개, 틈 건너뜀). 앵커는 씬의 고정 풀(4개)에 정의 위치로 놓고 남는 것은 끈다. 출발선·체크포인트는 비충돌 발광 띠. 매 틱 `PrepareTick`(초점 = 직전 `S`) → 입력 → 이동 → `Step`(투영 + `LapCounter`). 시계는 `StartRun` 틱 0, 러너는 출발선 위 `S 0`, 1랩 = 선에서 선, 3랩 완주 = `CompleteRun`.
+  - **`ChainRushGame`·HUD**: 선택 필드 `circuit`(있으면 중심선·완주 판정·`StartRun` 초기화가 서킷 쪽, 없으면 지금과 같다). HUD 는 서킷 분기만 더했다(제목·안내·윗줄 `LAP 2 / 3  01:23.4`·결과의 랩 시간 표). 씬은 메뉴 `Create Circuit Scene`(`ChainRushCircuitSceneBuilder`)이 만들었다: 복사본에서만 `Procedural World`·적 오브젝트·`EnemyDirector` 를 지우고 `Circuit World` 를 넣는다. `Data/Circuit_Stadium.asset`(스타디움 기본값)도 이 메뉴가 만든다.
+- **요청서 밖에서 고친 것 (사용자 승인, 2026-10-08)**: `RunnerAnimation.cs:68` 한 줄. 서킷 씬에는 `EnemyDirector` 가 없는데 러너 애니메이션이 `game.Enemies.State` 를 매 프레임 읽어 null 참조가 난다. `game.Enemies != null ? … : Idle` 로 고쳤다(적이 있는 씬은 동작 같음).
+- **요청서와 달라진 것**: 봇은 `CourseBot` 를 일반화하지 않고 별도 `CircuitBot`(약 50줄, 같은 점프 거리: 그래플 틈 4.5m, 점프 틈 0.8m)을 뒀다. `CourseBot` 이 `ProceduralCourse` 에 묶여 있어 일반화가 더 많은 기존 테스트 파일을 건드리기 때문. 앵커 풀은 4개(스타디움 그래플 틈 1개 + 여유).
+- **고치기 전 실패 기록**: `CenterlineLoopTests` 를 먼저 쓰고 컴파일해 `error CS1061: 'Centerline' does not contain a definition for 'Close' / 'SetFocus' / 'ClearFocus' / 'HasFocus'`(8건, 15:46 KST)를 확인한 뒤 구현했다. 구현 직후 새 EditMode 19건이 한 번에 통과했다.
+- **실측** (스타디움, 봇 3배속): 랩 시간 **52.94 / 52.74 / 52.78 초**(한 바퀴 531.3m ÷ 10 m/s = 53.1초 예측과 일치, 합계 158.46초), 그래플 3회(랩마다 1회), 가드 무접촉(중심선에서 최대 0.04m), 가장 느린 `Step` 0.01ms, 실시간 53초. 3랩 모두 이음매(`S` 가 `L` → 0)를 지나며 랩 카운트가 정확하다.
+- **검증** (`feature/course-t4-circuit`, **6000.3.19f1**(이 머신 에디터), MCP, KST)
+  - `Centerline` 변경만 넣은 회귀 기준선: EditMode `testcasecount="180" result="Passed" passed="180" failed="0"` (15:47:37), 기존 PlayMode(Device·Sweep 제외) `testcasecount="54" result="Passed" passed="54" failed="0" duration="377.32"` (15:47:55~15:54:12).
+  - 최종 코드: 컴파일 확인, Console Error 0. EditMode `testcasecount="213" result="Passed" passed="213" failed="0"` (16:08:36, 기존 161 + 루프 19 + 랩 카운터 14 + 정의 19). 서킷 PlayMode 5건 `testcasecount="5" passed="5" duration="70.30"` (16:05:15~16:06:26). PlayMode(Device·Sweep 제외) 1회차 `testcasecount="59" result="Passed" passed="59" failed="0" duration="447.24"` (16:08:52~16:16:19), 2회차 `testcasecount="59" result="Passed" passed="59" failed="0" duration="447.42"` (16:16:36~16:24:04). 59 = 기존 54 + 서킷 5. `Centerline` 을 바꿨으므로 20 시드 스윕 `testcasecount="1" result="Passed" passed="1" failed="0" duration="932.80"` (16:24:21~16:39:53): 모두 완주, 격파 39~46회, 탈출구 0회, 그래플 합계 37회, 가장 느린 `Step` 1.47ms, 원점 이동 2~3회(T3c 와 같은 값).
+  - 눈으로 확인(임시 테스트로 봇이 달리는 중 6장을 찍음, 커밋 안 함): 6장 중 3장(출발 6m, 215m 반원, 그래플 틈 앞)을 봤다. 헤더 `CIRCUIT TRIAL`, 윗줄 `LAP 1 / 3  00:21.7`, 출발 직후 언덕, 가드 달린 반원, 틈 앞 앵커 표식(`LINK / 24m`)과 건너편 노면 정상. 나머지 3장은 보지 않았다. 체감 튜닝은 하지 않았다. 입력 장치 경로 미변경이라 Device 실행은 해당 없다.
+- **하지 않은 것**: 아이템·접촉·충돌·순위·고스트·다인 출발(P3), 적·`CourseTarget` 판정의 트랙 프레임화(곡선 위 표적을 놓는 첫 작업에서), 낙사 복귀, 기록 저장, 서킷 에디터 도구, 서킷 여러 개, 다리·교차(교차 서킷은 "가장 가까운 조각" 이라 위·아래층을 구분하지 못한다), 장식, `Track/` 폴더 이동, `CLAUDE.md` 변경(스윕 조건의 대상 목록에 `Centerline` 을 더할지는 사용자 결정).
+
 ## 2026-10-08 · 코스 T3c: 무한 모드를 생성기 코스로 전환 (새 씬 `ChainRushProcedural`)
 
 - **결정 (사용자 승인, 2026-10-08 "모두 동의한다": 요청서 질문 1~7 전부 추천대로)**

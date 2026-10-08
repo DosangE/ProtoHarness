@@ -49,6 +49,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
+| 입력 기록·재생 (P2, 2026-10-08): `InputLog` 가 한 런의 틱별 `TickInput` 을 담고(항목 i = 틱 i + 1 의 입력), `InputRecorder`(`IInputSource` 데코레이터)가 `Consume()` 때 쌓고, `InputReplay` 가 틱마다 하나씩 돌려준다(끝나면 빈 입력, `Finished`). `Clear()` = 새 런(기록은 비우고 재생은 되감는다)이라 `SetInputSource(replay)` + `StartRun()` 이면 처음부터 재생된다. 직렬화·파일 저장은 없다 | `Runtime/ChainRush/Control/InputLog.cs`, `InputRecorder.cs`, `InputReplay.cs` | `TickInput`, `IInputSource` |
 | 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격, 왼쪽 Shift 드리프트, 왼쪽 Ctrl 체인 액션) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트. 체인 액션으로 강화되면 빨리 감고 세게 던진다. 슬링샷 당김 동안 체인 시각물 표시 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
 | 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |

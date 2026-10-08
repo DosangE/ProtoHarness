@@ -18,7 +18,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private AudioSource audioSource;
         [SerializeField] private float finishZ = 496f;
         [SerializeField] private bool endlessMode;
-        [SerializeField] private EndlessCourse endlessCourse;
+        [SerializeField] private CourseStream endlessCourse;
         [SerializeField] private EnemyDirector enemies;
         [SerializeField] private RunRules rules;
         [SerializeField] private bool enhancedPresentation;

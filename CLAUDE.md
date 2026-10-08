@@ -287,10 +287,11 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
 
 - **`main`, `dev` 에 직접 커밋하지 않는다.** 작업을 시작할 때 현재 브랜치를 확인하고, `main`/`dev` 이면 멈추고 브랜치부터 만든다. (브랜치 생성은 합의 대상이 아니다.)
 - **병합은 `--no-ff`** 로 기능 단위가 보이게 묶는다. `feature → dev`, `dev → main` 모두 같다.
-- **병합 조건**: 컴파일 에러 0 + EditMode 통과 + **같은 코드에서 PlayMode(`Device` 카테고리 제외) 연속 2회 통과** (§4). CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
+- **병합 조건**: 컴파일 에러 0 + EditMode 통과 + **같은 코드에서 PlayMode(`Device`·`Sweep` 카테고리 제외) 연속 2회 통과** (§4). CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
   - 한 번의 통과로는 부족하다 (간헐 실패 이력: `docs/DECISIONS.md` 2026-10-02 "병합 조건 강화").
   - `Device` 카테고리는 가상 키보드·마우스 장치 이벤트에 기대는 테스트다. 전달이 흔들려 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-04 "장치 입력 테스트 분리"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다.
   - 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update` 의 메뉴 키)를 바꾼 브랜치는 `Run Device Input Tests` 를 돌린 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.
+  - `Sweep` 카테고리는 시드 20개를 도는 장거리 봇 테스트(약 16분)라 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-08 "코스 T3c"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다. 코스 생성·스트리밍(`CourseGenerator`, `CourseTuning`, `ProceduralCourse`)을 바꾼 브랜치는 `Run Course Sweep` 를 따로 1회 돌려 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.
   - 병합 보고에는 **각 실행**의 결과 XML 값(`testcasecount`, `result`, `passed`/`failed`, 시각)을 모두 적는다. 통과한 실행만 골라 적지 않는다.
   - 한 번이라도 실패하면 실패한 테스트와 원문 메시지를 보고하고, 원인을 설명하지 못하면 병합하지 않는다. 코드를 바꾸지 않고 다시 돌려 통과한 것만으로 실패를 없던 일로 하지 않는다.
 - **병합 조건의 적용 범위**: 위 병합 조건은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 중 하나라도 닿을 때 적용한다. 셋 다 닿지 않는 브랜치(Unity 가 읽지 않는 `docs/`, `tools/`, `.claude/`, `.codex/`, 루트 `.md` 만 바꾼 것)는 Unity 검증 대신 **문서 검증**으로 병합한다. 조용히 건너뛰지 않고 아래 증거를 병합 보고에 붙인다.

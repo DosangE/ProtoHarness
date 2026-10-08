@@ -266,18 +266,22 @@ namespace ProtoHarness.Editor.ChainRush
             return created;
         }
 
-        // Merge gate run (CLAUDE.md §9-2): everything except the Device category.
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device and Sweep categories.
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests() => RunPlayMode("!Device");
+        public static void RunTests() => RunPlayMode("!Device", "!Sweep");
 
         // Tests that need virtual Keyboard/Mouse devices. Not part of the merge gate.
         [MenuItem("ProtoHarness/Chain Rush/Run Device Input Tests")]
         public static void RunDeviceTests() => RunPlayMode("Device");
 
-        private static void RunPlayMode(string category)
+        // The 20-seed course sweep that proves the T3c completion criterion. Run once, outside the merge gate.
+        [MenuItem("ProtoHarness/Chain Rush/Run Course Sweep")]
+        public static void RunCourseSweep() => RunPlayMode("Sweep");
+
+        private static void RunPlayMode(params string[] categories)
         {
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, categoryNames = new[] { category } }));
+            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, categoryNames = categories }));
         }
 
         private sealed class TestCallbacks : ICallbacks

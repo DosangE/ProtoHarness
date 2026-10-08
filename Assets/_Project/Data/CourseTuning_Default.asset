@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56f6684618a6f2048b38d6a5348acb65, type: 3}
+  m_Name: CourseTuning_Default
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Track.CourseTuning
+  rampDistance: 1400
+  weightsAtStart:
+  - 3
+  - 0
+  - 3
+  - 0
+  - 1
+  - 2
+  - 2
+  - 1
+  - 1
+  - 2
+  weightsAtFull:
+  - 2
+  - 0
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+  - 2
+  straightLengthStart: {x: 30, y: 80}
+  straightLengthFull: {x: 30, y: 80}
+  restLengthStart: {x: 40, y: 60}
+  restLengthFull: {x: 40, y: 60}
+  gentleRadiusStart: {x: 60, y: 120}
+  gentleRadiusFull: {x: 60, y: 120}
+  gentleAngleStart: {x: 30, y: 90}
+  gentleAngleFull: {x: 30, y: 90}
+  sharpRadiusStart: {x: 50, y: 60}
+  sharpRadiusFull: {x: 30, y: 50}
+  sharpAngleStart: {x: 60, y: 90}
+  sharpAngleFull: {x: 60, y: 120}
+  sCurveRadiusStart: {x: 80, y: 80}
+  sCurveRadiusFull: {x: 50, y: 80}
+  sCurveAngleStart: {x: 30, y: 45}
+  sCurveAngleFull: {x: 30, y: 60}
+  uphillGradeStart: {x: 0.04, y: 0.06}
+  uphillGradeFull: {x: 0.04, y: 0.1}
+  uphillLengthStart: {x: 40, y: 80}
+  uphillLengthFull: {x: 40, y: 80}
+  downhillGradeStart: {x: 0.04, y: 0.08}
+  downhillGradeFull: {x: 0.04, y: 0.12}
+  downhillLengthStart: {x: 40, y: 80}
+  downhillLengthFull: {x: 40, y: 80}
+  hillGradeStart: {x: 0.1, y: 0.12}
+  hillGradeFull: {x: 0.1, y: 0.12}
+  hillLengthStart: {x: 120, y: 160}
+  hillLengthFull: {x: 120, y: 160}
+  jumpGapLengthStart: {x: 5, y: 6}
+  jumpGapLengthFull: {x: 5, y: 7.7}
+  grappleGapLengthStart: {x: 16, y: 16}
+  grappleGapLengthFull: {x: 14, y: 18}
+  anchorOffsetStart: {x: 0, y: 0}
+  anchorOffsetFull: {x: -2, y: 2}
+  anchorHeightStart: {x: 10, y: 10}
+  anchorHeightFull: {x: 10, y: 10}
+  gapRunway: 15
+  spawnRestLength: 60
+  restMinLength: 40
+  restSpacing: 200
+  maxSameKindRun: 2
+  turnWindow: 600
+  turnLimit: 180
+  heightLimit: 40
+  intersectionWindow: 1200
+  footprintSpacing: 5
+  footprintMargin: 10.3
+  candidatesPerModule: 8
+  escapeRestLength: 40
+  openEdgeStartDistance: 600
+  openEdgeMaxFraction: 0.1
+  openEdgeChance: 0.25

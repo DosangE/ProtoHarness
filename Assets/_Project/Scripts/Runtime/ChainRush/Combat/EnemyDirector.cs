@@ -11,7 +11,7 @@ namespace ProtoHarness.ChainRush.Combat
         public enum EncounterState { Idle, Warning, Entering, Vulnerable, Firing, Retracting, Striking }
         [SerializeField] private ChainRushGame game;
         [SerializeField] private RunnerMotor player;
-        [SerializeField] private EndlessCourse course;
+        [SerializeField] private CourseStream course;
         [SerializeField] private Transform enemy;
         [SerializeField] private Transform warning;
         [SerializeField] private Transform impact;
@@ -76,11 +76,12 @@ namespace ProtoHarness.ChainRush.Combat
                     break;
                 case EncounterState.Entering:
                     enemy.position = Vector3.Lerp(playerPosition + frame.TransformDirection(entranceOffset), target, Mathf.SmoothStep(0f, 1f, (float)timer / tuning.EntranceTicks));
+                    enemy.rotation = Quaternion.LookRotation(frame.Forward);
                     if (timer >= tuning.EntranceTicks) { SetState(EncounterState.Vulnerable); game.PlayCue(1); }
                     break;
                 case EncounterState.Vulnerable:
                     enemy.position = target;
-                    enemy.rotation = Quaternion.Euler(0f, 0f, Mathf.Sin(seconds * 7f) * 8f);
+                    enemy.rotation = Quaternion.LookRotation(frame.Forward) * Quaternion.Euler(0f, 0f, Mathf.Sin(seconds * 7f) * 8f);
                     if (timer >= tuning.AttackWindowTicks) { SetState(EncounterState.Striking); warning.gameObject.SetActive(false); }
                     break;
                 case EncounterState.Firing:

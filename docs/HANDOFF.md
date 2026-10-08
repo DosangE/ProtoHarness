@@ -6,20 +6,19 @@
 
 ## 1. 지금 상태 (2026-10-08)
 
-- 브랜치: P3 준비 조사(`DESIGN.md` §7-5)까지 `dev` 에 병합돼 있다(`5ac8a70`, `origin/dev` 에는 푸시 안 함). 롤백 안전성 합의 요청서(`docs/rollback-proposal`)도 `dev` 에 병합돼 있고(`3840672`), 구현·검증은 `feature/p3-rollback-safety` 에서 끝났다(병합 전, 사용자가 시킬 때).
+- 브랜치: P3 준비 조사(`DESIGN.md` §7-5)까지 `dev` 에 병합돼 있다(`5ac8a70`, `origin/dev` 에는 푸시 안 함). 롤백 안전성 합의 요청서(`docs/rollback-proposal`)도 `dev` 에 병합돼 있고(`3840672`), 구현·검증은 `feature/p3-rollback-safety` 에서 끝나 `dev` 에 병합됐다(`cd1eb72`). 정규화 비용 측정은 `feature/p3-controller-cost` 에서 했다.
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`(루프·초점), 이동·드리프트·체인 액션, 절차 노면(T3a)·시드 생성기(T3b)·절차 무한 코스(T3c)·서킷(T4), 직선 무한 코스 정리(T3d).
   - **P2** (DECISIONS 2026-10-08 "P2"): 입력 기록·재생(`InputLog`·`InputRecorder`·`InputReplay`, `Control/`)과 상태 트레이스 비교(`StateTrace`, 테스트). **같은 시드 + 같은 입력 = 같은 런이 같은 머신·같은 에디터에서 비트 단위로 성립한다**: 서킷 1700틱·절차 코스 2500틱을 같은 세션(6배속)·씬 재로드(2배속)·별도 세션에서 모두 재현했다.
-  - **롤백 안전성** (DECISIONS 2026-10-08 "롤백 안전성"): 서킷에서 한 틱 스냅샷·복원(`SimSnapshot`, `StepTick`)과 "되감아 다시 해도 같은 결과"를 비트 단위로 증명했다(지상·공중·그래플·슬링·코너 스윙·랩 이음매, 한 프레임 20회 되감기). **`CharacterController` 의 내부 위치가 `transform.position` 보다 정밀해 처음엔 1 ULP 어긋났고, 매 틱 컨트롤러를 껐다 켜서 막았다. 그 대가로 P2 재생 해시가 바뀌었다**(서킷 `0xF9A914DA3FAA680B`, 절차 코스 `0xE81912109A2EB020`).
+  - **롤백 안전성** (DECISIONS 2026-10-08 "롤백 안전성"): 서킷에서 한 틱 스냅샷·복원(`SimSnapshot`, `StepTick`)과 "되감아 다시 해도 같은 결과"를 비트 단위로 증명했다(지상·공중·그래플·슬링·코너 스윙·랩 이음매, 한 프레임 20회 되감기). **`CharacterController` 의 내부 위치가 `transform.position` 보다 정밀해 처음엔 1 ULP 어긋났고, 매 틱 컨트롤러를 껐다 켜서 막았다. 그 대가로 P2 재생 해시가 바뀌었다**(서킷 `0xF9A914DA3FAA680B`, 절차 코스 `0xE81912109A2EB020`). 정규화 비용은 껐다 켜기 1회 2.94 µs, 한 틱 28.2 µs 로 틱 예산(20 ms)의 1% 미만이라 병목이 아니다(DECISIONS "컨트롤러 정규화 비용 측정", 에디터 안 값).
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
-- 테스트: EditMode 237, PlayMode 72(Device 2 + Sweep 1 + 게이트 69). 병합 조건 실행은 Device·Sweep 제외 69건, 약 520초/회. 20 시드 스윕(`Run Course Sweep`) 약 933초.
+- 테스트: EditMode 237, PlayMode 74(Device 2 + Sweep 1 + 게이트 71). 병합 조건 실행은 Device·Sweep 제외 71건, 약 520초/회. 20 시드 스윕(`Run Course Sweep`) 약 933초.
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
 롤백 안전성은 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
 - **P3 스파이크**: `spike/` 브랜치에서 NGO 를 우선으로 서버 1 + 클라이언트 1 이 서킷에서 같은 입력으로 같은 위치를 내는지 본다(`DESIGN.md` §7-5, 롤백이 필요하면 `RestoreSnapshot`·`StepTick` 을 쓴다). **`Packages/manifest.json` 변경은 §0 금지선이라 별도 승인**이 필요하고 그것만 담은 브랜치로 분리한다(§9-2).
-- **컨트롤러 정규화 비용 측정**: 이번에 매 틱 `controller.enabled` 끄고 켜기를 넣었다(DECISIONS 롤백 항목). 한 틱 비용을 재 본 적이 없다. 여러 번 되감아 재시뮬하는 예측에서 부담이 되면 `CharacterController` 대신 직접 구현한 충돌로 바꾸는 선택지가 열린다(큰 설계).
 - **P2 후속(고스트)**: 입력 로그 파일 저장과 최고 기록과 겨루기.
 - **T3e 장식**, **T5 보충 모듈**(`docs/COURSE.md`).
 - 체감 튜닝: 사용자가 직접 달려 본 피드백 대기(원격이라 보류).

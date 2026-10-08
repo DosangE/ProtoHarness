@@ -1,130 +1,39 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-08 (T3a 병합, T3b 합의 요청서). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-08 (T3b 구현·검증 완료, 다음은 T3c). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
 ## 1. 지금 상태 (2026-10-08)
 
-- 브랜치: T3a 는 `dev` 에 병합·푸시됐다(`dev` = `origin/dev` = `1a1be82`, 로컬 기능 브랜치 삭제). T3b 합의 요청서(아래 2절)는 `docs/t3b-proposal` 브랜치에 있다.
+- 브랜치: T3b 는 `feature/course-t3b-generator` 에서 구현·검증을 마쳤다(병합·푸시는 사용자가 시킬 때). `dev` 에는 T3a 와 T3b 합의 요청서(`docs/t3b-proposal`)가 병합돼 있다.
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`: 직선 + 수평 원호 + 종단 곡선, 절대 거리 `S`(double), 원점 이동.
   - 이동: 자유 조향(헤딩), 그립 한계, 경사 속도 보정, 내리막 땅 붙잡기, 가드 부딪힘.
   - 카트라이더식: 드리프트(Shift) → 체인 게이지(최대 2칸) → 체인 액션(Ctrl): 그래플 강화 / 코너 스윙 / 슬링샷.
   - 씬: 두 씬 발판 양쪽에 보이는 가드 난간(옆 낙사 없음, 틈 낙사는 유지).
-  - **T3a 절차 노면** (DECISIONS 2026-10-07): `RoadProfile`(단면) · `RoadMeshBuilder`(노면·가드 메시) · `RoadPiece`(재사용 조각). 시각 뱅크 없음, 가드 없는 가장자리 지원.
-- **씬 코스는 아직 직선·평지다.** 절차 노면은 `ChainRushRoadTests`(x = 300)에서만 쓴다. 씬 연결은 T3c.
-- 테스트: EditMode 131, PlayMode 46(그중 Device 2). 병합 조건 실행은 Device 제외 44건, 약 240초/회.
+  - **T3a 절차 노면** (DECISIONS 2026-10-07): `RoadProfile` · `RoadMeshBuilder` · `RoadPiece`.
+  - **T3b 모듈 카탈로그 + 시드 생성기** (DECISIONS 2026-10-08): `SeedHash` · `ModuleKind` · `CourseModule` · `CourseTuning`(SO, `.asset` 없음) · `CourseGenerator`. 순수 로직이고 씬·`EndlessCourse` 와 연결돼 있지 않다.
+- **씬 코스는 아직 직선·평지다.** 절차 노면은 `ChainRushRoadTests`(x = 300)에서만, 생성기는 EditMode 테스트에서만 쓴다. 씬 연결은 T3c.
+- 테스트: EditMode 161, PlayMode 46(그중 Device 2). 병합 조건 실행은 Device 제외 44건, 약 225~240초/회.
 
-## 2. 다음 작업: T3b — 모듈 카탈로그 + 시드 생성기 (합의 요청서, 승인 대기)
+## 2. 다음 작업: T3c — 무한 모드 전환 (합의 요청서부터)
 
-T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스를 달린다. 단계는 T3a(끝) / **T3b(이 요청)** / T3c. 아래는 §3-2 형식의 합의 요청서다. **구현은 사용자 승인 뒤에 한다.** 2-6 의 질문에 답이 오면 그대로 반영한다.
+COURSE 10절 T3c: `EndlessCourse` 가 `CourseGenerator` + `RoadPiece` 풀을 스트리밍하고, 원점 이동을 위치 벡터 기준으로, `CourseTarget`·적 회전을 트랙 프레임으로. 완료 기준: 시드 20개 봇 1400m 완주(PlayMode). **구현 전에 §3-2 합의 요청서를 올린다.** 씬·프리팹을 건드리므로 동시에 1개 브랜치만(§9-2).
 
-### 2-1. 목표
+T3b 가 T3c 에 넘기는 것:
+- `CourseModule.AppendTo(Centerline)` 로 중심선에 붙인다. 앵커·틈은 트랙 좌표(`AnchorS`/`AnchorOffset`/`AnchorHeight`, `GapStartS`/`GapLength`)라서 `Centerline.FrameAt` 로 월드 위치를 구한다. `GrappleController.anchors`(직렬화 고정 배열)와 앵커 오브젝트 풀 연결은 T3c 몫이다.
+- 가드 없는 가장자리는 `CourseModule.LeftOpen`/`RightOpen` → `RoadProfile` 의 가드 없음으로 옮긴다.
+- 생성기는 0 부터 순서대로만 만든다(`Next()`). 스트리밍은 앞쪽 약 300m 를 미리 `Next()` 로 받아 둔다. `CourseTuning` `.asset`(`Assets/_Project/Data/CourseTuning_Default.asset`)은 T3c 에서 에디터로 만든다.
+- 그래플 틈은 새 코스에서 훨씬 드물다(모듈 가중치 2/17~2/20). 틈 값(16m, 앵커 +10m)은 씬 통과 값이고, 14~18m·좌우 ±2m 는 **봇으로 아직 검증하지 않았다**(T3c 봇 완주에서 확인). COURSE 6-2 의 "앵커 +3~+8m" 는 실측 뒤에 고친다.
+- 막다른 길: 생성기는 한 걸음 앞(R9)까지만 본다. 탈출구가 이어 나오면 `InvalidOperationException` 이 날 수 있다(20 시드 × 10km 에서는 0건, 탈출구 9회). 스트리밍은 이 예외를 잡지 말고 크게 깨지게 둔다(§5).
 
-시드 하나와 모듈 번호로 코스 모듈 열을 결정적으로 만드는 **순수 로직**(생성기)과, 그 결과가 연결 규칙·물리 한계를 지키는지 EditMode 로 증명한다. 씬·`EndlessCourse`·노면은 건드리지 않는다(T3c).
+### 2-1. 기존 부채 (T3c 에서 다룬다)
 
-### 2-2. 건드릴 것 (기존 파일)
-
-없음. `Centerline` 의 공개 API(`AppendStraight`, `AppendArc`)를 쓰기만 한다.
-
-참고한 기존 자산(§2 검색): 시드·해시 코드는 **없다**(`SplitMix|SeedHash|seed` grep 결과 0, 2026-10-08). 첫 사례라 형식을 정한다. 거리에 따른 난이도 곡선은 `EncounterTuning.NextGap`(`Combat/EncounterTuning.cs:31`, 거리 선형 감소 + 하한)과 같은 방식으로, SO 형식은 DECISIONS 2026-10-02 "첫 ScriptableObject 형식" 을 따른다. 그래플 틈 값은 지금 씬에서 통과하는 값(틈 16m, 앵커는 틈 가운데 발판 위 10m, 좌우 0/±2m: `ChainRushSceneBuilder.cs:82-85`)에서 시작한다.
-
-### 2-3. 새로 만들 것 (§1-1 세 줄)
-
-경로는 `Assets/_Project/Scripts/` 기준, 네임스페이스는 폴더를 따른다(2-6 질문 5).
-
-| # | 목적 | 경로 | 형태 |
-|---|---|---|---|
-| 1 | `(시드, 모듈 번호, 시도 번호)` 를 플랫폼 무관 정수 연산으로 섞어 결정적인 난수를 얻기 위해 | `Runtime/ChainRush/Track/SeedHash.cs` | static class (SplitMix64. `Hash(seed, index, salt)` → ulong, `Unit` → [0, 1) double(상위 53비트), `Range`) |
-| 2 | 모듈 종류(COURSE 5-1)를 이름으로 가리키기 위해 | `Runtime/ChainRush/Track/ModuleKind.cs` | enum (직선, 쉼터, 완만한 커브, 급커브, S자, 오르막, 내리막, 언덕, 점프 틈, 그래플 틈) |
-| 3 | 생성된 모듈 하나(번호, 종류, 시작 `S`, 길이, 중심선 조각 최대 3개, 틈 구간, 앵커 위치, 가장자리 열림)를 값으로 넘기기 위해. `AppendTo(Centerline)` 로 중심선에 붙인다 | `Runtime/ChainRush/Track/CourseModule.cs` | readonly struct |
-| 4 | 모듈 가중치·파라미터 범위·규칙 상수를 코드 수정 없이 바꾸기 위해. 거리 함수(시작값 → 1400m 에서 완전값, 선형) | `Runtime/ChainRush/Track/CourseTuning.cs` | ScriptableObject (2-6 질문 1). **`.asset` 은 T3c 에서** 에디터로 만든다. T3b 테스트는 `CreateInstance` 기본값을 쓴다 |
-| 5 | 시드와 튜닝을 받아 `Next()` 로 모듈을 차례로 만들고 연결 규칙을 지키기 위해 | `Runtime/ChainRush/Track/CourseGenerator.cs` | sealed class (순수 C#, `Centerline` 과 같은 형식) |
-| 6 | 해시 참조값·결정성을 검증하기 위해 | `Tests/EditMode/SeedHashTests.cs` | 테스트 |
-| 7 | 생성기의 결정성·규칙·물리 한계를 **생성기와 독립된 검사 코드**로 검증하기 위해 | `Tests/EditMode/CourseGeneratorTests.cs` | 테스트 |
-
-`Track/` 은 지금 6개라 위 5개를 더하면 11개다(15개 넘으면 하위 분리, §1-2).
-
-### 2-4. 설계
-
-**생성 방식**
-- 생성기는 자기 좌표(double: x, z, 방향, 높이)를 따로 들고 모듈을 잇는다. 원점 이동과 무관하고, `Centerline` 에는 T3c 가 `AppendTo` 로 붙인다.
-- 모듈 k 의 후보 a(0~7)를 `SeedHash.Hash(seed, k, a)` 로 뽑고(종류 = 가중치 추첨, 파라미터 = 범위 안 값), 규칙을 통과하는 첫 후보를 쓴다. 같은 시드면 항상 같은 열이다.
-- 후보 8개가 모두 막히면 **탈출구**로 직선 쉼터 40m 를 낸다(같은 종류 연속 규칙에서 면제). 그것도 자기 교차에 걸리면 `InvalidOperationException` 으로 크게 깨진다(§5). 탈출구 횟수는 공개 카운터로 세고 테스트가 상한을 단언한다.
-- **알아둘 점**: 해시는 상태가 없지만 규칙이 최근 기록(직전 종류, 누적 회전, 경계 상자)에 기대므로 **모듈 k 를 바로 계산할 수는 없고 0 부터 다시 만든다**. COURSE 7-1 의 "임의 번호를 바로 계산" 은 해시만의 성질이다. 1400m ≈ 30 모듈이라 비용은 작다(10km 생성 시간을 테스트가 로그로 남긴다).
-- 모든 모듈은 **경사 0 으로 시작하고 끝난다**(오르막·내리막·언덕도 0 → g → 0). 그래서 어떤 순서로 붙여도 경사가 이어지고, 틈은 늘 평지에 놓인다.
-
-**모듈과 파라미터 시작값** (0m → 1400m 에서 선형으로 바뀐다. 계산·씬 값에서 고른 시작값이고 체감 튜닝 전이다)
-
-| 모듈 | 구성 | 0m | 1400m~ | 가중치 0m → 1400m |
-|---|---|---|---|---|
-| 직선 | 직선 | L 30~80 | 같음 | 3 → 2 |
-| 쉼터 | 평지 직선 | L 40~60 | 같음 | 강제(아래 R3)만 |
-| 완만한 커브 | 원호 | R 60~120, θ 30~90° | 같음 | 3 → 2 |
-| 급커브 | 원호 | R 50~60, θ 60~90° | R 30~50, θ 60~120° | 0 → 2 |
-| S자 | 원호 + 반대 원호 | R 80, θ 각 30~45° | R 50~80, θ 각 30~60° | 1 → 2 |
-| 오르막 | 0 → +g → 0 (조각 3개) | g 4~6%, L 40~80 | g 4~10% | 2 → 2 |
-| 내리막 | 0 → −g → 0 | g 4~8% | g 4~12% | 2 → 2 |
-| 언덕 | 오르막 + 내리막 | 정상 3~5m | 3~8m | 1 → 2 |
-| 점프 틈 | 도움닫기 15 + 틈 + 착지 15 | 틈 5~6m | 5~7.7m | 1 → 2 |
-| 그래플 틈 | 도움닫기 15 + 틈 + 착지 15, 앵커 | 틈 16m, 앵커 틈 가운데 +10m, 좌우 0 | 틈 14~18m, 좌우 −2~+2m | 2 → 2 |
-
-근거: 점프 틈 상한 7.7m = 평지 실측 10.25m × 75%(COURSE 6-1). 최소 반지름 30m(6-4). 내리막 상한 12%(5-1, 실측 허용 20% 보다 보수적). 그래플 값은 씬에서 통과 중인 값(2-2). 지금 무한 코스는 56m 마다 그래플 틈이 있었지만, 새 코스는 틈이 모듈 추첨으로만 나와서 훨씬 드물어진다(COURSE 11절 결정 5).
-
-**연결 규칙** (COURSE 6-5 + 물리 한계. 테스트가 독립 검사)
-
-| # | 규칙 |
-|---|---|
-| R1 | 틈 앞뒤 직선 ≥ 15m (틈 모듈이 도움닫기·착지를 포함한다) |
-| R2 | 급커브 바로 뒤에 그래플 틈 금지 |
-| R3 | 쉼터(평지 직선 ≥ 40m)를 200m 안에 한 번 보장: 마지막 쉼터 끝부터 거리 + 후보 길이 > 200 이면 쉼터를 강제한다. 첫 모듈은 스폰용 쉼터 60m |
-| R4 | 같은 종류 3연속 금지 (탈출구 제외) |
-| R5 | 최근 600m 의 순 회전 \|Σθ\| ≤ 180° |
-| R6 | 높이는 시작 높이 ±40m 안 |
-| R7 | 자기 교차 방지: 새 모듈의 수평 경계 상자(중심선 5m 간격 + 여유 10.3m = 반폭 6 + 가드 0.3 + 4)가, 바로 앞 모듈을 뺀 최근 1200m 모듈들의 상자와 겹치지 않는다 |
-| R8 | 커브 안에는 틈이 없다 (틈 모듈은 직선으로만 구성) |
-
-R7 은 2-8 의 머리핀 부채(`Centerline` 조각 선택)를 줄이지만 없애지는 않는다. 직전 `S` 근처 탐색은 T3c 에서 실제로 문제가 나는지 보고 정한다.
-
-### 2-5. 검증 방법
-
-- **EditMode `SeedHashTests`**: SplitMix64 공개 참조 출력과 비교(출처는 구현 때 소스로 확인해 주석에 적는다), 같은 입력 = 같은 출력, 번호·솔트가 바뀌면 다른 값, `Unit` ∈ [0, 1).
-- **EditMode `CourseGeneratorTests`**
-  - 같은 시드 → 같은 1400m 모듈 열(종류·파라미터 비트 단위). 생성기 두 개를 번갈아 돌려도 같다.
-  - 시드 20개(0~19)가 서로 다른 열을 낸다.
-  - 시드 20개 × 10km 에서 R1~R8 과 파라미터 범위를 **생성기와 독립된 검사 코드**로 확인한다.
-  - 시드 20개 × 1400m 에서 모든 종류가 한 번 이상 나온다.
-  - `AppendTo(Centerline)` 로 10km 를 붙인 끝 위치·방향이 생성기 좌표와 허용 오차 안에서 같다.
-  - 탈출구 횟수 상한, 잘못된 튜닝은 생성 시 `ArgumentException`, 10km 생성 시간 로그.
-- **병합 조건(§9-2)**: `Assets/` 에 닿으므로 컴파일 0 + EditMode 통과 + PlayMode(Device 제외) 연속 2회를 지금 규칙대로 돌린다(보류 결정 1 이 바뀌지 않는 한). 런타임 동작은 바뀌지 않으므로 PlayMode 결과는 그대로여야 한다.
-
-### 2-6. 사용자에게 물을 것 (추천을 받으면 "ㄱㄱ")
-
-1. **튜닝 위치**: **SO `CourseTuning` 추천**(기존 `EncounterTuning` 과 같은 형식, 코드 수정 없이 조정). `.asset` 은 T3c 에서 만든다. 대안: 코드 정적 표(더 단순, 조정할 때마다 컴파일).
-2. **벽 없는 구간(낙사 허용)**: **넣는 것을 추천하되 보수적으로**: 600m 이후, 직선·완만한 커브에서만, 한쪽 가장자리만, 전체 모듈의 10% 이하. 대안: T5 로 미룸.
-3. **그래플 앵커 오브젝트**: T3b 는 앵커 **위치만** 계산하고, 오브젝트 풀과 `GrappleController.anchors`(지금 직렬화 고정 배열) 연결은 T3c 에서 다루는 것을 추천한다.
-4. **그래플 틈 시작값**: 씬에서 통과 중인 값(틈 16m, 앵커 +10m)으로 시작하는 것을 추천한다. COURSE 6-2 의 "앵커 +3~+8m" 는 씬 값과 다르다. T3c 실측 뒤에 COURSE 를 고친다.
-5. **폴더·네임스페이스**: 기존 `Track/`(`ProtoHarness.ChainRush.Track`)에 두는 것을 추천한다(새 네임스페이스 없음, 11개). 대안: 새 `Course/` 폴더·네임스페이스(합의 대상, §3-1).
-6. **난이도 시작값**: 위 표 값으로 시작하고 체감 튜닝은 T3c 이후 플레이로 하는 것을 추천한다.
-
-### 2-7. 안 하는 것
-
-씬·프리팹·에셋 생성(`CourseTuning` `.asset` 포함), `EndlessCourse`·`RoadPiece` 연결, 앵커 오브젝트, 봇 완주 테스트(T3c), COURSE 5-2 보충 모듈(T5), `TrackDefinition`(T4), 기존 코드 수정.
-
-### 2-8. T3 안에서 다룰 기존 부채
-
-- `Centerline` 조각 선택이 "앞에서부터 첫 번째로 지나지 않은 조각"이다. 머리핀처럼 코스가 자기에게 가까이 돌아오면 틀릴 수 있다 → **T3b** R7 로 줄이고, 필요하면 T3c 에서 직전 `S` 근처 탐색.
-- 무한 모드 원점 이동 조건이 "앞 방향 투영 ≥ 448m" → **T3c** 에서 위치 벡터 기준(COURSE 7-1).
-- `CourseTarget` 접촉·공격 판정이 월드 x/z 박스(`CourseTarget.cs:42-55`), 적 회전이 월드 축 → **T3c** 에서 트랙 프레임 기준(COURSE 8절).
-- 피스 선택·투영은 틱마다 조각을 앞에서부터 훑는다 → **T3c** 에서 모듈 수가 늘면 비용을 잰다.
-
-### 2-9. 승인 뒤 시작 순서
-
-1. `docs/RULES/CONVENTIONS.md`, `VERIFICATION.md`, `BRANCHING.md` 를 읽는다(CLAUDE.md 표).
-2. 이 요청서(`docs/t3b-proposal`)가 `dev` 에 병합됐는지 확인한다. 안 됐으면 사용자에게 먼저 묻는다.
-3. `dev` 에서 `feature/course-t3b-generator` 브랜치를 만든다(§9-2).
-4. 승인된 답(2-6)을 반영해 구현하고, 2-5 대로 검증한다.
+- `Centerline` 조각 선택이 "앞에서부터 첫 번째로 지나지 않은 조각"이다. 코스가 자기에게 가까이 돌아오면 틀릴 수 있다. 생성기 R7 이 코스 간 거리를 중심선 20.6m(상자 기준) 이상으로 막지만, 직전 `S` 근처 탐색은 T3c 에서 실제로 문제가 나는지 보고 정한다.
+- 무한 모드 원점 이동 조건이 "앞 방향 투영 ≥ 448m" → 위치 벡터 기준(COURSE 7-1).
+- `CourseTarget` 접촉·공격 판정이 월드 x/z 박스(`CourseTarget.cs:42-55`), 적 회전이 월드 축 → 트랙 프레임 기준(COURSE 8절).
+- 피스 선택·투영은 틱마다 조각을 앞에서부터 훑는다 → 모듈이 늘면 비용을 잰다.
 
 ## 3. 보류된 사용자 결정
 
@@ -151,7 +60,7 @@ R7 은 2-8 의 머리핀 부채(`Centerline` 조각 선택)를 줄이지만 없�
 ## 4. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
 - 이 머신(`C:/Users/User/Desktop/PCUBE/ProtoHarness`)의 에디터는 **6000.3.19f1** 이다(결정 버전 25f1 아님). 그래서 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`(iOS 발열 설정 3줄 삭제)이 수정으로 보인다. 로컬 환경 차이라 커밋하지 않는다(사용자 2026-10-04). 검증 보고에는 19f1 에서 돌렸다고 적는다.
-- 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 이 머신은 `C:\Users\User\AppData\Local\Temp\` (2026-10-07 확인). 실행마다 따로 보관하려면 끝날 때 복사한다.
+- 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 에디터의 `Path.GetTempPath()` 는 이 머신에서 `C:\Users\Public\Documents\ESTsoft\CreatorTemp\` 이다(2026-10-08 Editor.log 의 `ChainRush tests: ... XML=` 줄로 확인. 셸의 `%TEMP%` 와 다르다). 경로는 Editor.log 에서 `ChainRush tests:` 를 찾으면 나온다. EditMode 는 MCP `Unity_RunCommand` 로 `TestRunnerApi.Execute(new Filter { testMode = TestMode.EditMode })`, PlayMode 는 `EditorApplication.ExecuteMenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")` 로 시작했다. 실행마다 따로 보관하려면 끝날 때 복사한다.
 - Unity MCP: 도메인 리로드마다 브리지가 몇 초 끊긴다(`Unity not detected (no fresh discovery files found)`). `~/.unity/mcp/connections/bridge-*.json` 이 다시 생기면 재시도한다. 에디터가 백그라운드면 스크립트를 자동 임포트하지 않을 수 있다 → `AssetDatabase.Refresh()`. 테스트 전에 새 코드가 로드됐는지(리플렉션 등) 확인한다.
 - `.codex/agents/` 가 `git status` 에 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음). 손대지 않는다.
 - `index/symbols.tsv` 는 낡았다(git-head `9f5a96f`). B모드로 쓰기 전에 재생성한다(§6-2).

@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using ProtoHarness.ChainRush.Endless;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush
@@ -20,6 +21,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private bool endlessMode;
         [SerializeField] private CourseStream endlessCourse;
         [SerializeField] private EnemyDirector enemies;
+        [SerializeField] private CircuitRace circuit;
         [SerializeField] private RunRules rules;
         [SerializeField] private bool enhancedPresentation;
         [SerializeField] private Audio.ChainRushAudio presentationAudio;
@@ -41,11 +43,13 @@ namespace ProtoHarness.ChainRush
         public int Grapples => racer.Grapples;
         public int Tick => tick;
         public float Elapsed => Ticks.ToSeconds(tick);
-        public float Progress => Mathf.Clamp01((float)(PlayerS / finishZ));
+        public float Progress => circuit != null ? circuit.RaceFraction : Mathf.Clamp01((float)(PlayerS / finishZ));
         public float FinishZ => finishZ;
         public bool DamageFlash => racer.IsInvulnerable(tick) && IsRunning;
         public bool AttackActive => racer.IsAttackShown(tick);
         public bool IsEndless => endlessMode;
+        public bool IsCircuit => circuit != null;
+        public CircuitRace Circuit => circuit;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
         public RacerState Racer => racer;
@@ -80,6 +84,12 @@ namespace ProtoHarness.ChainRush
                 enabled = false;
                 return;
             }
+            if (endlessMode && circuit != null)
+            {
+                Debug.LogError("ChainRushGame: a scene is either endless or a circuit race, not both.", this);
+                enabled = false;
+                return;
+            }
             if (enhancedPresentation && (presentationAudio == null || presentationAnimation == null))
             {
                 Debug.LogError("ChainRushGame: enhanced presentation requires audio and animation references.", this);
@@ -103,9 +113,17 @@ namespace ProtoHarness.ChainRush
             }
             racer = new RacerState(rules);
             // T0: both scenes are laid out along +z from the world origin. A track definition asset replaces this (COURSE.md T4).
-            track = new Centerline(Vector3.zero, 0f);
-            if (endlessMode) endlessCourse.SeedTrack(track);
-            else track.AppendStraight(finishZ);
+            if (circuit != null)
+            {
+                // A circuit race runs on the closed centerline of its definition (COURSE.md T4).
+                track = circuit.BuildTrack();
+            }
+            else
+            {
+                track = new Centerline(Vector3.zero, 0f);
+                if (endlessMode) endlessCourse.SeedTrack(track);
+                else track.AppendStraight(finishZ);
+            }
             inputSource = new KeyboardMouseInputSource();
             attackVisual.gameObject.SetActive(false);
         }
@@ -123,6 +141,7 @@ namespace ProtoHarness.ChainRush
         public void SetTrack(Centerline replacement)
         {
             if (replacement == null) throw new System.ArgumentNullException(nameof(replacement));
+            if (circuit != null) throw new System.InvalidOperationException("ChainRushGame: a circuit race builds its own track; SetTrack is for finite straight courses.");
             if (replacement.PieceCount == 0) throw new System.ArgumentException("Track needs at least one piece.", nameof(replacement));
             if (endlessMode) throw new System.InvalidOperationException("ChainRushGame: endless mode builds its own track; SetTrack is for finite courses.");
             track = replacement;
@@ -156,6 +175,8 @@ namespace ProtoHarness.ChainRush
         {
             if (!IsRunning) return;
             tick++;
+            // The closed track looks for the runner near where it was, so a return leg is not mistaken for the start.
+            if (circuit != null) circuit.PrepareTick();
             TickInput input = inputSource.Consume();
             if (input.AttackPressed) Attack();
             player.Step(input);
@@ -164,7 +185,12 @@ namespace ProtoHarness.ChainRush
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].Touches(position)) TakeDamage();
             if (!IsRunning) return;
-            if (!endlessMode && track.Project(position).S >= finishZ) CompleteRun();
+            if (circuit != null)
+            {
+                circuit.Step(tick);
+                if (circuit.IsFinished) CompleteRun();
+            }
+            else if (!endlessMode && track.Project(position).S >= finishZ) CompleteRun();
             if (!IsRunning || !endlessMode) return;
             enemies.Step();
             if (!IsRunning) return;
@@ -174,6 +200,7 @@ namespace ProtoHarness.ChainRush
         public void StartRun()
         {
             phase = Phase.Ready;
+            if (circuit != null) circuit.ResetRace();
             if (enhancedPresentation) { presentationAudio.ResetAudio(); presentationAnimation.ResetPose(); }
             if (endlessMode) endlessCourse.ResetCourse();
             player.ResetAtSpawn();

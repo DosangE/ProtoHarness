@@ -60,7 +60,9 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
 | 시작 안내·HUD(체인 게이지 2칸 포함)·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
 | 씬 생성·열기·테스트 실행 메뉴. 발판 양쪽 가드 난간(`AddGuards`, 충돌 4m)과 기존 씬용 메뉴 `Add Deck Guards To Open Scene` | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
-| 발판 풀 재배치·원점 이동·중심선 조각 잇기/버리기. 거리는 트랙 `S` | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game(`Track`), Motor, Camera, 직렬화 구간 배열 |
+| 발판 풀 재배치·원점 이동·중심선 조각 잇기/버리기. 거리는 트랙 `S`. 직선 코스(`ChainRushEndless` 씬). `CourseStream` 을 상속한다 | `Runtime/ChainRush/Endless/EndlessCourse.cs` | Game(`Track`), Motor, Camera, 직렬화 구간 배열 |
+| 무한 코스가 게임·적 감독에게 내미는 면: `Distance`, `Step`(틱당 1회), `SeedTrack`, `ResetCourse`, `CanStartEncounter`. `ChainRushGame.endlessCourse`·`EnemyDirector.course` 가 이 타입으로 받는다 (T3c, 2026-10-08) | `Runtime/ChainRush/Endless/CourseStream.cs` (abstract) | `Centerline` |
+| 절차 코스 스트리밍 (T3c): `CourseGenerator` 모듈을 플레이어 앞 300m 까지 중심선에 붙이고(`AppendTo`), 모듈마다 `RoadPiece` 풀(24칸)로 노면을 깐다(틈 모듈은 틈 앞뒤 두 구간, 50m 초과는 나눔, 틱당 `Build` 1회). 그래플 앵커 풀(10칸, `GrappleController.anchors` 와 같은 배열)에 `AnchorS`·`AnchorOffset`·`AnchorHeight` 로 앵커를 놓는다. 뒤쪽 60m 밖은 풀로 반환(붙어 있는 앵커는 유지). 플레이어 수평 위치가 원점에서 400m 이상이면 전부 `-(x, 0, z)` 이동. 런마다 새 무작위 시드(`SetSeed` 로 지정). `ChainRushProcedural` 씬에서 쓴다 | `Runtime/ChainRush/Endless/ProceduralCourse.cs` | `CourseGenerator`, `CourseTuning`(`Data/CourseTuning_Default.asset`), `RoadPiece`, Game, Motor, Camera |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |

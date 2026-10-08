@@ -65,7 +65,33 @@ namespace ProtoHarness.ChainRush.Track
             RoadMeshBuilder.Samples(fromS, toS);
             Vector3 origin = line.FrameAt(fromS).Position;
             root.transform.SetPositionAndRotation(origin, Quaternion.identity);
+            // The colliders must get their meshes while the piece is active: a piece hidden and built again in
+            // the same frame kept null collider meshes otherwise (found 2026-10-08, ChainRushRoadTests).
+            root.SetActive(true);
+            bool built = false;
+            try
+            {
+                BuildMeshes(line, fromS, toS, profile, origin);
+                built = true;
+            }
+            finally
+            {
+                // A failed build must not leave a half-filled piece showing.
+                if (!built)
+                {
+                    root.SetActive(false);
+                    IsBuilt = false;
+                }
+            }
 
+            FromS = fromS;
+            ToS = toS;
+            Profile = profile;
+            IsBuilt = true;
+        }
+
+        private void BuildMeshes(Centerline line, double fromS, double toS, RoadProfile profile, Vector3 origin)
+        {
             Clear();
             RoadMeshBuilder.AppendRoad(line, fromS, toS, profile, origin, vertices, triangles);
             roadCollider.sharedMesh = null;
@@ -91,12 +117,6 @@ namespace ProtoHarness.ChainRush.Track
                 RoadMeshBuilder.AppendGuardLights(line, fromS, toS, profile, origin, vertices, triangles);
                 Fill(lightMesh);
             }
-
-            FromS = fromS;
-            ToS = toS;
-            Profile = profile;
-            IsBuilt = true;
-            root.SetActive(true);
         }
 
         // Hides the piece until the next Build, for a pool to hold it.

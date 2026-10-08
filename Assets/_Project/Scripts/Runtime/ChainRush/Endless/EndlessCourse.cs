@@ -3,7 +3,7 @@ using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush.Endless
 {
-    public sealed class EndlessCourse : MonoBehaviour
+    public sealed class EndlessCourse : CourseStream
     {
         [SerializeField] private ChainRushGame game;
         [SerializeField] private RunnerMotor player;
@@ -14,7 +14,7 @@ namespace ProtoHarness.ChainRush.Endless
         private Vector3[] initialPositions;
         private int recycledCount;
         // The track's S counts from the run start and survives origin shifts, so it is the distance.
-        public double Distance => System.Math.Max(0d, PlayerS - 5d);
+        public override double Distance => System.Math.Max(0d, PlayerS - 5d);
         public int RecycledCount => recycledCount;
         public int RebaseCount { get; private set; }
         public int PoolSize => chunks.Length;
@@ -47,7 +47,7 @@ namespace ProtoHarness.ChainRush.Endless
         }
 
         // One simulation tick, called only by ChainRushGame.FixedUpdate.
-        public void Step()
+        public override void Step()
         {
             if (!game.IsRunning) return;
             Centerline track = game.Track;
@@ -76,7 +76,7 @@ namespace ProtoHarness.ChainRush.Endless
         }
 
         // Restarts the centerline at its origin with one straight piece; Step extends it as the runner advances.
-        public void SeedTrack(Centerline track)
+        public override void SeedTrack(Centerline track)
         {
             if (track == null) throw new System.ArgumentNullException(nameof(track));
             track.Clear();
@@ -97,12 +97,12 @@ namespace ProtoHarness.ChainRush.Endless
 
         private double PlayerS => game.Track.Project(player.transform.position).S;
 
-        public bool CanStartEncounter(float duration)
+        public override bool CanStartEncounter(float duration)
         {
             return player.IsGrounded && DistanceToEdge() > Mathf.Max(10f, player.Speed) * duration + 5f;
         }
 
-        public void ResetCourse()
+        public override void ResetCourse()
         {
             for (int i = 0; i < chunks.Length; i++) chunks[i].position = initialPositions[i];
             SeedTrack(game.Track);

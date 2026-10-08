@@ -136,6 +136,32 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(minOffset, Is.LessThan(-HalfWidth - 1f), "The runner should have left the road on the left: " + State(line) + ".");
         }
 
+        // A pool hides a piece and builds it again for the next stretch, even in the same frame. The colliders
+        // lost their meshes then (found 2026-10-08 when the procedural course reused pieces).
+        [UnityTest]
+        public IEnumerator Piece_HiddenAndBuiltAgainInTheSameFrame_KeepsItsColliderMeshes()
+        {
+            var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);
+            line.AppendStraight(100f);
+            var piece = new RoadPiece("Test road piece rebuilt", null, material, material, material);
+            pieces.Add(piece);
+            piece.Build(line, 0d, 50d, RoadProfile.Guarded);
+            piece.Hide();
+            piece.Build(line, 50d, 100d, RoadProfile.Guarded);
+            int colliders = 0;
+            foreach (MeshCollider collider in piece.Transform.GetComponentsInChildren<MeshCollider>(true))
+            {
+                colliders++;
+                Assert.That(collider.sharedMesh, Is.Not.Null, collider.name + " lost its mesh when its piece was hidden and built again in one frame.");
+                Assert.That(collider.sharedMesh.vertexCount, Is.GreaterThan(0), collider.name);
+            }
+            Assert.That(colliders, Is.EqualTo(2), "A guarded piece has a road collider and a guard wall collider.");
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            Assert.That(Physics.Raycast(new Vector3(RoadX, 5f, 75f), Vector3.down, out RaycastHit hit, 10f), Is.True, "The rebuilt road must be solid.");
+            Assert.That(hit.collider.name, Is.EqualTo("Road collider"));
+        }
+
         // Straight 30 m, R30 right quarter turn, straight 20 m, a crest that eases up to 10% and back down to
         // -10% and flat over 90 m, an R50 left 60 degree turn, straight 30 m: about 270 m, short of the finish.
         private static Centerline CourseRoad()

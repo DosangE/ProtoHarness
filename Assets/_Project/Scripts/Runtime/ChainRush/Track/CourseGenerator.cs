@@ -5,7 +5,7 @@ using UnityEngine;
 namespace ProtoHarness.ChainRush.Track
 {
     // Builds the endless course one module at a time from a seed. Candidate a of module k is drawn from
-    // SeedHash.Hash(seed, k, a); the first candidate that passes the connection rules (docs/HANDOFF.md 2-4,
+    // SeedHash.Hash(seed, k, a); the first candidate that passes the connection rules (docs/COURSE.md 6-6,
     // R1-R8) is used, so the same seed and tuning always give the same modules. The rules look at recent
     // history, so module k cannot be computed on its own: replay from module 0.
     // The generator tracks its own pose in doubles, starting at the origin facing +Z on flat ground with the

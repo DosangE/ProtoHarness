@@ -4,7 +4,7 @@ namespace ProtoHarness.ChainRush.Track
 {
     // Weights, parameter ranges and rule constants for CourseGenerator. Distance-dependent values come in pairs
     // (at 0m, at fullDistance) and change linearly in between, then hold; ranges are Vector2 (min, max).
-    // Defaults are the T3b starting values (docs/HANDOFF.md 2-4), chosen by calculation, not yet play-tuned.
+    // Defaults are the T3b starting values (docs/COURSE.md 6-6), chosen by calculation, not yet play-tuned.
     [CreateAssetMenu(menuName = "ProtoHarness/ChainRush/Course Tuning")]
     public sealed class CourseTuning : ScriptableObject
     {

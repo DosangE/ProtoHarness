@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace ProtoHarness.Tests.EditMode
 {
-    // The rule checks here are written from the rule text (docs/HANDOFF.md 2-4) and integrate the module
+    // The rule checks here are written from the rule text (docs/COURSE.md 6-6) and integrate the module
     // pieces with their own geometry, independently of CourseGenerator's code.
     public sealed class CourseGeneratorTests
     {

@@ -7,7 +7,7 @@
 ## 1. 지금 상태 (2026-10-09, T3c-1 구현 중)
 
 - 브랜치
-  - `dev` = `e3a80b2`(T3b, `origin/dev` 와 같음) + `c9573bf`(T3c-1 요청서 병합, **로컬만, 푸시 안 함**).
+  - `dev` = `origin/dev` = `c9573bf`(T3b `e3a80b2` + T3c-1 요청서 병합).
   - **`feature/course-t3c-endless`** 에 T3c-1 구현이 커밋·푸시돼 있다(**PlayMode 실패 중, `dev` 병합 금지**). 다음 작업은 이 브랜치에서 이어간다. 중단 지점과 다음 순서는 2-10.
   - 병합된 로컬 브랜치 `feature/course-t3b-generator`, `docs/t3b-proposal`, `docs/t3c-proposal` 은 아직 지우지 않았다.
 - 구현된 것 요약

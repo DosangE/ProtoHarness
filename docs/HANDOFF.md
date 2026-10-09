@@ -1,48 +1,113 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-09 (T3b 구현·검증). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-09 (T3b 병합, T3c 합의 요청서). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
 ## 1. 지금 상태 (2026-10-09)
 
-- 브랜치: T3b 요청서는 `dev` 에 병합됐다(`d2c0084`, **로컬만, 푸시 안 함**). T3b 구현은 `feature/course-t3b-generator` 에 있고 **`dev` 병합 대기**다(병합 조건 검증은 끝남, DECISIONS 2026-10-09).
+- 브랜치: T3b 는 `dev` 에 병합·푸시됐다(`dev` = `origin/dev` = `e3a80b2`). T3c 합의 요청서(아래 2절)는 `docs/t3c-proposal` 브랜치에 있다. 병합된 로컬 브랜치 `feature/course-t3b-generator`, `docs/t3b-proposal` 은 아직 지우지 않았다.
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`: 직선 + 수평 원호 + 종단 곡선, 절대 거리 `S`(double), 원점 이동.
   - 이동: 자유 조향(헤딩), 그립 한계, 경사 속도 보정, 내리막 땅 붙잡기, 가드 부딪힘.
   - 카트라이더식: 드리프트(Shift) → 체인 게이지(최대 2칸) → 체인 액션(Ctrl): 그래플 강화 / 코너 스윙 / 슬링샷.
   - 씬: 두 씬 발판 양쪽에 보이는 가드 난간(옆 낙사 없음, 틈 낙사는 유지).
   - T3a 절차 노면 (DECISIONS 2026-10-07): `RoadProfile` · `RoadMeshBuilder` · `RoadPiece`.
-  - **T3b 시드 생성기** (DECISIONS 2026-10-09): `SeedHash` · `ModuleKind` · `CourseModule` · `CourseTuning`(SO, `.asset` 없음) · `CourseGenerator`. 연결 규칙 R1~R8, 앞보기 300m, 벽 없는 구간.
-- **씬 코스는 아직 직선·평지다.** 절차 노면과 생성기는 테스트에서만 쓴다. 씬 연결은 T3c.
+  - T3b 시드 생성기 (DECISIONS 2026-10-09): `SeedHash` · `ModuleKind` · `CourseModule` · `CourseTuning`(SO, `.asset` 없음) · `CourseGenerator`. 규칙과 시작값은 COURSE 6-6.
+- **씬 코스는 아직 직선·평지다.** 절차 노면과 생성기는 테스트에서만 쓴다.
 - 테스트: EditMode 152, PlayMode 46(그중 Device 2). 병합 조건 실행은 Device 제외 44건, 약 240초/회.
 
-## 2. 다음 작업: T3c — 무한 모드 전환 (합의 요청서 작성 전)
+## 2. 다음 작업: T3c-1 — 무한 모드를 생성 코스로 (합의 요청서, 승인 대기)
 
-T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스를 달린다. 완료 기준은 **시드 20개에서 봇이 1400m 완주(PlayMode)**. 씬을 건드리므로 §3-1 합의 대상이고, 씬·프리팹 브랜치는 동시에 1개만(§9-2).
+T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스를 달린다. 완료 기준은 시드 20개 봇 1400m 완주(PlayMode)다. 바꿀 것이 많아 **둘로 나누는 것을 제안한다**(2-7 질문 1).
 
-### 2-1. 시작 전에
+- **T3c-1 (이 요청)**: 무한 씬이 생성기 + 절차 노면 + 앵커 풀로 달린다. 원점 이동을 위치 벡터 기준으로. 시드 2개 봇 1400m 완주.
+- T3c-2 (다음 요청): 시드 20개 완주 테스트와 그 실행 방식(병합 조건 시간 문제, 2-6), 적 회전을 트랙 프레임으로, 장식 배치, `Centerline` 조각 선택 개선(필요하면).
 
-1. `feature/course-t3b-generator` 가 `dev` 에 병합됐는지 확인한다. 안 됐으면 사용자에게 먼저 묻는다(병합·푸시는 지시가 있을 때만).
-2. `dev` 를 푸시할지 사용자에게 묻는다(`d2c0084` 부터 로컬만).
-3. 요청서를 §3-2 형식으로 올린다. 아래 2-2 는 요청서에 넣을 재료다.
+아래는 T3c-1 의 §3-2 요청서다. **구현은 사용자 승인 뒤에 한다.**
 
-### 2-2. T3b 가 T3c 에 넘기는 것
+### 2-1. 목표
 
-- **`CourseTuning_Default.asset`**: `Assets/_Project/Data/` 에 에디터로 만든다(첫 SO 형식 ⑥). 지금은 코드 기본값만 있다.
-- **좌표 맞추기**: 생성기는 원점·+Z·평지에서 시작한다(`EndX/EndZ/EndYaw/EndHeight`, double). 씬 `Centerline` 의 시작점·yaw 를 같게 두고 `CourseModule.AppendTo` 로 붙인다(선 끝 `S`·경사가 다르면 예외). 첫 모듈은 스폰 쉼터 60m.
-- **노면**: 틈 모듈은 조각 3개(도움닫기 15 · 틈 · 착지 15)라 `RoadPiece` 를 틈 앞뒤로 나눠 깔면 된다(`GapStart`, `GapLength`). 열린 가장자리(`OpenLeft/OpenRight`)는 `RoadProfile` 의 가드 플래그로 넘긴다.
-- **앵커**: `AnchorAlong`(모듈 시작부터), `AnchorHeight`(노면 위 10m), `AnchorSide`(오른쪽 +). 오브젝트 풀과 `GrappleController.anchors`(지금 직렬화 고정 배열) 연결 방식을 정해야 한다.
-- **쉼터 = 적 조우 자리**: 20 시드 × 10km 에서 모듈 약 3개 중 1개가 쉼터다(R3 이 긴 모듈 자리에 쉼터를 낸다). 조우 빈도가 지금과 달라지므로 `EnemyDirector` 의 `CanStartEncounter` 와 함께 본다.
-- **미리 생성 거리**: COURSE 7-1 의 앞쪽 300m 는 생성기 앞보기 300m 와 같다. 생성기는 상태를 갖고 앞으로만 간다(`Next()`), 되돌리지 않는다.
-- **알아둘 점**: 생성기는 탈출 직선 위에서도 겹치면 `InvalidOperationException` 을 던진다. 5000 시드 × 10km 에서 0회였지만 튜닝을 바꾸면 다시 잰다(DECISIONS 2026-10-09 표).
+무한 씬(`ChainRushEndless.unity`)의 발판 풀(56m 마다 40m 발판 + 16m 틈 반복)을 `CourseGenerator` 가 만든 모듈 열로 바꾼다. 노면은 `RoadPiece` 풀, 그래플 앵커는 앵커 풀로 깔고, 원점 이동은 러너 위치 벡터 기준으로 한다. 시드 2개에서 봇이 1400m 를 완주한다.
 
-### 2-3. T3c 에서 다룰 기존 부채
+### 2-2. 건드릴 것 (기존 파일)
 
-- `Centerline` 조각 선택이 "앞에서부터 첫 번째로 지나지 않은 조각"이다. 코스가 자기에게 가까이 돌아오면 틀릴 수 있다 → T3b 의 R7(샘플 거리 20.6m)·앞보기로 줄었다. 실제 문제가 나면 직전 `S` 근처 탐색.
-- 무한 모드 원점 이동 조건이 "앞 방향 투영 ≥ 448m" → 위치 벡터 기준(COURSE 7-1).
-- `CourseTarget` 접촉·공격 판정이 월드 x/z 박스(`CourseTarget.cs:42-55`), 적 회전이 월드 축 → 트랙 프레임 기준(COURSE 8절).
-- 피스 선택·투영은 틱마다 조각을 앞에서부터 훑는다 → 모듈 수가 늘면 비용을 잰다.
+| 파일 | 바꿀 것 |
+|---|---|
+| `Runtime/ChainRush/Endless/EndlessCourse.cs` (114줄) | 거의 다시 쓴다. 지금은 직선만 잇고(`Step` `:50`, `AppendStraight`), 발판을 앞 방향으로 옮기며(`:62`), 원점 이동 조건이 앞 방향 투영 ≥ 448m 다(`:67`). 바꾼 뒤: 2-4 의 `CourseStream` 을 소유하고, `RoadPiece` 풀·앵커 풀을 S 범위에 맞춰 다시 깔고, 수평 거리 기준으로 원점을 옮긴다. 직렬화 필드 `chunks`·`segmentLength`·`deckLength` 를 빼고 `tuning`(CourseTuning), `seed`, 재질 3개, `anchors` 를 넣는다. 공개 API `Distance`·`RebaseCount`·`ShiftOrigin` 흐름·`SeedTrack`·`ResetCourse`·`CanStartEncounter`·`DistanceToEdge` 는 이름을 유지하고 뜻을 2-4 대로 바꾼다. `RecycledCount` 는 노면 조각 재사용 수, `PoolSize` 는 노면 조각 수 |
+| `Runtime/ChainRush/GrappleController.cs` (`:95`) | 후보 고르기에서 비활성 앵커를 건너뛴다(한 줄). 앵커 풀이 안 쓰는 앵커를 끄기 때문이다. 시제품 씬 앵커는 늘 켜져 있어 동작이 같다 |
+| `Editor/ChainRush/ChainRushEndlessSceneBuilder.cs` | 새 메뉴 "Upgrade Endless Scene (T3c)": `CourseTuning_Default.asset` 이 없으면 만들고, `Pooled Sector 0~7`(발판·도시 타워 포함, 씬 오브젝트)을 지우고, `Link Anchor` 모양을 복사한 앵커 8개를 만들어 `EndlessCourse`·`GrappleController.anchors`(`:106`)에 연결한 뒤 씬을 저장한다. `CreateEndlessScene` 도 같은 구성을 만들도록 맞춘다 |
+| `Tests/PlayMode/ChainRushEndlessTests.cs` (228줄) | 고정 z 에 기대는 테스트를 코스 조회로 바꾼다: 틈 앞 위치(`MovePlayer(29f)` `:157`, `MovePlayer(28f)` `:172`), 풀 크기 8(`:212`), 장거리 봇(`:190-219`, 지금은 직진 + 틈 점프 + 그래플). 봇은 `TrackFollower` 조향 + 다음 틈 종류에 따라 점프·그래플. **동작이 의도적으로 바뀌어서 고치는 것**이고, 단언 목록은 2-5 에 적는다 |
+| 씬 `ChainRushEndless.unity` | 위 메뉴로만 바꾼다(YAML 직접 수정 없음, §0). 메뉴 실행·씬 저장은 **그때 따로 승인받는다**(§0, HANDOFF 4절) |
+| 새 에셋 `Assets/_Project/Data/CourseTuning_Default.asset` | 위 메뉴가 만든다. 값은 코드 기본값 그대로 |
+
+참고한 기존 자산(§2 검색): 풀·원점 이동 흐름은 지금 `EndlessCourse`, 노면 조각 사용법은 `ChainRushRoadTests`(재질을 만들어 `RoadPiece` 에 넘김), 씬 이전 메뉴 형식은 `ChainRushSceneBuilder` 의 "Add Deck Guards To Open Scene", 봇은 `TrackFollower`. 무한 씬의 `targets` 는 비어 있어(`ChainRushEndlessSceneBuilder.cs:104`) **`CourseTarget` 의 월드 박스 판정은 무한 모드와 무관하다**. 그래서 이번 범위에서 뺐다.
+
+### 2-3. 새로 만들 것 (§1-1 세 줄)
+
+| # | 목적 | 경로 | 형태 |
+|---|---|---|---|
+| 1 | 생성기 → 중심선 → 노면 조각 범위·앵커 위치를 Unity 오브젝트 없이 계산해 EditMode 로 증명하기 위해 | `Runtime/ChainRush/Endless/CourseStream.cs` | sealed class (순수 C#, `Centerline` 과 같은 형식) |
+| 2 | `CourseStream` 의 범위 나누기·앵커 위치·조회를 검증하기 위해 | `Tests/EditMode/CourseStreamTests.cs` | 테스트 |
+
+`Endless/` 는 1개 → 2개. 새 네임스페이스 없음(`ProtoHarness.ChainRush.Endless`).
+
+### 2-4. 설계
+
+**`CourseStream`** (순수 로직)
+- `CourseGenerator`·`Centerline` 을 받아, 러너 `S` 앞쪽 300m 까지 모듈을 생성해 `AppendTo` 로 잇고, 뒤쪽은 `TrimBefore` 로 버린다. 살아 있는 모듈 목록을 가진다.
+- **노면 범위**: 모듈마다 틈을 빼고 나눈다. 한 범위는 최대 50m(T3a 조각 길이). 범위마다 `RoadProfile`: 반폭 6, 두께 1.2, 가드는 모듈의 `OpenLeft/OpenRight` 반대.
+- **앵커 위치**: 앵커가 있는 모듈은 `S = 모듈 시작 + AnchorAlong` 의 중심선 프레임에서 오른쪽 `AnchorSide`, 노면 위 `AnchorHeight`.
+- **조회**: `ModuleAt(S)`, 다음 틈까지 거리와 그 종류, 지금 쉼터의 남은 길이.
+
+**`EndlessCourse`**
+- 노면 조각 풀 크기는 (앞 300m + 뒤 유지 거리) / 50 + 틈 분할 여유로 정하고 **실행 중에는 늘리지 않는다**. 지금 테스트 `CountObjects()` 가 같다고 단언하므로 그대로 둔다.
+- 풀이 모자라면 LogError 후 비활성화한다(§5).
+- **원점 이동**: 러너의 수평 거리가 448m 를 넘으면, 러너의 수평 위치만큼 노면 조각·앵커·러너·카메라·적·중심선을 같이 옮긴다(COURSE 7-1). 높이는 옮기지 않는다(R6 로 ±40m 안).
+- **시드**: 2-7 질문 2.
+- **적 조우 가능 조건** `CanStartEncounter`: 2-7 질문 3. `DistanceToEdge` 는 다음 틈 시작까지 거리.
+- **스폰**: 생성기 첫 모듈은 스폰 쉼터 60m(S 0~60)다. 씬 러너 스폰 위치가 그 위에 오는지는 **확인 못 했다**(씬 YAML 통독 금지). 구현 때 MCP 로 스폰 좌표를 읽어 맞추고, 필요하면 S < 0 쪽 노면도 깐다.
+
+### 2-5. 검증 방법
+
+- **EditMode `CourseStreamTests`**
+  - 노면 범위가 틈과 겹치지 않고, 틈을 뺀 구간을 빈틈없이 덮으며, 각 범위가 50m 이하다.
+  - 열린 가장자리 모듈의 범위만 가드가 빠진다.
+  - 앵커 월드 위치가 `Centerline.FrameAt` 로 직접 계산한 값과 같다.
+  - 앞 300m 유지와 뒤 버리기 뒤에도 `S` 가 이어진다.
+  - 원점 이동 뒤 조회 값이 같다.
+- **PlayMode `ChainRushEndlessTests`** (고친 뒤)
+  - 전투 4개: 조우 시작 조건만 새 코스 조회로 바꾸고 단언은 그대로.
+  - 그래플 재시작: 첫 그래플 틈 앞으로 옮겨서 확인.
+  - 장거리 봇: 시드 2개 각각 1400m 완주, `RebaseCount ≥ 3`, `Distance` 역행 없음, 적중 > 3, 풀 크기·오브젝트 수 불변, 재시작 뒤 0.
+- **시간 추정 (계산, 실측 아님)**: 장거리 봇 1회가 지금 약 47초(1400m ÷ 10m/s ÷ 배속 3)라서, 시드 2개면 PlayMode 1회가 약 240 → 290초로 늘 것으로 본다.
+- **병합 조건(§9-2)**: 컴파일 0 + EditMode + PlayMode(Device 제외) 연속 2회. 입력 장치 경로는 바꾸지 않는다.
+
+### 2-6. T3c-2 로 미루는 것과 이유
+
+- **시드 20개 × 1400m**: 위 계산으로 1회 약 16분이라 병합 조건(2회 연속)에 넣으면 실행이 30분을 넘는다. 별도 카테고리(Device 처럼)로 빼려면 CLAUDE.md §9-2 규칙 변경이 필요하다. 보류 결정 1(병합 조건 줄이기)과 같이 정한다.
+- **적 회전**: `EnemyDirector.cs:83` 이 월드 축 회전이다(표현만, 판정 아님).
+- **장식(도시 타워)**: 커브 코스에서는 다른 구간 노면과 겹칠 수 있어 겹침 검사가 필요하다.
+- **`Centerline` 조각 선택 개선**: 장거리 봇의 `Distance` 역행 없음 단언으로 감시한다. T3c-1 에서 재현되면 멈추고 보고한다.
+
+### 2-7. 사용자에게 물을 것 (추천을 받으면 "ㄱㄱ")
+
+1. **범위**: **T3c-1 / T3c-2 로 나누는 것을 추천**한다(위 2-6). 대안: 한 번에(병합 조건 시간 문제를 먼저 정해야 함).
+2. **시드 출처**: **`EndlessCourse` 직렬화 값(기본 1) + 테스트용 setter 를 추천**한다. 같은 시드면 같은 코스라 버그 재현이 쉽다. 대안: 매 판 무작위(랭킹·일일 시드는 그때 정함).
+3. **적 조우 자리**: **쉼터 모듈 안 + 남은 쉼터 길이가 조우 시간 동안 달릴 거리보다 길 때를 추천**한다(COURSE 5-1 "쉼터 = 적 조우 자리", 커브·경사 위 전투를 피함). 쉼터 40~60m 라 조우 시작 기회는 지금보다 줄어든다(필요 거리 약 28.5m = 10m/s × 2.35s + 5, 계산). 대안: 다음 틈까지 거리(지금 방식, 커브 위에서도 조우).
+4. **도시 타워 장식**: **이번에는 빼는 것을 추천**한다(T3c-2 에서 겹침 검사와 함께). 대안: 노면 옆 고정 간격으로 두되 겹침 검사 없이.
+5. **옛 발판 풀(`Pooled Sector 0~7`)**: **이전 메뉴가 씬에서 지우는 것을 추천**한다(씬 오브젝트이고 에셋이 아님, 되돌리기는 git). 대안: 끄고 남김.
+6. **앵커 연결**: **씬에 앵커 8개 풀 + `GrappleController` 가 꺼진 앵커를 건너뛰는 것을 추천**한다(직렬화 참조 유지). 대안: `GrappleController` 에 앵커 등록 API 를 새로 만듦(공개 API 추가).
+
+### 2-8. 안 하는 것
+
+2-6 의 T3c-2 항목, 시제품 씬(`ChainRushPrototype.unity`)과 `CourseTarget`, 보충 모듈(T5), `TrackDefinition`(T4), 튜닝 값 변경, `manifest.json`·`ProjectSettings` 변경.
+
+### 2-9. 승인 뒤 시작 순서
+
+1. 이 요청서(`docs/t3c-proposal`)를 `dev` 에 병합한다(문서 검증, §9-2).
+2. `dev` 에서 `feature/course-t3c-endless` 를 만든다.
+3. 구현 → EditMode → 이전 메뉴 실행·씬 저장은 **그때 승인** → PlayMode 2회.
 
 ## 3. 보류된 사용자 결정
 

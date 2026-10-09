@@ -1,0 +1,73 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b8827bae56d7584eac377c532886aa6, type: 3}
+  m_Name: CourseTuning_Default
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Track.CourseTuning
+  fullDistance: 1400
+  straightWeight: {x: 3, y: 2}
+  gentleCurveWeight: {x: 3, y: 2}
+  sharpCurveWeight: {x: 0, y: 2}
+  sCurveWeight: {x: 1, y: 2}
+  uphillWeight: {x: 2, y: 2}
+  downhillWeight: {x: 2, y: 2}
+  hillWeight: {x: 1, y: 2}
+  jumpGapWeight: {x: 1, y: 2}
+  grappleGapWeight: {x: 2, y: 2}
+  straightLengthStart: {x: 30, y: 80}
+  straightLengthFull: {x: 30, y: 80}
+  restLengthStart: {x: 40, y: 60}
+  restLengthFull: {x: 40, y: 60}
+  gentleRadiusStart: {x: 60, y: 120}
+  gentleRadiusFull: {x: 60, y: 120}
+  gentleDegreesStart: {x: 30, y: 90}
+  gentleDegreesFull: {x: 30, y: 90}
+  sharpRadiusStart: {x: 50, y: 60}
+  sharpRadiusFull: {x: 30, y: 50}
+  sharpDegreesStart: {x: 60, y: 90}
+  sharpDegreesFull: {x: 60, y: 120}
+  sCurveRadiusStart: {x: 80, y: 80}
+  sCurveRadiusFull: {x: 50, y: 80}
+  sCurveDegreesStart: {x: 30, y: 45}
+  sCurveDegreesFull: {x: 30, y: 60}
+  uphillGradeStart: {x: 0.04, y: 0.06}
+  uphillGradeFull: {x: 0.04, y: 0.1}
+  downhillGradeStart: {x: 0.04, y: 0.08}
+  downhillGradeFull: {x: 0.04, y: 0.12}
+  slopeLengthStart: {x: 40, y: 80}
+  slopeLengthFull: {x: 40, y: 80}
+  slopeRampLength: 20
+  hillGradeStart: {x: 0.06, y: 0.08}
+  hillGradeFull: {x: 0.06, y: 0.1}
+  hillPieceLengthStart: {x: 40, y: 53}
+  hillPieceLengthFull: {x: 40, y: 53}
+  jumpGapStart: {x: 5, y: 6}
+  jumpGapFull: {x: 5, y: 7.7}
+  grappleGapStart: {x: 16, y: 16}
+  grappleGapFull: {x: 14, y: 18}
+  grappleAnchorSideStart: {x: 0, y: 0}
+  grappleAnchorSideFull: {x: -2, y: 2}
+  gapApproachLength: 15
+  grappleAnchorHeight: 10
+  spawnRestLength: 60
+  escapeRestLength: 40
+  restSpacing: 200
+  turnWindow: 600
+  maxNetTurn: 180
+  maxHeightOffset: 40
+  overlapWindow: 1200
+  overlapSampleStep: 5
+  overlapMargin: 10.3
+  lookaheadLength: 300
+  candidateAttempts: 8
+  openEdgeStart: 600
+  openEdgeChance: 0.2
+  openEdgeMaxShare: 0.1

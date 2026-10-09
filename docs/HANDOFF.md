@@ -1,30 +1,33 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-09 (T3b 병합, T3c 합의 요청서). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-09 (T3c-1 구현 중단 지점). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
-## 1. 지금 상태 (2026-10-09)
+## 1. 지금 상태 (2026-10-09, T3c-1 구현 중)
 
-- 브랜치: T3b 는 `dev` 에 병합·푸시됐다(`dev` = `origin/dev` = `e3a80b2`). T3c 합의 요청서(아래 2절)는 `docs/t3c-proposal` 브랜치에 있다. 병합된 로컬 브랜치 `feature/course-t3b-generator`, `docs/t3b-proposal` 은 아직 지우지 않았다.
+- 브랜치
+  - `dev` = `e3a80b2`(T3b, `origin/dev` 와 같음) + `c9573bf`(T3c-1 요청서 병합, **로컬만, 푸시 안 함**).
+  - **`feature/course-t3c-endless`** 에 T3c-1 구현이 커밋·푸시돼 있다(**PlayMode 실패 중, `dev` 병합 금지**). 다음 작업은 이 브랜치에서 이어간다. 중단 지점과 다음 순서는 2-10.
+  - 병합된 로컬 브랜치 `feature/course-t3b-generator`, `docs/t3b-proposal`, `docs/t3c-proposal` 은 아직 지우지 않았다.
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`: 직선 + 수평 원호 + 종단 곡선, 절대 거리 `S`(double), 원점 이동.
   - 이동: 자유 조향(헤딩), 그립 한계, 경사 속도 보정, 내리막 땅 붙잡기, 가드 부딪힘.
   - 카트라이더식: 드리프트(Shift) → 체인 게이지(최대 2칸) → 체인 액션(Ctrl): 그래플 강화 / 코너 스윙 / 슬링샷.
-  - 씬: 두 씬 발판 양쪽에 보이는 가드 난간(옆 낙사 없음, 틈 낙사는 유지).
+  - 씬: 시제품 씬 발판 양쪽에 보이는 가드 난간(옆 낙사 없음, 틈 낙사는 유지).
   - T3a 절차 노면 (DECISIONS 2026-10-07): `RoadProfile` · `RoadMeshBuilder` · `RoadPiece`.
-  - T3b 시드 생성기 (DECISIONS 2026-10-09): `SeedHash` · `ModuleKind` · `CourseModule` · `CourseTuning`(SO, `.asset` 없음) · `CourseGenerator`. 규칙과 시작값은 COURSE 6-6.
-- **씬 코스는 아직 직선·평지다.** 절차 노면과 생성기는 테스트에서만 쓴다.
-- 테스트: EditMode 152, PlayMode 46(그중 Device 2). 병합 조건 실행은 Device 제외 44건, 약 240초/회.
+  - T3b 시드 생성기 (DECISIONS 2026-10-09): `SeedHash` · `ModuleKind` · `CourseModule` · `CourseTuning` · `CourseGenerator`. 규칙과 시작값은 COURSE 6-6.
+  - T3c-1 (기능 브랜치만): 무한 씬이 생성 코스·절차 노면·앵커 풀로 바뀌었다. 2-10 참고.
+- 테스트 (`dev` 기준): EditMode 152, PlayMode 46(그중 Device 2). 기능 브랜치는 EditMode 162.
 
-## 2. 다음 작업: T3c-1 — 무한 모드를 생성 코스로 (합의 요청서, 승인 대기)
+## 2. 다음 작업: T3c-1 — 무한 모드를 생성 코스로 (승인됨 2026-10-09, 구현 중)
 
 T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스를 달린다. 완료 기준은 시드 20개 봇 1400m 완주(PlayMode)다. 바꿀 것이 많아 **둘로 나누는 것을 제안한다**(2-7 질문 1).
 
 - **T3c-1 (이 요청)**: 무한 씬이 생성기 + 절차 노면 + 앵커 풀로 달린다. 원점 이동을 위치 벡터 기준으로. 시드 2개 봇 1400m 완주.
 - T3c-2 (다음 요청): 시드 20개 완주 테스트와 그 실행 방식(병합 조건 시간 문제, 2-6), 적 회전을 트랙 프레임으로, 장식 배치, `Centerline` 조각 선택 개선(필요하면).
 
-아래는 T3c-1 의 §3-2 요청서다. **구현은 사용자 승인 뒤에 한다.**
+아래는 T3c-1 의 §3-2 요청서다. **사용자가 2026-10-09 에 질문 1~6 을 추천안대로 승인했다.** 구현 진행 상황은 2-10.
 
 ### 2-1. 목표
 
@@ -109,6 +112,50 @@ T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스
 2. `dev` 에서 `feature/course-t3c-endless` 를 만든다.
 3. 구현 → EditMode → 이전 메뉴 실행·씬 저장은 **그때 승인** → PlayMode 2회.
 
+### 2-10. 진행 상황과 다음 순서 (2026-10-09 중단 지점)
+
+**한 것** (`feature/course-t3c-endless`)
+- 새 파일: `Endless/CourseStream.cs`, `Tests/EditMode/CourseStreamTests.cs`(10건).
+- 수정
+  - `EndlessCourse`: 노면 조각 32개 풀, 앵커 풀, 수평 거리 448m 원점 이동, 쉼터 조우, 시드 setter, 스폰 앞 10m 노면.
+  - `GrappleController`: 꺼진 앵커는 후보에서 뺀다(한 줄).
+  - `ChainRushEndlessSceneBuilder`: 메뉴 "Upgrade Endless Scene (T3c)" 추가, `CreateEndlessScene` 도 같은 구성.
+  - `ChainRushEndlessTests`: 틈 근처 조우 거절 z 29 → 40, 그래플 재시작은 그래플 틈이 있는 시드를 찾아서, 장거리 봇은 `TrackFollower` 조향 + 시드 1·2.
+- 씬·에셋: 사용자 승인(2026-10-09 "이전 메뉴 실행 승인")으로 이전 메뉴를 실행하고 저장했다.
+  - `Pooled Sector 0~7` 삭제, 루트 `Grapple Anchors` 아래 앵커 8개, `CourseTuning_Default.asset` 생성.
+  - grep 확인: `Pooled Sector` 0개, `Grapple Anchor N` 8개, 옛 `chunks` 필드 없음.
+- 스폰 위치는 씬 grep 으로 `(0, 1.05, 5)` = S 5 를 확인했다.
+
+**검증 (에디터 6000.3.19f1)**
+- 컴파일: Error 0.
+- EditMode: `testcasecount="162" result="Passed" passed="162" failed="0"` (15:43:40~15:43:45 KST).
+- **PlayMode(Device 제외) 1회차: `testcasecount="44" result="Failed(Child)" passed="38" failed="6"`** (15:45:07~15:48:13).
+  - 무한 4건. 장거리 봇 원문: `seed 1: failed at 3.0 m; player=(0.00, -12.32, 7.97); health=3`. 전투 3건: `Expected: True But was: False`(`BeginEncounter`).
+  - 연출 2건(`Animation_JumpAndGrapple_ChangesArmPoseWithoutMovingMotor`, `Presentation_RunPauseRestart_SynchronizesAudioAndJoints`): `Expected: True But was: False`, `Expected: greater than 0.0f But was: 0.0f`. 같은 원인(러너 추락)으로 보이지만 **확인 못 했다**.
+
+**막힌 곳: 다시 지은 노면 조각의 콜라이더가 비어 있다**
+- 진단: `Unity_RunCommand` 로 Play 모드에 들어가 읽기·실험했다. 씬은 저장하지 않았고, 끝난 뒤 편집 모드·`dirty=False` 를 확인했다.
+  - 씬을 불러온 직후 노면 콜라이더는 정상이다(조각 0: 정점 296, S −10~25).
+  - `game.StartRun()` 뒤에는 **모든 노면 콜라이더의 `sharedMesh` 가 null** 이고, (3, 5, 5) 에서 아래로 쏜 레이가 맞히지 못한다. `StartRun` → `ResetCourse` 가 조각을 숨겼다가 다시 짓기 때문이다.
+- 실험 (같은 조각, Play 모드)
+
+  | 실험 | 결과 |
+  |---|---|
+  | 켜진 상태에서 할당 | 정상 296 |
+  | 꺼진 상태에서 null → 같은 메시 | **null**, 켜도 null |
+  | 꺼진 상태에서 null → 메시 다시 채움 → 할당 | 정상 296 |
+
+- 결론: `RoadPiece.Build`(T3a)는 루트를 맨 마지막(`root.SetActive(true)`)에 켜서, 풀에서 숨겼다 다시 짓는 조각이 콜라이더를 잃는다. T3a 테스트는 다시 짓지 않아 이 경로를 잡지 못했다. 엔진 쪽 이유는 **확인 못 했다**.
+- 제안한 수정(**사용자 승인 대기**, 계획 밖 파일 2개)
+  1. `Tests/PlayMode/ChainRushRoadTests.cs` 에 "지음 → 숨김 → 다시 지음 뒤 노면 콜라이더 메시가 있고 아래 레이가 노면을 맞힌다" 1건을 추가한다. 고치기 전 실패를 먼저 확인한다(§4-4).
+  2. `Runtime/ChainRush/Track/RoadPiece.cs` 의 `Build`: 콜라이더 메시를 붙이기 전에 루트를 켠다(몇 줄).
+
+**다음 순서**
+1. 위 수정 승인을 받는다. 승인 없이 `RoadPiece`·`ChainRushRoadTests` 를 고치지 않는다(§3-3).
+2. 테스트 추가 → 실패 확인 → 수정 → EditMode → PlayMode(Device 제외) 연속 2회.
+3. 그래도 실패하면 원문을 남기고 멈춘다. 장거리 봇의 `RebaseCount ≥ 3` 은 커브 때문에 수평 이동이 짧아 못 미칠 수 있다(계산 안 함). 그러면 이유와 함께 보고하고 단언 변경을 합의한다.
+4. 통과하면 DECISIONS(T3c-1, 위 실패 기록 포함)·COURSE 10절·ARCHITECTURE·이 문서를 갱신하고 병합을 요청한다.
+
 ## 3. 보류된 사용자 결정
 
 | # | 주제 | 상태 | 참고 |
@@ -133,6 +180,7 @@ T3 목표(COURSE 10절): 무한 모드가 시드로 만든 커브·경사 코스
 
 ## 4. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
+- `Unity_RunCommand` 로 Play 모드 진단: `EditorApplication.EnterPlaymode()` 뒤 브리지가 다시 붙으면 다음 호출에서 Play 중인 씬을 읽을 수 있다. 끝나면 `ExitPlaymode()` 로 나오고 `isDirty` 를 확인한다. 명령 코드가 `Unity.AI.Assistant...Editor` 네임스페이스 안에 들어가서 `Mesh` 가 네임스페이스로 해석된다 → `UnityEngine.Mesh` 로 쓴다(2026-10-09).
 - `Unity_RunCommand` 는 `System.Reflection` 네임스페이스를 쓰면 실행을 거부하고(`unauthorized namespaces`), `System.Diagnostics.Stopwatch` 는 참조가 없어 컴파일되지 않는다. 시간은 `Time.realtimeSinceStartupAsDouble`, 새 코드 로드 확인은 공개 타입·메서드 이름 조회나 `Assembly.Location` 기록 시각으로 한다(2026-10-09).
 - 이 머신(`C:/Users/User/Desktop/PCUBE/ProtoHarness`)의 에디터는 **6000.3.19f1** 이다(결정 버전 25f1 아님). 그래서 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`(iOS 발열 설정 3줄 삭제)이 수정으로 보인다. 로컬 환경 차이라 커밋하지 않는다(사용자 2026-10-04). 검증 보고에는 19f1 에서 돌렸다고 적는다.
 - 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 이 머신은 `C:\Users\User\AppData\Local\Temp\` (2026-10-07 확인). 실행마다 따로 보관하려면 끝날 때 복사한다.

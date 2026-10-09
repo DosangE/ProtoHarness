@@ -4,6 +4,7 @@ using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -77,6 +78,35 @@ namespace ProtoHarness.Tests.PlayMode
             player.transform.position = new Vector3(0f, 1f, z);
             controller.enabled = true;
             controller.Move(Vector3.down * 0.2f);
+        }
+
+        // Places the runner on the centerline at s (1 m up, settled onto the road) facing along the track.
+        private void MovePlayerToS(double s)
+        {
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = game.Track.FrameAt(s).Position + Vector3.up;
+            controller.enabled = true;
+            controller.Move(Vector3.down * 0.2f);
+            player.FaceTrack();
+        }
+
+        // Restarts with the first seed from 1 whose streamed course has a grapple gap; returns its start S.
+        private double StartOnSeedWithGrappleGap()
+        {
+            for (int seed = 1; seed <= 50; seed++)
+            {
+                course.Seed = seed;
+                game.StartRun();
+                CourseStream stream = course.Stream;
+                for (int i = 0; i < stream.ModuleCount; i++)
+                {
+                    CourseModule module = stream.Module(i);
+                    if (module.Kind == ModuleKind.GrappleGap) return module.StartS + module.GapStart;
+                }
+            }
+            Assert.Fail("No seed in 1..50 streams a grapple gap within the first stretch.");
+            return 0d;
         }
 
         private IEnumerator Prepare(EnemyDirector.Entrance direction)
@@ -154,7 +184,8 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Combat_GapAndJump_DoesNotRequireAttack()
         {
             game.StartRun();
-            MovePlayer(29f);
+            // 20 m of spawn rest left: too little to finish an encounter on it (T3c, rests only).
+            MovePlayer(40f);
             yield return new WaitForFixedUpdate();
             Assert.That(enemies.BeginEncounter(EnemyDirector.Entrance.Above), Is.False);
             yield return Prepare(EnemyDirector.Entrance.Right);
@@ -168,8 +199,8 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest, Timeout(120000)]
         public IEnumerator Grapple_RestartWhileAttached_ClearsOldChainImmediately()
         {
-            game.StartRun();
-            MovePlayer(28f);
+            double gapStart = StartOnSeedWithGrappleGap();
+            MovePlayerToS(gapStart - 4d);
             yield return new WaitForFixedUpdate();
             player.PrimaryAction();
             yield return new WaitForSeconds(0.25f);
@@ -186,31 +217,44 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(grapple.IsAttached, Is.False);
         }
 
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Endless_LongRun_RecyclesRebasesAndRestartsWithoutGrowingPool()
+        // A steering bot (TrackFollower) on seeds 1 and 2: jumps just before jump gaps, jumps early and grapples
+        // over grapple gaps, and attacks every enemy. COURSE.md T3c-1 completion: 1400 m on both seeds.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator Endless_LongRun_TwoSeedsReach1400mAndRestartWithoutGrowingPool()
         {
             int objects = CountObjects();
+            int pool = course.PoolSize;
             Time.timeScale = 3f;
-            game.StartRun();
-            float deadline = Time.realtimeSinceStartup + 100f;
-            double lastDistance = 0d;
-            while (game.IsRunning && course.Distance < 1400d && Time.realtimeSinceStartup < deadline)
+            foreach (int seed in new[] { 1, 2 })
             {
-                float edge = course.DistanceToEdge();
-                if (player.IsGrounded && edge >= 0f && edge <= 4.5f) player.PrimaryAction();
-                if (!player.IsGrounded && player.transform.position.y > 2.6f && !grapple.IsAttached) grapple.TryAttach();
-                if (enemies.CanAttack) game.Attack();
-                Assert.That(course.Distance, Is.GreaterThanOrEqualTo(lastDistance - 0.01d));
-                lastDistance = course.Distance;
-                yield return null;
+                course.Seed = seed;
+                game.StartRun();
+                var bot = new TrackFollower(game.Track, player);
+                game.SetInputSource(bot);
+                float deadline = Time.realtimeSinceStartup + 100f;
+                double lastDistance = 0d;
+                while (game.IsRunning && course.Distance < 1400d && Time.realtimeSinceStartup < deadline)
+                {
+                    bool gapAhead = course.Stream.TryNextGap(game.Track.Project(player.transform.position).S, out _, out _, out ModuleKind gap);
+                    float edge = course.DistanceToEdge();
+                    float lead = gap == ModuleKind.GrappleGap ? 4.5f : 2f;
+                    if (gapAhead && player.IsGrounded && edge <= lead) player.PrimaryAction();
+                    if (gapAhead && gap == ModuleKind.GrappleGap && !player.IsGrounded && !grapple.IsAttached
+                        && game.Track.Project(player.transform.position).H > 2.6f) grapple.TryAttach();
+                    if (enemies.CanAttack) game.Attack();
+                    Assert.That(course.Distance, Is.GreaterThanOrEqualTo(lastDistance - 0.01d), $"seed {seed}: distance went back");
+                    lastDistance = course.Distance;
+                    yield return null;
+                }
+                Assert.That(game.IsRunning, Is.True, $"seed {seed}: failed at {course.Distance:0.0} m; player={player.transform.position}; health={game.Health}");
+                Assert.That(course.Distance, Is.GreaterThanOrEqualTo(1400d), $"seed {seed}: timed out");
+                Assert.That(course.RebaseCount, Is.GreaterThanOrEqualTo(3), $"seed {seed}: rebases");
+                Assert.That(course.RecycledCount, Is.GreaterThan(16), $"seed {seed}: road pieces reused");
+                Assert.That(game.Hits, Is.GreaterThan(3), $"seed {seed}: rest encounters must actually spawn");
+                Assert.That(course.PoolSize, Is.EqualTo(pool));
+                Assert.That(CountObjects(), Is.EqualTo(objects), $"seed {seed}: object count");
+                Debug.Log($"ChainRush endless seed {seed}: 1400 m, rebases {course.RebaseCount}, road reuses {course.RecycledCount}, hits {game.Hits}, health {game.Health}.");
             }
-            Assert.That(game.IsRunning, Is.True, "Failed at " + course.Distance + "m; player=" + player.transform.position + "; health=" + game.Health);
-            Assert.That(course.Distance, Is.GreaterThanOrEqualTo(1400d));
-            Assert.That(course.RebaseCount, Is.GreaterThanOrEqualTo(3));
-            Assert.That(course.RecycledCount, Is.GreaterThan(16));
-            Assert.That(game.Hits, Is.GreaterThan(3), "Safe-platform encounters must actually spawn.");
-            Assert.That(course.PoolSize, Is.EqualTo(8));
-            Assert.That(CountObjects(), Is.EqualTo(objects));
             game.StartRun();
             Assert.That(course.RebaseCount, Is.Zero);
             Assert.That(course.RecycledCount, Is.Zero);

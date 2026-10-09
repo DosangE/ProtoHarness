@@ -94,6 +94,8 @@ namespace ProtoHarness.ChainRush
             TrackFrame frame = game.Track.Frame(transform.position);
             for (int i = 0; i < anchors.Length; i++)
             {
+                // The endless course switches off pooled anchors it is not using.
+                if (!anchors[i].gameObject.activeInHierarchy) continue;
                 Vector3 offset = anchors[i].position - origin;
                 // "Ahead" and "off to the side" are measured along the track, not world z/x.
                 Vector3 local = frame.InverseTransformDirection(offset);

@@ -3,6 +3,7 @@ using System.IO;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -15,6 +16,9 @@ namespace ProtoHarness.Editor.ChainRush
     {
         public const string EndlessScenePath = "Assets/_Project/Scenes/ChainRushEndless.unity";
         public const string TuningPath = "Assets/_Project/Data/EncounterTuning_Default.asset";
+        public const string CourseTuningPath = "Assets/_Project/Data/CourseTuning_Default.asset";
+        private const string AnchorRootName = "Grapple Anchors";
+        private const int AnchorCount = 8;
 
         [MenuItem("ProtoHarness/Chain Rush/Create Endless Scene %#e")]
         public static void CreateEndlessScene()
@@ -41,44 +45,16 @@ namespace ProtoHarness.Editor.ChainRush
             if (game == null || player == null || follow == null || oldWorld == null)
                 throw new InvalidOperationException("Prototype scene does not match the required source structure.");
             var grapple = player.GetComponent<GrappleController>();
-            Transform source = oldWorld.Find("Sector 02");
-            if (source == null) throw new InvalidOperationException("Source Sector 02 is missing.");
             var world = new GameObject("Endless World").transform;
             var course = world.gameObject.AddComponent<EndlessCourse>();
-            var chunks = new Transform[8];
-            var anchors = new Transform[8];
-            Material city = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Art/Materials/M_City.mat");
             Material frame = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Art/Materials/M_Frame.mat");
             Material mint = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Art/Materials/M_Link.mat");
             Material coral = Material("EnemyNeon", new Color(1f, 0.08f, 0.35f), 1.5f);
             Material metal = Material("ChainMetal", new Color(0.55f, 0.65f, 0.72f), 0f);
             metal.SetFloat("_Metallic", 0.85f);
             metal.SetFloat("_Smoothness", 0.7f);
-            if (city == null || frame == null || mint == null) throw new InvalidOperationException("Source materials are missing.");
-            for (int i = 0; i < chunks.Length; i++)
-            {
-                Transform chunk = new GameObject("Pooled Sector " + i).transform;
-                chunk.SetParent(world, false);
-                chunk.position = Vector3.forward * (-8f + i * 56f);
-                Transform geometry = UnityEngine.Object.Instantiate(source, chunk);
-                geometry.name = "Course Geometry";
-                geometry.localPosition = Vector3.back * 64f;
-                foreach (CourseTarget target in geometry.GetComponentsInChildren<CourseTarget>()) target.gameObject.SetActive(false);
-                Transform anchor = geometry.Find("Link Anchor 2");
-                if (anchor == null) throw new InvalidOperationException("Source link anchor is missing.");
-                anchors[i] = anchor;
-                chunks[i] = chunk;
-                foreach (TextMesh label in geometry.GetComponentsInChildren<TextMesh>()) label.text = (i + 1).ToString("00");
-                for (int side = -1; side <= 1; side += 2)
-                    for (int tower = 0; tower < 3; tower++)
-                    {
-                        float height = 18f + (i * 11 + tower * 7) % 27;
-                        Vector3 position = chunk.position + new Vector3(side * (20f + tower * 9f), height / 2f - 28f, tower * 18f);
-                        Cube("Neon tower", chunk, position, new Vector3(8f, height, 10f), city);
-                        for (int row = 0; row < 5; row++)
-                            Cube("Facade signal", chunk, position + new Vector3(0f, -height / 2f + row * height / 5f + 2f, -5.02f), new Vector3(6f, 0.12f, 0.05f), side < 0 ? coral : mint);
-                    }
-            }
+            if (frame == null || mint == null) throw new InvalidOperationException("Source materials are missing.");
+            SetUpGeneratedCourse(scene, course, game, player, follow, grapple);
             oldWorld.gameObject.SetActive(false);
             var director = game.gameObject.AddComponent<EnemyDirector>();
             var enemy = new GameObject("Interceptor Drone").transform;
@@ -97,13 +73,10 @@ namespace ProtoHarness.Editor.ChainRush
             Transform hand = (Transform)grappleData.FindProperty("ropeOrigin").objectReferenceValue;
             ChainVisual attackChain = CreateChain("Attack Chain", game, hand, metal, coral);
             ChainVisual grappleChain = CreateChain("Grapple Chain", game, hand, metal, mint);
-            Assign(course, "game", game, "player", player, "followCamera", follow);
-            AssignArray(course, "chunks", chunks);
             Assign(director, "game", game, "player", player, "course", course, "tuning", tuning, "enemy", enemy, "warning", warning, "impact", impact, "chain", attackChain);
             Assign(game, "endlessCourse", course, "enemies", director);
             AssignArray(game, "targets", Array.Empty<CourseTarget>());
             Assign(grapple, "chainVisual", grappleChain);
-            AssignArray(grapple, "anchors", anchors);
             var gameData = new SerializedObject(game);
             gameData.FindProperty("endlessMode").boolValue = true;
             gameData.ApplyModifiedPropertiesWithoutUndo();
@@ -112,7 +85,79 @@ namespace ProtoHarness.Editor.ChainRush
             impact.gameObject.SetActive(false);
             if (!EditorSceneManager.SaveScene(scene, EndlessScenePath)) throw new IOException("Could not save endless scene.");
             AssetDatabase.SaveAssets();
-            Debug.Log("ChainRush: endless scene saved; 8 pooled sectors, 3 enemy entrances, 1.2s attack window.");
+            Debug.Log("ChainRush: endless scene saved; generated course, 8 pooled anchors, 3 enemy entrances, 1.2s attack window.");
+        }
+
+        // T3c: moves an existing endless scene from the pooled 56 m sectors to the generated course. Deletes the
+        // Pooled Sector objects (decks, towers, anchors: scene objects, not assets), creates the course tuning
+        // asset if it is missing, adds the anchor pool and wires EndlessCourse and the grapple, then saves.
+        [MenuItem("ProtoHarness/Chain Rush/Upgrade Endless Scene (T3c)")]
+        public static void UpgradeEndlessScene()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before editing the scene.");
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            var scene = EditorSceneManager.OpenScene(EndlessScenePath);
+            ChainRushGame game = null;
+            RunnerMotor player = null;
+            FollowCamera follow = null;
+            EndlessCourse course = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (root.TryGetComponent(out ChainRushGame g)) game = g;
+                if (root.TryGetComponent(out RunnerMotor p)) player = p;
+                if (root.TryGetComponent(out FollowCamera f)) follow = f;
+                if (root.TryGetComponent(out EndlessCourse c)) course = c;
+                if (root.name == AnchorRootName) throw new InvalidOperationException("The endless scene already has the generated course.");
+            }
+            if (game == null || player == null || follow == null || course == null)
+                throw new InvalidOperationException("Endless scene does not match the required structure.");
+            int removed = 0;
+            for (int i = course.transform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = course.transform.GetChild(i);
+                if (!child.name.StartsWith("Pooled Sector ", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Unexpected child under Endless World: " + child.name);
+                UnityEngine.Object.DestroyImmediate(child.gameObject);
+                removed++;
+            }
+            SetUpGeneratedCourse(scene, course, game, player, follow, player.GetComponent<GrappleController>());
+            if (!EditorSceneManager.SaveScene(scene)) throw new IOException("Could not save the upgraded endless scene.");
+            AssetDatabase.SaveAssets();
+            Debug.Log("ChainRush: endless scene upgraded to the generated course; removed " + removed + " pooled sectors, added " + AnchorCount + " anchors.");
+        }
+
+        // Course tuning, road materials and an inactive anchor pool (a root of its own, so the presentation
+        // menus that walk Endless World's children never see it), wired into EndlessCourse and the grapple.
+        private static void SetUpGeneratedCourse(UnityEngine.SceneManagement.Scene scene, EndlessCourse course, ChainRushGame game,
+            RunnerMotor player, FollowCamera follow, GrappleController grapple)
+        {
+            if (grapple == null) throw new InvalidOperationException("The runner has no GrappleController.");
+            var tuning = AssetDatabase.LoadAssetAtPath<CourseTuning>(CourseTuningPath);
+            if (tuning == null)
+            {
+                tuning = ScriptableObject.CreateInstance<CourseTuning>();
+                AssetDatabase.CreateAsset(tuning, CourseTuningPath);
+            }
+            // The endless decks' floor (ChainRushPresentationBuilder) and the guard materials (AddGuards).
+            Material road = Material("RoofPanels", new Color(0.105f, 0.15f, 0.21f), 0f);
+            Material rail = Material("Frame", new Color(0.035f, 0.09f, 0.12f), 0f);
+            Material light = Material("Link", new Color(0.25f, 0.95f, 0.72f), 1.7f);
+            var root = new GameObject(AnchorRootName).transform;
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(root.gameObject, scene);
+            var anchors = new Transform[AnchorCount];
+            for (int i = 0; i < anchors.Length; i++)
+            {
+                var anchor = new GameObject("Grapple Anchor " + i).transform;
+                anchor.SetParent(root, false);
+                Primitive("Anchor core", PrimitiveType.Sphere, anchor, Vector3.zero, Vector3.one * 0.8f, light);
+                Ring("Anchor halo", anchor, Vector3.zero, 1.4f, 0.075f, light);
+                anchor.gameObject.SetActive(false);
+                anchors[i] = anchor;
+            }
+            Assign(course, "game", game, "player", player, "followCamera", follow, "tuning", tuning,
+                "roadMaterial", road, "railMaterial", rail, "lightMaterial", light);
+            AssignArray(course, "anchors", anchors);
+            AssignArray(grapple, "anchors", anchors);
         }
 
         private static ChainVisual CreateChain(string name, ChainRushGame game, Transform hand, Material metal, Material signal)

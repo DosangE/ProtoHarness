@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__UnityMCP__read_console",
+      "mcp__unity-mcp__Unity_GetConsoleLogs",
+      "Bash(tasklist)",
+      "Bash(tasklist *)",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__tabs_context",
+      "mcp__UnityMCP__find_gameobjects"
+    ]
+  }
+}

@@ -14,7 +14,10 @@ namespace ProtoHarness.Net
     // what was predicted. Equal: nothing happens. Different: the game goes back to the server's state and the
     // remembered controls are run again up to the present tick (a correction), so the server's word wins and
     // the controls typed since are not lost. When the server's run ends (OnServerEnd), the client plays the same
-    // ending from the server's state before it, and predicts nothing after it. Nothing here knows about the network.
+    // ending from the server's state before it, and predicts nothing after it. When the client's own run ends first and
+    // the server's state for that tick or a later one arrives, the server's run was still going there: the game goes back
+    // to that state, runs the remembered controls again, and then runs on live controls until it is as far ahead of the
+    // server as it was when its run ended (a catch-up). Nothing here knows about the network.
     public sealed class ClientPredictor : IInputSource
     {
         // How many ticks the client may run ahead of the newest server state it has compared.
@@ -22,6 +25,8 @@ namespace ProtoHarness.Net
 
         private readonly ChainRushGame game;
         private readonly IInputSource live;
+        // The last tick a catch-up may run (the caller's last tick; int.MaxValue: no limit).
+        private readonly int catchUpLimit;
         private readonly TickInput[] inputs = new TickInput[Window];
         private readonly int[] inputTicks = new int[Window];
         private readonly byte[][] states = new byte[Window][];
@@ -33,10 +38,14 @@ namespace ProtoHarness.Net
         private int endReplayTick;
         private TickInput endReplayInput;
 
-        public ClientPredictor(ChainRushGame game, IInputSource live)
+        // catchUpLimit: the last tick a catch-up may run. The caller that stops sending controls after some tick passes that
+        // tick, so a catch-up never runs past it (RaceClient's target).
+        public ClientPredictor(ChainRushGame game, IInputSource live, int catchUpLimit = int.MaxValue)
         {
             this.game = game != null ? game : throw new ArgumentNullException(nameof(game));
             this.live = live ?? throw new ArgumentNullException(nameof(live));
+            if (catchUpLimit < 1) throw new ArgumentOutOfRangeException(nameof(catchUpLimit), catchUpLimit, "ClientPredictor: a catch-up limit is a tick, 1 or more.");
+            this.catchUpLimit = catchUpLimit;
             // The state after each tick is remembered by the game's own tick-completed event, for live ticks and replays alike.
             game.TickCompleted += OnTickCompleted;
             Clear();
@@ -72,6 +81,15 @@ namespace ProtoHarness.Net
         // lifts it.
         public bool Faulted { get; private set; }
         public string FaultReason { get; private set; }
+        // The tick the client's run ended on (a fall or a finish, seen after the tick that ended it, whichever way that tick
+        // ran), and how far ahead of the newest compared server state the client then was (LastInputTick - LastComparedTick).
+        // Both -1 while the run is going: a correction that puts the run back to going forgets them.
+        public int ClientEndTick { get; private set; }
+        public int ClientEndLead { get; private set; }
+        // Catch-ups that ran at least one tick, and the live ticks they ran in all. Not part of ReplayedTicks: those ticks
+        // are new controls, sent to the server like any live tick.
+        public int CatchUps { get; private set; }
+        public int CaughtUpTicks { get; private set; }
 
         public void Poll() => live.Poll();
 
@@ -94,6 +112,10 @@ namespace ProtoHarness.Net
             EndReason = default;
             Faulted = false;
             FaultReason = null;
+            ClientEndTick = -1;
+            ClientEndLead = -1;
+            CatchUps = 0;
+            CaughtUpTicks = 0;
             Corrections = 0;
             StatesCompared = 0;
             ReplayedTicks = 0;
@@ -134,16 +156,32 @@ namespace ProtoHarness.Net
         }
 
         // Remembers the state the game is in after the tick that just ran. TickCompleted calls it after every tick; call it
-        // once yourself after StartRun, for tick 0. A run that has just ended has no state to remember; the server's states
-        // stop there too.
+        // once yourself after StartRun, for tick 0. A run that has just ended has no state to remember (the server's states
+        // stop there too, if its run ended there as well); the first call after a fall or a finish remembers the tick instead,
+        // with how far ahead of the server the client was (ClientEndTick, ClientEndLead). A paused run is not an ended one.
         public void AfterTick()
         {
-            if (!game.IsRunning) return;
+            if (!game.IsRunning)
+            {
+                if ((game.HasFailed || game.HasFinished) && ClientEndTick != game.Tick)
+                {
+                    ClientEndTick = game.Tick;
+                    ClientEndLead = lastInputTick - ackedTick;
+                }
+                return;
+            }
             Store(game.Tick, SimSnapshotCodec.Encode(game.CaptureSnapshot()));
         }
 
         // The server's state after tick N (encoded). Call it between ticks, never from inside StepTick.
         // Returns true when it differed from the prediction and the game was corrected.
+        // If the client's run has ended on tick E and the state is for E or later (even past the client's tick), the
+        // server's run was still going on that tick: had it ended there too it would have sent its end instead of a state.
+        // That is always a correction: the game goes back to the state, the remembered controls are run again up to the
+        // last tick that has them, and then live controls are run (and sent, InputConsumed) until the client is
+        // ClientEndLead ticks past the state, as far ahead as when its run ended, but never past the catch-up limit. A run
+        // that ends again during either stops there and is remembered again. Such a correction is not in LargestJolt (an
+        // ended run has no position to measure from).
         public bool OnServerState(byte[] encoded)
         {
             if (Faulted) throw FaultedError("a server state arrived");
@@ -151,10 +189,12 @@ namespace ProtoHarness.Net
             int serverTick = SimSnapshotCodec.TickOf(encoded);
             if (ServerEnded)
                 throw new InvalidOperationException($"ClientPredictor: the server's state for tick {serverTick} arrived after its run ended at tick {EndTick}.");
-            if (serverTick > game.Tick)
+            bool pastClientEnd = ClientEndTick >= 0 && serverTick >= ClientEndTick;
+            if (serverTick > game.Tick && !pastClientEnd)
                 throw new InvalidOperationException($"ClientPredictor: the server's state is for tick {serverTick} but the client is at tick {game.Tick}.");
             if (serverTick < ackedTick)
                 throw new InvalidOperationException($"ClientPredictor: the server's state for tick {serverTick} arrived after tick {ackedTick} was compared.");
+            if (pastClientEnd) return TakeStatePastClientEnd(serverTick, encoded);
             // Between ticks, so the present state can be taken now if AfterTick was not called for it.
             if (serverTick == game.Tick && stateTicks[serverTick % Window] != serverTick)
                 Store(serverTick, SimSnapshotCodec.Encode(game.CaptureSnapshot()));
@@ -171,8 +211,48 @@ namespace ProtoHarness.Net
             // Where the runner is drawn now, to measure how far a correction moves it.
             Vector3 before = game.IsRunning ? game.CaptureSnapshot().Position : default;
             game.RestoreSnapshot(SimSnapshotCodec.Decode(encoded));
+            // The run is going again; an end the replay reaches is remembered afresh.
+            ForgetClientEnd();
             Store(serverTick, encoded);
-            int target = lastInputTick;
+            int replayed = ReplayTo(lastInputTick);
+            if (game.IsRunning)
+            {
+                float jolt = Vector3.Distance(before, game.CaptureSnapshot().Position);
+                if (jolt > LargestJolt) LargestJolt = jolt;
+            }
+            ReplayedTicks += replayed;
+            if (replayed > LongestReplay) LongestReplay = replayed;
+            ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
+            return true;
+        }
+
+        // The server's state for a tick at or past the one the client's run ended on (OnServerState checked the order).
+        private bool TakeStatePastClientEnd(int serverTick, byte[] encoded)
+        {
+            if (game.IsRunning || game.Tick != ClientEndTick || !(game.HasFailed || game.HasFinished))
+                throw new InvalidOperationException($"ClientPredictor: the client's run was seen to end at tick {ClientEndTick}, but the game is at tick {game.Tick} (running {game.IsRunning}, failed {game.HasFailed}, finished {game.HasFinished}).");
+            int lead = ClientEndLead;
+            if (lead < 0)
+                throw new InvalidOperationException($"ClientPredictor: the client's run ended at tick {ClientEndTick} with a lead of {lead} ticks over the server's states.");
+            StatesCompared++;
+            ackedTick = serverTick;
+            if (FirstMismatchTick < 0) FirstMismatchTick = serverTick;
+            Corrections++;
+            long start = Stopwatch.GetTimestamp();
+            game.RestoreSnapshot(SimSnapshotCodec.Decode(encoded));
+            ForgetClientEnd();
+            Store(serverTick, encoded);
+            int replayed = ReplayTo(lastInputTick);
+            ReplayedTicks += replayed;
+            if (replayed > LongestReplay) LongestReplay = replayed;
+            ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
+            CatchUp(serverTick + lead);
+            return true;
+        }
+
+        // Runs the remembered controls up to `target`, or until the run ends.
+        private int ReplayTo(int target)
+        {
             int replayed = 0;
             replaying = true;
             try
@@ -187,15 +267,31 @@ namespace ProtoHarness.Net
             {
                 replaying = false;
             }
-            if (game.IsRunning)
+            return replayed;
+        }
+
+        // Runs live ticks (controls taken, remembered and sent, as on any live tick) up to `target` but never past the
+        // catch-up limit, or until the run ends. Only ticks past the last one that has controls: a tick whose controls were
+        // sent once is never sent again.
+        private void CatchUp(int target)
+        {
+            int until = Math.Min(target, catchUpLimit);
+            if (game.IsRunning && game.Tick < lastInputTick)
+                throw new InvalidOperationException($"ClientPredictor: a catch-up from tick {game.Tick} would take new controls for ticks up to {lastInputTick}, which were already sent.");
+            int ran = 0;
+            while (game.IsRunning && game.Tick < until)
             {
-                float jolt = Vector3.Distance(before, game.CaptureSnapshot().Position);
-                if (jolt > LargestJolt) LargestJolt = jolt;
+                game.StepTick(this);
+                ran++;
             }
-            ReplayedTicks += replayed;
-            if (replayed > LongestReplay) LongestReplay = replayed;
-            ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
-            return true;
+            CaughtUpTicks += ran;
+            if (ran > 0) CatchUps++;
+        }
+
+        private void ForgetClientEnd()
+        {
+            ClientEndTick = -1;
+            ClientEndLead = -1;
         }
 
         // The server's word that its run ended on tick `tick`, for `reason`, with the controls it ran that tick on. The

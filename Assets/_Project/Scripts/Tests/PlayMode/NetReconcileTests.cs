@@ -584,6 +584,185 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(predictor.FaultReason, Is.Null);
         }
 
+        // ---- the client's run ended first ---------------------------------------------------------------
+
+        // The mirror of the replay test above: the client let go of drift on the tick F its run finishes (FindClientOnlyFinish),
+        // the server missed F's controls, ran F on the tick before's (drift still held) and stayed short of the line. The
+        // server's state for F reaches the client after its own run has finished there: the server's run was still going, so
+        // the state is a correction. The client goes back to it, catches up on live controls (sent like any other), and ends
+        // where the server's run ends, on the same tick, for the same reason, at the same position, with no other correction.
+        // The server is given the client's controls after F as if they arrived in time.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator ClientEnd_WhenOnlyTheClientsRunFinished_GoesBackToTheServersStateAndEndsWhereTheServersRunDoes()
+        {
+            yield return Load();
+            InputLog log = RecordBotToFinish(RaceTicksLimit);
+            ClientOnlyFinish found = FindClientOnlyFinish(log, game.Tick, false);
+            int finish = found.FinishTick;
+            byte[][] server = RunServerToEnd(found.ClientLog, RaceTicksLimit, found.ServerMisses, out ServerEnd end);
+            var serverEnded = EndedAt();
+            Assert.That(end.Reason, Is.EqualTo(RaceWire.EndReason.Finished), "The server's run must finish too, later.");
+            Assert.That(end.Tick, Is.GreaterThan(finish), $"The server missed the release on tick {finish} and must still have been running on it.");
+            Assert.That(server.Length, Is.EqualTo(end.Tick), "One state for every tick before the server's end, F's among them.");
+
+            foreach (int latency in new[] { 5, 15, 40 })
+            {
+                var sent = new List<int>();
+                ClientPredictor predictor = StartClient(found.ClientLog, int.MaxValue, sent);
+                bool tookFinishState = false;
+                bool corrected = StepClientToEnd(predictor, server, end, latency, tick =>
+                {
+                    if (tick == finish - 1)
+                    {
+                        Assert.That((game.HasFinished, game.Tick), Is.EqualTo((true, finish)), $"latency {latency}: precondition: the client's own run finishes on tick {finish}.");
+                        // At the tick that finished it the client had sent `latency` + 1 ticks past the newest state compared:
+                        // a step runs its tick before that step's state arrives.
+                        Assert.That((predictor.ClientEndTick, predictor.ClientEndLead), Is.EqualTo((finish, latency + 1)), $"latency {latency}: the client's end and its lead then are remembered.");
+                        Assert.That(predictor.Corrections, Is.EqualTo(0), $"latency {latency}: every state before F agrees.");
+                    }
+                    else if (tick == finish)
+                    {
+                        tookFinishState = true;
+                        int caughtUpTo = Math.Min(end.Tick, finish + latency + 1);
+                        Assert.That(predictor.Corrections, Is.EqualTo(1), $"latency {latency}: the server's state for F is a correction.");
+                        Assert.That(predictor.FirstMismatchTick, Is.EqualTo(finish), $"latency {latency}");
+                        Assert.That(predictor.LastComparedTick, Is.EqualTo(finish), $"latency {latency}");
+                        Assert.That(predictor.ReplayedTicks, Is.EqualTo(0), $"latency {latency}: no controls past F were taken, so nothing is replayed.");
+                        Assert.That((predictor.CatchUps, predictor.CaughtUpTicks), Is.EqualTo((1, caughtUpTo - finish)), $"latency {latency}: the client catches up on live controls until it is as far ahead as when its run ended, or its run ends.");
+                        Assert.That(game.Tick, Is.EqualTo(caughtUpTo), $"latency {latency}");
+                        Assert.That(sent, Is.EqualTo(TickRange(1, game.Tick)), $"latency {latency}: every tick's controls are sent once and in order, the caught-up ones too.");
+                    }
+                });
+                Assert.That(tookFinishState, Is.True, $"latency {latency}: the server's state for F was never delivered.");
+                Assert.That(corrected, Is.False, $"latency {latency}: from the server's state the client runs on as the server did, so the end changes nothing.");
+                Assert.That(predictor.Corrections, Is.EqualTo(1), $"latency {latency}");
+                Assert.That(predictor.Faulted, Is.False, $"latency {latency}");
+                Assert.That((predictor.ServerEnded, predictor.EndTick, predictor.EndReason), Is.EqualTo((true, end.Tick, end.Reason)), $"latency {latency}");
+                Assert.That(predictor.StatesCompared, Is.EqualTo(end.Tick), $"latency {latency}: every state the server sent (ticks 0..{end.Tick - 1}) is taken, F's too.");
+                Assert.That(EndedAt(), Is.EqualTo(serverEnded), $"latency {latency}: the client's run must end exactly where the server's did (tick, reason, position, progress).");
+                Debug.Log($"Net client-only finish: {found.Found}; the server missed tick {finish} and finished on tick {end.Tick}; latency {latency} ticks: the client went back to the server's state {finish} and caught up {predictor.CaughtUpTicks} ticks, ending on tick {game.Tick}.");
+            }
+        }
+
+        // A correction's replay can be what finishes the client's run, with controls left past the tick it finishes on. The
+        // client held drift from tick D = F - k and let go on F (FindClientOnlyFinish with the first drift tick missed): its
+        // own run is still going after F. The server missed D (no drift there) and F (drift held): its state for D corrects
+        // the client after the client has run past F, and the replay, from the server's state on the client's own later
+        // controls, finishes on F, short of the last tick with controls. Then the server's state for F arrives: the server's
+        // run was still going there, so the client goes back to it and runs its remembered controls after F again (they
+        // were sent, so they are not taken anew), and ends where the server's run ends.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator ClientEnd_WhenACorrectionsReplayFinishedBeforeItsLastControls_GoesBackToTheServersStateAndReplaysTheRest()
+        {
+            yield return Load();
+            InputLog log = RecordBotToFinish(RaceTicksLimit);
+            ClientOnlyFinish found = FindClientOnlyFinish(log, game.Tick, true);
+            int finish = found.FinishTick;
+            int drift = finish - found.DriftTicks;
+            // More than FinishTailMax: the state for D arrives once the client has run its own tick F + 1.
+            const int latency = FinishTailMax + 3;
+            Assert.That(latency, Is.GreaterThan(found.DriftTicks), "precondition: the state for the first drift tick must arrive after the client has run past F.");
+            byte[][] server = RunServerToEnd(found.ClientLog, RaceTicksLimit, found.ServerMisses, out ServerEnd end);
+            var serverEnded = EndedAt();
+            Assert.That(end.Reason, Is.EqualTo(RaceWire.EndReason.Finished), "The server's run must finish too, later.");
+            Assert.That(end.Tick, Is.GreaterThan(finish), $"The server missed the release on tick {finish} and must still have been running on it.");
+
+            var sent = new List<int>();
+            ClientPredictor predictor = StartClient(found.ClientLog, int.MaxValue, sent);
+            int lastInput = -1;
+            int lead = -1;
+            int replayedBefore = -1;
+            bool tookFinishState = false;
+            bool corrected = StepClientToEnd(predictor, server, end, latency, tick =>
+            {
+                if (tick < drift)
+                {
+                    Assert.That(predictor.Corrections, Is.EqualTo(0), $"tick {tick}: the server's states before the missed drift tick agree.");
+                }
+                else if (tick == drift)
+                {
+                    lastInput = predictor.LastInputTick;
+                    lead = predictor.ClientEndLead;
+                    Assert.That(predictor.Corrections, Is.EqualTo(1), $"The server's state for the missed drift tick {drift} corrects the client.");
+                    Assert.That(predictor.FirstMismatchTick, Is.EqualTo(drift));
+                    Assert.That((game.HasFinished, game.Tick), Is.EqualTo((true, finish)), $"The replay from the server's state {drift}, on the client's own later controls, must finish on tick {finish}.");
+                    Assert.That(lastInput, Is.GreaterThan(finish), "precondition: the client had controls past F when its replay finished there.");
+                    Assert.That((predictor.ClientEndTick, lead), Is.EqualTo((finish, lastInput - drift)), "The replay's end and the lead then are remembered.");
+                    Assert.That(predictor.ReplayedTicks, Is.EqualTo(finish - drift), "The replay stops on the tick the run ends.");
+                    replayedBefore = predictor.ReplayedTicks;
+                }
+                else if (tick < finish)
+                {
+                    Assert.That(predictor.Corrections, Is.EqualTo(1), $"tick {tick}: after the replay the client is on the server's run.");
+                }
+                else if (tick == finish)
+                {
+                    tookFinishState = true;
+                    // The remembered controls run up to the last one, or until the run ends; live ones only after that.
+                    int replayedTo = Math.Min(end.Tick, lastInput);
+                    int caughtUpTo = Math.Max(replayedTo, Math.Min(end.Tick, finish + lead));
+                    Assert.That(predictor.Corrections, Is.EqualTo(2), $"The server's state for F, past the client's end, is the second correction.");
+                    Assert.That(predictor.LastComparedTick, Is.EqualTo(finish));
+                    Assert.That(predictor.ReplayedTicks - replayedBefore, Is.EqualTo(replayedTo - finish), "The remembered controls after F are run again.");
+                    Assert.That(game.Tick, Is.EqualTo(caughtUpTo));
+                    Assert.That(predictor.CaughtUpTicks, Is.EqualTo(caughtUpTo - replayedTo), "Only ticks past the last remembered controls are caught up.");
+                    Assert.That(sent, Is.EqualTo(TickRange(1, Math.Max(lastInput, game.Tick))), "No tick's controls are sent twice.");
+                }
+            });
+            Assert.That(tookFinishState, Is.True, "The server's state for F was never delivered.");
+            Assert.That(corrected, Is.False, "From the server's state the client runs on as the server did, so the end changes nothing.");
+            Assert.That(predictor.Corrections, Is.EqualTo(2));
+            Assert.That(predictor.Faulted, Is.False);
+            Assert.That((predictor.ServerEnded, predictor.EndTick, predictor.EndReason), Is.EqualTo((true, end.Tick, end.Reason)));
+            Assert.That(predictor.StatesCompared, Is.EqualTo(end.Tick));
+            Assert.That(EndedAt(), Is.EqualTo(serverEnded), "The client's run must end exactly where the server's did (tick, reason, position, progress).");
+            Debug.Log($"Net replay-ended client: {found.Found}; the server missed ticks {drift} and {finish} and finished on tick {end.Tick}; latency {latency} ticks: the state for {drift} replayed the client to a finish on {finish} with controls up to {lastInput}, the state for {finish} put it back on the server's run, ending on tick {game.Tick}.");
+        }
+
+        // The catch-up never runs past the limit it was given (RaceClient's target: controls past it are not sent). With the
+        // limit on F itself the client, after the server's state for F, stands on that state exactly, though it was
+        // `latency` + 1 ticks ahead when its run ended, and takes no controls past F until its next live tick.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator ClientEnd_CatchingUpAfterTheClientsOwnFinish_StopsAtTheCatchUpLimit()
+        {
+            yield return Load();
+            InputLog log = RecordBotToFinish(RaceTicksLimit);
+            ClientOnlyFinish found = FindClientOnlyFinish(log, game.Tick, false);
+            int finish = found.FinishTick;
+            const int latency = 15;
+            byte[][] server = RunServerToEnd(found.ClientLog, RaceTicksLimit, found.ServerMisses, out ServerEnd end);
+            var serverEnded = EndedAt();
+            Assert.That(end.Tick, Is.GreaterThan(finish), $"The server missed the release on tick {finish} and must still have been running on it.");
+
+            var sent = new List<int>();
+            ClientPredictor predictor = StartClient(found.ClientLog, finish, sent);
+            bool tookFinishState = false;
+            bool corrected = StepClientToEnd(predictor, server, end, latency, tick =>
+            {
+                if (tick == finish - 1)
+                {
+                    Assert.That((predictor.ClientEndTick, predictor.ClientEndLead), Is.EqualTo((finish, latency + 1)), "precondition: without the limit the client would catch up past F.");
+                }
+                else if (tick == finish)
+                {
+                    tookFinishState = true;
+                    Assert.That(predictor.Corrections, Is.EqualTo(1));
+                    Assert.That((game.Tick, game.IsRunning), Is.EqualTo((finish, true)), "The catch-up stops at the limit: the client stands on the server's state for F, running.");
+                    Assert.That(SimSnapshotCodec.SameState(SimSnapshotCodec.Encode(game.CaptureSnapshot()), server[finish]), Is.True, "The client's state is the server's, bit for bit.");
+                    Assert.That((predictor.CatchUps, predictor.CaughtUpTicks), Is.EqualTo((0, 0)));
+                    Assert.That(predictor.ClientEndTick, Is.EqualTo(-1), "The run is going again; its end is forgotten.");
+                    Assert.That(predictor.LastInputTick, Is.EqualTo(finish));
+                    Assert.That(sent, Is.EqualTo(TickRange(1, finish)), "No controls past the limit are taken by the catch-up.");
+                }
+            });
+            Assert.That(tookFinishState, Is.True, "The server's state for F was never delivered.");
+            Assert.That(corrected, Is.False, "From the server's state the client's next live ticks run as the server's did.");
+            Assert.That(predictor.Corrections, Is.EqualTo(1));
+            Assert.That(predictor.CaughtUpTicks, Is.EqualTo(0), "Live ticks after a stopped catch-up are not catch-up ticks.");
+            Assert.That(EndedAt(), Is.EqualTo(serverEnded), "The client's run must end exactly where the server's did (tick, reason, position, progress).");
+            Debug.Log($"Net catch-up limit: {found.Found}; latency {latency} ticks: the catch-up stopped at the limit {finish}; the client then finished on tick {game.Tick} with the server.");
+        }
+
         // ---- helpers -------------------------------------------------------------------------------
 
         private IEnumerator Load()
@@ -766,19 +945,7 @@ namespace ProtoHarness.Tests.PlayMode
             var watch = System.Diagnostics.Stopwatch.StartNew();
             TickInput[] candidates = EndCandidates();
             var tried = new System.Text.StringBuilder();
-
-            // The recorded run's state on each lead's start tick.
-            var starts = new byte[FinishVariantLeads.Length][];
-            var replay = new InputReplay(log);
-            game.SetInputSource(replay);
-            game.StartRun();
-            while (game.IsRunning && game.Tick < RaceTicksLimit)
-            {
-                for (int i = 0; i < FinishVariantLeads.Length; i++)
-                    if (game.Tick == recordedFinish - FinishVariantLeads[i]) starts[i] = SimSnapshotCodec.Encode(game.CaptureSnapshot());
-                game.StepTick(replay);
-            }
-            Assert.That((game.HasFinished, game.Tick), Is.EqualTo((true, recordedFinish)), "Replaying the recorded log must finish where the recording did.");
+            byte[][] starts = LeadStarts(log, recordedFinish);
 
             int variants = 0;
             for (int i = 0; i < FinishVariantLeads.Length; i++)
@@ -832,6 +999,203 @@ namespace ProtoHarness.Tests.PlayMode
             endTick = -1;
             found = null;
             return null;
+        }
+
+        // The recorded run's state on each lead's start tick (recordedFinish - lead, for FinishVariantLeads in order).
+        private byte[][] LeadStarts(InputLog log, int recordedFinish)
+        {
+            var starts = new byte[FinishVariantLeads.Length][];
+            var replay = new InputReplay(log);
+            game.SetInputSource(replay);
+            game.StartRun();
+            while (game.IsRunning && game.Tick < RaceTicksLimit)
+            {
+                for (int i = 0; i < FinishVariantLeads.Length; i++)
+                    if (game.Tick == recordedFinish - FinishVariantLeads[i]) starts[i] = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+                game.StepTick(replay);
+            }
+            Assert.That((game.HasFinished, game.Tick), Is.EqualTo((true, recordedFinish)), "Replaying the recorded log must finish where the recording did.");
+            return starts;
+        }
+
+        // The most ticks FindClientOnlyFinish holds drift on before the finish (k = 0 .. FinishTailMax).
+        private const int FinishTailMax = 12;
+
+        // A run whose finish only the client sees, found by FindClientOnlyFinish.
+        private struct ClientOnlyFinish
+        {
+            // The client's controls from tick 1, long enough to run past the finish (idle past the variant's log).
+            public InputLog ClientLog;
+            // F: the client's run, from the server's state before F, finishes on F; the server's run does not.
+            public int FinishTick;
+            // k: the client held drift on ticks F - k .. F - 1 and let go on F.
+            public int DriftTicks;
+            // The ticks whose controls the server misses (and runs on the controls before): F, and F - k when asked for.
+            public int[] ServerMisses;
+            public string Found;
+        }
+
+        // A finish only the client sees: the mirror of FindFinishReplayCase. The client held drift for the last k ticks
+        // before tick F and let go on F; its run crosses the line on F. The server missed F's controls and ran F on the tick
+        // before's, so it held drift one tick longer (drift on the ground lowers the run target by a tenth, the speed follows
+        // by at most 0.6 m/s a tick, about 0.012 m of travel a tick) and stays short of the line on F. Holding drift k ticks
+        // moves where the runner is on F by about 0.024 m a tick, so trying k = 0 .. FinishTailMax on each variant of
+        // FindFinishReplayCase (same leads and drift flips) moves the margin across the window a missed release opens.
+        // With missFirstDriftTick, the server also missed the first drift tick F - k (k >= 2, so the server's F - 1 is still
+        // the client's): its state for F - k differs from the prediction, and the client, corrected from it with its own
+        // later controls, must finish on F, while its own run (drift from F - k) must still be going after F. That is a
+        // correction whose replay ends on F while the client has controls past F.
+        // Deterministic: leads, then drift flips, then k in order; the first fit is taken. Fails with every case tried when
+        // none of the FinishVariantCount variants fits.
+        private ClientOnlyFinish FindClientOnlyFinish(InputLog log, int recordedFinish, bool missFirstDriftTick)
+        {
+            Time.timeScale = 0f;
+            // Measured for the log line only; never part of the judgement.
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var tried = new System.Text.StringBuilder();
+            byte[][] starts = LeadStarts(log, recordedFinish);
+            int firstTail = missFirstDriftTick ? 2 : 0;
+
+            int variants = 0;
+            for (int i = 0; i < FinishVariantLeads.Length; i++)
+            {
+                int lead = FinishVariantLeads[i];
+                int startTick = recordedFinish - lead;
+                Assert.That(starts[i], Is.Not.Null, $"The recorded run has no tick {startTick} ({lead} before its finish at {recordedFinish}).");
+                // j = 0 is the recorded run itself, the same for every lead.
+                for (int j = i == 0 ? 0 : 1; j <= FinishVariantMaxDrift; j++)
+                {
+                    variants++;
+                    string name = $"{lead}+{j}";
+                    var variant = new LogAtTick(game, j == 0 ? log : WithDriftFlipped(log, startTick + 1, j));
+                    game.RestoreSnapshot(SimSnapshotCodec.Decode(starts[i]));
+                    while (game.IsRunning && game.Tick < RaceTicksLimit) game.StepTick(variant);
+                    if (!game.HasFinished)
+                    {
+                        tried.Append($" {name}:{(game.HasFailed ? "fell" : "ran")}@{game.Tick}");
+                        continue;
+                    }
+                    int finish = game.Tick;
+                    int first = finish - FinishTailMax - 1;
+                    Assert.That(first, Is.GreaterThanOrEqualTo(startTick), $"variant {name}: it finishes on tick {finish}, too soon after its start {startTick} for a drift tail of {FinishTailMax}.");
+                    // The variant's states after ticks first .. finish - 1: where each drift tail starts from.
+                    var tailStarts = new byte[FinishTailMax + 1][];
+                    game.RestoreSnapshot(SimSnapshotCodec.Decode(starts[i]));
+                    while (game.IsRunning && game.Tick < finish - 1)
+                    {
+                        if (game.Tick >= first) tailStarts[game.Tick - first] = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+                        game.StepTick(variant);
+                    }
+                    Assert.That((game.IsRunning, game.Tick), Is.EqualTo((true, finish - 1)), $"variant {name}: running it again did not reach tick {finish - 1}.");
+                    tailStarts[finish - 1 - first] = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+                    // The variant as a log from tick 1, long enough for the client to run past the finish.
+                    InputLog full = WithInputAt(variant, finish, variant.InputFor(finish));
+
+                    tried.Append($" {name}:fin@{finish}[");
+                    for (int k = firstTail; k <= FinishTailMax; k++)
+                    {
+                        InputLog clientLog = k == 0 ? full : WithDriftFlipped(full, finish - k, k);
+                        if (TryClientOnlyFinish(clientLog, finish, k, tailStarts[FinishTailMax - k], missFirstDriftTick, out string outcome))
+                        {
+                            return new ClientOnlyFinish
+                            {
+                                ClientLog = clientLog,
+                                FinishTick = finish,
+                                DriftTicks = k,
+                                ServerMisses = missFirstDriftTick ? new[] { finish - k, finish } : new[] { finish },
+                                Found = $"variant {name} (drift flipped on {j} ticks from tick {startTick + 1}) finishes on tick {finish}; with drift held on the {k} ticks before it: {outcome} (search {watch.Elapsed.TotalSeconds:F1} s)",
+                            };
+                        }
+                        tried.Append($" {k}:{outcome}");
+                    }
+                    tried.Append(" ]");
+                }
+            }
+            Assert.That(variants, Is.EqualTo(FinishVariantCount), "The search must try exactly the fixed set of variants.");
+            Assert.Fail($"All {variants} variants of the recorded run (finish at tick {recordedFinish}), each with drift held on the last k = {firstTail}..{FinishTailMax} ticks before its finish, were tried and none fits{(missFirstDriftTick ? " (the server also missing the first drift tick)" : "")}: in none does the client's own controls finish the race on the tick while the server's repeated controls of the tick before keep it going.\n" +
+                        $"Cases (lead+drift ticks: outcome; fin@F[k: A = the server's repeated controls on F, C = the client's own on F, +/- metres past the line; ends@/own-ends@/srv-ends@ = a run ended before; same@drift = missing the first drift tick changed nothing]; search {watch.Elapsed.TotalSeconds:F1} s):{tried}");
+            return default;
+        }
+
+        // One drift tail of FindClientOnlyFinish, from the variant's state after tick finish - k - 1. See there.
+        private bool TryClientOnlyFinish(InputLog clientLog, int finish, int k, byte[] tailStart, bool missFirstDriftTick, out string outcome)
+        {
+            var source = new LogAtTick(game, clientLog);
+            game.RestoreSnapshot(SimSnapshotCodec.Decode(tailStart));
+            if (!missFirstDriftTick)
+            {
+                // The client's run, and the server's (the same controls), up to the tick before the finish.
+                while (game.IsRunning && game.Tick < finish - 1) game.StepTick(source);
+                if (!game.IsRunning)
+                {
+                    outcome = $"ends@{game.Tick}";
+                    return false;
+                }
+                return LastTickSplits(SimSnapshotCodec.Encode(game.CaptureSnapshot()), finish, source.InputFor(finish - 1), source.InputFor(finish), out outcome);
+            }
+
+            int drift = finish - k;
+            // The client's own run: drift from `drift`, let go on `finish`. It must still be going after `finish`.
+            game.StepTick(source);
+            if (!game.IsRunning)
+            {
+                outcome = $"own-ends@{game.Tick}";
+                return false;
+            }
+            byte[] clientAtDrift = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+            while (game.IsRunning && game.Tick < finish) game.StepTick(source);
+            if (!game.IsRunning)
+            {
+                outcome = $"own-ends@{game.Tick}";
+                return false;
+            }
+            // The server's run: `drift` on the controls of the tick before (missed), then the client's up to finish - 1.
+            game.RestoreSnapshot(SimSnapshotCodec.Decode(tailStart));
+            StepOn(source.InputFor(drift - 1));
+            if (!game.IsRunning)
+            {
+                outcome = $"srv-ends@{game.Tick}";
+                return false;
+            }
+            if (SimSnapshotCodec.SameState(SimSnapshotCodec.Encode(game.CaptureSnapshot()), clientAtDrift))
+            {
+                outcome = "same@drift";
+                return false;
+            }
+            while (game.IsRunning && game.Tick < finish - 1) game.StepTick(source);
+            if (!game.IsRunning)
+            {
+                outcome = $"srv-ends@{game.Tick}";
+                return false;
+            }
+            return LastTickSplits(SimSnapshotCodec.Encode(game.CaptureSnapshot()), finish, source.InputFor(finish - 1), source.InputFor(finish), out outcome);
+        }
+
+        // From the state before tick `finish`: true when the repeated controls (the tick before's) keep the run going on it and
+        // the client's own controls finish the race on it.
+        private bool LastTickSplits(byte[] before, int finish, in TickInput repeated, in TickInput own, out string outcome)
+        {
+            if (EndsOnNextTick(before, repeated, out RaceWire.EndReason serverReason, out double serverPast))
+            {
+                outcome = $"A{serverReason}{serverPast:+0.0000;-0.0000}";
+                return false;
+            }
+            bool clientEnds = EndsOnNextTick(before, own, out RaceWire.EndReason clientReason, out double clientPast);
+            if (!clientEnds || clientReason != RaceWire.EndReason.Finished)
+            {
+                outcome = $"A{serverPast:+0.0000;-0.0000},C{(clientEnds ? clientReason.ToString() : "")}{clientPast:+0.0000;-0.0000}";
+                return false;
+            }
+            outcome = $"on tick {finish} the server's repeated controls leave it {-serverPast:F5} m short of the line and the client's own carry it {clientPast:F5} m past";
+            return true;
+        }
+
+        // One tick on `input`.
+        private void StepOn(in TickInput input)
+        {
+            var one = new InputLog();
+            one.Add(input);
+            game.StepTick(new InputReplay(one));
         }
 
         // Whether one tick on `input` from the encoded state ends the run on that tick, why, and how far the lap counter's
@@ -894,7 +1258,11 @@ namespace ProtoHarness.Tests.PlayMode
 
         // The server's run to its end: every input but dropTick arrives in time (0 = none dropped). Returns the states it
         // handed out (ticks 0 .. end - 1) and the end it raised.
-        private byte[][] RunServerToEnd(InputLog log, int maxTicks, int dropTick, out ServerEnd end)
+        private byte[][] RunServerToEnd(InputLog log, int maxTicks, int dropTick, out ServerEnd end) =>
+            RunServerToEnd(log, maxTicks, new[] { dropTick }, out end);
+
+        // The same, with every input but those of dropTicks arriving in time.
+        private byte[][] RunServerToEnd(InputLog log, int maxTicks, int[] dropTicks, out ServerEnd end)
         {
             activeBuffer?.Detach();
             var buffer = new ServerInputBuffer(game);
@@ -908,7 +1276,7 @@ namespace ProtoHarness.Tests.PlayMode
                 ends++;
                 raised = new ServerEnd { Tick = tick, Reason = reason, Input = input };
             };
-            for (int t = 1; t <= log.Count; t++) if (t != dropTick) buffer.Receive(t, log[t - 1]);
+            for (int t = 1; t <= log.Count; t++) if (Array.IndexOf(dropTicks, t) < 0) buffer.Receive(t, log[t - 1]);
             Time.timeScale = 0f;
             game.SetInputSource(buffer);
             game.StartRun();
@@ -933,23 +1301,60 @@ namespace ProtoHarness.Tests.PlayMode
         // ended a step runs no tick. Returns what OnServerEnd returned.
         private bool RunClientToEnd(InputLog log, byte[][] server, ServerEnd end, int latency, out ClientPredictor predictor)
         {
+            predictor = StartClient(log);
+            return StepClientToEnd(predictor, server, end, latency, null);
+        }
+
+        // A fresh client on `log` (played in order, one input per live tick) at tick 0, its state for tick 0 taken. `sent`, if
+        // given, gets the tick of every control the client sends (InputConsumed), in order.
+        private ClientPredictor StartClient(InputLog log, int catchUpLimit = int.MaxValue, List<int> sent = null)
+        {
             activePredictor?.Detach();
-            predictor = new ClientPredictor(game, new InputReplay(log));
+            var predictor = new ClientPredictor(game, new InputReplay(log), catchUpLimit);
             activePredictor = predictor;
+            if (sent != null) predictor.InputConsumed += (tick, _) => sent.Add(tick);
             Time.timeScale = 0f;
             game.SetInputSource(predictor);
             game.StartRun();
             predictor.AfterTick();
+            return predictor;
+        }
+
+        // The rest of RunClientToEnd: one step is one live tick (none once the client's run has ended), then whatever arrives.
+        // `onState`, if given, is called after each server state has been taken, with its tick.
+        private bool StepClientToEnd(ClientPredictor predictor, byte[][] server, ServerEnd end, int latency, Action<int> onState)
+        {
             bool corrected = false;
             for (int step = 1; !predictor.ServerEnded; step++)
             {
                 Assert.That(step, Is.LessThanOrEqualTo(end.Tick + latency), "The end should have been delivered by now.");
                 game.StepTick(predictor);
                 int arrived = step - latency;
-                if (arrived >= 0 && arrived < end.Tick) predictor.OnServerState(server[arrived]);
+                if (arrived >= 0 && arrived < end.Tick)
+                {
+                    predictor.OnServerState(server[arrived]);
+                    onState?.Invoke(arrived);
+                }
                 else if (arrived == end.Tick) corrected = predictor.OnServerEnd(end.Tick, end.Reason, end.Input);
             }
             return corrected;
+        }
+
+        // Where the run stands once it has ended: the tick, why, the runner's position and the lap counter's progress (a
+        // finished run has no snapshot; these are what its last tick moved).
+        private (int Tick, bool Failed, bool Finished, float X, float Y, float Z, double Progress) EndedAt()
+        {
+            Assert.That(game.IsRunning, Is.False, "The run must have ended.");
+            Vector3 p = player.transform.position;
+            return (game.Tick, game.HasFailed, game.HasFinished, p.x, p.y, p.z, circuit.Laps.Progress);
+        }
+
+        // The ticks from .. to, in order.
+        private static List<int> TickRange(int from, int to)
+        {
+            var ticks = new List<int>(Math.Max(0, to - from + 1));
+            for (int t = from; t <= to; t++) ticks.Add(t);
+            return ticks;
         }
 
         private static InputLog SingleInput(InputLog log, int index)

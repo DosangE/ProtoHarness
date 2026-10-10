@@ -75,7 +75,8 @@ namespace ProtoHarness.Net
         public void Begin()
         {
             if (game == null) throw new InvalidOperationException("RaceClient: call Configure before Begin.");
-            predictor = new ClientPredictor(game, live);
+            // Controls past the target are not sent (OnInputConsumed), so a catch-up never runs past it.
+            predictor = new ClientPredictor(game, live, targetTicks);
             delayed = new DelayedSender(SendInput, delaySeconds, jitterSeconds, seed);
             predictor.InputConsumed += OnInputConsumed;
             remote = new RemoteInterpolator();
@@ -175,7 +176,7 @@ namespace ProtoHarness.Net
                 ClientPredictor p = predictor;
                 // Always present, so a log without it is from a build that predates race.end.
                 string ended = p.ServerEnded ? $"{p.EndReason}@{p.EndTick}" : "none";
-                Debug.Log($"RACE-CLIENT-DONE compared={p.StatesCompared} corrections={p.Corrections} firstMismatch={p.FirstMismatchTick} replayed={p.ReplayedTicks} longest={p.LongestReplay} ms={p.ReplayMilliseconds:F3} jolt={p.LargestJolt:F4} remote={remoteSamples} ended={ended}");
+                Debug.Log($"RACE-CLIENT-DONE compared={p.StatesCompared} corrections={p.Corrections} firstMismatch={p.FirstMismatchTick} replayed={p.ReplayedTicks} longest={p.LongestReplay} ms={p.ReplayMilliseconds:F3} jolt={p.LargestJolt:F4} remote={remoteSamples} ended={ended} catchUps={p.CatchUps} caughtUp={p.CaughtUpTicks}");
                 if (quitWhenDone) StartCoroutine(QuitSoon());
             }
             else if (started && quitWhenDone && timeoutSeconds > 0f && !Finished && !gaveUp && Time.realtimeSinceStartup - connectedAt > timeoutSeconds)

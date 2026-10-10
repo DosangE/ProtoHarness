@@ -179,6 +179,17 @@ namespace ProtoHarness.ChainRush
         {
             if (source == null) throw new System.ArgumentNullException(nameof(source));
             if (!IsRunning) return;
+            RunTick(source);
+            TickCompleted?.Invoke(tick);
+        }
+
+        // Raised at the end of every tick that ran, with that tick's number, whether it came from FixedUpdate or a direct
+        // StepTick. The state is then between ticks: a snapshot taken here is the state after that tick, which a snapshot
+        // taken while the input is being read (inside IInputSource.Consume) is not. The run may have ended during the tick.
+        public event System.Action<int> TickCompleted;
+
+        private void RunTick(IInputSource source)
+        {
             tick++;
             // The closed track looks for the runner near where it was, so a return leg is not mistaken for the start.
             if (circuit != null) circuit.PrepareTick();

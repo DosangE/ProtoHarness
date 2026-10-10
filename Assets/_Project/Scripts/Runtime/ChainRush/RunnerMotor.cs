@@ -293,7 +293,10 @@ namespace ProtoHarness.ChainRush
             float radius = controller.radius;
             Vector3 bottom = transform.TransformPoint(controller.center) + Vector3.down * (controller.height * 0.5f - radius);
             float reach = groundSnapDistance + controller.skinWidth;
-            if (!Physics.SphereCast(bottom, radius, Vector3.down, out RaycastHit hit, reach,
+            // The physics world of the scene this runner lives in: a race world loaded on its own physics scene must
+            // not see another racer's world (for the main scene this is the default physics scene).
+            PhysicsScene world = gameObject.scene.GetPhysicsScene();
+            if (!world.SphereCast(bottom, radius, Vector3.down, out RaycastHit hit, reach,
                     Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return;
             controller.Move(Vector3.down * (hit.distance + controller.skinWidth));
             SyncGrounded();

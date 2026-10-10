@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-10-10 · P3 C1a: 격리 월드 — 레이서마다 서킷 씬 복사본과 자기 물리 씬, 틱 완료 이벤트
+
+- **결정 (사용자 승인, 2026-10-10 "추천대로진행" 후 계획을 고쳐 다시 올리고 "추천재로")**: C1 은 "2인, 방해 없음"이라 레이서끼리 닿지 않는다. 그래서 레이서 한 명마다 **서킷 씬 복사본을 `LocalPhysicsMode.Physics3D` 로 추가 로드**해 각자 `ChainRushGame`·`RunnerMotor`·`CircuitRace`·물리 씬을 갖는다. 공유 월드는 충돌이 생기는 C2 에서 필요가 확인된 뒤 설계한다.
+- **처음 승인받은 계획(레이서마다 `ChainRushGame` 을 두고 한 월드에서 서로의 콜라이더를 코드로 거르기)을 버린 이유**: 구현 전에 코드를 읽고 발견했다. ① `Centerline` 은 가변 상태다(`SetFocus` → `focusS`, `Centerline.cs:47,210`)이고 `ChainRushGame` 은 `circuit.BuildTrack()` 로 그 객체를 그대로 받는다(`ChainRushGame.cs:119`). 서킷을 공유하면 두 게임이 focus 를 서로 덮어쓴다. ② `CircuitRace` 는 레이서 1명 전용이다(`game`·`player` 직렬화 하나씩 `:18-19`, 랩 카운터·마지막 S 하나). 쪼개려면 월드/레이서 분리와 새 씬(에디터 승인)이 필요해 변경이 6곳 이상이다. 구현은 시작하지 않고 §3-3 대로 멈춰서 수정안을 올렸다.
+- **바꾼 것**
+  - `RunnerMotor.cs:298-299` `SnapToGround` 의 `Physics.SphereCast` → `gameObject.scene.GetPhysicsScene()` 의 `SphereCast`. `GrappleController.cs:96,106` 앵커 시야 검사의 `Physics.Linecast` → 같은 물리 씬의 `Raycast(origin, offset, offset.magnitude, ...)` (`PhysicsScene` 에는 `Linecast` 가 없다). 메인 씬에서는 기본 물리 씬이라 동작이 같다.
+  - `ChainRushGame.cs:183,189,191` 공개 이벤트 `TickCompleted(int tick)`. `StepTick` 은 가드(`IsRunning`)를 지난 뒤 본문(`RunTick`, 기존 코드 그대로)을 돌리고 이벤트를 올린다. 틱이 실제로 돈 경우에만 올라가며 그 틱 중 런이 끝났어도 올라간다. 스파이크에서 찾은 "`Consume` 안에서 찍은 스냅샷은 틱 사이 상태가 아니다" 문제의 근본 해결이다(이벤트 안에서 `CaptureSnapshot().Tick` 이 방금 돈 틱이다).
+  - 새 `Race/RaceWorld.cs`: 로드한 서킷 씬에서 게임·러너·그래플·서킷을 찾아 묶고(없거나 둘이면 예외), `IsolatedLoad`(= `Additive` + `Physics3D`)와 `PhysicsWorld` 를 준다.
+  - 새 테스트 `ChainRushWorldTests` 5건. 씬 파일·프리팹·`ProjectSettings`·`manifest.json`·`CircuitRace`·`Centerline` 은 건드리지 않았다.
+- **증명한 것** (같은 머신·같은 에디터, 서킷, 봇 1700틱)
+  - 격리 복사본 둘을 번갈아 한 틱씩 돌리면 각자 **혼자 달린 런과 비트 단위로 같다**(해시 `0xF9A914DA3FAA680B` = P2 서킷 해시 그대로. 단일 레이서 동작이 안 바뀐 증거).
+  - **상대 월드의 러너가 내 길 위(트랙 150 m)에 서 있어도 내 런은 솔로와 같다**(상대 게임은 스텝하지 않아 제자리).
+  - **음성 대조**: 같은 구성을 물리 씬을 나누지 않고 로드하면(공유 물리 월드) 757틱에서 갈라진다(`posX 0x3F89C4A8 vs 0x3F891288`, `posZ`, `S`). 그래서 위 두 결과가 우연이 아니다.
+  - 격리 월드에서 지상·공중·그래플 스냅샷 복원 뒤 60틱이 비트 단위로 같다(롤백이 격리 월드에서도 성립). `Physics.SyncTransforms()`(`RunnerMotor.cs:398`)가 로컬 물리 씬에도 충분한지 미확인이었으나 이 결과로 문제 없음을 확인했다.
+  - `TickCompleted`: 5틱에 1..5 가 한 번씩, 정지 중 `StepTick` 은 올리지 않고, 재개하면 다시 올린다. 이벤트 안 상태가 호출이 돌아온 뒤 상태와 같다.
+- **먼저 틀렸던 두 테스트 설계 (밝힌다)**: (1) 쌍둥이(같은 자리·같은 입력)는 서로 닿지 않아서 공유 월드에서도 갈라지지 않았고, 처음 대조군이 통과해 버렸다. 그래서 "한쪽이 다른 쪽 길 위에 서 있는" 구성으로 바꿨다. (2) 이 게임의 러너는 입력이 없어도 앞으로 달리는 자동 주행이라 "입력 없음 = 서 있음"이 아니다. 서 있게 하려면 그 게임을 스텝하지 않는다. 쌍둥이 테스트(함께 돌아간다)는 그대로 두었다.
+- **알아둘 것**
+  - 복사본마다 카메라·`AudioListener` 가 하나씩 있어 두 번째를 켜면 Unity 가 "리스너 2개" 로그를 **매 프레임** 찍는다. 테스트는 두 번째 로드 전에 첫 복사본의 리스너를 꺼서 막았다. 서버용 월드는 카메라·오디오가 필요 없으니 C1b 에서 꺼야 한다.
+  - 복사본을 로드하는 코드(에디터는 `EditorSceneManager.LoadSceneAsyncInPlayMode`, 플레이어는 `SceneManager.LoadSceneAsync`)는 이번 범위에 넣지 않았다. `RaceWorld` 는 로드된 씬만 받는다. C1b 서버가 정한다.
+  - 격리 월드끼리는 서로 영향을 못 준다. 추월·충돌·밀치기는 이 구조로는 못 한다(C2 에서 공유 월드 설계 필요: `CircuitRace` 의 월드/레이서 분리, `Centerline` focus 의 레이서별 분리).
+- **한계 (확인 못 한 것)**: 같은 머신·에디터뿐이다. 여러 복사본의 메모리·시간 비용은 재지 않았다(둘일 때 틱 2배 정도는 일상적이나 수치 없음). 2개를 넘는 복사본, 무한 코스(`LocalPhysicsMode` 에서의 원점 이동·스트리밍), 플레이어 빌드에서의 로컬 물리 씬 로드는 확인하지 않았다. 무한 코스의 `Physics.SyncTransforms()` 호출(`ProceduralCourse.cs:180,340`)과 `CircuitRace.cs:193` 은 전역 호출 그대로다.
+- **검증** (시각은 XML 의 UTC, 에디터 **6000.3.25f1**): 컴파일 Console Error 0. 새 테스트 단독 `testcasecount=5 Passed passed=5` (이전 시도: 4건 중 3건 실패(AudioListener 로그), 5건 중 4건 실패(대조군·서 있는 러너), 모두 테스트 설계 문제). EditMode `testcasecount=237 result=Passed passed=237 failed=0` (07:40:55Z~07:40:58Z). PlayMode 게이트(Device·Sweep 제외) 연속 2회: 1회 `testcasecount=76 result=Passed passed=76 failed=0` (07:41:13Z~07:49:59Z, 526.2초), 2회 `76/76 Passed failed=0` (07:50:15Z~07:59:01Z, 526.0초). 76 = 이전 71 + 새 5. 20 시드 스윕(모터·그래플 변경이라 돌렸다) `testcasecount=1 Passed passed=1 failed=0` (07:59:15Z~08:14:48Z, 932.7초): 시드마다 `escapes 0`, `health 3`, 1400 m 완주. 입력 장치 경로는 안 바꿔서 Device 는 해당 없다. 화면 변화 없음.
+- **하지 않은 것**: 네트워크(C1b), 충돌·아이템(C2·C3), 공유 월드, 씬·프리팹·`ProjectSettings` 수정, `CircuitRace`·`Centerline` 분리, 복사본 로더, 스파이크 코드(`spike/p3-ngo-prediction`)의 병합.
+
+---
+
 ## 2026-10-10 · P3 스파이크: NGO 서버 1 + 클라이언트 1 예측·보정 — 같은 머신에서 프로세스 사이도 비트 일치
 
 - **결정 (사용자 승인, 2026-10-10 "추천대로 ㄱㄱ" 후 "Ok": 서버는 별도 프로세스(방식 A), `manifest.json` 에 NGO 2.13.3 추가, 새 asmdef `ProtoHarness.Spike`, 스파이크 부트스트랩의 `FindFirstObjectByType` 1회 면제, 지연은 앱 수준 큐, 서버 빌드는 리포 밖)**: NGO 를 쓰되 예측·보정은 직접 만들었다. 브랜치 `feature/p3-ngo-package`(커밋 `09da115`, manifest+lock 만) → `spike/p3-ngo-prediction`(병합하지 않음). 이 항목은 `docs/p3-spike-report` 로 `dev` 에 옮겼다(스파이크 브랜치는 병합하지 않는다). 스파이크 코드는 `spike/p3-ngo-prediction`(`cd6186b`)에만 있다.

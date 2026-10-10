@@ -92,6 +92,8 @@ namespace ProtoHarness.ChainRush
             float bestScore = float.PositiveInfinity;
             Vector3 origin = transform.position + Vector3.up * 0.4f;
             TrackFrame frame = game.Track.Frame(transform.position);
+            // Sight lines are checked in the physics world of this runner's scene (see RunnerMotor.SnapToGround).
+            PhysicsScene world = gameObject.scene.GetPhysicsScene();
             for (int i = 0; i < anchors.Length; i++)
             {
                 // A pooled anchor that is switched off is resting, not a hook point.
@@ -100,7 +102,8 @@ namespace ProtoHarness.ChainRush
                 // "Ahead" and "off to the side" are measured along the track, not world z/x.
                 Vector3 local = frame.InverseTransformDirection(offset);
                 if (local.z < 1f || local.y < 0f || offset.sqrMagnitude > maxRange * maxRange) continue;
-                if (Physics.Linecast(origin, anchors[i].position, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                // PhysicsScene has no Linecast; a line from origin to the anchor is a ray of that length along that offset.
+                if (world.Raycast(origin, offset, offset.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
                 float score = offset.sqrMagnitude + local.x * local.x * 3f;
                 if (score >= bestScore) continue;
                 bestScore = score;

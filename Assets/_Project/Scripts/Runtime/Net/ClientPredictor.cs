@@ -13,7 +13,8 @@ namespace ProtoHarness.Net
     // When the server's state for a past tick arrives (OnServerState) it compares it with
     // what was predicted. Equal: nothing happens. Different: the game goes back to the server's state and the
     // remembered controls are run again up to the present tick (a correction), so the server's word wins and
-    // the controls typed since are not lost. Nothing here knows about the network.
+    // the controls typed since are not lost. When the server's run ends (OnServerEnd), the client plays the same
+    // ending from the server's state before it, and predicts nothing after it. Nothing here knows about the network.
     public sealed class ClientPredictor : IInputSource
     {
         // How many ticks the client may run ahead of the newest server state it has compared.
@@ -28,6 +29,9 @@ namespace ProtoHarness.Net
         private bool replaying;
         private int lastInputTick;
         private int ackedTick;
+        // While OnServerEnd replays the server's last tick: that tick (0 otherwise) and the controls the server ran it on.
+        private int endReplayTick;
+        private TickInput endReplayInput;
 
         public ClientPredictor(ChainRushGame game, IInputSource live)
         {
@@ -57,6 +61,17 @@ namespace ProtoHarness.Net
         public int FirstMismatchTick { get; private set; }
         public int LastComparedTick => ackedTick;
         public int LastInputTick => lastInputTick;
+        // True once the server's end has been taken: the client's run ended on EndTick for EndReason, as the server's did,
+        // and nothing is predicted after it. EndTick is -1 and EndReason meaningless until then.
+        public bool ServerEnded { get; private set; }
+        public int EndTick { get; private set; }
+        public RaceWire.EndReason EndReason { get; private set; }
+        // True once the server's end could not be taken (OnServerEnd threw, for any reason): the client can no longer end its
+        // run as the server's did, and a failed replay leaves the game on a tick that is neither run. Consume, OnServerState
+        // and OnServerEnd throw from then on, with FaultReason (the first cause, with its tick; null until then). Only Clear
+        // lifts it.
+        public bool Faulted { get; private set; }
+        public string FaultReason { get; private set; }
 
         public void Poll() => live.Poll();
 
@@ -72,6 +87,13 @@ namespace ProtoHarness.Net
             replaying = false;
             lastInputTick = 0;
             ackedTick = 0;
+            endReplayTick = 0;
+            endReplayInput = default;
+            ServerEnded = false;
+            EndTick = -1;
+            EndReason = default;
+            Faulted = false;
+            FaultReason = null;
             Corrections = 0;
             StatesCompared = 0;
             ReplayedTicks = 0;
@@ -84,6 +106,13 @@ namespace ProtoHarness.Net
         public TickInput Consume()
         {
             int tick = game.Tick;
+            if (Faulted) throw FaultedError($"the controls for tick {tick} were asked for");
+            if (endReplayTick > 0)
+            {
+                if (tick != endReplayTick)
+                    throw new InvalidOperationException($"ClientPredictor: replaying the server's last tick {endReplayTick}, but the game asked for the controls of tick {tick}.");
+                return endReplayInput;
+            }
             if (!replaying && tick - ackedTick >= Window)
                 throw new InvalidOperationException($"ClientPredictor: {tick - ackedTick} ticks without a server state to compare (window {Window}); the history would be overwritten.");
             TickInput input;
@@ -117,8 +146,11 @@ namespace ProtoHarness.Net
         // Returns true when it differed from the prediction and the game was corrected.
         public bool OnServerState(byte[] encoded)
         {
+            if (Faulted) throw FaultedError("a server state arrived");
             if (replaying) throw new InvalidOperationException("ClientPredictor: OnServerState called during a replay.");
             int serverTick = SimSnapshotCodec.TickOf(encoded);
+            if (ServerEnded)
+                throw new InvalidOperationException($"ClientPredictor: the server's state for tick {serverTick} arrived after its run ended at tick {EndTick}.");
             if (serverTick > game.Tick)
                 throw new InvalidOperationException($"ClientPredictor: the server's state is for tick {serverTick} but the client is at tick {game.Tick}.");
             if (serverTick < ackedTick)
@@ -165,6 +197,98 @@ namespace ProtoHarness.Net
             ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
             return true;
         }
+
+        // The server's word that its run ended on tick `tick`, for `reason`, with the controls it ran that tick on. The
+        // server's state for the tick before is sent first on the same ordered channel, so it must have been compared already:
+        // the client then stands where the server stood before its last tick. If the client's run also ended on that tick for
+        // that reason, nothing happens. Otherwise the game goes back to that state and runs the last tick again on the
+        // server's controls (a correction). Either way the run is over and nothing is predicted after it. Call it between
+        // ticks, never from inside StepTick. Returns true when the game was corrected.
+        // An end that cannot be taken is a broken prediction, whatever the reason: one out of order or for an unknown reason,
+        // a second end, a replay that throws, or a replay that does not end the run as the server's did (the two simulations
+        // differ). Every exception that leaves here leaves the predictor Faulted first, with the cause and the tick in
+        // FaultReason, so the caller stops the run (RaceClient). A refused end does not touch the game; a replay that threw
+        // or ended differently leaves it where the replay stopped. A call on a predictor that is already Faulted throws
+        // without changing the first cause.
+        public bool OnServerEnd(int tick, RaceWire.EndReason reason, in TickInput serverInput)
+        {
+            if (Faulted) throw FaultedError($"the server's end for tick {tick} arrived");
+            try
+            {
+                return TakeServerEnd(tick, reason, serverInput);
+            }
+            catch (Exception e)
+            {
+                // Not handled here: the cause is recorded, and the exception goes on unchanged. A fault TakeServerEnd set
+                // itself keeps its own, fuller cause.
+                if (!Faulted)
+                {
+                    FaultReason = $"the server's end for tick {tick} ({reason}) could not be taken: {e.GetType().Name}: {e.Message}";
+                    Faulted = true;
+                }
+                throw;
+            }
+        }
+
+        private bool TakeServerEnd(int tick, RaceWire.EndReason reason, in TickInput serverInput)
+        {
+            if (replaying) throw new InvalidOperationException("ClientPredictor: OnServerEnd called during a replay.");
+            if (!RaceWire.IsKnown(reason))
+                throw new ArgumentOutOfRangeException(nameof(reason), reason, $"ClientPredictor: not an end reason (tick {tick}).");
+            if (ServerEnded)
+                throw new InvalidOperationException($"ClientPredictor: the server's run already ended at tick {EndTick}; another end for tick {tick} arrived.");
+            if (ackedTick != tick - 1)
+                throw new InvalidOperationException($"ClientPredictor: the server's run ended at tick {tick}, but the newest server state compared is for tick {ackedTick}, not {tick - 1}.");
+            if (game.Tick < tick)
+                throw new InvalidOperationException($"ClientPredictor: the server's run ended at tick {tick} but the client is at tick {game.Tick}.");
+            int before = tick - 1;
+            if (stateTicks[before % Window] != before)
+                throw new InvalidOperationException($"ClientPredictor: the state for tick {before}, before the server's end at tick {tick}, is gone from the history.");
+
+            bool corrected = false;
+            if (!EndedAt(tick, reason))
+            {
+                if (FirstMismatchTick < 0) FirstMismatchTick = tick;
+                Corrections++;
+                long start = Stopwatch.GetTimestamp();
+                game.RestoreSnapshot(SimSnapshotCodec.Decode(states[before % Window]));
+                endReplayTick = tick;
+                endReplayInput = serverInput;
+                replaying = true;
+                try
+                {
+                    game.StepTick(this);
+                }
+                finally
+                {
+                    replaying = false;
+                    endReplayTick = 0;
+                }
+                ReplayedTicks++;
+                if (LongestReplay < 1) LongestReplay = 1;
+                ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
+                if (!EndedAt(tick, reason))
+                {
+                    // The game now stands after a replayed tick that is neither the server's run nor the client's: nothing
+                    // after this can be trusted, so the predictor refuses everything until Clear.
+                    FaultReason = $"replaying tick {tick} on the server's controls from the state after tick {before} did not end the run as the server's did ({reason}); the client is at tick {game.Tick} (running {game.IsRunning}, failed {game.HasFailed}, finished {game.HasFinished}).";
+                    Faulted = true;
+                    throw new InvalidOperationException("ClientPredictor: " + FaultReason);
+                }
+                corrected = true;
+            }
+            ServerEnded = true;
+            EndTick = tick;
+            EndReason = reason;
+            return corrected;
+        }
+
+        // Built only once Faulted is set, so a healthy tick makes no message.
+        private InvalidOperationException FaultedError(string what) =>
+            new InvalidOperationException($"ClientPredictor: {what} after the prediction broke: {FaultReason}");
+
+        private bool EndedAt(int tick, RaceWire.EndReason reason) =>
+            game.Tick == tick && (reason == RaceWire.EndReason.Failed ? game.HasFailed : game.HasFinished);
 
         private void Store(int tick, byte[] encoded)
         {

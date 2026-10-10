@@ -30,8 +30,14 @@ namespace ProtoHarness.Tests.PlayMode
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         private const int BotTicks = 1700;
+        // RaceClient.OnConnected logs it with the id Netcode gave the client (its LocalClientId). The test assembly does not
+        // reference Netcode, so for the editor client this line is where its id is read.
+        private const string ConnectedPattern = @"RACE-CLIENT connected as (\d+);";
 
         private ChainRushGame game;
+        // Listens to the editor's log for the editor client's ConnectedPattern line while a scenario runs; let go in TearDown
+        // too, in case the scenario stopped early.
+        private Application.LogCallback editorLogWatch;
         private RunnerMotor player;
         private GrappleController grapple;
         private CircuitRace circuit;
@@ -62,6 +68,29 @@ namespace ProtoHarness.Tests.PlayMode
             public int[] Late;
             // Whether the server logged that racer i's run ended (a fall or a finish) before its client left.
             public bool[] ServerRunEnded;
+            // The end the server sent racer i's client (RACE-SERVER-END), as "<reason>@<tick>"; "none" when there was none within
+            // the clients' ticks. ServerEndLines counts every RACE-SERVER-END line for racer i, within the ticks or not.
+            public string[] ServerEndOf;
+            public int[] ServerEndLines;
+            // Which client the server made racer i ("RACE-SERVER client <id> is racer <i>."), and how many such lines it logged.
+            public ulong[] RacerClient;
+            public int[] RacerClientLines;
+            // Server lines (racer assignments or ends) for a racer other than 0 and 1.
+            public int StrayRacerLines;
+            // The editor client's id, from its "RACE-CLIENT connected as <id>;" line (RaceClient.OnConnected), and how many of
+            // those lines it logged.
+            public ulong EditorId;
+            public int EditorIdLines;
+            // The player client's id, from the same line in its log.
+            public ulong BId;
+            public int BIdLines;
+            // The end the editor client took, as "<reason>@<tick>", or "none".
+            public string EditorEnded;
+            // The player client's DONE line was logged; its ended= field ("<reason>@<tick>" or "none"; null when the line has none,
+            // which is a build from before race.end); and whether it logged RACE-CLIENT-TIMEOUT.
+            public bool BDone;
+            public string BEnded;
+            public bool BTimedOut;
         }
 
         [UnitySetUp]
@@ -74,6 +103,11 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
+            if (editorLogWatch != null)
+            {
+                Application.logMessageReceived -= editorLogWatch;
+                editorLogWatch = null;
+            }
             if (game != null) game.SetInputSource(new InputReplay(new InputLog()));
             Time.timeScale = timeScale;
             yield return null;
@@ -107,20 +141,59 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Jitter of up to 120 ms against a 1-tick buffer: inputs arrive late and the server repeats the last one. A missed jump
-        // can make the server's run fall and end, and the server does not say so to the client, which then waits for a state
-        // that never comes. So each client either finishes, or the server logged that its racer's run ended. Every correction
-        // still needs a missed input on the server to come from.
+        // can make the server's run fall and end; the server then tells that racer's client (race.end), which ends its own run
+        // on the same tick. So each client finishes, with no timeout: by comparing the state for its last tick, or by taking the
+        // end of a server run that ended within its ticks. Each client takes exactly the end of its own racer, at the same tick
+        // and for the same reason, and none ("none") when its racer's run did not end within the ticks. Every correction still
+        // needs a missed input on the server to come from.
+        // Judged from the logs: the server's "RACE-SERVER client <id> is racer <i>." and "RACE-SERVER-END racer=<i> reason=<r>
+        // tick=<t>" lines (t <= the clients' ticks), each client's own "RACE-CLIENT connected as <id>;" line (the editor's read
+        // from its log as it happens, the player client's from its log file), the player client's "RACE-CLIENT-DONE ...
+        // ended=<r>@<t>|none" line and the absence of "RACE-CLIENT-TIMEOUT" in it, and the editor client's predictor
+        // (ServerEnded, EndReason, EndTick). The pairing is written to the test's output on every run.
         [UnityTest, Timeout(300000)]
-        public IEnumerator TwoClients_WithJitterBeyondTheBuffer_EachFinishesOrItsServerRunEnded_AndCorrectionsHaveACause()
+        public IEnumerator TwoClients_WithJitterBeyondTheBuffer_EachFinishesWithoutTimeoutAndIsToldOfItsServerRunsEnd_AndCorrectionsHaveACause()
         {
+            const int ticks = 1000;
             Outcome o = default;
-            yield return Scenario(7794, 1000, 1, 30, 120, r => o = r);
-            Debug.Log($"Net race B (30 ms + 0..120 ms jitter, buffer 1): {Describe(o)}; server run ended: racer 0 {o.ServerRunEnded[0]}, racer 1 {o.ServerRunEnded[1]}.");
-            bool serverRunEnded = o.ServerRunEnded[0] || o.ServerRunEnded[1];
-            Assert.That(o.Finished || serverRunEnded, Is.True, "The editor client did not finish and no server run ended. " + o.ServerLog);
-            Assert.That(o.BCompared > 900 || serverRunEnded, Is.True, "The player client did not finish and no server run ended. " + o.ClientB);
+            yield return Scenario(7794, ticks, 1, 30, 120, r => o = r);
+            int editorRacer = RacerOf(o, o.EditorId);
+            int bRacer = RacerOf(o, o.BId);
+            // Written for every run, before any judgement, so the result XML holds which client was which racer and what each was told.
+            string pairing = $"server ends within {ticks} ticks: racer 0 {o.ServerEndOf[0]} ({o.ServerEndLines[0]} END lines), racer 1 {o.ServerEndOf[1]} ({o.ServerEndLines[1]} END lines); " +
+                             $"racers: 0 = client {o.RacerClient[0]} ({o.RacerClientLines[0]} lines), 1 = client {o.RacerClient[1]} ({o.RacerClientLines[1]} lines), stray racer lines {o.StrayRacerLines}; " +
+                             $"editor client {o.EditorId} ({o.EditorIdLines} connected lines) is racer {editorRacer}, ended {o.EditorEnded}; " +
+                             $"player client {o.BId} ({o.BIdLines} connected lines) is racer {bRacer}, ended {o.BEnded ?? "(no ended= field)"}.";
+            TestContext.WriteLine("Net race B pairing: " + pairing);
+            Debug.Log($"Net race B (30 ms + 0..120 ms jitter, buffer 1): {Describe(o)}; {pairing}");
+            Assert.That(o.Finished, Is.True, "The editor client neither compared the state for its last tick nor took the server's end. " + o.ServerLog);
+            Assert.That(o.BTimedOut, Is.False, "The player client timed out. " + o.ClientB);
+            Assert.That(o.BDone, Is.True, "The player client did not finish. " + o.ClientB);
+            Assert.That(o.BEnded, Is.Not.Null, "The player client's DONE line has no ended= field: the race build predates race.end. Rebuild it. " + o.ClientB);
+            // Each client is matched to its racer by its id: its own connected line, and the server's assignment line.
+            Assert.That(o.EditorIdLines, Is.EqualTo(1), "The editor client must log exactly one 'RACE-CLIENT connected as' line. " + pairing);
+            Assert.That(o.BIdLines, Is.EqualTo(1), "The player client must log exactly one 'RACE-CLIENT connected as' line. " + pairing + " " + o.ClientB);
+            Assert.That(o.StrayRacerLines, Is.EqualTo(0), "The server logged a racer other than 0 and 1. " + pairing + " " + o.ServerLog);
+            for (int i = 0; i < 2; i++)
+            {
+                Assert.That(o.RacerClientLines[i], Is.EqualTo(1), $"racer {i} must be given to exactly one client. " + pairing + " " + o.ServerLog);
+                Assert.That(o.ServerEndLines[i], Is.LessThanOrEqualTo(1), $"racer {i}'s run can end only once. " + pairing + " " + o.ServerLog);
+            }
+            Assert.That(o.EditorId, Is.Not.EqualTo(o.BId), "The two clients must have different ids. " + pairing);
+            Assert.That(editorRacer, Is.GreaterThanOrEqualTo(0), "The server made no racer of the editor client. " + pairing + " " + o.ServerLog);
+            Assert.That(bRacer, Is.GreaterThanOrEqualTo(0), "The server made no racer of the player client. " + pairing + " " + o.ServerLog);
+            // Each client takes exactly its own racer's end ("none" for a racer whose run did not end within the ticks).
+            Assert.That(o.EditorEnded, Is.EqualTo(o.ServerEndOf[editorRacer]), $"The editor client (racer {editorRacer}) must take its own racer's end and no other. " + pairing + " " + o.ServerLog);
+            Assert.That(o.BEnded, Is.EqualTo(o.ServerEndOf[bRacer]), $"The player client (racer {bRacer}) must take its own racer's end and no other. " + pairing + " " + o.ClientB);
             Assert.That(o.Missed[0] + o.Missed[1], Is.GreaterThan(0), "The jitter should have made some inputs late.");
             Assert.That(o.Corrections + o.BCorrections, Is.LessThanOrEqualTo(o.Missed[0] + o.Missed[1]), "A correction without a missed input on the server has no cause.");
+        }
+
+        // The racer the server gave this client, or -1.
+        private static int RacerOf(Outcome o, ulong clientId)
+        {
+            for (int i = 0; i < 2; i++) if (o.RacerClientLines[i] > 0 && o.RacerClient[i] == clientId) return i;
+            return -1;
         }
 
         private static string Describe(Outcome o) =>
@@ -160,6 +233,16 @@ namespace ProtoHarness.Tests.PlayMode
             RaceClient client = host.AddComponent<RaceClient>();
             client.Configure(game, new InputReplay(log), "127.0.0.1", port, delayMs / 1000d, jitterMs / 1000d, 11, ticks, showRemote: true, quitWhenDone: false);
             client.RemoteReceived += (tick, position) => received.Add((tick, position));
+            ulong editorId = 0;
+            int editorIdLines = 0;
+            editorLogWatch = (message, stackTrace, type) =>
+            {
+                Match m = Regex.Match(message, ConnectedPattern);
+                if (!m.Success) return;
+                editorIdLines++;
+                editorId = ulong.Parse(m.Groups[1].Value);
+            };
+            Application.logMessageReceived += editorLogWatch;
             host.SetActive(true);
             client.Begin();
 
@@ -186,12 +269,18 @@ namespace ProtoHarness.Tests.PlayMode
                 }
             }
 
+            Application.logMessageReceived -= editorLogWatch;
+            editorLogWatch = null;
+            outcome.EditorId = editorId;
+            outcome.EditorIdLines = editorIdLines;
             outcome.Finished = client.Finished;
             ClientPredictor p = client.Predictor;
+            outcome.EditorEnded = "none";
             if (p != null)
             {
                 outcome.Corrections = p.Corrections;
                 outcome.StatesCompared = p.StatesCompared;
+                if (p.ServerEnded) outcome.EditorEnded = $"{p.EndReason}@{p.EndTick}";
             }
             outcome.RemoteSamples = client.RemoteSamples;
             foreach ((int tick, Vector3 position) in received)
@@ -214,7 +303,7 @@ namespace ProtoHarness.Tests.PlayMode
             UnityEngine.Object.Destroy(host);
             yield return null;
 
-            ReadLogs(serverLog, clientLog, ref outcome);
+            ReadLogs(serverLog, clientLog, ticks, ref outcome);
             done(outcome);
         }
 
@@ -243,7 +332,8 @@ namespace ProtoHarness.Tests.PlayMode
             return text.Length == 0 ? $"(no log at {path})" : "log tail: " + text.Substring(Math.Max(0, text.Length - 1500));
         }
 
-        private static void ReadLogs(string serverLog, string clientLog, ref Outcome outcome)
+        // ticks: the clients' last tick; a server end after it is one the clients ignore (it ran on controls they never sent).
+        private static void ReadLogs(string serverLog, string clientLog, int ticks, ref Outcome outcome)
         {
             string server = ReadShared(serverLog);
             outcome.ServerLog = Tail(serverLog);
@@ -257,6 +347,32 @@ namespace ProtoHarness.Tests.PlayMode
                 int racer = int.Parse(m.Groups[1].Value);
                 if (racer >= 0 && racer <= 1) outcome.ServerRunEnded[racer] = true;
             }
+            outcome.ServerEndOf = new[] { "none", "none" };
+            outcome.ServerEndLines = new int[2];
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER-END racer=(\d+) reason=(\w+) tick=(\d+)"))
+            {
+                int racer = int.Parse(m.Groups[1].Value);
+                if (racer < 0 || racer > 1)
+                {
+                    outcome.StrayRacerLines++;
+                    continue;
+                }
+                outcome.ServerEndLines[racer]++;
+                if (int.Parse(m.Groups[3].Value) <= ticks) outcome.ServerEndOf[racer] = $"{m.Groups[2].Value}@{m.Groups[3].Value}";
+            }
+            outcome.RacerClient = new ulong[2];
+            outcome.RacerClientLines = new int[2];
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER client (\d+) is racer (\d+)\."))
+            {
+                int racer = int.Parse(m.Groups[2].Value);
+                if (racer < 0 || racer > 1)
+                {
+                    outcome.StrayRacerLines++;
+                    continue;
+                }
+                outcome.RacerClientLines[racer]++;
+                outcome.RacerClient[racer] = ulong.Parse(m.Groups[1].Value);
+            }
             foreach (Match m in Regex.Matches(server, @"RACE-SERVER-DONE racer=(\d+) ticks=(\d+) received=(\d+) missed=(\d+) late=(\d+)"))
             {
                 int racer = int.Parse(m.Groups[1].Value);
@@ -267,13 +383,21 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.Late[racer] = int.Parse(m.Groups[5].Value);
             }
             string client = ReadShared(clientLog);
-            Match done = Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)");
+            Match done = Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)(?: ended=(\S+))?");
             outcome.ClientB = done.Success ? done.Value : Tail(clientLog);
+            outcome.BDone = done.Success;
+            outcome.BTimedOut = client.Contains("RACE-CLIENT-TIMEOUT");
+            foreach (Match m in Regex.Matches(client, ConnectedPattern))
+            {
+                outcome.BIdLines++;
+                outcome.BId = ulong.Parse(m.Groups[1].Value);
+            }
             if (done.Success)
             {
                 outcome.BCompared = int.Parse(done.Groups[1].Value);
                 outcome.BCorrections = int.Parse(done.Groups[2].Value);
                 outcome.BRemote = int.Parse(done.Groups[3].Value);
+                if (done.Groups[4].Success) outcome.BEnded = done.Groups[4].Value;
             }
         }
 

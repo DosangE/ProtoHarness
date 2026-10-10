@@ -45,7 +45,7 @@ model: opus
 - `Packages/manifest.json`, `ProjectSettings/` 변경.
 - 파일·에셋 삭제. 필요하면 보고만 한다.
 - 파일 이동·이름변경. `.meta` 가 따라가지 않으면 GUID가 새로 발급되어 씨·프리팝 참조가 조용히 끊긴다. 보고만 한다.
-- 커밋, 푸시, `git reset`, `git checkout --`, `git clean`.
+- 커밋, 푸시, `git reset`, `git checkout --`, `git restore`, `git clean`.
 - Editor 전용 코드를 `Editor/` 바깥에 두는 것.
 
 ## 코드 규칙

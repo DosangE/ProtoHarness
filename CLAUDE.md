@@ -38,7 +38,7 @@ Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 
 **Git**
 - 커밋·푸시는 사용자가 시킬 때만.
-- `git reset --hard`, `git checkout -- .`, `git clean`, 강제 푸시 금지.
+- `git reset --hard`, `git checkout -- .`, `git restore .`(작업 트리 되돌리기), `git clean`, 강제 푸시 금지.
 - `main`, `dev` 에 직접 커밋하지 않는다. 브랜치는 `dev` 에서 분기한다. → §9
 
 **코드**

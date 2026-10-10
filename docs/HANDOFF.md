@@ -1,24 +1,27 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-08 (롤백 안전성 구현·검증). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-10 (P3 스파이크·C1a 격리 월드). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
-## 1. 지금 상태 (2026-10-08)
+## 1. 지금 상태 (2026-10-10)
 
-- 브랜치: P3 준비 조사(`DESIGN.md` §7-5)까지 `dev` 에 병합돼 있다(`5ac8a70`, `origin/dev` 에는 푸시 안 함). 롤백 안전성 합의 요청서(`docs/rollback-proposal`)도 `dev` 에 병합돼 있고(`3840672`), 구현·검증은 `feature/p3-rollback-safety` 에서 끝나 `dev` 에 병합됐다(`cd1eb72`). 정규화 비용 측정은 `feature/p3-controller-cost` 에서 했다.
+- 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용)와 **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)** 가 병합돼 있다. `origin/dev` 에는 푸시하지 않았다(로컬이 앞서 있음). **스파이크 코드는 병합하지 않았다**: `spike/p3-ngo-prediction`(`cd6186b`, `d530638`)에만 있고, NGO 패키지 추가는 `feature/p3-ngo-package`(`09da115`)에만 있다. `dev` 의 `manifest.json` 에는 NGO 가 없다.
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`(루프·초점), 이동·드리프트·체인 액션, 절차 노면(T3a)·시드 생성기(T3b)·절차 무한 코스(T3c)·서킷(T4), 직선 무한 코스 정리(T3d).
   - **P2** (DECISIONS 2026-10-08 "P2"): 입력 기록·재생(`InputLog`·`InputRecorder`·`InputReplay`, `Control/`)과 상태 트레이스 비교(`StateTrace`, 테스트). **같은 시드 + 같은 입력 = 같은 런이 같은 머신·같은 에디터에서 비트 단위로 성립한다**: 서킷 1700틱·절차 코스 2500틱을 같은 세션(6배속)·씬 재로드(2배속)·별도 세션에서 모두 재현했다.
   - **롤백 안전성** (DECISIONS 2026-10-08 "롤백 안전성"): 서킷에서 한 틱 스냅샷·복원(`SimSnapshot`, `StepTick`)과 "되감아 다시 해도 같은 결과"를 비트 단위로 증명했다(지상·공중·그래플·슬링·코너 스윙·랩 이음매, 한 프레임 20회 되감기). **`CharacterController` 의 내부 위치가 `transform.position` 보다 정밀해 처음엔 1 ULP 어긋났고, 매 틱 컨트롤러를 껐다 켜서 막았다. 그 대가로 P2 재생 해시가 바뀌었다**(서킷 `0xF9A914DA3FAA680B`, 절차 코스 `0xE81912109A2EB020`). 정규화 비용은 껐다 켜기 1회 2.94 µs, 한 틱 28.2 µs 로 틱 예산(20 ms)의 1% 미만이라 병목이 아니다(DECISIONS "컨트롤러 정규화 비용 측정", 에디터 안 값).
+  - **P3 스파이크** (DECISIONS 2026-10-10 "P3 스파이크"): NGO 2.13.3 으로 서버 1(별도 스탠드얼론 프로세스) + 클라 1(에디터)이 서킷에서 같은 입력으로 **비트 단위로 같은 1001개 상태**를 냈고(보정 0회), 서버가 입력을 놓치면 클라가 `RestoreSnapshot` + 입력 재실행으로 보정한다(보정 1회 평균 약 0.4 ms). 예측·보정의 핵심은 NGO 무관 순수 클래스(`ClientPredictor`, `ServerInputBuffer`, `SimSnapshotCodec`, `SpikeWire`, `DelayedSender`)이고 스파이크 브랜치에만 있다. 다른 기기·IL2CPP·모바일 일치와 100 ms 에서의 체감은 확인하지 못했다.
+  - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
-- 테스트: EditMode 237, PlayMode 74(Device 2 + Sweep 1 + 게이트 71). 병합 조건 실행은 Device·Sweep 제외 71건, 약 520초/회. 20 시드 스윕(`Run Course Sweep`) 약 933초.
+- 테스트: EditMode 237, PlayMode 79(Device 2 + Sweep 1 + 게이트 76). 병합 조건 실행은 Device·Sweep 제외 76건, 약 526초/회. 20 시드 스윕(`Run Course Sweep`) 약 933초.
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
 롤백 안전성은 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **P3 스파이크**: `spike/` 브랜치에서 NGO 를 우선으로 서버 1 + 클라이언트 1 이 서킷에서 같은 입력으로 같은 위치를 내는지 본다(`DESIGN.md` §7-5, 롤백이 필요하면 `RestoreSnapshot`·`StepTick` 을 쓴다). **`Packages/manifest.json` 변경은 §0 금지선이라 별도 승인**이 필요하고 그것만 담은 브랜치로 분리한다(§9-2).
+- **P3 C1b (2인 네트워크 레이스)**: 서버가 격리 월드 2개를 시뮬하고, 클라는 자기만 예측하며 상대는 서버 상태를 보간해 표시한다. 선행 결정: ① NGO 를 `dev` 에 들이는 `manifest.json` 변경(§0 금지선, 그것만 담은 브랜치·별도 승인) ② 스파이크의 순수 클래스를 `dev` 로 옮기는 방법(`spike/p3-ngo-prediction` 에서 필요한 파일만 새 `feature/` 브랜치로 재구성, 그 브랜치는 병합하지 않는다) ③ 복사본 로더(서버 플레이어용 `SceneManager.LoadSceneAsync`, 에디터용 `EditorSceneManager`)와 서버 월드의 카메라·`AudioListener` 끄기. 먼저 §3-2 합의 요청서를 올린다.
+- **P3 C2 (충돌·추월)**: 격리 월드로는 못 한다. 공유 월드가 필요하고 `CircuitRace` 의 월드/레이서 분리, `Centerline` focus 의 레이서별 분리가 선행이다(DECISIONS "P3 C1a" 의 버린 계획 이유).
 - **P2 후속(고스트)**: 입력 로그 파일 저장과 최고 기록과 겨루기.
 - **T3e 장식**, **T5 보충 모듈**(`docs/COURSE.md`).
 - 체감 튜닝: 사용자가 직접 달려 본 피드백 대기(원격이라 보류).
@@ -47,7 +50,10 @@
 
 ## 4. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
-- 이 머신(`C:/Users/User/Desktop/PCUBE/ProtoHarness`)의 에디터는 **6000.3.19f1** 이다(결정 버전 25f1 아님). 그래서 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`(iOS 발열 설정 3줄 삭제)이 수정으로 보인다. 로컬 환경 차이라 커밋하지 않는다(사용자 2026-10-04). 검증 보고에는 19f1 에서 돌렸다고 적는다.
+- 이 머신(`D:/PCUBE/ProtoHarness`, 2026-10-10)의 에디터는 **6000.3.25f1**(결정 버전과 같음, `Editor.log:2`)이고 Hub 에 18f1·25f1 이 있다(둘 다 Windows Mono 빌드 모듈 있음). 이전 머신(`C:/Users/User/Desktop/...`)은 19f1 이었고 그때 보이던 로컬 차이(`ProjectVersion.txt` 등)는 이 머신에서는 없다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다.
+- **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`, 2026-10-10 스파이크 서버 빌드 때 확인). 커밋하지 않고 파일을 지정해 `git restore` 한다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
+- 작업 트리의 미추적 파일 둘: `.claude/settings.json`(`/fewer-permission-prompts` 로 만든 읽기 전용 허용 목록, `.claude/` 변경이라 합의 전에는 커밋하지 않음), `Assets/DefaultNetworkPrefabs.asset`(NGO 가 자동 생성한 빈 목록; `dev` 에는 NGO 가 없어 스크립트 누락 경고가 날 수 있음, 지울지는 사용자 결정).
+- 이 환경에서 검증할 때: 테스트 결과는 XML 을 `Grep` 으로 읽고, 완료 알림은 `Editor.log` 의 `ChainRush tests:` 줄을 쓴다. `Unity_RunCommand` 는 `System.Reflection` 을 막는다(타입 확인은 `System.Type.GetType("...")`). 컴파일 확인은 `EditorApplication.isCompiling` 과 새 타입 로드 여부를 같이 본다(리프레시 직후 `False` 는 아직 이르다). 사용자는 허용 프롬프트가 많은 것을 싫어하므로 읽기·수정은 `Read`/`Grep`/`Edit` 로 하고 Bash 는 최소로 쓴다.
 - 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 에디터의 `Path.GetTempPath()` 는 이 머신에서 `C:\Users\Public\Documents\ESTsoft\CreatorTemp\` 이다(2026-10-08 Editor.log 의 `ChainRush tests: ... XML=` 줄로 확인. 셸의 `%TEMP%` 와 다르다). 경로는 Editor.log 에서 `ChainRush tests:` 를 찾으면 나온다. EditMode 는 MCP `Unity_RunCommand` 로 `TestRunnerApi.Execute(new Filter { testMode = TestMode.EditMode })`, PlayMode 는 `EditorApplication.ExecuteMenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")` 로 시작했다. 실행마다 따로 보관하려면 끝날 때 복사한다.
 - Unity MCP: 도메인 리로드마다 브리지가 몇 초 끊긴다(`Unity not detected (no fresh discovery files found)`). `~/.unity/mcp/connections/bridge-*.json` 이 다시 생기면 재시도한다. 에디터가 백그라운드면 스크립트를 자동 임포트하지 않을 수 있다 → `AssetDatabase.Refresh()`. 테스트 전에 새 코드가 로드됐는지(리플렉션 등) 확인한다.
 - `.codex/agents/` 가 `git status` 에 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음). 손대지 않는다.

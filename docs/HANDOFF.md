@@ -22,6 +22,14 @@
 C1b 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
 - **P3 C1c (결승·낙하·순위를 클라에 알리기)**: 서버가 런이 끝났다(낙하·결승)고 클라에 알리지 않아, 클라는 마지막 상태를 영원히 기다린다(지터 시나리오에서 서버의 한 레이서가 놓친 입력으로 낙하해 끝났다. 플레이어 클라는 `-raceTimeout` 으로만 빠져나온다). 필요한 것: ① 종료 메시지(이유·틱) ② 클라가 서버 종료 틱 이후를 어떻게 하는지(예측 중단·보정) ③ 결승 순서·순위 계산. 결승선은 서킷의 랩 수로 이미 판정된다(`CircuitRace.IsFinished`).
+  - **C1c-1 요청서 (2026-10-10 작성, 승인 전)** — ①② 만. 다음 세션은 이 요청서를 사용자에게 올리고 승인을 받는다.
+    - 근거: 런이 끝나면 `ServerInputBuffer.AfterTick` 은 아무것도 안 낸다(`ServerInputBuffer.cs:71`), 서버는 로그만 남긴다(`RaceServer.cs:265-270`). 클라 `Finished` 는 `targetTicks` 비교 완료뿐(`RaceClient.cs:46`), 아니면 타임아웃(`:149-155`). 놓친 입력은 직전 입력 반복(`ServerInputBuffer.cs:84-85`). `DelayedSender` 는 순서를 지킨다(`DelayedSender.cs:8,18`) → 종료를 같은 `ToOwner` 로 보내면 T-1 상태 뒤에 온다.
+    - 설계: 마지막 상태 대신 "종료 틱 T + 이유(낙하/결승) + 서버가 T 에 쓴 입력"을 보낸다. 끝난 런은 `CaptureSnapshot` 이 던지므로(`ChainRushGame.cs:221`) 상태로 보내려면 시뮬 코드를 고쳐야 한다. 클라는 결정성(P2)으로 같은 결말을 재현하고, 안 되면 예외(§5). `targetTicks` 를 넘은 종료는 상태처럼 무시(`RaceClient.cs:126`).
+    - 건드릴 것: `Runtime/Net/` 의 `RaceNetwork.cs:13-15`(메시지 `race.end`), `RaceWire.cs`(EncodeEnd/DecodeEnd, 엄격 디코드), `ServerInputBuffer.cs:67-73`(`RunEnded(tick, 이유, 쓴 입력)` 이벤트), `RaceServer.cs:153` 부근(`RunEnded` → `ToOwner`), `ClientPredictor.cs`(`OnServerEnd`: 같으면 통과, 다르면 T-1 로 되감고 서버 입력으로 틱 T 재실행, 결말이 다르면 예외), `RaceClient.cs:46,87,146`(핸들러, `Finished` 에 서버 종료 포함, DONE 로그에 `ended=<이유>@<틱>`). 테스트: `NetReconcileTests.cs` 에 ① Wire 종료 왕복·손상 바이트 예외 ② 서버가 입력을 놓쳐 낙하 → 클라 보정 1회 후 같은 틱에 Failed ③ 같은 결승 → 보정 0 ④ T-1 비교 전 종료 도착은 예외. `NetworkRaceTests.cs:114` 지터 테스트를 "끝나거나 서버가 끝냄" → "각 클라가 종료를 받고 끝남" 으로 조인다(통과시키려고 푸는 것이 아니라 조이는 것). 새 파일 없음. 기존 8파일·공개 API 추가 → §3-1 합의 대상.
+    - 검증: 컴파일 에러 0 → EditMode 전체 → PlayMode 게이트 연속 2회(Device·Sweep 제외, 약 18분) → 레이스 플레이어 재빌드(1절 "네트워크 레이스") 후 NetRace `[Explicit]` 2개, 지터 시나리오에서 `RACE-CLIENT-TIMEOUT` 이 없어야 한다. 빌드가 바꾼 `ProjectSettings` 는 파일 지정 restore(4절).
+    - 안 하는 것: 순위·결승 순서(C1c-2), 다른 레이서에게 종료 알림(고스트), 시뮬 코드(`ChainRushGame`·`SimSnapshot`), 씬·프리팹·`ProjectSettings`, Device·Sweep 실행(입력·코스 경로 안 건드림).
+    - 브랜치: `feature/p3-c1c-run-end`.
+    - **실행 방식: A 로 정함**(2026-10-10 사용자 "A 로 하되 요청서까지만"). 구현 승인은 아직 아니다 — 다음 세션은 이 요청서를 올리고 명시적 승인을 받은 뒤 시작한다. 순서(직렬, §7-2): ① 메인이 브랜치 생성 ② `unity-implementer` 파견 — 프롬프트에 이 요청서 전문(건드릴 것·안 하는 것·테스트 4개), `승인: <날짜, 사용자 문구>`, `브랜치: feature/p3-c1c-run-end` ③ `unity-reviewer` 에 변경 파일 목록을 주고 §0/§1/§5 리뷰 ④ 지적 반영은 다시 `unity-implementer` ⑤ `unity-verifier` 로 컴파일·Console 확인 ⑥ 테스트 게이트 실행·병합 보고는 메인(§9-2). 에이전트 결과의 `경로:줄` 없는 주장은 되묻는다(§7-4).
 - **P3 C1 마무리 측정**: 서로 **다른** 입력의 두 레이서(지금은 같은 입력), 3인 이상 서버, 100 ms 에서의 체감(프레임 시간·입력 지연), 패킷 유실(앱 수준 지연 큐는 유실을 모사하지 못한다), 모바일/IL2CPP 빌드의 일치.
 - **P3 C2 (충돌·추월)**: 격리 월드로는 못 한다. 공유 월드가 필요하고 `CircuitRace` 의 월드/레이서 분리, `Centerline` focus 의 레이서별 분리가 선행이다(DECISIONS "P3 C1a" 의 버린 계획 이유).
 - **P2 후속(고스트)**: 입력 로그 파일 저장은 `InputLogFile` 로 끝났다. 남은 것은 최고 기록 저장과 겨루기(고스트 재생)와 UI.

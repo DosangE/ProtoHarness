@@ -35,7 +35,7 @@ C1b 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 
 - **P2 후속(고스트)**: 입력 로그 파일 저장은 `InputLogFile` 로 끝났다. 남은 것은 최고 기록 저장과 겨루기(고스트 재생)와 UI.
 - **T3e 장식**, **T5 보충 모듈**(`docs/COURSE.md`).
 - 체감 튜닝: 사용자가 직접 달려 본 피드백 대기(원격이라 보류).
-- **하네스**: ① SessionStart 의 `startup`·`resume` 트리거 확인(`clear` 만 확인됨) ② 서브에이전트 안의 훅은 Bash deny 만 확인됨(DECISIONS 2026-10-10 "하네스 자동화" 한계). `ask`·PowerShell·PostToolUse 는 미확인 ③ C모드 재논의: 우리 `.cs` 가 95개(2026-10-10 `git ls-files`)로 §6-3 의 재논의 트리거(60개 초과)를 넘었다. 만들지는 별도 합의.
+- **하네스**: ① SessionStart 의 `resume` 트리거 미확인(`clear`·`startup`·`fork` 는 확인됨). 2026-10-10 백그라운드 세션을 `dev` 위에서 resume 했을 때 transcript 에 `SessionStart:resume` 기록이 없었다. dev 커밋은 PreToolUse guard 가, 낡은 인덱스는 LOOKUP §6-2 가 따로 막으므로 우선순위 낮음 ② 서브에이전트 안의 훅은 Bash deny 만 확인됨(DECISIONS 2026-10-10 "하네스 자동화" 한계). `ask`·PowerShell·PostToolUse 는 미확인 ③ C모드 재논의: 우리 `.cs` 가 95개(2026-10-10 `git ls-files`)로 §6-3 의 재논의 트리거(60개 초과)를 넘었다. 만들지는 별도 합의.
 
 ## 3. 보류된 사용자 결정
 

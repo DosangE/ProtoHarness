@@ -1,7 +1,7 @@
 {
   "name": "ProtoHarness.Tests.PlayMode",
   "rootNamespace": "ProtoHarness.Tests.PlayMode",
-  "references": ["ProtoHarness.Runtime", "Unity.InputSystem"],
+  "references": ["ProtoHarness.Runtime", "ProtoHarness.Net", "Unity.InputSystem"],
   "optionalUnityReferences": ["TestAssemblies"],
   "defineConstraints": ["UNITY_INCLUDE_TESTS"],
   "autoReferenced": false

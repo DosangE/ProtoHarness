@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-10-10 · P3 C1b-0·C1b-1: NGO 를 `dev` 에 들이고 2인 네트워크 레이스를 `Net` 으로 이식
+
+- **결정 (사용자 승인, 2026-10-10 C1b 합의 요청서 "추천대로": 패키지는 별도 브랜치, `Spike` → `Net` 이름 변경, 입력 로그 파일 포함, 상대는 런타임 캡슐로 보간 표시)**
+  - **C1b-0**: `feature/p3-ngo-install`(스파이크 때의 패키지 커밋 `09da115` 를 현재 `dev` 위에 `cherry-pick` → `35b51ee`)을 `dev` 에 `--no-ff` 로 병합했다(`0b82595`). `manifest.json:11` 에 `com.unity.netcode.gameobjects 2.13.3` 한 줄과 lock 21줄(`com.unity.transport 2.7.4` 포함)뿐이다. 병합 보고: 컴파일 Console Error 0, EditMode `237/237`(08:49:47Z~08:49:52Z), PlayMode 게이트 `76/76` 연속 2회(08:50:10Z~08:59:09Z 539.4초, 08:59:32Z~09:08:33Z 540.7초), 자동으로 바뀐 파일 없음.
+  - **C1b-1**: 스파이크의 순수 클래스 4개(`SimSnapshotCodec`, `ClientPredictor`, `ServerInputBuffer`, `DelayedSender`)와 NGO 접착을 `Runtime/Net/`(asmdef `ProtoHarness.Net`)로 옮기고, 서버를 **레이서 N명(격리 월드 N개)** 으로 넓혔다. 상대 위치 전달·보간·표시와 입력 로그 파일을 더했다.
+- **옮기며 바꾼 것**
+  - `ClientPredictor`·`ServerInputBuffer` 가 `ChainRushGame.TickCompleted` 를 **스스로 구독**한다. 스파이크에서는 호출자가 틱마다 `AfterTick()` 을 불러야 했고 실행 순서(`DefaultExecutionOrder`)에 기댔다. 이제 빠뜨릴 수 없다. `Detach()` 로 구독을 푼다. tick 0(`StartRun` 직후) 만 호출자가 `AfterTick()` 을 한 번 부른다.
+  - `TickInputCodec`(`Control/`): 다섯 버튼을 한 바이트로. 와이어와 입력 로그 파일이 같은 규칙(알 수 없는 비트는 `InvalidDataException`, 조향 범위 밖은 `ArgumentOutOfRangeException`)을 쓴다.
+  - `InputLogFile`(`Control/`): `"PHIL"` + 버전 + 틱 수 + 틱당 5바이트. 엄격한 디코드(머리말·버전·길이·버튼·조향). P2 후속(로그 저장)의 첫 조각이다. 실제 봇 런이 파일을 거쳐도 같은 1700틱을 재생한다.
+  - 부트스트랩 `RaceBootstrap`: `FindFirstObjectByType` 대신 `RaceWorld.FromScene` 의 루트 스캔을 쓴다(스파이크 때의 §0 면제가 필요 없다). `-raceServer`/`-raceClient` 로 같은 플레이어가 서버도 클라이언트도 된다.
+  - 서버 `RaceServer`: 슬롯(격리 월드, 입력 버퍼, 지연 큐)이 레이서마다 하나. 한 레이서의 상태는 주인에게 통째로, 위치(틱+Vector3 16바이트)는 다른 클라이언트에게 간다. 서버 플레이어가 첫 서킷 씬을 열고 나머지는 `SceneManager.LoadSceneAsync(이름, IsolatedLoad)` 로 복사본을 로드한다. 서버 월드의 `AudioListener`·`Camera` 는 끈다(켜 두면 Unity 가 매 프레임 로그를 찍는다).
+  - 상대 표시: `RemoteInterpolator`(표시 시계가 최신 위치보다 `delayTicks` 4 뒤에서 틱 속도로 가고, 최대 `maxLagTicks` 25 이상 뒤처지지 않으며, 두 위치 사이를 선형 보간) + `RemoteGhost`(런타임에 만든 콜라이더 없는 캡슐, 씬 무수정).
+- **증명한 것** (같은 머신·루프백·Mono 스탠드얼론 서버 + Mono 스탠드얼론 클라이언트 + 에디터 클라이언트, 봇이 기록한 같은 1000틱, 시각은 XML 의 UTC, 에디터 6000.3.25f1)
+  - **고정 지연(RTT 100 ms, 한쪽 50 ms, 지터 없음, 서버 버퍼 3틱)**: 에디터·플레이어 두 클라이언트 모두 서버 상태 1001개를 비교해 **보정 0회**. 서버의 두 격리 월드 모두 `late 0` 이고 중간 놓침 없음(놓침은 클라가 입력을 그만 보낸 뒤 서버가 더 돈 틱뿐: `ran − received`). 에디터가 받은 상대 위치 937개 중 자기 런과 대조한 936개가 **비트 단위로 모두 같다**(같은 입력이라 상대 위치 = 자기 위치). 고스트는 4571프레임에서 한 프레임 최대 이동 0.272 m, 5 m 넘는 점프 0. 새 빌드로 다시 돌려도 같은 결과(첫 빌드: 최대 0.430 m).
+  - **지터(기본 30 ms + 0~120 ms, 버퍼 1틱)**: 서버가 입력을 962~1070회 놓침·333~440회 늦음. 에디터 보정 108~134회. 고스트는 4456~4658프레임에서 최대 0.172 m, 점프 0.
+- **발견: 서버가 런이 끝났다고 클라이언트에게 알리지 않는다.** 지터 시나리오에서 서버의 한 레이서가 놓친 입력 때문에 틱 657 에서 `failed True`(낙하)로 끝났고(`server-7794.log:30`), 그 뒤 서버는 그 레이서의 상태를 더 보내지 않는다(`ServerInputBuffer.AfterTick` 은 런이 끝나면 아무것도 안 낸다). 그 클라이언트는 마지막 상태를 영원히 기다린다. 플레이어 클라이언트는 `-raceTimeout`(이번에 넣은 인자)으로 스스로 끝낸다. 결승·순위·낙사를 클라에 알리는 메시지는 **C1b-2 또는 그 뒤의 일**이다. 스파이크의 "보정 크기 약 184 m"(놓친 점프의 낙하 추정)도 같은 현상으로 보인다(확인 못 함).
+- **알아둘 것**
+  - 통합 테스트(`NetworkRaceTests`)는 `[Explicit]` 이다. 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`)가 있어야 하고 약 90초 걸려 병합 게이트에 넣지 않았다. 이름으로 골라 돌린다. 게이트에는 빠른 `Net` 카테고리 단위 테스트 21건(보정·코덱·보간기·와이어·입력 로그 파일)이 들어간다. `CLAUDE.md` §9-2 는 바꾸지 않았다.
+  - 플레이어 빌드는 이번에도 Unity 가 `ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/` 에셋 3개를 자동으로 바꿨다(`git status` 확인, 스파이크 때와 같은 파일들). 커밋하지 않고 파일을 지정해 `git restore` 로 되돌렸다. 첫 빌드는 Sentis 셰이더 경고 485건을 냈고 도구가 "실패"로 표시했지만 빌드는 `Succeeded, 0 errors` 였다.
+  - 두 번째 클라이언트가 플레이어 프로세스인 이유: `NetworkManager` 는 프로세스당 하나라서 에디터 안에 클라이언트 둘을 둘 수 없다.
+- **한계 (확인 못 한 것)**: 같은 머신·루프백, 같은 입력 두 명(서로 다른 입력이 아님), 클라이언트 2명뿐이다. 모바일·IL2CPP·다른 기기, 패킷 유실, 3인 이상, 결승·순위, 상대의 충돌은 없다. 지연은 앱 수준이라 전송 계층의 지터를 모사하지 못한다. 보정 횟수는 지터 시나리오에서 실행마다 다르다(실시간).
+- **검증 (C1b-1, `feature/p3-c1b-net`, 시각은 XML 의 UTC)**: 컴파일 Console Error 0. `Net` 카테고리 단위 테스트 `testcasecount=21 Passed passed=21 failed=0`. 네트워크 레이스 `testcasecount=2 Passed passed=2 failed=0` (09:21:01Z~09:22:34Z, 93.4초; 이전 실행: 지터 시나리오가 플레이어 클라이언트의 대기 때문에 `passed=1 failed=1` 이었고, 단언을 "끝까지 가거나 서버가 그 런의 종료를 기록했다"로 바꿔 통과시켰다. 판정 기준(보정 횟수·비트 일치)은 바꾸지 않았다). EditMode `testcasecount=237 Passed passed=237 failed=0` (09:22:49Z~09:22:54Z). PlayMode 게이트(Device·Sweep 제외) 연속 2회: 1회 `testcasecount=99 result=Passed passed=97 failed=0 skipped=2` (09:23:14Z~09:32:28Z, 553.8초), 2회 `99/97/0/2` (09:32:50Z~09:42:00Z, 550.6초). skipped 2 는 `[Explicit]` 네트워크 레이스 테스트이고 97 = 이전 76 + `Net` 21. 시뮬 코드를 안 바꿔서 스윕·Device 는 해당 없다. 
+- **하지 않은 것**: 시뮬 코드(`ChainRushGame`·`RunnerMotor`·`GrappleController`) 변경, 씬·프리팹 수정, 의도적인 `ProjectSettings` 변경(위의 자동 변경은 되돌렸다), 결승·순위 메시지, 충돌·아이템(C2·C3), 푸시.
+
+---
+
 ## 2026-10-10 · P3 C1a: 격리 월드 — 레이서마다 서킷 씬 복사본과 자기 물리 씬, 틱 완료 이벤트
 
 - **결정 (사용자 승인, 2026-10-10 "추천대로진행" 후 계획을 고쳐 다시 올리고 "추천재로")**: C1 은 "2인, 방해 없음"이라 레이서끼리 닿지 않는다. 그래서 레이서 한 명마다 **서킷 씬 복사본을 `LocalPhysicsMode.Physics3D` 로 추가 로드**해 각자 `ChainRushGame`·`RunnerMotor`·`CircuitRace`·물리 씬을 갖는다. 공유 월드는 충돌이 생기는 C2 에서 필요가 확인된 뒤 설계한다.

@@ -1,0 +1,59 @@
+using System;
+using System.IO;
+using ProtoHarness.ChainRush.Control;
+using UnityEngine;
+
+namespace ProtoHarness.Net
+{
+    // What goes over the wire. Input (client to server): the tick it is for and that tick's controls. State (server to
+    // the racer it belongs to): an encoded SimSnapshot (SimSnapshotCodec), which carries its own tick. Remote (server to
+    // the other racer): where a racer was after a tick, for drawing it. Decoding is strict: a short or long message throws.
+    public static class RaceWire
+    {
+        public static byte[] EncodeInput(int tick, in TickInput input)
+        {
+            using var stream = new MemoryStream(16);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(tick);
+            writer.Write(input.Steer);
+            writer.Write(TickInputCodec.ToFlags(input));
+            writer.Flush();
+            return stream.ToArray();
+        }
+
+        public static TickInput DecodeInput(byte[] bytes, out int tick)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            using var stream = new MemoryStream(bytes, false);
+            using var reader = new BinaryReader(stream);
+            tick = reader.ReadInt32();
+            float steer = reader.ReadSingle();
+            byte flags = reader.ReadByte();
+            if (stream.Position != stream.Length) throw new InvalidDataException("RaceWire: unread bytes after an input.");
+            return TickInputCodec.FromFlags(steer, flags);
+        }
+
+        public static byte[] EncodeRemote(int tick, Vector3 position)
+        {
+            using var stream = new MemoryStream(16);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(tick);
+            writer.Write(position.x);
+            writer.Write(position.y);
+            writer.Write(position.z);
+            writer.Flush();
+            return stream.ToArray();
+        }
+
+        public static Vector3 DecodeRemote(byte[] bytes, out int tick)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            using var stream = new MemoryStream(bytes, false);
+            using var reader = new BinaryReader(stream);
+            tick = reader.ReadInt32();
+            var position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+            if (stream.Position != stream.Length) throw new InvalidDataException("RaceWire: unread bytes after a remote position.");
+            return position;
+        }
+    }
+}

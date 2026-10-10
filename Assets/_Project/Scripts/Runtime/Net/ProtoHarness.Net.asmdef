@@ -1,0 +1,7 @@
+{
+  "name": "ProtoHarness.Net",
+  "rootNamespace": "ProtoHarness.Net",
+  "references": ["ProtoHarness.Runtime", "Unity.Netcode.Runtime", "Unity.Networking.Transport", "Unity.Collections"],
+  "allowUnsafeCode": false,
+  "autoReferenced": false
+}

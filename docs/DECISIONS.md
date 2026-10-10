@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-10-10 · 서브에이전트 모델·노력 고정: 5종 모두 `claude-opus-5-5` + `effort: high`
+
+- **결정 (사용자 지시, 2026-10-10 "opus 5.5, high로 고정하자" → 요청서에 "그렇게해라 그러면")**: `.claude/agents/*.md` 5개의 frontmatter 를 `model: claude-opus-5-5`, `effort: high` 로 바꾼다. 전에는 explorer·verifier 가 `sonnet`, 나머지가 별칭 `opus` 였고 `effort` 는 없었다. `docs/RULES/SUBAGENTS.md` §7-1 표에 노력 열을 더하고, `tools/sync-agents.ps1` 로 `.codex` 를 재생성했다.
+- **이유**: 파견할 때마다 모델·노력을 지정하지 않아도 같은 설정으로 돈다. 별칭 대신 전체 ID 를 쓰면 별칭이 다른 모델을 가리키게 돼도 조용히 바뀌지 않는다. 두 필드가 받는 값(`model` 은 별칭·전체 ID·`inherit`, `effort` 는 `low`~`max`)은 Claude Code 문서 `code.claude.com/docs/en/sub-agents` 의 frontmatter 표로 확인했다.
+- **대가**: explorer·verifier 가 sonnet 에서 opus 로 올라가 파견 1회의 비용·시간이 는다.
+- **한계 (확인 못 한 것)**: 정의 파일을 고친 것이 이미 열린 세션의 다음 파견에 바로 반영되는지 확인하지 못했다. `effort` 는 `CLAUDE_CODE_EFFORT_LEVEL` 환경변수가 있으면 그 값에 진다(같은 문서). `sync-agents.ps1` 은 `model` 만 주석으로 옮기고 `effort` 는 옮기지 않는다(`tools/sync-agents.ps1:71`) — Codex 쪽 대응 키는 2026-10-10 "하네스 자동화" 이전부터 미확인이다.
+- **버린 대안**: explorer·verifier 는 sonnet 유지하고 노력만 high — 사용자가 5종 모두 opus 를 택했다. 파견 때마다 `model`·`effort` 를 넘기기 — 빠뜨리면 조용히 기본값으로 돈다.
+
 ## 2026-10-10 · 하네스 자동화: 금지선 일부를 훅으로 집행하고 `sync-agents -Check` 거짓 양성을 고친다
 
 - **결정 (사용자 승인, 2026-10-10 합의 요청서 "ㄱㄱ")**: 문서로만 있던 규칙 중 기계로 판정되는 것을 `.claude/settings.json` 의 훅 3개로 집행한다. 스크립트는 `tools/hooks/`(Assets 바깥, 2026-08-25 "도구·문서는 Assets 바깥에 둔다"와 같다).

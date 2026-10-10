@@ -7,6 +7,33 @@
 
 ---
 
+## 2026-10-10 · P3 스파이크: NGO 서버 1 + 클라이언트 1 예측·보정 — 같은 머신에서 프로세스 사이도 비트 일치
+
+- **결정 (사용자 승인, 2026-10-10 "추천대로 ㄱㄱ" 후 "Ok": 서버는 별도 프로세스(방식 A), `manifest.json` 에 NGO 2.13.3 추가, 새 asmdef `ProtoHarness.Spike`, 스파이크 부트스트랩의 `FindFirstObjectByType` 1회 면제, 지연은 앱 수준 큐, 서버 빌드는 리포 밖)**: NGO 를 쓰되 예측·보정은 직접 만들었다. 브랜치 `feature/p3-ngo-package`(커밋 `09da115`, manifest+lock 만) → `spike/p3-ngo-prediction`(병합하지 않음). 이 항목은 `docs/p3-spike-report` 로 `dev` 에 옮겼다(스파이크 브랜치는 병합하지 않는다). 스파이크 코드는 `spike/p3-ngo-prediction`(`cd6186b`)에만 있다.
+- **만든 것** (`Assets/_Project/Scripts/Runtime/Spike/`, 10파일): 코덱(`SimSnapshotCodec`: 스냅샷의 모든 필드를 비트 그대로 바이트로, 같은 상태 = 같은 바이트)·와이어(`SpikeWire`)·예측기(`ClientPredictor`: `IInputSource`, 서버 상태와 예측을 바이트로 비교하고 어긋나면 `RestoreSnapshot` 후 기억해 둔 입력으로 현재 틱까지 `StepTick` 재실행)·서버 입력 버퍼(`ServerInputBuffer`: 입력이 늦으면 직전 입력을 반복하고 센다)·지연 큐(`DelayedSender`)는 **NGO 와 무관한 순수 클래스**다. NGO 에 닿는 것은 `SpikeNetwork`·`SpikeServer`·`SpikeClient`·`SpikeBootstrap` 4개뿐이고 메시지는 `CustomMessagingManager` 이름 있는 메시지 2종(입력/상태), 프리팹·`NetworkObject`·씬 수정이 없다. 테스트 2파일(`SpikeReconcileTests` 카테고리 `Spike`, `SpikeNetworkTests` 카테고리 `SpikeNet`)과 기존 테스트 asmdef 참조 1줄.
+- **측정** (같은 머신, 루프백, **서버 = Windows 스탠드얼론 Mono 빌드, 클라이언트 = 에디터**, 서킷 씬, 봇이 기록한 입력 1000틱):
+
+| 항목 | 값 |
+|---|---|
+| 프로세스 사이 일치 (RTT 100 ms: 한쪽 50 ms, 지터 없음, 서버 버퍼 3틱) | 상태 1001개 비교, **보정 0회.** 서버 1003틱·입력 1000 수신·늦음 0 |
+| 놓친 입력 한 번의 보정 (단일 시뮬 테스트, 서버 상태가 5/15/40틱 늦게 도착) | 보정 정확히 1회, 재실행 틱 수 = 지연 틱 수(5/15/40), 보정 뒤 서버 런을 비트 단위로 따라감. 재실행 비용 2.000 / 0.456 / 1.211 ms (한 번 더 돌린 값 1.853 / 0.473 / 1.257 ms) |
+| 지터 0~120 ms + 기본 30 ms, 버퍼 1틱 (실시간 비결정, 같은 코드 3회) | 서버가 입력을 놓침 362~536회·늦게 도착 358~532회. 클라 보정 **114 / 115 / 166회**, 재실행 1216 / 1225 / 1646틱(가장 긴 재실행 13틱), 합계 49.8 / 51.6 / 68.2 ms → **보정 1회 평균 약 0.4 ms, 재실행 한 틱 약 41 µs** |
+| 코덱 | 스냅샷 192바이트(틱 400). 필드 32개 전부 바이트를 바꾼다(반사 테스트) |
+
+- **판정 기준 (`DESIGN.md` 7-4-3, 7-5)**: ① *서로 일치하는가* — 예(위 첫 행). ② *되감아 재실행해도 P2 와 같은 결과인가* — 예(복원한 디코드 스냅샷으로 한 틱 가면 원래 틱 401 과 같은 바이트, 놓친 입력 테스트에서 보정 뒤 서버 런과 비트 일치). ③ *지연 100 ms 에서 조작이 끊기지 않는가* — **직접 재지 않았다.** 구조상 클라는 서버 응답을 기다리지 않고 입력을 즉시 시뮬에 넣지만, 프레임 시간·체감은 안 쟀다. ④ *NGO 에서 예측을 직접 만드는 비용* — 위 순수 클래스 5개와 NGO 접착 4개로 끝났고, 비용의 대부분은 NGO 가 아니라 "스냅샷·비교·재실행" 쪽이었다(**판단**: 그 부분은 Fusion 을 골라도 `CharacterController` 우회와 함께 같은 일이 필요하다).
+- **발견 (고치기 전에 실패해서 찾은 것)**
+  1. **스냅샷을 `Consume` 안에서 찍으면 틱 사이 상태가 아니다.** `StepTick` 은 `tick++` 와 `circuit.PrepareTick()` 을 한 뒤에 입력을 묻는다(`ChainRushGame.cs:178-186`). 처음엔 `Consume` 에서 직전 상태를 찍었더니 "서버와 일치"인데도 보정이 1686회 났다(비교한 상태 전부). `StepTick` 이 끝난 뒤 찍도록(`AfterTick`) 고쳤다. 서버·클라가 매 틱 끝에 `AfterTick` 을 불러야 하고, 서버/클라 컴포넌트는 `[DefaultExecutionOrder(1000)]` 으로 게임의 `FixedUpdate` 뒤에 돈다. 게임 코드에는 틱 완료 이벤트가 없다.
+  2. **`UnityTransport` 의 디버그 시뮬레이터는 이 버전에서 동작하지 않는다**(`UnityTransport.cs:348,969` `Obsolete ... has no effect`; 대안은 Multiplayer Tools 패키지). 그래서 지연·지터는 `DelayedSender`(앱 수준, 유실 없음)로 흉내 냈다.
+  3. `NetworkManager` 는 다른 오브젝트 아래에 둘 수 없다(`NotifyUserOfNestedNetworkManager`). `OnEnable` 이 `Application.runInBackground = true` 를 켜므로 `RunInBackground = false` 로 막았다.
+  4. **놓친 입력의 보정은 크게 보일 수 있다.** 지터 시나리오의 가장 큰 보정은 화면에서 **약 183.8 ~ 183.9 m** 를 움직였다(3회 모두 첫 불일치 틱 604 부근). 원인은 **확인하지 못했다**(추정: 점프/그래플 입력을 서버가 놓쳐 서버 쪽 러너가 갭에서 떨어진 것). 재실행 틱 수와 무관하다. 놓친 입력을 이전 입력으로 때우는 정책은 이 스파이크의 선택일 뿐이고 정책 비교는 하지 않았다.
+  5. 서버는 클라가 입력을 그만 보낸 뒤에도 접속이 끊길 때까지 몇 틱 더 돌아 그 틱이 "놓침"으로 세어진다(서버 `ran 1003, received 1000, missed 3`). 서버 쪽 결함이 아니고 테스트가 `missed == ran − received` 로 가린다.
+  6. **플레이어 빌드는 Unity 가 `ProjectSettings` 를 바꾸게 한다**(자동, 내가 쓴 것이 아님): `ProjectSettings.asset` 의 `preloadedAssets`(URP 전역 설정 에셋)·`m_BuildTargetBatching`(Standalone), `UnityConnectSettings.asset` 의 `m_Enabled 0 → 1`, `Assets/Settings/` 의 3개 에셋, `ProtoHarness.slnx` 1줄. 커밋하지 않았고, 사용자 승인(2026-10-10 "ㄱㄱ")으로 파일 5개를 지정해 `git restore` 로 되돌렸다(`ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 그대로 뒀다). 빌드 중 임시 `Assets/Resources/` 가 생겼다가 사라졌다. 이 스파이크 때문에 생긴 `Assets/DefaultNetworkPrefabs.asset`(NGO 가 만드는 빈 목록)도 미추적으로 남아 있다. **스파이크 밖에서 NGO 를 쓰게 되면 `ProjectSettings` 변경을 `CLAUDE.md` §9-2 대로 따로 담은 브랜치로 분리해야 한다.**
+- **한계 (확인 못 한 것·증명하지 않는 것)**: 같은 머신·루프백·클라이언트 1명·서킷·한 레이서뿐이다. **다른 기기·OS·IL2CPP·모바일에서의 부동소수 일치는 증명하지 않았다**(여기서 일치한 것은 같은 CPU 의 에디터 Mono 와 스탠드얼론 Mono 뿐이다). 패킷 유실·실제 네트워크 지연·8인·충돌·아이템은 없다. 지연은 앱 수준이라 전송 계층 자체의 지터를 모사하지 못한다. 1000틱(20초)이고 지터 시나리오는 실시간이라 같은 코드로도 보정 횟수가 114~166으로 달랐다. Fusion 은 비교하지 않았다. NGO 2.13.3 이 6000.3.25f1 에서 임포트·컴파일·접속까지 되는 것은 확인했다(레지스트리 `unity: 6000.0`, 매뉴얼의 pre-release 표시와의 차이는 확인 못 함).
+- **검증** (시각은 XML 의 UTC, 에디터 **6000.3.25f1**): 컴파일 Console Error 0. 서버 빌드 `Succeeded, 0 errors, 0 warnings, 131125727 bytes`. `Spike` 카테고리 `testcasecount=11 result=Passed passed=11 failed=0` (06:42:17Z~06:42:25Z). `SpikeNet` 카테고리 `testcasecount=2 result=Passed passed=2 failed=0` (06:58:48Z~06:59:38Z, 50.0초). **이전 실행의 실패도 적는다**: `Spike` 1차 `passed=7 failed=4`(조향 구간 오선택 3 + 스냅샷 시점 1), 2차 `8/3`(구간 3), 3차 `7/4`(대조군이 512틱 창을 넘겨 의도한 예외 + 그 예외가 뒤 테스트로 번짐), 4차 통과. `SpikeNet` 1차 `0/2`(NetworkManager 중첩), 2차 `1/1`(로그 파일 공유 위반), 3차 `1/1`(서버 놓침 단언), 4차 통과. 모두 테스트·접착 코드를 고쳐서 통과했고 판정 기준(비트 일치, 보정 횟수)은 바꾸지 않았다. **병합 조건(EditMode·PlayMode 게이트 2회)은 돌리지 않았다**: 병합하지 않는 스파이크이고 시뮬 코드는 바꾸지 않았다(`ChainRushGame`·`RunnerMotor` 무수정).
+- **하지 않은 것**: 시뮬 코드 수정, 씬·프리팹 수정, Fusion 비교, 모바일/IL2CPP 빌드, 다인(C1), 스파이크 코드의 `dev` 병합, 푸시.
+
+---
+
 ## 2026-10-08 · P3 준비: 컨트롤러 정규화 비용 측정 — 틱 예산 대비 무시할 수준
 
 - **결정 (사용자 승인, 2026-10-08 "ㄱㄱ": 합의 요청서 "컨트롤러 정규화 비용 측정")**: 롤백 안전성에서 넣은 매 틱 `NormalizeController`(`CharacterController` 껐다 켜기, `RunnerMotor.cs`)의 비용을 처음으로 쟀다. **정규화는 그대로 두고, 런타임 코드는 바꾸지 않았다.** `CharacterController` 를 자체 충돌로 바꾸는 선택지는 이 숫자로는 필요하지 않다.

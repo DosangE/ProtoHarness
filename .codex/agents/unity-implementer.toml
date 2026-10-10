@@ -1,7 +1,7 @@
 # 생성물 — 직접 수정하지 말 것.
 # 원본: .claude/agents/unity-implementer.md
 # 재생성: powershell -ExecutionPolicy Bypass -File tools/sync-agents.ps1
-# model: opus
+# model: claude-opus-5-5
 # tools: Read, Grep, Glob, Bash, Write, Edit
 
 name = 'unity-implementer'

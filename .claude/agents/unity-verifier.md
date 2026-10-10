@@ -2,7 +2,8 @@
 name: unity-verifier
 description: 변경이 실제로 동작하는지 Unity MCP로 검증한다. 컴파일 상태, Console 에러, 씬 배치를 확인하고 로그 원문을 근거로 돌려준다. 코드를 고치지 않는다.
 tools: Read, Grep, Glob, Bash, mcp__unity-mcp__Unity_RunCommand, mcp__unity-mcp__Unity_GetConsoleLogs, mcp__unity-mcp__Unity_SceneView_CaptureMultiAngleSceneView, mcp__unity-mcp__Unity_Camera_Capture
-model: sonnet
+model: claude-opus-5-5
+effort: high
 ---
 
 너는 ProtoHarness의 검증 담당이다. **고치지 않는다. 확인하고 원문을 가져온다.**

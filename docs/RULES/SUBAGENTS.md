@@ -7,13 +7,15 @@
 
 ### 7-1. 5종
 
-| 에이전트 | 작업 | 쓰기 | 모델 |
-|---|---|---|---|
-| `unity-explorer` | 탐색 | ❌ | sonnet |
-| `unity-architect` | 구조 분석 | `docs/` 만 | opus |
-| `unity-reviewer` | 리뷰 (§0/§1/§5 체크리스트) | ❌ | opus |
-| `unity-implementer` | 생성 | `Assets/` | opus |
-| `unity-verifier` | 검증 (Unity MCP) | ❌ | sonnet |
+| 에이전트 | 작업 | 쓰기 | 모델 | 노력 |
+|---|---|---|---|---|
+| `unity-explorer` | 탐색 | ❌ | `claude-opus-5-5` | high |
+| `unity-architect` | 구조 분석 | `docs/` 만 | `claude-opus-5-5` | high |
+| `unity-reviewer` | 리뷰 (§0/§1/§5 체크리스트) | ❌ | `claude-opus-5-5` | high |
+| `unity-implementer` | 생성 | `Assets/` | `claude-opus-5-5` | high |
+| `unity-verifier` | 검증 (Unity MCP) | ❌ | `claude-opus-5-5` | high |
+
+- 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
 
 ### 7-2. 병렬 / 직렬
 

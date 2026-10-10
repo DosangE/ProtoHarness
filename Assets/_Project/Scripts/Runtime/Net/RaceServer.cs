@@ -14,7 +14,9 @@ namespace ProtoHarness.Net
     // The authoritative side: one racer per client, each in a world of its own (RaceWorld, DESIGN.md P3 C1). A client's
     // inputs go to its racer's ServerInputBuffer; the racer's run starts once enough inputs are buffered. After every
     // tick its state goes back to its owner (to reconcile with) and its position to every other client (to draw it),
-    // both through a DelayedSender. Racers do not touch each other, so each world simply runs on its own.
+    // both through a DelayedSender. The tick that ends a racer's run sends its owner the end (race.end) instead of a
+    // state, through the same DelayedSender, so it arrives after the last state. Racers do not touch each other, so each
+    // world simply runs on its own.
     public sealed class RaceServer : MonoBehaviour
     {
         private sealed class Slot
@@ -22,6 +24,8 @@ namespace ProtoHarness.Net
             public RaceWorld World;
             public ServerInputBuffer Buffer;
             public DelayedSender ToOwner;
+            // The message name of each payload waiting in ToOwner, in the same order (states and the end share its queue).
+            public readonly Queue<string> ToOwnerNames = new Queue<string>(64);
             public DelayedSender[] ToOthers;
             public ulong ClientId;
             public bool HasClient;
@@ -142,7 +146,7 @@ namespace ProtoHarness.Net
                 int index = i;
                 Slot slot = slots[i];
                 slot.Buffer = new ServerInputBuffer(slot.World.Game);
-                slot.ToOwner = new DelayedSender(bytes => SendTo(RaceNetwork.StateMessage, index, bytes), delaySeconds, jitterSeconds, seed + i * 101);
+                slot.ToOwner = new DelayedSender(bytes => SendTo(NextOwnerName(slot, index), index, bytes), delaySeconds, jitterSeconds, seed + i * 101);
                 slot.ToOthers = new DelayedSender[slots.Length];
                 for (int j = 0; j < slots.Length; j++)
                 {
@@ -151,6 +155,7 @@ namespace ProtoHarness.Net
                     slot.ToOthers[j] = new DelayedSender(bytes => SendTo(RaceNetwork.RemoteMessage, target, bytes), delaySeconds, jitterSeconds, seed + i * 101 + j * 7 + 1);
                 }
                 slot.Buffer.StateReady += bytes => OnState(index, bytes);
+                slot.Buffer.RunEnded += (tick, reason, input) => OnRunEnded(index, tick, reason, input);
             }
             manager = RaceNetwork.Create("127.0.0.1", port);
             manager.OnClientConnectedCallback += OnClientConnected;
@@ -214,10 +219,37 @@ namespace ProtoHarness.Net
         {
             double now = Time.realtimeSinceStartupAsDouble;
             Slot slot = slots[index];
-            slot.ToOwner.Send(bytes, now);
+            SendToOwner(slot, RaceNetwork.StateMessage, bytes, now);
             SimSnapshot snapshot = SimSnapshotCodec.Decode(bytes);
             byte[] remote = RaceWire.EncodeRemote(snapshot.Tick, snapshot.Position);
             for (int j = 0; j < slots.Length; j++) if (j != index) slot.ToOthers[j].Send(remote, now);
+        }
+
+        // A racer's run ended on `tick`: its owner is told how, with the controls the server ran that tick on, after the
+        // states already queued. The other racers are not told (C1c-2).
+        private void OnRunEnded(int index, int tick, RaceWire.EndReason reason, TickInput input)
+        {
+            Debug.Log($"RACE-SERVER-END racer={index} reason={reason} tick={tick}");
+            SendToOwner(slots[index], RaceNetwork.EndMessage, RaceWire.EncodeEnd(tick, reason, input), Time.realtimeSinceStartupAsDouble);
+        }
+
+        // Every payload waiting in ToOwner has its name waiting in ToOwnerNames, in the same order; a count that disagrees
+        // would send a payload under another message's name, so it throws.
+        private static void SendToOwner(Slot slot, string name, byte[] bytes, double now)
+        {
+            slot.ToOwner.Send(bytes, now);
+            slot.ToOwnerNames.Enqueue(name);
+            if (slot.ToOwnerNames.Count != slot.ToOwner.Pending)
+                throw new InvalidOperationException($"RaceServer: {slot.ToOwner.Pending} messages wait for the owner but {slot.ToOwnerNames.Count} names do (after queuing a {name}).");
+        }
+
+        // The name of the payload ToOwner is handing out now. DelayedSender takes the payload off its queue before it calls
+        // the sink, so at this point the names are one ahead.
+        private static string NextOwnerName(Slot slot, int index)
+        {
+            if (slot.ToOwnerNames.Count != slot.ToOwner.Pending + 1)
+                throw new InvalidOperationException($"RaceServer: racer {index}: a message for the owner is going out with {slot.ToOwner.Pending} still waiting, but {slot.ToOwnerNames.Count} names wait (expected {slot.ToOwner.Pending + 1}).");
+            return slot.ToOwnerNames.Dequeue();
         }
 
         private void SendTo(string name, int slotIndex, byte[] bytes)

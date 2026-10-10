@@ -40,7 +40,7 @@ C1b 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 
 | 6 | 끝난 브랜치 정리 | 로컬 브랜치가 많다. 모두 `dev` 에 병합돼 있으나 둘은 아니다: `spike/p3-ngo-prediction`(코드는 `Net` 으로 이식됨, 보고는 DECISIONS 에 있음)와 `feature/p3-ngo-package`(옛 패키지 커밋, `feature/p3-ngo-install` 로 대체). 삭제는 §0 에 따라 **승인 후**. 원격에는 `feature/course-t3c-endless` 가 있고 로컬에는 없다 | 2026-10-10 |
 | 7 | 미추적 `Assets/DefaultNetworkPrefabs.asset` (+`.meta`) | NGO 가 자동 생성한 빈 목록(`IsDefault: 1`). 커밋하면 `Assets/` 에 닿아 게이트 2회 필요, 안 하면 계속 미추적. 커밋 / `.gitignore` 에 추가 / 삭제 중 결정. `ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 수정으로 보이면 커밋하지 않는다 | 2026-10-10 |
 | 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). `main` 은 `origin/main` 과 같고(`7e4a0a8`) P0·P1-1·P1-2 시점이다. 지금 `dev` 는 P3 C1b 까지 와 있다. 사용자가 시킬 때만 | 2026-10-10 |
-| 9 | `.claude/settings.json` (읽기 전용 허용 8개) | `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다 | 2026-10-10 |
+| 9 | `.claude/settings.json` (읽기 전용 허용 8개 + 훅 3개) | 허용 목록은 `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다. 훅은 `docs/harness-automation` 에서 추가(DECISIONS 2026-10-10 "하네스 자동화") | 2026-10-10 |
 
 튜닝 대상 시작값 (`RunnerMotor`/`FollowCamera`/`GrappleController` 인스펙터, 씬 값이 없으면 코드 기본값):
 
@@ -65,7 +65,8 @@ C1b 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 
 - 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 에디터의 `Path.GetTempPath()` 는 이 머신에서 `C:\Users\Public\Documents\ESTsoft\CreatorTemp\` 이다(2026-10-08 Editor.log 의 `ChainRush tests: ... XML=` 줄로 확인. 셸의 `%TEMP%` 와 다르다). 경로는 Editor.log 에서 `ChainRush tests:` 를 찾으면 나온다. EditMode 는 MCP `Unity_RunCommand` 로 `TestRunnerApi.Execute(new Filter { testMode = TestMode.EditMode })`, PlayMode 는 `EditorApplication.ExecuteMenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")` 로 시작했다. 실행마다 따로 보관하려면 끝날 때 복사한다.
 - Unity MCP: 도메인 리로드마다 브리지가 몇 초 끊긴다(`Unity not detected (no fresh discovery files found)`). `~/.unity/mcp/connections/bridge-*.json` 이 다시 생기면 재시도한다. 에디터가 백그라운드면 스크립트를 자동 임포트하지 않을 수 있다 → `AssetDatabase.Refresh()`. 테스트 전에 새 코드가 로드됐는지(리플렉션 등) 확인한다.
 - `.codex/agents/` 가 `git status` 에 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음). 손대지 않는다.
-- `index/symbols.tsv` 는 낡았다(git-head `9f5a96f`). B모드로 쓰기 전에 재생성한다(§6-2).
+- `index/symbols.tsv` 는 2026-10-10 `64a1339` 로 재생성했다. 그 뒤 커밋이 생기면 다시 낡는다. 세션 시작 때 SessionStart 훅(`tools/hooks/session-start.ps1`)이 낡았으면 알린다. B모드로 쓰기 전에 재생성한다(§6-2).
+- 훅 3개가 `.claude/settings.json` 에 있다(DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
 - GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다(2026-10-05 한 번 발생).
 - 씬 저장을 `Unity_RunCommand` 로 하려면 매번 승인받는다(§0, §3-3). T2a 의 승인은 1회성이었다.
 - 도메인 리로드 때 `Deleting invalid font reference.` 경고가 나온다(P1-3a 부터, 원인 미확인). 변경과 무관.

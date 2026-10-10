@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-10 · 하네스 자동화: 금지선 일부를 훅으로 집행하고 `sync-agents -Check` 거짓 양성을 고친다
+
+- **결정 (사용자 승인, 2026-10-10 합의 요청서 "ㄱㄱ")**: 문서로만 있던 규칙 중 기계로 판정되는 것을 `.claude/settings.json` 의 훅 3개로 집행한다. 스크립트는 `tools/hooks/`(Assets 바깥, 2026-08-25 "도구·문서는 Assets 바깥에 둔다"와 같다).
+  - `session-start.ps1` (SessionStart): 현재 브랜치가 `main`/`dev` 이면, `index/symbols.tsv` 의 `git-head` 가 `git rev-parse HEAD` 와 다르거나 인덱스가 없으면 사실 한 줄씩 컨텍스트에 넣는다. 알릴 것이 없으면 침묵. 읽기 전용(§9-2, `LOOKUP.md` §6-2).
+  - `guard.ps1` (PreToolUse, `Bash` 는 `if: "Bash(git *)"` 일 때만 / `PowerShell|Edit|Write|NotebookEdit` 는 항상): **deny** = `git reset --hard`, `git checkout -- .`, `git restore .`(`-- .`·`:/` 포함, `--staged` 만이면 통과), `git clean`, 강제 푸시(`--force`·`--force-with-lease`·`-f`), `main`/`dev` 위에서 `git commit`(§0 Git). **ask** = `.meta`, `Library/ Temp/ obj/ Build/ UserSettings/`, `ProjectSettings/`, `Packages/manifest.json`, `.unity .prefab .asset .inputactions` 에 Edit/Write/NotebookEdit(§0 파일·설정). 그 밖은 판정하지 않는다(평소 권한 흐름).
+  - `after-agents-edit.ps1` (PostToolUse, `Edit|Write`): `.claude/agents/*.md` 를 고친 직후 `sync-agents.ps1 -Check` 를 부르고, 어긋나면 stdout JSON `{"decision":"block","reason":...}` 로 알린다(문서상 PostToolUse 는 이 JSON 과 exit 2 + stderr 둘 다 Claude 에게 전달된다. JSON 을 택했다). 쓰지 않는다.
+  - **§0 Git 에 `git restore .` 추가** (사용자 승인, 2026-10-10 "다 진행해보아라"): `checkout -- .` 와 같은 일(작업 트리 변경 버리기)을 하는데 목록에 없어 훅의 미탐이었다. `CLAUDE.md` §0 과 `unity-implementer` 정의를 같이 고치고(§7) `.codex` 를 재생성했다.
+  - **Bash 만 `if` 로 거른다**: 문서상 `if` 는 Bash 서브커맨드(`&&`, `$()`)를 각각 검사하고 판단이 안 되면 훅을 그냥 돌린다. git 이 아닌 Bash 호출은 PowerShell 을 띄우지 않는다. `PowerShell` 도구와 Edit/Write 에는 걸지 않았다 — `PowerShell(...)` 규칙의 서브커맨드 처리와 `Edit(...)` 가 Write 에도 맞는지 문서에서 확인하지 못했다.
+  - `tools/sync-agents.ps1` 비교 전에 `\r\n` → `\n`. 이 머신은 `core.autocrlf=true` 라 작업 트리의 `.codex/agents/*.toml` 이 CRLF 이고(`git ls-files --eol`: `i/lf w/crlf`) 바이트 비교가 항상 "어긋남(exit 1)"을 냈다. 고친 뒤 exit 0.
+- **이유**: 금지선은 읽는 쪽이 지켜야만 작동했다. 이번 세션 시작 때 `dev` 위였고 인덱스는 10-02 것이었다(`git-head 9f5a96f`, 현재 HEAD 와 40여 커밋 차이). 되돌릴 수 없는 git 명령과 보호 브랜치 커밋은 호출 직전에 막는 편이 싸다. 훅 실패는 조용하지 않게 한다: 스크립트 오류는 원문을 stderr 에 남기고 exit 1(비차단 오류 표시), 판정 불가를 "허용"으로 바꾸지 않는다(§5).
+- **ask 로 둔 이유**: 이 파일들은 "금지"가 아니라 "승인 후"다. 승인한 뒤에도 통과할 길이 있어야 한다. deny 는 승인 후에도 쓸 일이 없는 git 명령으로 좁혔다.
+- **한계 (확인 못 한 것·안 한 것)**
+  - 셸 명령으로 보호 파일을 바꾸는 것(`sed -i`, 리다이렉트, `rm`, `mv`)은 판정하지 않는다. 파싱으로는 믿을 수 없다.
+  - 실세션 확인: `deny` 는 `cd … && git clean -n` 이 막혔다(`if` 적용 전·후 둘 다). `ask` 는 scratchpad 의 `hook-probe.meta` Write 에 승인 프롬프트가 떠서 사용자가 거부했다(평소 프롬프트 없는 위치). 프롬프트에 사유 문장이 보였는지는 확인하지 못했다. PostToolUse 는 `unity-implementer.md` 편집 직후 "`.codex` 사본이 어긋났다 … 갱신 필요 : unity-implementer.toml" 이 Claude 에게 전달됐다. SessionStart 는 샘플 입력으로만 확인했다.
+  - 훅 스키마는 공식 문서(`code.claude.com/docs/en/hooks`)로 확인했다: PostToolUse 입력에 `tool_input.file_path`(Windows 는 역슬래시 절대 경로), `matcher` 는 Windows 에서 `Bash|PowerShell` 둘 다, exec form(`powershell.exe` + `args`) 예시. 서브에이전트 안의 도구 호출에 훅이 걸리는지는 문서에서 찾지 못했다.
+  - 지연(10회 중앙값, 이 머신): guard 약 290–360 ms(PowerShell 기동 약 160 ms 포함), PostToolUse 약 290 ms(에이전트 정의를 고칠 때만 약 690 ms), SessionStart 약 400 ms. 즉 Edit/Write 1회에 약 0.6 초가 더해진다. git 이 아닌 Bash 호출은 `if` 로 0 이 된다(문서상 동작, 시간은 재지 않았다).
+  - 오탐: heredoc 커밋 메시지에서 줄 첫머리가 `git clean`·`git reset --hard` 인 문장은 deny 된다(메시지를 고쳐 피한다). 따옴표 안·grep 패턴은 걸리지 않는다. 판정하지 않는 것: `git switch --discard-changes`, `git checkout -f`, `git stash drop` 등 §0 목록 밖의 명령.
+  - 인덱스 신선도는 §6-2 문자 그대로 HEAD 와 같은지만 본다. 문서만 바꾼 커밋도 "낡음"으로 표시된다.
+- **버린 대안**: 인덱스 자동 **갱신** 훅 — 2026-08-25 에 버렸고(Unity 임포트와 경합 가능, 수동 재생성이 명시적) 이번에도 검사만 한다. / 훅 대신 규칙 문장 추가 — 문서 규칙은 이미 있고 어겨진 것은 읽히지 않아서다. / 보호 파일 전부 deny — 승인 후 작업을 막는다.
+- **이어서 후보**: 병합 전 문서 검증(§9-2 ① `§` 참조 해석)의 스크립트화. `.cs` 가 95개로 `LOOKUP.md` §6-3 의 C모드 재논의 트리거(60개)를 넘었다 — 재논의는 별도 합의.
+
+---
+
 ## 2026-10-10 · P3 C1b-0·C1b-1: NGO 를 `dev` 에 들이고 2인 네트워크 레이스를 `Net` 으로 이식
 
 - **결정 (사용자 승인, 2026-10-10 C1b 합의 요청서 "추천대로": 패키지는 별도 브랜치, `Spike` → `Net` 이름 변경, 입력 로그 파일 포함, 상대는 런타임 캡슐로 보간 표시)**

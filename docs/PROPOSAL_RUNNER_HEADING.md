@@ -1,7 +1,23 @@
 # 수정 제안서: 러너 본체가 `Heading` 방향을 바라보게 하기
 
-> **상태: 제안 (미승인, 미구현).** 2026-10-10 작성. 승인 전에는 코드를 바꾸지 않는다 (CLAUDE.md §3).
-> 이 문서는 코드 정독과 grep 으로만 확인한 내용이다. **플레이해서 확인하지 않았다.**
+> **상태: B안 변형으로 구현됨 (브랜치 `fix/runner-heading-visual`, 미병합).** 2026-10-10 작성, 같은 날 갱신.
+> 권장했던 A안은 결정성을 깨서 버렸다. 아래 "결과" 절을 먼저 본다. 아래 본문(증상~위험)은 처음 제안 그대로다.
+> **플레이해서 확인하지 않았다.**
+
+## 결과 (2026-10-10)
+
+- **A안 실패**: 루트를 `LateUpdate` 에서 돌리자 PlayMode 게이트에서 결정성 테스트 3개가 `posY` 1 ULP 로 갈라졌다
+  (`Replay_CircuitBotRun_RepeatsEveryTickBitForBit` 샘플 718, `Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit` 샘플 313,
+  `StepTick_ByHand_IsTheSameRunAsFixedUpdate` 샘플 719, `0x3F70A3D6 vs 0x3F70A3D5`). 루트 회전이 물리 계산에 들어가고, 프레임마다 돌리면
+  틱과 프레임의 맞물림에 따라 값이 달라진다. PhysX 안의 정확한 지점은 확인하지 못했다. 아래 "확인한 사실"의 "루트를 yaw 로 돌려도 안전한 근거"는 틀렸다.
+  "루트 회전은 항상 identity" 도 틀렸다: 서킷 빌더가 루트를 돌려 둔다(`ChainRushCircuitSceneBuilder.cs:109`).
+- **B안 변형 채택** (사용자 승인 2026-10-10 "B안 변형으로 진행해줘"): `RunnerTilt` 가 시각물 `Runner Visual` 에만 월드 회전
+  `Euler(0, Heading, 0) * Evaluate(...)` 을 준다. 루트는 돌리지 않는다. 시각물 프리미티브는 콜라이더가 꺼져 있어(`ChainRushSceneBuilder.cs:343`) 물리에 닿지 않는다.
+  기존 테스트 `Tilt_ScriptedSteerLeft_LeansBodyFromMotorState` 의 기대값을 "헤딩 yaw × 기울기" 로 바꿨다(승인된 사양 변경).
+  새 테스트 `Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading` 는 조향 뒤·±180° 감김 뒤 몸 방향과 루트 불변을 본다(수정 전 31.2° 로 실패 확인).
+- **검증** (에디터 6000.3.25f1): EditMode `testcasecount="237" passed="237" failed="0"`. PlayMode 게이트(Device·Sweep 제외) 2회 모두
+  `testcasecount="100" result="Passed" passed="98" failed="0" skipped="2"` (13:29:10Z–13:38:19Z, 13:38:40Z–13:47:43Z). 같은 브랜치의 A안 코드 실행 1회는 `failed="3"` 이었다(코드는 버림).
+- **남은 것**: 플레이로 몸 방향 확인(사용자). `Strike Arc` 는 루트 자식이라 계속 월드 +z 앞에 뜬다(별도 합의).
 
 ## 증상
 

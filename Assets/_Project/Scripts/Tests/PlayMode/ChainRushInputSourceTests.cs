@@ -164,8 +164,9 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForSeconds(0.3f);
             yield return new WaitForEndOfFrame();
             Assert.That(player.Steer, Is.EqualTo(-1f));
-            Quaternion expected = RunnerTilt.Evaluate(player.Velocity, player.Steer);
-            Assert.That(Quaternion.Angle(body.localRotation, expected), Is.LessThan(0.01f));
+            // The body faces the heading, then leans on top of it.
+            Quaternion expected = Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer);
+            Assert.That(Quaternion.Angle(body.rotation, expected), Is.LessThan(0.01f));
             Assert.That(Quaternion.Angle(body.localRotation, Quaternion.identity), Is.GreaterThan(10f));
             source.Steer = 0f;
             game.StartRun();
@@ -176,8 +177,32 @@ namespace ProtoHarness.Tests.PlayMode
             // That tick adds gravity (velocity.y -0.44, a 0.4 degree pitch), so "upright" means the steering
             // lean is gone: no steer, and no yaw or roll beyond what velocity alone gives.
             Assert.That(player.Steer, Is.Zero);
-            Assert.That(Quaternion.Angle(body.localRotation, RunnerTilt.Evaluate(player.Velocity, 0f)), Is.LessThan(0.01f),
-                "Restart must clear the steering lean.");
+            Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, 0f)),
+                Is.LessThan(0.01f), "Restart must clear the steering lean.");
+        }
+
+        [UnityTest]
+        // Only the body turns: the root carries the physics capsule, and turning it per frame breaks bit-for-bit replay.
+        public IEnumerator Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading()
+        {
+            Transform body = player.transform.Find("Runner Visual");
+            Assert.That(body, Is.Not.Null);
+            Quaternion rootRotation = player.transform.rotation;
+            game.StartRun();
+            source.Steer = -1f;
+            yield return new WaitForSeconds(0.3f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.Heading, Is.LessThan(-10f), "The runner must have turned for this check to mean anything.");
+            Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer)),
+                Is.LessThan(0.5f), "The body must face its heading after turning.");
+            // Heading wraps from -180 to 180; the body must follow across the seam.
+            game.Racer.Heading = -170f;
+            yield return new WaitForSeconds(0.2f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.Heading, Is.GreaterThan(90f), "Steering left from -170 must have wrapped past -180.");
+            Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer)),
+                Is.LessThan(0.5f), "The body must face its heading after it wraps.");
+            Assert.That(player.transform.rotation, Is.EqualTo(rootRotation), "The root must not turn.");
         }
     }
 }

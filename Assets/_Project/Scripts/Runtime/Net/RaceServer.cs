@@ -15,8 +15,10 @@ namespace ProtoHarness.Net
     // inputs go to its racer's ServerInputBuffer; the racer's run starts once enough inputs are buffered. After every
     // tick its state goes back to its owner (to reconcile with) and its position to every other client (to draw it),
     // both through a DelayedSender. The tick that ends a racer's run sends its owner the end (race.end) instead of a
-    // state, through the same DelayedSender, so it arrives after the last state. Racers do not touch each other, so each
-    // world simply runs on its own.
+    // state, through the same DelayedSender, so it arrives after the last state. The server keeps the standings
+    // (RaceStandings: starts, states, ends) and each time they change sends them to every racer through that racer's own
+    // DelayedSender, so a racer always hears of its own end before the standings that hold it. Racers do not touch each
+    // other, so each world simply runs on its own.
     public sealed class RaceServer : MonoBehaviour
     {
         private sealed class Slot
@@ -36,6 +38,8 @@ namespace ProtoHarness.Net
         }
 
         private Slot[] slots;
+        private RaceStandings standings;
+        private int sentStandings;
         private ushort port;
         private int bufferTicks;
         private double delaySeconds;
@@ -51,6 +55,7 @@ namespace ProtoHarness.Net
         public int SlotCount => slots == null ? 0 : slots.Length;
         public ServerInputBuffer BufferOf(int slot) => slots[slot].Buffer;
         public bool IsRunning(int slot) => slots[slot].Running;
+        public RaceStandings Standings => standings;
 
         public void Configure(IReadOnlyList<RaceWorld> worlds, ushort port, int bufferTicks, double delaySeconds, double jitterSeconds, int seed, float connectTimeoutSeconds)
         {
@@ -141,6 +146,8 @@ namespace ProtoHarness.Net
         public void Begin()
         {
             if (slots == null) throw new InvalidOperationException("RaceServer: call Configure before Begin.");
+            standings = new RaceStandings(slots.Length);
+            sentStandings = standings.Version;
             for (int i = 0; i < slots.Length; i++)
             {
                 int index = i;
@@ -214,7 +221,8 @@ namespace ProtoHarness.Net
             slots[slot].Buffer.Receive(tick, input);
         }
 
-        // A racer's state after a tick: to its owner whole, to the others as a position.
+        // A racer's state after a tick: to its owner whole, to the others as a position. The racer has run past that tick,
+        // which can make another racer's place final.
         private void OnState(int index, byte[] bytes)
         {
             double now = Time.realtimeSinceStartupAsDouble;
@@ -223,14 +231,30 @@ namespace ProtoHarness.Net
             SimSnapshot snapshot = SimSnapshotCodec.Decode(bytes);
             byte[] remote = RaceWire.EncodeRemote(snapshot.Tick, snapshot.Position);
             for (int j = 0; j < slots.Length; j++) if (j != index) slot.ToOthers[j].Send(remote, now);
+            standings.Advance(index, snapshot.Tick);
+            SendStandingsIfChanged(now);
         }
 
         // A racer's run ended on `tick`: its owner is told how, with the controls the server ran that tick on, after the
-        // states already queued. The other racers are not told (C1c-2).
+        // states already queued. Every racer then hears of it in the standings.
         private void OnRunEnded(int index, int tick, RaceWire.EndReason reason, TickInput input)
         {
             Debug.Log($"RACE-SERVER-END racer={index} reason={reason} tick={tick}");
-            SendToOwner(slots[index], RaceNetwork.EndMessage, RaceWire.EncodeEnd(tick, reason, input), Time.realtimeSinceStartupAsDouble);
+            double now = Time.realtimeSinceStartupAsDouble;
+            SendToOwner(slots[index], RaceNetwork.EndMessage, RaceWire.EncodeEnd(tick, reason, input), now);
+            standings.End(index, tick, reason);
+            SendStandingsIfChanged(now);
+        }
+
+        // Every racer gets the standings, with which of them it is, behind whatever its own sender already holds. A racer
+        // with no client drops them (counted in Dropped) and hears the next ones.
+        private void SendStandingsIfChanged(double now)
+        {
+            if (standings.Version == sentStandings) return;
+            sentStandings = standings.Version;
+            RaceStandings.Entry[] entries = standings.ToArray();
+            Debug.Log($"RACE-SERVER-STANDINGS v={standings.Version} {RaceStandings.Describe(entries)}");
+            for (int k = 0; k < slots.Length; k++) SendToOwner(slots[k], RaceNetwork.StandingsMessage, RaceWire.EncodeStandings(k, entries), now);
         }
 
         // Every payload waiting in ToOwner has its name waiting in ToOwnerNames, in the same order; a count that disagrees
@@ -290,9 +314,12 @@ namespace ProtoHarness.Net
                     ChainRushGame game = slot.World.Game;
                     game.SetInputSource(slot.Buffer);
                     game.StartRun();
-                    slot.Buffer.AfterTick();
                     slot.Running = true;
                     Debug.Log($"RACE-SERVER racer {i} started with {slot.Buffer.Buffered} inputs buffered.");
+                    // Before the state for tick 0 (AfterTick), which advances the racer in the standings.
+                    standings.Start(i);
+                    SendStandingsIfChanged(now);
+                    slot.Buffer.AfterTick();
                 }
                 else if (slot.Running && !slot.EndReported && !slot.World.Game.IsRunning)
                 {

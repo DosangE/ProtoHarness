@@ -1,6 +1,6 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-11 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-11 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
@@ -15,15 +15,16 @@
   - **C1b 2인 네트워크 레이스** (DECISIONS 2026-10-10 "P3 C1b-0·C1b-1"): `Runtime/Net/`(asmdef `ProtoHarness.Net`). 서버(`RaceServer`)는 레이서마다 격리 월드 1개·입력 버퍼·지연 큐를 갖고, 한 레이서의 상태는 주인에게 통째로, 위치는 상대에게 보낸다. 클라(`RaceClient`)는 `ClientPredictor`(`TickCompleted` 구독)로 자기만 예측·보정하고 상대는 `RemoteInterpolator` + `RemoteGhost`(런타임 캡슐)로 그린다. 같은 플레이어 빌드가 `-raceServer`/`-raceClient` 로 서버도 클라도 된다(`RaceBootstrap`). 입력 로그는 `InputLogFile`(`Control/`)로 파일에 저장·로드한다. **고정 지연(RTT 100 ms)에서 에디터·플레이어 클라 둘 다 보정 0회, 상대 위치 936개가 자기 런과 비트 일치, 고스트 최대 한 프레임 0.27 m.**
   - **C1c-1 런 종료 알림** (DECISIONS 2026-10-11 "P3 C1c-1"): 서버가 런이 끝난 틱에 `race.end`(틱·이유·그 틱에 쓴 입력)를 주인 클라에 보내고, 클라(`ClientPredictor.OnServerEnd`)는 같은 결말이면 그대로, 아니면 T-1 로 되감아 서버 입력으로 틱 T 를 다시 돈다. 재현 못 하거나 종료 처리에서 예외가 나면 예측기가 고장(`Faulted`) 상태가 되고 클라가 멈춘다. 지터 레이스에서 낙하한 레이서의 클라가 타임아웃 없이 `ended=Failed@657` 로 끝났다. 클라만 먼저 끝나는 경우는 C1c-1b 에서 막았다(아래).
   - **C1c-1b 클라만 먼저 끝나는 경우** (DECISIONS 2026-10-11 "P3 C1c-1b"): 클라 런이 끝난 뒤 그 틱 이후의 서버 상태가 오면 서버 상태로 되돌아가 기록 입력으로 다시 돌고, 끝날 때의 앞섬만큼 live 입력으로 따라잡는다(목표 틱 상한). 지금 서킷에서는 서버도 다음 틱에 끝나 따라잡기는 최대 1틱이다(S+L 상한 경로는 테스트로 끝까지 돌지 않았다).
+  - **예측기 구멍 fix** (DECISIONS 2026-10-11 "P3 C1c 예측기 구멍 4개"): 예측기가 입력을 내준 뒤의 `Clear`(R·Enter·HUD 의 `StartRun`)는 재시작이라 고장이 되고, 고장은 무엇으로도 풀리지 않는다(새 경기 = 새 예측기). `OnServerState` 의 모든 예외도 고장을 세운다. `LargestJolt` 는 일시정지 중에도 그 틱의 예측 상태에서 잰다(DONE 줄 `jolt=` 를 다시 근거로 쓸 수 있다). 끝난 클라가 더 이른 서버 상태로 되살아나도 따라잡는다.
   - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
-- 테스트: EditMode 237, PlayMode 111(Device 2 + Sweep 1 + `[Explicit]` 네트워크 레이스 2 + 게이트 106). 병합 조건 실행은 Device·Sweep 제외 108건 중 106 통과·2 skipped(Explicit), 약 550초/회. 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
+- 테스트: EditMode 237, PlayMode 115(Device 2 + Sweep 1 + `[Explicit]` 네트워크 레이스 2 + 게이트 110). 병합 조건 실행은 Device·Sweep 제외 112건 중 110 통과·2 skipped(Explicit), 약 553초/회. `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
-C1c-1b 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
+C1c-1b 와 예측기 구멍 fix 까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **C1c-1b 의 남은 것 (범위 밖으로 둔 것)**: ① R·Enter(`ChainRushGame.cs:160`)로 `StartRun` 하면 `Clear()` 가 예측기 고장을 지운다(네트워크 레이스의 재시작이 정의돼 있지 않다) ② `OnServerState` 에서 나간 예외는 `Faulted` 를 세우지 않아 클라가 멈추지 않는다 ③ `LargestJolt` 가 보정 전 런이 Running 이 아니면 원점 기준으로 잰다(`ClientPredictor.cs:212`, DONE 줄 `jolt=` 를 근거로 쓰지 않는다) ④ 끝난 클라가 더 이른 서버 상태로 보정돼 되살아나면 따라잡기가 없다 ⑤ 따라잡기의 S+L 상한은 표적·충돌 같은 다른 종료 조건이 생기면 다시 시험한다. 묶어서 `fix/` 요청서로 올릴지는 사용자 결정.
+- **C1c 의 남은 것**: 따라잡기의 S+L 상한은 표적·충돌 같은 다른 종료 조건이 생기면 다시 시험한다(지금 서킷에서는 만들 수 없다). `RaceClient.OnState`·`OnEnd` 에서 예측기에 넘기기 전 디코딩이 던지는 손상 바이트는 고장을 세우지 않는다(Netcode 가 예외를 로그로 남김).
 - **P3 C1c-2 (결승 순서·순위)**: 서버가 레이서별 종료(이유·틱)를 이미 안다(`ServerInputBuffer.RunEnded`). 남은 것: 순위 계산, 상대(고스트)에게 종료 알림, 표시. 결승선은 서킷 랩 수로 판정된다(`CircuitRace.IsFinished`).
 - **공격 판정 방향 (이슈, 설계 결정 대기)**: 공격 판정이 몸 방향도 트랙 방향도 아닌 **월드 +z** 를 앞으로 본다. `CourseTarget.TryHit`(`CourseTarget.cs:53-54`)은 플레이어 기준 월드 z 로 -0.5 ~ 5 m, |x|·|y| ≤ 2.5 m 상자다. 직선 코스 전제라 자유 조향·커브에서 바라보는 쪽과 맞는 쪽이 갈라진다. 공격 링 `Strike Arc` 는 루트 자식(local z=1.6, `ChainRushSceneBuilder.cs:159-161`)이라 프로토타입에서는 판정과 같은 +z 를 보여 주지만, 서킷은 루트가 출발선 방향으로 돌아가 있어(`ChainRushCircuitSceneBuilder.cs:109`) 링과 판정이 어긋날 수 있다(서킷에 공격 대상이 있는지는 미확인). 링만 몸 방향으로 돌리면 판정과 더 어긋나므로 하지 않았다(2026-10-10, `fix/runner-heading-visual` 에서 몸만 `Heading` 을 보게 함). 정할 것: 판정 기준을 몸 방향(`Heading`)으로 할지 트랙 진행 방향으로 할지. 판정은 시뮬레이션(`ChainRushGame.cs:281` 의 `racer.AddHit`)이다. P2 재생 해시에 영향이 있는지는 확인하지 못했다 → 요청서(§3-2)부터. 링은 같은 기준으로 같이 돌린다.
 - **P3 C1 마무리 측정**: 서로 **다른** 입력의 두 레이서(지금은 같은 입력), 3인 이상 서버, 100 ms 에서의 체감(프레임 시간·입력 지연), 패킷 유실(앱 수준 지연 큐는 유실을 모사하지 못한다), 모바일/IL2CPP 빌드의 일치.

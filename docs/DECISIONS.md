@@ -7,6 +7,28 @@
 
 ---
 
+## 2026-10-11 · P3 C1c 예측기 구멍 4개: 재시작·상태 예외는 고장, 일시정지 중 jolt, 되살아난 클라 따라잡기
+
+- **결정 (사용자 승인, 2026-10-11 `fix/` 요청서에 "진행하라", 기존 테스트 분리는 "케이스별로 분리 (추천)")**: HANDOFF 2절 "C1c-1b 의 남은 것" 중 ①~④ 를 고친다. ⑤(S+L 상한 재시험)는 다른 종료 조건이 없어 이번에 못 하므로 남긴다.
+  - ① **네트워크 레이스에는 재시작이 없다.** `ClientPredictor.Clear()` 는 예측기가 live 틱의 입력을 한 번이라도 내준 뒤(`armed`, `Consume` live 경로에서 세움)에 불리면 초기화하지 않고 **고장**(`Faulted`, "the run was restarted after tick N …")이 된다. R·Enter(`ChainRushGame.cs:160-161`)와 HUD 버튼이 부르는 `StartRun` → `inputSource.Clear()`, 경기 중 `SetInputSource` 가 여기에 해당한다. **고장은 더 이상 아무것도 풀지 못한다**(전에는 `Clear` 가 풀었다). 새 경기는 새 예측기로 한다.
+    - `armed` 를 `AfterTick` 에서 세웠던 1차 구현은 네트워크 레이스에서 바로 고장 났다: `RaceClient.Begin` 이 예측기를 만들면 `TickCompleted` 를 구독하는데, 접속 전 게임이 다른 입력원으로 도는 틱마다 `AfterTick` 이 불려 무장되고, 접속 때의 정상 `SetInputSource` → `Clear` 가 재시작으로 판정됐다(아래 검증의 `Net` 1회). 그래서 무장 시점을 "자기 입력을 내준 뒤"로 옮기고, 그 경우를 재시작 테스트 앞부분에 단언으로 넣었다.
+  - ② **`OnServerState` 에서 나가는 모든 예외는 먼저 고장을 세운다**(원인·틱을 `FaultReason` 에, 예외는 그대로). `OnServerEnd` 와 같은 방식이다. 거부된 상태는 게임을 건드리지 않는다. `RaceClient.OnState` 는 `OnEnd` 처럼 `finally` 에서 `HaltOnFault` 를 부른다.
+  - ③ **`LargestJolt` 의 출발 위치는 지금 틱의 기억된 예측 상태**(실행 중 또는 일시정지)다. 기억이 없으면(끝난 런) 재지 않는다. 전에는 Running 이 아니면 원점을 썼고, `RestoreSnapshot` 이 Running 으로 되돌리므로 목표 틱에서 멈춘 뒤의 보정은 원점부터 거리를 기록했다(테스트에서 실제 0.0162 m 가 143.2 m 로 기록됨).
+  - ④ **끝난 클라가 끝난 틱보다 이른 서버 상태로 보정돼 다시 달리면, 리플레이 뒤 `ClientEndLead` 만큼 따라잡는다**(`serverTick + lead`, 상한 `catchUpLimit`). C1c-1b 의 "끝난 틱 이후 상태" 경로와 같은 규칙이다.
+- **이유**: ①②는 깨진 예측이 조용히 이어지는 경로(§5)이고, ③은 DONE 줄의 `jolt=` 를 근거로 쓸 수 없게 만들었고, ④는 클라가 서버 뒤에 서서 이후 입력이 늦게 도착하게 만든다.
+  - ①에서 버린 대안: `ChainRushGame` 의 메뉴 키를 네트워크 레이스에서 막기(입력 장치 경로라 Device 검증이 붙고 `ChainRushGame` 공개 API 가 바뀐다), `Clear` 가 예외를 던지기(`StartRun` 이 반쯤 초기화된 채 `Ready` 에 멈춘다).
+- **테스트 (`NetReconcileTests`, 고치기 전 4개 모두 실패 → 고친 뒤 통과)**
+  - 고치기 전 실행(05:12:44Z~05:12:48Z) `testcasecount=4 Failed(Child) passed=0 failed=4`, 실패 단언: ③ `Expected: 0.0162162203f But was: 143.223053f`, ② `state 21: a refused state must leave the predictor faulted. Expected: True But was: False`, ① `A restart in the middle of a network race must break the prediction. Expected: True But was: False`, ④ `The client catches up on live controls until it is as far ahead as when its run ended. Expected: (1, 6) But was: (0, 0)`.
+  - 새 테스트: `ClientEnd_WhenAnOlderStateBringsAFallenClientBack_CatchesUp`(④: 클라가 누름을 놓쳐 낙하, 서버(참값) 상태 d 가 낙하 뒤 도착 → 되살아나 6틱 따라잡고 참값과 비트 일치, 이후 보정 없음), `Client_AStateThatCannotBeTaken_LeavesThePredictorFaulted`(②), `Client_RestartedDuringARace_IsFaultedAndStaysFaulted`(①, 접속 전 다른 입력원 틱은 무장하지 않음 포함), `Client_ACorrectionWhilePaused_MeasuresTheJoltFromWhereTheRunnerStands`(③).
+  - **계약이 바뀌어 고친 기존 테스트 2개**(테스트를 통과시키려는 수정이 아님): `ClientEnd_BeforeTheStateForTheTickBeforeIt_ThrowsLoudly` 의 "Clear 가 고장을 푼다" → "Clear 는 고장을 풀지 못하고 첫 원인이 남는다". `Client_WithAServerStateFromTheFuture_ThrowsLoudly` 는 거부 뒤 같은 예측기로 이어서 비교하던 세 확인(미래 거부·현재 틱 비교·과거 거부)을 케이스마다 새 예측기(`PredictorAt10`)로 나눴다. 단언 내용은 같다.
+- **검증 (`fix/p3-c1c-predictor-gaps`, 에디터 6000.3.25f1, 시각은 XML 의 UTC)** — 실행한 것 전부
+  - 1차 구현 뒤 `Net` 카테고리(05:15:53Z~05:19:37Z): `testcasecount=35 Failed(Child) passed=33 failed=2`. 실패 2 는 `[Explicit]` 네트워크 레이스 2개(카테고리로 고르면 함께 돈다) — 에디터 클라가 `RACE-CLIENT-FAULT the run was restarted after tick 0 …` 로 멈춤. 위 ① 의 무장 시점 문제였고 고쳤다. 옛 플레이어 빌드 상대였으므로 그 밖의 값은 근거로 쓰지 않는다.
+  - 무장 시점 수정 뒤 `NetReconcileTests` 만(05:21:53Z~05:22:18Z): `testcasecount=24 Passed passed=24 failed=0`. 그 뒤 주석 줄바꿈만 고쳤다.
+  - 주석만 다듬은 뒤 같은 코드(`git diff -- Assets` sha1 `dea41d9e`)로: 컴파일 Error 0(`Tundra build success`), EditMode `testcasecount=237 Passed passed=237 failed=0`(05:23:18Z~05:23:21Z), PlayMode 게이트(Device·Sweep 제외) 1회 `testcasecount=112 result=Passed passed=110 failed=0 skipped=2`(05:23:36Z~05:32:49Z, 553.4초), 2회 `112/Passed/110/0/2`(05:33:10Z~05:42:23Z, 553.3초). skipped 2 는 `[Explicit]` 네트워크 레이스.
+  - 플레이어 재빌드(서킷 씬만, `Succeeded, 0 errors`, Sentis 셰이더 경고 485건) 후 네트워크 레이스 `testcasecount=2 Passed passed=2 failed=0`(05:43:17Z~05:44:10Z, 53.8초): 고정 지연 보정 0·상대 위치 953개 비트 일치·에디터 클라 DONE `jolt=0.0000`, 지터는 에디터 클라 보정 172회·`jolt=0.0111`, 서버 레이서 1 이 657 에서 낙하 → 플레이어 클라 `ended=Failed@657`. 두 클라 모두 `RACE-CLIENT-FAULT` 없음. 빌드가 자동으로 바꾼 5파일(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/` 3개)은 파일을 지정해 `git restore`, 그 뒤 `git diff -- Assets` sha1 이 그대로 `dea41d9e`.
+  - 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update`)와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음.
+- **하지 않은 것**: ⑤ S+L 상한 재시험, 순위(C1c-2), 서버 쪽(`RaceServer`·`ServerInputBuffer`·`RaceWire`), `ChainRushGame`·시뮬 코드, 씬·프리팹·`ProjectSettings`. `RaceClient.OnState`·`OnEnd` 에서 예측기에 넘기기 전 디코딩(`TickOf`·`DecodeEnd`)이 던지는 손상 바이트는 여전히 고장을 세우지 않는다(Netcode 가 예외를 로그로 남긴다).
+
 ## 2026-10-11 · P3 C1c-1b: 클라만 먼저 끝나면 서버 상태로 되돌아가 다시 달린다
 
 - **결정 (사용자 승인, 2026-10-11 C1c-1b 요청서에 "A로 ㄱㄱ", 테스트 ③ 은 "③ 빼고 진행")**: 클라 예측 런이 틱 E 에 끝났는데(`HasFailed || HasFinished`, 목표 틱에서 멈춘 Paused 는 아님) 틱 S ≥ E 의 서버 상태가 오면 **반드시 어긋난 것**으로 본다 — 같은 틱에 서버도 끝났다면 상태가 아니라 `race.end` 가 온다(C1c-1). 처리: 서버 상태 S 로 되돌리기 → 기록에 남은 입력으로 `lastInputTick` 까지 재실행 → 끝날 때 기억한 앞섬 `L = lastInputTick − ackedTick` 만큼 live 입력으로 S+L 까지 따라잡기(입력은 평소처럼 기록·전송, 상한은 생성자 `catchUpLimit` = `RaceClient` 의 목표 틱).

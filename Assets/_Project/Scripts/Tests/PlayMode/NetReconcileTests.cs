@@ -401,18 +401,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load();
             InputLog log = RecordBot(BotTicks);
             byte[][] truth = RunTruth(log, BotTicks);
-            var predictor = new ClientPredictor(game, new InputReplay(log));
-            activePredictor = predictor;
-            Time.timeScale = 0f;
-            game.SetInputSource(predictor);
-            game.StartRun();
-            predictor.AfterTick();
-            for (int i = 0; i < 10; i++)
-            {
-                game.StepTick(predictor);
-            }
-            Assert.Throws<InvalidOperationException>(() => predictor.OnServerState(truth[11]));
-            Assert.That(predictor.OnServerState(truth[10]), Is.False, "A state for the present tick is compared with the live one.");
+            // Each case on its own fresh client: a refused state breaks the prediction for good
+            // (Client_AStateThatCannotBeTaken_LeavesThePredictorFaulted).
+            Assert.Throws<InvalidOperationException>(() => PredictorAt10(log).OnServerState(truth[11]));
+            Assert.That(PredictorAt10(log).OnServerState(truth[10]), Is.False, "A state for the present tick is compared with the live one.");
+            ClientPredictor predictor = PredictorAt10(log);
+            Assert.That(predictor.OnServerState(truth[10]), Is.False);
             Assert.Throws<InvalidOperationException>(() => predictor.OnServerState(truth[9]), "A state older than the newest compared one is a bug.");
         }
 
@@ -576,12 +570,15 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.Throws<InvalidOperationException>(() => game.StepTick(predictor), "A tick on a faulted predictor must not run quietly.");
             Assert.Throws<InvalidOperationException>(() => predictor.OnServerState(truth[10]), "A faulted predictor compares no more states.");
             Assert.Throws<InvalidOperationException>(() => predictor.OnServerEnd(11, RaceWire.EndReason.Failed, log[10]), "A faulted predictor takes no other end.");
-            Assert.That(predictor.Faulted, Is.True, "Only Clear lifts the fault.");
+            Assert.That(predictor.Faulted, Is.True, "Nothing lifts the fault.");
             Assert.That(predictor.ServerEnded, Is.False);
 
+            // A new race needs a new predictor: Clear is a restart, which a network race does not have
+            // (Client_RestartedDuringARace_IsFaultedAndStaysFaulted).
+            string replayFault = predictor.FaultReason;
             predictor.Clear();
-            Assert.That(predictor.Faulted, Is.False, "Clear lifts the fault.");
-            Assert.That(predictor.FaultReason, Is.Null);
+            Assert.That(predictor.Faulted, Is.True, "Clear does not lift the fault.");
+            Assert.That(predictor.FaultReason, Is.EqualTo(replayFault), "The first cause stays.");
         }
 
         // ---- the client's run ended first ---------------------------------------------------------------
@@ -763,6 +760,169 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log($"Net catch-up limit: {found.Found}; latency {latency} ticks: the catch-up stopped at the limit {finish}; the client then finished on tick {game.Tick} with the server.");
         }
 
+        // The mirror of the fall above: the client missed a press on tick d (its own controls repeat the tick before's), so its
+        // run falls on tick E, while the server's run (here the truth, every press in it) goes on. The server's state for d
+        // reaches the client after its run has fallen: it is older than E, so it is an ordinary correction, and its replay on
+        // the remembered controls after d does not fall. The client had stopped running while it waited, so it is behind: it
+        // catches up on live controls (sent like any other) until it is as far ahead of the state as when its run ended, as
+        // after a state past its end. Then it follows the truth with no other correction.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator ClientEnd_WhenAnOlderStateBringsAFallenClientBack_CatchesUp()
+        {
+            yield return Load();
+            InputLog log = RecordBot(BotTicks);
+            byte[][] truth = RunTruth(log, BotTicks);
+            int dropTick = FindFallingDrop(log, truth, out int fallTick);
+            var clientLog = new InputLog();
+            for (int t = 1; t <= log.Count; t++) clientLog.Add(t == dropTick ? log[t - 2] : log[t - 1]);
+            // The state for d arrives a few steps after the client's run has fallen.
+            int latency = fallTick - dropTick + 5;
+            Assert.That(latency, Is.LessThan(ClientPredictor.Window - 8), "precondition: the client must not outrun its window while it waits.");
+            // The lead is measured on the falling tick, from the state that arrived the step before (tick d - 6).
+            Assert.That(dropTick, Is.GreaterThanOrEqualTo(6), "precondition: a server state must have been compared before the client's run falls.");
+            int arrivalStep = dropTick + latency;
+            int caughtUpTo = arrivalStep + 1;
+            Assert.That(caughtUpTo + 20, Is.LessThanOrEqualTo(BotTicks), "precondition: the truth must go on past the catch-up.");
+
+            var sent = new List<int>();
+            ClientPredictor predictor = StartClient(clientLog, int.MaxValue, sent);
+            for (int step = 1; step <= caughtUpTo + 20; step++)
+            {
+                game.StepTick(predictor);
+                int arrived = step - latency;
+                if (arrived < 0) continue;
+                predictor.OnServerState(truth[arrived]);
+                if (arrived == dropTick - 1)
+                {
+                    Assert.That((game.HasFailed, game.Tick), Is.EqualTo((true, fallTick)), "precondition: the client's own run has fallen before the state for d arrives.");
+                    Assert.That((predictor.ClientEndTick, predictor.ClientEndLead), Is.EqualTo((fallTick, latency + 1)), "The client's end and its lead then are remembered.");
+                    Assert.That(predictor.Corrections, Is.EqualTo(0), "Every state before d agrees.");
+                }
+                else if (arrived == dropTick)
+                {
+                    Assert.That(predictor.Corrections, Is.EqualTo(1), "The server's state for d is a correction.");
+                    Assert.That(predictor.FirstMismatchTick, Is.EqualTo(dropTick));
+                    Assert.That(predictor.ReplayedTicks, Is.EqualTo(fallTick - dropTick), "The remembered controls after d, up to the last one taken, are run again.");
+                    Assert.That(predictor.ClientEndTick, Is.EqualTo(-1), "The run is going again; its end is forgotten.");
+                    Assert.That((predictor.CatchUps, predictor.CaughtUpTicks), Is.EqualTo((1, caughtUpTo - fallTick)), "The client catches up on live controls until it is as far ahead as when its run ended.");
+                    Assert.That((game.IsRunning, game.Tick), Is.EqualTo((true, caughtUpTo)));
+                    Assert.That(SimSnapshotCodec.SameState(SimSnapshotCodec.Encode(game.CaptureSnapshot()), truth[caughtUpTo]), Is.True, "After d the client's controls are the truth's, so it stands on the truth's state.");
+                    Assert.That(sent, Is.EqualTo(TickRange(1, caughtUpTo)), "Every tick's controls are sent once and in order, the caught-up ones too.");
+                }
+            }
+            Assert.That(predictor.Corrections, Is.EqualTo(1), "After the catch-up the client follows the truth.");
+            Assert.That(predictor.Faulted, Is.False);
+            Debug.Log($"Net older state after a fall: the client missed the press on tick {dropTick} and fell on tick {fallTick}; latency {latency} ticks: the state for {dropTick} brought it back and it caught up {predictor.CaughtUpTicks} ticks to tick {caughtUpTo}.");
+        }
+
+        // ---- a broken prediction stays broken -------------------------------------------------------------
+
+        // A state the predictor refuses (from the future, or older than one already compared) is a broken stream, like an end
+        // out of order: the predictor is Faulted with the cause and the tick, refuses everything after, and the refused state
+        // leaves the game as it was. Each case starts from its own fresh client.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Client_AStateThatCannotBeTaken_LeavesThePredictorFaulted()
+        {
+            yield return Load();
+            const int ticks = 60;
+            InputLog log = RecordBot(ticks);
+            byte[][] truth = RunTruth(log, ticks);
+
+            foreach ((int stateTick, string why) in new[]
+            {
+                (21, "A state for a tick the client has not run yet."),
+                (8, "A state older than the newest compared one."),
+            })
+            {
+                ClientPredictor refused = PredictorAt20(log, truth);
+                byte[] stateBefore = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+                Assert.Throws<InvalidOperationException>(() => refused.OnServerState(truth[stateTick]), why);
+                Assert.That(game.Tick, Is.EqualTo(20), $"state {stateTick}: a refused state must not touch the game.");
+                Assert.That(SimSnapshotCodec.SameState(SimSnapshotCodec.Encode(game.CaptureSnapshot()), stateBefore), Is.True, $"state {stateTick}: a refused state must leave the game's state as it was.");
+                Assert.That(refused.Faulted, Is.True, $"state {stateTick}: a refused state must leave the predictor faulted.");
+                string firstCause = refused.FaultReason;
+                Assert.That(firstCause, Does.Contain($"tick {stateTick}"), $"state {stateTick}: the fault keeps its cause and tick.");
+                var refusedConsume = Assert.Throws<InvalidOperationException>(() => refused.Consume(), $"state {stateTick}: a faulted predictor gives no controls.");
+                Assert.That(refusedConsume.Message, Does.Contain(firstCause), $"state {stateTick}: the refusal carries the cause.");
+                Assert.Throws<InvalidOperationException>(() => refused.OnServerState(truth[10]), $"state {stateTick}: a faulted predictor compares no more states, not even one in order.");
+                Assert.Throws<InvalidOperationException>(() => refused.OnServerEnd(11, RaceWire.EndReason.Failed, log[10]), $"state {stateTick}: a faulted predictor takes no end.");
+                Assert.That(refused.FaultReason, Is.EqualTo(firstCause), $"state {stateTick}: later refusals keep the first cause.");
+                Assert.That((refused.StatesCompared, refused.LastComparedTick), Is.EqualTo((10, 9)), $"state {stateTick}: nothing after the fault was compared.");
+            }
+        }
+
+        // R or Enter (ChainRushGame.Update) restarts the run, and StartRun clears the input source, the predictor. A network
+        // race has no restart (the server's run goes on), so once the predictor has remembered its run's first state a Clear
+        // breaks the prediction instead of starting it over; and nothing lifts a fault, not even another Clear.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Client_RestartedDuringARace_IsFaultedAndStaysFaulted()
+        {
+            yield return Load();
+            const int ticks = 60;
+            InputLog log = RecordBot(ticks);
+            byte[][] truth = RunTruth(log, ticks);
+
+            // Made while the game still runs on another source (RaceClient makes it in Begin, before it connects): it hears
+            // those ticks too, and setting it and starting the run afterwards is still a start, not a restart.
+            activePredictor?.Detach();
+            var early = new ClientPredictor(game, new InputReplay(log));
+            activePredictor = early;
+            var other = new InputReplay(log);
+            game.SetInputSource(other);
+            game.StartRun();
+            for (int i = 0; i < 5; i++) game.StepTick(other);
+            game.SetInputSource(early);
+            game.StartRun();
+            early.AfterTick();
+            Assert.That(early.Faulted, Is.False, "Ticks run on another source before the predictor was set are not its run.");
+
+            ClientPredictor predictor = PredictorAt20(log, truth);
+            game.StartRun();
+            Assert.That(predictor.Faulted, Is.True, "A restart in the middle of a network race must break the prediction.");
+            string cause = predictor.FaultReason;
+            Assert.That(cause, Does.Contain("restart").And.Contain("tick 20"), "The fault says what happened and where the run was.");
+            Assert.That((predictor.LastInputTick, predictor.LastComparedTick, predictor.StatesCompared), Is.EqualTo((20, 9, 10)), "The broken prediction is kept as it was, not cleared.");
+            Assert.That(game.IsRunning, Is.True, "precondition: the restarted run is going, so a step would ask for controls.");
+            var onConsume = Assert.Throws<InvalidOperationException>(() => game.StepTick(predictor), "A tick on a restarted network race must not run quietly.");
+            Assert.That(onConsume.Message, Does.Contain(cause), "The refusal carries the cause.");
+            Assert.Throws<InvalidOperationException>(() => predictor.OnServerState(truth[10]), "A faulted predictor compares no more states.");
+
+            predictor.Clear();
+            game.SetInputSource(predictor);
+            Assert.That((predictor.Faulted, predictor.FaultReason), Is.EqualTo((true, cause)), "Nothing lifts the fault, and the first cause stays.");
+        }
+
+        // A correction that arrives while the client stands paused (RaceClient pauses the run on its last tick and waits for the
+        // server's last states) moves the runner from where it is drawn, the state of the paused tick, not from the origin.
+        [UnityTest, Timeout(180000)]
+        public IEnumerator Client_ACorrectionWhilePaused_MeasuresTheJoltFromWhereTheRunnerStands()
+        {
+            yield return Load();
+            InputLog log = RecordBot(BotTicks);
+            int dropTick = BiggestSteerChange(log, 700, 800);
+            byte[][] server = RunServer(log, BotTicks, dropTick, out _);
+            const int latency = 15;
+            ClientPredictor predictor = StartClient(log);
+            for (int step = 1; step <= dropTick + latency; step++)
+            {
+                game.StepTick(predictor);
+                int arrived = step - latency;
+                if (arrived >= 0 && arrived < dropTick) predictor.OnServerState(server[arrived]);
+            }
+            Assert.That(predictor.Corrections, Is.EqualTo(0), "precondition: every state before the missed input agrees.");
+            game.TogglePause();
+            Assert.That(game.IsPaused, Is.True);
+            Vector3 drawn = player.transform.position;
+
+            Assert.That(predictor.OnServerState(server[dropTick]), Is.True, "The missed input's state is a correction.");
+            Assert.That((game.IsRunning, game.Tick), Is.EqualTo((true, dropTick + latency)), "The replay runs up to the last tick with controls.");
+            Vector3 after = game.CaptureSnapshot().Position;
+            float expected = Vector3.Distance(drawn, after);
+            Assert.That(Vector3.Distance(Vector3.zero, after), Is.Not.EqualTo(expected), "precondition: a jolt measured from the origin must be told apart.");
+            Assert.That(predictor.LargestJolt, Is.EqualTo(expected), "The jolt is measured from where the paused runner stood.");
+            Debug.Log($"Net paused correction: missed input at tick {dropTick}, corrected while paused at tick {dropTick + latency}; jolt {predictor.LargestJolt:F4} m (from the origin it would read {Vector3.Distance(Vector3.zero, after):F4} m).");
+        }
+
         // ---- helpers -------------------------------------------------------------------------------
 
         private IEnumerator Load()
@@ -861,6 +1021,20 @@ namespace ProtoHarness.Tests.PlayMode
                 states[t] = SimSnapshotCodec.Encode(game.CaptureSnapshot());
             }
             return states;
+        }
+
+        // A fresh client 10 ticks into the log, with no server state compared.
+        private ClientPredictor PredictorAt10(InputLog log)
+        {
+            activePredictor?.Detach();
+            var predictor = new ClientPredictor(game, new InputReplay(log));
+            activePredictor = predictor;
+            Time.timeScale = 0f;
+            game.SetInputSource(predictor);
+            game.StartRun();
+            predictor.AfterTick();
+            for (int i = 0; i < 10; i++) game.StepTick(predictor);
+            return predictor;
         }
 
         // A fresh client 20 ticks into the log, with the server's states for ticks 0..9 compared (all the truth's).

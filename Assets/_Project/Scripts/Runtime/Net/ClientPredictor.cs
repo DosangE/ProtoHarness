@@ -17,7 +17,9 @@ namespace ProtoHarness.Net
     // ending from the server's state before it, and predicts nothing after it. When the client's own run ends first and
     // the server's state for that tick or a later one arrives, the server's run was still going there: the game goes back
     // to that state, runs the remembered controls again, and then runs on live controls until it is as far ahead of the
-    // server as it was when its run ended (a catch-up). Nothing here knows about the network.
+    // server as it was when its run ended (a catch-up); an older state whose correction puts the ended run back to going
+    // catches up the same way. Anything that cannot be taken, or a restart, breaks the prediction for good (Faulted).
+    // Nothing here knows about the network.
     public sealed class ClientPredictor : IInputSource
     {
         // How many ticks the client may run ahead of the newest server state it has compared.
@@ -37,6 +39,9 @@ namespace ProtoHarness.Net
         // While OnServerEnd replays the server's last tick: that tick (0 otherwise) and the controls the server ran it on.
         private int endReplayTick;
         private TickInput endReplayInput;
+        // True once the predictor has given the controls of a live tick: from then on a Clear is a restart, not a start. Not
+        // set by AfterTick, which hears every tick of the game, also those run on another source before this one is set.
+        private bool armed;
 
         // catchUpLimit: the last tick a catch-up may run. The caller that stops sending controls after some tick passes that
         // tick, so a catch-up never runs past it (RaceClient's target).
@@ -75,10 +80,11 @@ namespace ProtoHarness.Net
         public bool ServerEnded { get; private set; }
         public int EndTick { get; private set; }
         public RaceWire.EndReason EndReason { get; private set; }
-        // True once the server's end could not be taken (OnServerEnd threw, for any reason): the client can no longer end its
-        // run as the server's did, and a failed replay leaves the game on a tick that is neither run. Consume, OnServerState
-        // and OnServerEnd throw from then on, with FaultReason (the first cause, with its tick; null until then). Only Clear
-        // lifts it.
+        // True once the prediction broke: a server state or the server's end could not be taken (OnServerState or OnServerEnd
+        // threw, for any reason), or the run was restarted (Clear after the run began). The client can no longer follow the
+        // server's run, and a failed replay leaves the game on a tick that is neither run. Consume, OnServerState and
+        // OnServerEnd throw from then on, with FaultReason (the first cause, with its tick; null until then). Nothing lifts
+        // it: a new race needs a new predictor.
         public bool Faulted { get; private set; }
         public string FaultReason { get; private set; }
         // The tick the client's run ended on (a fall or a finish, seen after the tick that ended it, whichever way that tick
@@ -93,8 +99,19 @@ namespace ProtoHarness.Net
 
         public void Poll() => live.Poll();
 
+        // Starts the predictor over, before its run begins (SetInputSource and StartRun both call it). Once the predictor
+        // has given the controls of a tick it is a restart (R or Enter, ChainRushGame.Update), which a network race does
+        // not have: the server's run goes on. So it then breaks the prediction instead (Faulted) and clears nothing; on a
+        // predictor that is already Faulted it does nothing.
         public void Clear()
         {
+            if (Faulted) return;
+            if (armed)
+            {
+                FaultReason = $"the run was restarted after tick {lastInputTick} (the server's state for tick {ackedTick} was the newest compared); a network race has no restart.";
+                Faulted = true;
+                return;
+            }
             live.Clear();
             for (int i = 0; i < Window; i++)
             {
@@ -150,6 +167,7 @@ namespace ProtoHarness.Net
                 inputs[tick % Window] = input;
                 inputTicks[tick % Window] = tick;
                 lastInputTick = tick;
+                armed = true;
                 InputConsumed?.Invoke(tick, input);
             }
             return input;
@@ -182,11 +200,37 @@ namespace ProtoHarness.Net
         // ClientEndLead ticks past the state, as far ahead as when its run ended, but never past the catch-up limit. A run
         // that ends again during either stops there and is remembered again. Such a correction is not in LargestJolt (an
         // ended run has no position to measure from).
+        // A state for a tick before the client's end that puts the run back to going is an ordinary correction, but the client
+        // stood still while its run was over, so after the replay it catches up the same way, to ClientEndLead ticks past
+        // the state.
+        // A state that cannot be taken is a broken prediction, as an end that cannot be: every exception that leaves here
+        // leaves the predictor Faulted first, with the cause and the tick in FaultReason, so the caller stops the run
+        // (RaceClient). A refused state does not touch the game; a replay that threw leaves it where the replay stopped.
         public bool OnServerState(byte[] encoded)
         {
             if (Faulted) throw FaultedError("a server state arrived");
+            int serverTick = -1;
+            try
+            {
+                serverTick = SimSnapshotCodec.TickOf(encoded);
+                return TakeServerState(serverTick, encoded);
+            }
+            catch (Exception e)
+            {
+                // Not handled here: the cause is recorded, and the exception goes on unchanged.
+                if (!Faulted)
+                {
+                    string which = serverTick >= 0 ? $"the server's state for tick {serverTick}" : "a server state";
+                    FaultReason = $"{which} could not be taken (the client at tick {game.Tick}): {e.GetType().Name}: {e.Message}";
+                    Faulted = true;
+                }
+                throw;
+            }
+        }
+
+        private bool TakeServerState(int serverTick, byte[] encoded)
+        {
             if (replaying) throw new InvalidOperationException("ClientPredictor: OnServerState called during a replay.");
-            int serverTick = SimSnapshotCodec.TickOf(encoded);
             if (ServerEnded)
                 throw new InvalidOperationException($"ClientPredictor: the server's state for tick {serverTick} arrived after its run ended at tick {EndTick}.");
             bool pastClientEnd = ClientEndTick >= 0 && serverTick >= ClientEndTick;
@@ -208,14 +252,20 @@ namespace ProtoHarness.Net
             if (FirstMismatchTick < 0) FirstMismatchTick = serverTick;
             Corrections++;
             long start = Stopwatch.GetTimestamp();
-            // Where the runner is drawn now, to measure how far a correction moves it.
-            Vector3 before = game.IsRunning ? game.CaptureSnapshot().Position : default;
+            // Where the runner is drawn now, to measure how far a correction moves it: the remembered state of the present
+            // tick, running or paused (RaceClient pauses on its last tick). An ended run remembers no state for its last tick.
+            int now = game.Tick;
+            bool drawnKnown = (game.IsRunning || game.IsPaused) && stateTicks[now % Window] == now;
+            Vector3 before = drawnKnown ? SimSnapshotCodec.Decode(states[now % Window]).Position : default;
+            // An ended run stood still while the server's states came; if the replay puts it back to going it catches up.
+            bool wasEnded = ClientEndTick >= 0;
+            int endLead = ClientEndLead;
             game.RestoreSnapshot(SimSnapshotCodec.Decode(encoded));
             // The run is going again; an end the replay reaches is remembered afresh.
             ForgetClientEnd();
             Store(serverTick, encoded);
             int replayed = ReplayTo(lastInputTick);
-            if (game.IsRunning)
+            if (drawnKnown && game.IsRunning)
             {
                 float jolt = Vector3.Distance(before, game.CaptureSnapshot().Position);
                 if (jolt > LargestJolt) LargestJolt = jolt;
@@ -223,6 +273,12 @@ namespace ProtoHarness.Net
             ReplayedTicks += replayed;
             if (replayed > LongestReplay) LongestReplay = replayed;
             ReplayMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
+            if (wasEnded && game.IsRunning)
+            {
+                if (endLead < 0)
+                    throw new InvalidOperationException($"ClientPredictor: the client's run had ended with a lead of {endLead} ticks over the server's states.");
+                CatchUp(serverTick + endLead);
+            }
             return true;
         }
 

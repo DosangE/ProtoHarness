@@ -5,15 +5,17 @@ using UnityEngine;
 
 namespace ProtoHarness.Net
 {
-    // Builds the one NetworkManager a process uses, from code: no prefabs, no scene objects, no scene changes. The four
+    // Builds the one NetworkManager a process uses, from code: no prefabs, no scene objects, no scene changes. The five
     // message names are the whole protocol: the client sends inputs; the server sends each racer its own states, then,
-    // once that racer's run is over, how and when it ended; and it sends every racer the other racers' positions.
+    // once that racer's run is over, how and when it ended; it sends every racer the other racers' positions; and, each
+    // time they change, it sends every racer the standings.
     internal static class RaceNetwork
     {
         public const string InputMessage = "race.input";
         public const string StateMessage = "race.state";
         public const string EndMessage = "race.end";
         public const string RemoteMessage = "race.remote";
+        public const string StandingsMessage = "race.standings";
 
         // The manager lives on its own root object (NetworkManager refuses to be nested), created inactive so its
         // settings are in place before its Awake and OnEnable run. It is kept across scene loads, so whoever calls

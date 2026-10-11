@@ -91,6 +91,19 @@ namespace ProtoHarness.Tests.PlayMode
             public bool BDone;
             public string BEnded;
             public bool BTimedOut;
+            // The newest standings each client holds when the player client has left (RaceStandings.Describe), which racer
+            // each says it is, and how many it took. For the player client, its last "RACE-CLIENT-STANDINGS you=<i> <lines>"
+            // line; BStandingsRefused is its log holding a standings message the client threw on.
+            public string EditorStandings;
+            public int EditorYou;
+            public int EditorStandingsCount;
+            public string BStandings;
+            public int BYou;
+            public int BStandingsLines;
+            public bool BStandingsRefused;
+            // How many "RACE-SERVER-STANDINGS" lines the server logged, and its last.
+            public int ServerStandingsLines;
+            public string ServerLastStandings;
         }
 
         [UnitySetUp]
@@ -138,6 +151,14 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.RemoteMismatches, Is.EqualTo(0), "Both racers play the same run in separate worlds, so the other racer's position at a tick must be this racer's own.");
             Assert.That(o.GhostJumps, Is.EqualTo(0), $"The ghost jumped (largest step {o.GhostLargestStep:F2} m in a frame).");
             Assert.That(o.ServerRunEnded[0] || o.ServerRunEnded[1], Is.False, "A server run ended with nothing late.");
+            // Nobody ended, so both clients' newest standings have both racers running, and each knows which racer it is.
+            string standings = Standings(o);
+            TestContext.WriteLine("Net race A standings: " + standings);
+            Assert.That(o.EditorStandings, Is.EqualTo("0=Running 1=Running"), standings);
+            Assert.That(o.BStandings, Is.EqualTo("0=Running 1=Running"), standings + " " + o.ClientB);
+            Assert.That(o.EditorYou, Is.EqualTo(RacerOf(o, o.EditorId)), standings);
+            Assert.That(o.BYou, Is.EqualTo(RacerOf(o, o.BId)), standings);
+            Assert.That(o.BStandingsRefused, Is.False, "The player client refused a standings message. " + o.ClientB);
         }
 
         // Jitter of up to 120 ms against a 1-tick buffer: inputs arrive late and the server repeats the last one. A missed jump
@@ -187,6 +208,42 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.BEnded, Is.EqualTo(o.ServerEndOf[bRacer]), $"The player client (racer {bRacer}) must take its own racer's end and no other. " + pairing + " " + o.ClientB);
             Assert.That(o.Missed[0] + o.Missed[1], Is.GreaterThan(0), "The jitter should have made some inputs late.");
             Assert.That(o.Corrections + o.BCorrections, Is.LessThanOrEqualTo(o.Missed[0] + o.Missed[1]), "A correction without a missed input on the server has no cause.");
+            // Both clients, the other racer's too, hear of every end within the ticks as the server had it; a racer whose run
+            // did not end within them is running, or ended after them.
+            string standings = Standings(o);
+            TestContext.WriteLine("Net race B standings: " + standings);
+            Assert.That(o.BStandingsRefused, Is.False, "The player client refused a standings message. " + o.ClientB);
+            Assert.That(o.EditorYou, Is.EqualTo(editorRacer), standings);
+            Assert.That(o.BYou, Is.EqualTo(bRacer), standings);
+            for (int i = 0; i < 2; i++)
+            {
+                Assert.That(FitsTheServersEnd(LineOf(o.EditorStandings, i), o.ServerEndOf[i], ticks), Is.True, $"The editor client's standings for racer {i} against the server's end {o.ServerEndOf[i]}. " + standings + " " + pairing);
+                Assert.That(FitsTheServersEnd(LineOf(o.BStandings, i), o.ServerEndOf[i], ticks), Is.True, $"The player client's standings for racer {i} against the server's end {o.ServerEndOf[i]}. " + standings + " " + pairing);
+            }
+        }
+
+        private static string Standings(Outcome o) =>
+            $"editor client: you={o.EditorYou} \"{o.EditorStandings}\" ({o.EditorStandingsCount} taken); player client: you={o.BYou} \"{o.BStandings}\" ({o.BStandingsLines} lines, refused {o.BStandingsRefused}); " +
+            $"server: {o.ServerStandingsLines} lines, last \"{o.ServerLastStandings}\".";
+
+        // Racer i's line in RaceStandings.Describe's text ("0=Running 1=Failed@657"), or null.
+        private static string LineOf(string standings, int racer)
+        {
+            if (standings == null) return null;
+            string prefix = racer + "=";
+            foreach (string part in standings.Split(' ')) if (part.StartsWith(prefix, StringComparison.Ordinal)) return part.Substring(prefix.Length);
+            return null;
+        }
+
+        // serverEnd: "<reason>@<tick>" within the ticks, or "none". A line fits it when it is that end (a finish with any
+        // place), or, for "none", when the racer is running or ended after the ticks.
+        private static bool FitsTheServersEnd(string line, string serverEnd, int ticks)
+        {
+            if (line == null) return false;
+            if (serverEnd != "none") return line == serverEnd || line.StartsWith(serverEnd + "#", StringComparison.Ordinal);
+            if (line == "Running") return true;
+            Match m = Regex.Match(line, @"^(?:Failed|Finished)@(\d+)");
+            return m.Success && int.Parse(m.Groups[1].Value) > ticks;
         }
 
         // The racer the server gave this client, or -1.
@@ -296,6 +353,11 @@ namespace ProtoHarness.Tests.PlayMode
             float exitDeadline = Time.realtimeSinceStartup + 25f;
             while (!playerClient.HasExited && Time.realtimeSinceStartup < exitDeadline) yield return null;
             if (!playerClient.HasExited) { playerClient.Kill(); playerClient.WaitForExit(5000); }
+            // Read when the player client has left: until then the editor client still takes standings (an end of the other
+            // racer can come after this client finished).
+            outcome.EditorStandings = client.Standings == null ? null : RaceStandings.Describe(client.Standings);
+            outcome.EditorYou = client.You;
+            outcome.EditorStandingsCount = client.StandingsReceived;
             client.Disconnect();
             exitDeadline = Time.realtimeSinceStartup + 15f;
             while (!server.HasExited && Time.realtimeSinceStartup < exitDeadline) yield return null;
@@ -382,8 +444,21 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.Missed[racer] = int.Parse(m.Groups[4].Value);
                 outcome.Late[racer] = int.Parse(m.Groups[5].Value);
             }
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER-STANDINGS v=\d+ ([^\r\n]+)"))
+            {
+                outcome.ServerStandingsLines++;
+                outcome.ServerLastStandings = m.Groups[1].Value;
+            }
             string client = ReadShared(clientLog);
-            Match done = Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)(?: ended=(\S+))?");
+            outcome.BYou = -1;
+            foreach (Match m in Regex.Matches(client, @"RACE-CLIENT-STANDINGS you=(\d+) ([^\r\n]+)"))
+            {
+                outcome.BStandingsLines++;
+                outcome.BYou = int.Parse(m.Groups[1].Value);
+                outcome.BStandings = m.Groups[2].Value;
+            }
+            outcome.BStandingsRefused = client.Contains("RaceClient: standings for racer") || client.Contains("RaceClient: the standings say");
+            Match done =Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)(?: ended=(\S+))?");
             outcome.ClientB = done.Success ? done.Value : Tail(clientLog);
             outcome.BDone = done.Success;
             outcome.BTimedOut = client.Contains("RACE-CLIENT-TIMEOUT");

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
 using Unity.Collections;
@@ -13,7 +15,8 @@ namespace ProtoHarness.Net
     // `targetTicks` ticks it stops sending and, once the server's state for the last of them has been compared, it is
     // Finished. It is Finished too once the server has said that this racer's run ended within those ticks (race.end).
     // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart from the
-    // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished.
+    // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished. The standings the
+    // server sends (race.standings) are kept as they come (Standings, You); they only tell, the run never reads them.
     public sealed class RaceClient : MonoBehaviour
     {
         private ChainRushGame game;
@@ -38,8 +41,16 @@ namespace ProtoHarness.Net
         private bool paused;
         private bool reported;
         private int remoteSamples;
+        private RaceStandings.Entry[] standings;
+        private int you = -1;
+        private int standingsReceived;
 
         public ClientPredictor Predictor => predictor;
+        // The newest standings from the server, by racer, or null before the first arrive.
+        public IReadOnlyList<RaceStandings.Entry> Standings => standings;
+        // Which racer the server made this client (from the standings), or -1 before the first arrive.
+        public int You => you;
+        public int StandingsReceived => standingsReceived;
         public RemoteInterpolator Remote => remote;
         // The picture of the other racer, or null when the client was made without one.
         public RemoteGhost Ghost { get; private set; }
@@ -91,6 +102,7 @@ namespace ProtoHarness.Net
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.StateMessage, OnState);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.EndMessage, OnEnd);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.RemoteMessage, OnRemote);
+            manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.StandingsMessage, OnStandings);
         }
 
         // Closes the connection (the server notices when its client leaves).
@@ -159,6 +171,29 @@ namespace ProtoHarness.Net
                 if (predictor.Faulted) HaltOnFault();
             }
             Debug.Log($"RACE-CLIENT the server's run ended: {reason} at tick {tick} (corrected {corrected}).");
+        }
+
+        // The server sends this racer's own end before any standings that hold it, on the same ordered queue. So an end
+        // within the target ticks that the predictor did not take, or took differently, is a bug and throws (Netcode logs it).
+        // A broken predictor is not checked: its end may never have been taken.
+        private void OnStandings(ulong sender, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out byte[] payload);
+            RaceStandings.Entry[] entries = RaceWire.DecodeStandings(payload, out int racer);
+            if (you >= 0 && (racer != you || entries.Length != standings.Length))
+                throw new InvalidDataException($"RaceClient: standings for racer {racer} of {entries.Length}, but earlier ones were for racer {you} of {standings.Length}.");
+            RaceStandings.Entry own = entries[racer];
+            bool ended = own.Status == RaceStandings.Status.Finished || own.Status == RaceStandings.Status.Failed;
+            if (ended && own.EndTick <= targetTicks && !predictor.Faulted)
+            {
+                RaceWire.EndReason reason = own.Status == RaceStandings.Status.Finished ? RaceWire.EndReason.Finished : RaceWire.EndReason.Failed;
+                if (!predictor.ServerEnded || predictor.EndTick != own.EndTick || predictor.EndReason != reason)
+                    throw new InvalidDataException($"RaceClient: the standings say racer {racer} ended {reason} at tick {own.EndTick}, but the end this client took was {(predictor.ServerEnded ? $"{predictor.EndReason} at tick {predictor.EndTick}" : "none")}.");
+            }
+            standings = entries;
+            you = racer;
+            standingsReceived++;
+            Debug.Log($"RACE-CLIENT-STANDINGS you={racer} {RaceStandings.Describe(entries)}");
         }
 
         private void OnRemote(ulong sender, FastBufferReader reader)

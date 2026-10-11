@@ -12,8 +12,8 @@ namespace ProtoHarness.Net
     // disagree (DESIGN.md P3). The other racers' positions go to a RemoteInterpolator and are drawn by a RemoteGhost. After
     // `targetTicks` ticks it stops sending and, once the server's state for the last of them has been compared, it is
     // Finished. It is Finished too once the server has said that this racer's run ended within those ticks (race.end).
-    // An end the predictor cannot take (any exception from OnServerEnd) leaves it Faulted: the run is then stopped for good
-    // (RACE-CLIENT-FAULT), not Finished.
+    // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart from the
+    // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished.
     public sealed class RaceClient : MonoBehaviour
     {
         private ChainRushGame game;
@@ -129,7 +129,15 @@ namespace ProtoHarness.Net
             reader.ReadValueSafe(out byte[] payload);
             // The run goes on past the target with idle controls; the server never saw those, so they are not compared.
             if (SimSnapshotCodec.TickOf(payload) > targetTicks) return;
-            predictor.OnServerState(payload);
+            try
+            {
+                predictor.OnServerState(payload);
+            }
+            finally
+            {
+                // As in OnEnd: the exception goes on to Netcode, and the game is stopped before the next tick.
+                if (predictor.Faulted) HaltOnFault();
+            }
         }
 
         // Runs between ticks (the network update), never inside StepTick. Arrives after the state for the tick before it.
@@ -188,9 +196,9 @@ namespace ProtoHarness.Net
             }
         }
 
-        // The predictor broke (the server's end could not be taken). No tick may run on it again: each would throw, and an input
-        // for a tick the server already has would be sent a second time. So the run is held paused, the fault is told once, and
-        // with quitWhenDone the process ends as on a timeout. Safe to call every frame.
+        // The predictor broke (a state or the server's end could not be taken, or the run was restarted). No tick may run on it
+        // again: each would throw, and an input for a tick the server already has would be sent a second time. So the run is
+        // held paused, the fault is told once, and with quitWhenDone the process ends as on a timeout. Safe to call every frame.
         private void HaltOnFault()
         {
             if (game.IsRunning) game.TogglePause();

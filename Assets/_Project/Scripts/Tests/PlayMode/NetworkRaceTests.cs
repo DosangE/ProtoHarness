@@ -117,6 +117,14 @@ namespace ProtoHarness.Tests.PlayMode
             public int SlowFrames;
             public string SlowFrameList;
             public int FirstStandingsTick;
+            // The other racer's positions at the editor, as the editor's own clock sees them: its tick when the first arrived
+            // and when it finished, the other racer's first tick received, and how many times a tick did not follow the one
+            // before by one (a gap, a repeat or a step back). The other racer starts later by however long its process takes
+            // to start, so how many arrive depends on that, not on the stream (DECISIONS 2026-10-12 "네트워크 레이스 A").
+            public int FirstRemoteAt;
+            public int EndAt;
+            public int FirstRemoteTick;
+            public int RemoteBreaks;
         }
 
         [UnitySetUp]
@@ -145,8 +153,9 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest, Timeout(300000)]
         public IEnumerator TwoClients_FixedDelay_AgreeBitForBitAndTheGhostMovesSmoothly()
         {
+            const int ticks = 1000;
             Outcome o = default;
-            yield return Scenario(7793, 1000, 3, 50, 0, r => o = r);
+            yield return Scenario(7793, ticks, 3, 50, 0, r => o = r);
             Debug.Log($"Net race A (rtt 100 ms, buffer 3): {Describe(o)}");
             Assert.That(o.Finished, Is.True, "The editor client did not get to compare the server's last state. " + o.ServerLog);
             Assert.That(o.Corrections, Is.EqualTo(0), "The editor client had to be corrected.");
@@ -158,9 +167,16 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(o.Late[i], Is.EqualTo(0), $"racer {i}: an input came late.");
                 Assert.That(o.Missed[i], Is.EqualTo(o.Ticks[i] - o.Received[i]), $"racer {i}: an input was missing in the middle of the run (ticks {o.Ticks[i]}, received {o.Received[i]}, missed {o.Missed[i]}).");
             }
-            Assert.That(o.RemoteSamples, Is.GreaterThan(900), "The other racer's positions must keep arriving.");
+            // The other racer's positions keep arriving: from its first tick, with none missing or out of order (no jitter, an
+            // ordered reliable channel), for as long as both ran. How many that is depends on how much later its process
+            // started, so the count is judged against the editor's own ticks since the first arrived; 5 ticks cover frames.
+            Assert.That(o.FirstRemoteAt, Is.InRange(0, ticks / 2 - 1), "The other racer must start within the first half of this run, or there is little to judge.");
+            Assert.That(o.FirstRemoteTick, Is.EqualTo(0), "The other racer's positions must arrive from its first tick.");
+            Assert.That(o.RemoteBreaks, Is.EqualTo(0), "The other racer's positions must arrive one tick after another.");
+            Assert.That(o.RemoteSamples, Is.GreaterThanOrEqualTo(o.EndAt - o.FirstRemoteAt - 5), "The other racer's positions must keep arriving.");
             Assert.That(o.BRemote, Is.GreaterThan(900), o.ClientB);
-            Assert.That(o.RemoteChecked, Is.GreaterThan(900));
+            // Every position but the one for tick 0 is compared with this racer's own (its own tick 0 is not a completed tick).
+            Assert.That(o.RemoteChecked, Is.GreaterThanOrEqualTo(o.RemoteSamples - 1));
             Assert.That(o.RemoteMismatches, Is.EqualTo(0), "Both racers play the same run in separate worlds, so the other racer's position at a tick must be this racer's own.");
             Assert.That(o.GhostJumps, Is.EqualTo(0), $"The ghost jumped (largest step {o.GhostLargestStep:F2} m in a frame).");
             Assert.That(o.ServerRunEnded[0] || o.ServerRunEnded[1], Is.False, "A server run ended with nothing late.");
@@ -283,7 +299,7 @@ namespace ProtoHarness.Tests.PlayMode
 
         private static string Describe(Outcome o) =>
             $"editor client: finished {o.Finished}, {o.StatesCompared} states compared, {o.Corrections} corrections; player client: {o.BCompared} compared, {o.BCorrections} corrections, {o.BRemote} remote positions; " +
-            $"remote positions at the editor: {o.RemoteSamples} ({o.RemoteChecked} checked against its own run, {o.RemoteMismatches} differ); ghost: {o.GhostFrames} frames, largest step {o.GhostLargestStep:F3} m, jumps {o.GhostJumps}; " +
+            $"remote positions at the editor: {o.RemoteSamples} ({o.RemoteChecked} checked against its own run, {o.RemoteMismatches} differ; from its tick {o.FirstRemoteTick}, {o.RemoteBreaks} breaks; first at the editor's tick {o.FirstRemoteAt}, the editor ended at tick {o.EndAt}); ghost: {o.GhostFrames} frames, largest step {o.GhostLargestStep:F3} m, jumps {o.GhostJumps}; " +
             $"server racer 0: ran {o.Ticks?[0]}, received {o.Received?[0]}, missed {o.Missed?[0]}, late {o.Late?[0]}; racer 1: ran {o.Ticks?[1]}, received {o.Received?[1]}, missed {o.Missed?[1]}, late {o.Late?[1]}; " +
             $"editor frames: longest {o.LongestFrameMs:F1} ms after tick {o.LongestFrameTick}, over 50 ms {o.SlowFrames} [{o.SlowFrameList}], first standings at tick {o.FirstStandingsTick}.";
 
@@ -313,12 +329,17 @@ namespace ProtoHarness.Tests.PlayMode
             var own = new Dictionary<int, Vector3>(ticks + 64);
             game.TickCompleted += tick => { if (game.IsRunning) own[tick] = game.CaptureSnapshot().Position; };
             var received = new List<(int Tick, Vector3 Position)>(ticks + 64);
+            int firstRemoteAt = -1;
             Time.timeScale = 1f;
             var host = new GameObject("RaceClient");
             host.SetActive(false);
             RaceClient client = host.AddComponent<RaceClient>();
             client.Configure(game, new InputReplay(log), "127.0.0.1", port, delayMs / 1000d, jitterMs / 1000d, 11, ticks, showRemote: true, quitWhenDone: false);
-            client.RemoteReceived += (tick, position) => received.Add((tick, position));
+            client.RemoteReceived += (tick, position) =>
+            {
+                if (firstRemoteAt < 0) firstRemoteAt = game.Tick;
+                received.Add((tick, position));
+            };
             ulong editorId = 0;
             int editorIdLines = 0;
             editorLogWatch = (message, stackTrace, type) =>
@@ -386,6 +407,10 @@ namespace ProtoHarness.Tests.PlayMode
                 if (p.ServerEnded) outcome.EditorEnded = $"{p.EndReason}@{p.EndTick}";
             }
             outcome.RemoteSamples = client.RemoteSamples;
+            outcome.EndAt = game.Tick;
+            outcome.FirstRemoteAt = firstRemoteAt;
+            outcome.FirstRemoteTick = received.Count > 0 ? received[0].Tick : -1;
+            for (int i = 1; i < received.Count; i++) if (received[i].Tick != received[i - 1].Tick + 1) outcome.RemoteBreaks++;
             foreach ((int tick, Vector3 position) in received)
             {
                 if (!own.TryGetValue(tick, out Vector3 mine)) continue;

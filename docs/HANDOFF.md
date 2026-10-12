@@ -4,6 +4,26 @@
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
+## 0. 중단된 작업 — 다음 세션은 이것부터 (2026-10-12 저장)
+
+**`fix/net-race-remote-count` — 네트워크 레이스 A 의 상대 위치 기준.** 이미 승인된 작업이다(2026-10-12 요청서에 사용자 "ㄱㄱ"). 범위: `NetworkRaceTests.cs` 의 A 판정 교체 + docs. 런타임·서버·클라 코드와 플레이어 빌드는 범위 밖. 코드는 끝났고 **네트워크 레이스 검증만 남았다**. 사용자가 "PC 를 다른 데 쓰지 않을 때 다시 돌린다"고 중단했다.
+
+- **원인 (확인함)**: 서버는 레이서마다 입력이 쌓이면 따로 출발시키고(`RaceServer.cs:312-318`) 매 상태를 상대에게 위치로 보낸다(`RaceServer.cs:226-233`). 플레이어 클라는 별도 프로세스라 부팅만큼(Δ ≈ 80~180틱) 늦게 출발하므로 에디터는 약 1000−Δ 개를 받는다. 실행 12회: 플레이어 클라 1009~1016개(일정), 에디터 834~921개. 채널은 `ReliableSequenced`(`CustomMessageManager.cs:300` 기본값), 지연 큐는 순서 보장(`DelayedSender.cs:40-42`). 자기 틱 0 은 `TickCompleted` 로 보고되지 않는다(`ChainRushGame.cs:193` 에서 틱을 올린 뒤 `:183` 호출).
+- **바꾼 것** (`NetworkRaceTests.cs`, 커밋돼 있음): A 의 `RemoteSamples > 900`·`RemoteChecked > 900` 을 ① 상대 첫 위치가 에디터 틱 500 전에 도착 ② 상대 틱 0 부터 ③ 빈틈·중복 0 ④ 받은 수 ≥ (에디터 끝 틱 − 첫 도착 틱) − 5 ⑤ `RemoteChecked ≥ RemoteSamples − 1` 로. Outcome 에 `FirstRemoteAt`·`EndAt`·`FirstRemoteTick`·`RemoteBreaks`, `Describe` 에 같은 값. `BRemote > 900` 은 그대로(약 1010 으로 안정).
+- **지금까지의 실행 (에디터 6000.3.19f1, `C:/Users/User/Desktop/...` 머신)** — 컴파일 OK(Console Error 0). 새 기준 ①~⑤ 는 A 3회 모두 성립:
+  - A 1회 07:11:57Z **Passed** — 925 ≥ 910, 틱 0부터, 빈틈 0, 첫 도착 85, 50 ms 초과 프레임 0.
+  - A 2회 07:12:56Z Failed — 912 ≥ 897 (새 기준 성립). 실패는 바꾸지 않은 판정: `racer 0: an input came late. Expected: 0 But was: 3`. 에디터 50 ms 초과 프레임 5번(최대 93 ms, 틱 54~339).
+  - A 3회 + B 07:14:12Z 둘 다 Failed — A: 919 ≥ 905, `But was: 7`(늦은 입력), 85·88 ms 멈춤. B: 에디터가 600~866 ms 씩 멈춰 `RACE-CLIENT-FAULT the server's state for tick 175 could not be taken (the client at tick 174)`.
+  - 멈춤의 원인은 확인 못 했다. 남은 레이스 프로세스는 없었고 PC 에서 Media Player·브라우저 등이 돌고 있었다. 순위 패널 첫 그리기는 0.4 ms 로 정상(C1c-2b 수정이 작동).
+  - 덤: 이 B 에서 처음으로 낙하(`Failed@657`)가 나서 **플레이어 클라의 고스트 숨김이 실제로 동작했다**(`RACE-CLIENT-GHOST hidden: racer 0 Failed@657`, `RaceStandingsView: no graphics device; the standings are not drawn.`). C1c-2b DECISIONS 의 "고스트 숨김 미실행" 한계를 이 근거로 고쳐 적는다.
+- **재개 절차** (사용자가 "돌려라"고 하면 묻지 말고 이대로):
+  1. `git branch --show-current` 가 `fix/net-race-remote-count` 인지, `git status` 에 이 머신의 버전 차이 4파일(`packages-lock.json`·`ProjectSettings.asset`·`ProjectVersion.txt`·`ProtoHarness.slnx`)만 있는지 본다. Unity 에디터가 이 브랜치 코드로 컴파일됐는지(`Library/ScriptAssemblies/ProtoHarness.Tests.PlayMode.dll` 시각 > `NetworkRaceTests.cs` 시각, Console Error 0) 확인한다. 아니면 `AssetDatabase.Refresh()`.
+  2. 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`)는 다시 만들지 않는다 — 이 브랜치는 테스트만 바꿨고, 2026-10-12 15:27(+0900) 빌드가 `dev`(`eb4d0d7`) 런타임 코드다(`RaceBuild_Data/Managed/ProtoHarness.Net.dll` 64000 바이트). 빌드가 없거나 크기가 다르면 4절 방식으로 다시 빌드하고 설정 파일 5개를 되돌린다.
+  3. 사용자에게 PC 의 다른 작업을 멈추고 Unity 에디터를 앞에 두라고 한 줄 알린 뒤, `TestRunnerApi.Execute`(PlayMode, `testNames` 에 A·B 전체 이름)로 **A 3회**(A 단독 3번) + **B 1회**를 돌린다. **도는 동안 `Unity_RunCommand` 를 부르지 않는다**(4절). 완료는 Editor.log 의 `ChainRush tests:` 줄 수 증가로 기다리고, 결과 XML 을 실행마다 scratchpad 로 복사한다.
+  4. 각 실행의 `result`, 시각, `remote positions at the editor: … (from its tick …, … breaks; first at …, ended at …)`, `server racer 0: … late`, `editor frames: …` 줄을 보고에 그대로 적는다.
+  5. A 3회 모두 Passed 면: EditMode + PlayMode 게이트(`Run PlayMode Tests`) 2회 → DECISIONS 에 새 항목("네트워크 레이스 A 의 상대 위치 기준", 위 원인·실행 전부·실패 원문 포함) → 이 0절과 2절의 해당 후보를 지움 → 커밋 → 병합은 사용자 지시 때.
+  6. 또 멈춤으로 실패하면 고치지 말고 멈춘다. 실패 원문과 `editor frames` 줄을 보고하고, 다음 후보로 "에디터 프레임 멈춤 조사"(에디터 포커스·백그라운드 스로틀·다른 프로세스 부하 구분)를 올린다.
+
 ## 1. 지금 상태 (2026-10-12)
 
 - 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)**, C1c-1·C1c-1b·예측기 구멍 fix·**C1c-2a 순위(`28a9fc7`)** 가 병합돼 있다. `dev`(`28a9fc7`)는 `origin/dev` 와 같다(2026-10-12 확인). **C1c-2b 순위 표시는 `feature/p3-c1c2b-standings-view` 에 있고 병합 전이다**(검증은 DECISIONS 2026-10-12 "P3 C1c-2b"). 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐으므로 필요 없다(지워도 되는지는 사용자 결정, 삭제는 승인 후).
@@ -26,7 +46,7 @@
 
 C1c-2b(순위 표시)까지 구현·검증했다(위 1절, 병합은 사용자 지시 대기). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **네트워크 레이스 A 의 상대 위치 기준 (`fix/`)**: `NetworkRaceTests` A 의 `RemoteSamples > 900` 이 이 머신에서는 변경 전 `dev` 코드로도 899 로 떨어진다(2026-10-12, 이전 머신은 951~954). 상대 클라 접속 시각에 따라 받는 수가 달라지는 것으로 보이나 확인하지 않았다. 기준을 서버가 보낸 수 대비로 바꿀지 등 → 요청서부터.
+- **네트워크 레이스 A 의 상대 위치 기준 (`fix/`)**: 진행 중, 검증만 남음 → 위 0절.
 - **진행 중 순위**: 랩·진행도로 누가 앞인지는 상대 위치만으로는 못 하므로 메시지가 더 필요하다(C1c-2b 에서 하지 않음).
 - **네트워크 클라의 HUD 재시작 버튼**: 네트워크 클라에서도 HUD 결과 패널의 `R / RUN AGAIN` 버튼(`ChainRushHud.cs:226-228`)과 R 키가 `StartRun` 을 불러 예측기를 영구 고장 낸다(의도한 동작이지만 누를 수 있게 보인다). 막으려면 HUD 를 고쳐야 한다 → 별도 합의.
 

@@ -16,7 +16,8 @@ namespace ProtoHarness.Net
     // Finished. It is Finished too once the server has said that this racer's run ended within those ticks (race.end).
     // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart from the
     // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished. The standings the
-    // server sends (race.standings) are kept as they come (Standings, You); they only tell, the run never reads them.
+    // server sends (race.standings) are kept as they come (Standings, You); they only tell, the run never reads them. With
+    // showRemote they are drawn (RaceStandingsView), and the ghost is hidden once they say the other racer's run has ended.
     public sealed class RaceClient : MonoBehaviour
     {
         private ChainRushGame game;
@@ -54,6 +55,8 @@ namespace ProtoHarness.Net
         public RemoteInterpolator Remote => remote;
         // The picture of the other racer, or null when the client was made without one.
         public RemoteGhost Ghost { get; private set; }
+        // The standings panel, or null when the client was made without one (as the ghost).
+        public RaceStandingsView StandingsView { get; private set; }
         public bool Connected => started;
         public int RemoteSamples => remoteSamples;
         // True once the server's state for the last tick has been compared, or the server's end has been taken.
@@ -95,6 +98,8 @@ namespace ProtoHarness.Net
             {
                 Ghost = gameObject.AddComponent<RemoteGhost>();
                 Ghost.Initialize(remote);
+                StandingsView = gameObject.AddComponent<RaceStandingsView>();
+                StandingsView.Initialize(this);
             }
             manager = RaceNetwork.Create(address, port);
             manager.OnClientConnectedCallback += OnConnected;
@@ -190,10 +195,23 @@ namespace ProtoHarness.Net
                 if (!predictor.ServerEnded || predictor.EndTick != own.EndTick || predictor.EndReason != reason)
                     throw new InvalidDataException($"RaceClient: the standings say racer {racer} ended {reason} at tick {own.EndTick}, but the end this client took was {(predictor.ServerEnded ? $"{predictor.EndReason} at tick {predictor.EndTick}" : "none")}.");
             }
+            // The remote positions carry no racer number: the ghost is "the other one", which only means something with two.
+            if (Ghost != null && entries.Length != 2)
+                throw new InvalidOperationException($"RaceClient: the ghost shows the one other racer, but the standings have {entries.Length} racers.");
             standings = entries;
             you = racer;
             standingsReceived++;
             Debug.Log($"RACE-CLIENT-STANDINGS you={racer} {RaceStandings.Describe(entries)}");
+            if (Ghost != null && Ghost.Visible)
+            {
+                int other = 1 - racer;
+                RaceStandings.Status status = entries[other].Status;
+                if (status == RaceStandings.Status.Finished || status == RaceStandings.Status.Failed)
+                {
+                    Ghost.Hide();
+                    Debug.Log($"RACE-CLIENT-GHOST hidden: racer {other} {RaceStandings.Describe(entries[other])}");
+                }
+            }
         }
 
         private void OnRemote(ulong sender, FastBufferReader reader)

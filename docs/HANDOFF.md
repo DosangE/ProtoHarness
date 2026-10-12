@@ -1,12 +1,12 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-11 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix·C1c-2a 순위). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-12 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix·C1c-2a 순위·C1c-2b 순위 표시). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
-## 1. 지금 상태 (2026-10-10)
+## 1. 지금 상태 (2026-10-12)
 
-- 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)** 가 병합돼 있다. `dev`(`889cadd`, 하네스 훅 포함)는 `origin/dev` 와 같다(2026-10-10 푸시). 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐으므로 필요 없다(지워도 되는지는 사용자 결정, 삭제는 승인 후).
+- 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)**, C1c-1·C1c-1b·예측기 구멍 fix·**C1c-2a 순위(`28a9fc7`)** 가 병합돼 있다. `dev`(`28a9fc7`)는 `origin/dev` 와 같다(2026-10-12 확인). **C1c-2b 순위 표시는 `feature/p3-c1c2b-standings-view` 에 있고 병합 전이다**(검증은 DECISIONS 2026-10-12 "P3 C1c-2b"). 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐으므로 필요 없다(지워도 되는지는 사용자 결정, 삭제는 승인 후).
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`(루프·초점), 이동·드리프트·체인 액션, 절차 노면(T3a)·시드 생성기(T3b)·절차 무한 코스(T3c)·서킷(T4), 직선 무한 코스 정리(T3d).
   - **P2** (DECISIONS 2026-10-08 "P2"): 입력 기록·재생(`InputLog`·`InputRecorder`·`InputReplay`, `Control/`)과 상태 트레이스 비교(`StateTrace`, 테스트). **같은 시드 + 같은 입력 = 같은 런이 같은 머신·같은 에디터에서 비트 단위로 성립한다**: 서킷 1700틱·절차 코스 2500틱을 같은 세션(6배속)·씬 재로드(2배속)·별도 세션에서 모두 재현했다.
@@ -16,16 +16,19 @@
   - **C1c-1 런 종료 알림** (DECISIONS 2026-10-11 "P3 C1c-1"): 서버가 런이 끝난 틱에 `race.end`(틱·이유·그 틱에 쓴 입력)를 주인 클라에 보내고, 클라(`ClientPredictor.OnServerEnd`)는 같은 결말이면 그대로, 아니면 T-1 로 되감아 서버 입력으로 틱 T 를 다시 돈다. 재현 못 하거나 종료 처리에서 예외가 나면 예측기가 고장(`Faulted`) 상태가 되고 클라가 멈춘다. 지터 레이스에서 낙하한 레이서의 클라가 타임아웃 없이 `ended=Failed@657` 로 끝났다. 클라만 먼저 끝나는 경우는 C1c-1b 에서 막았다(아래).
   - **C1c-1b 클라만 먼저 끝나는 경우** (DECISIONS 2026-10-11 "P3 C1c-1b"): 클라 런이 끝난 뒤 그 틱 이후의 서버 상태가 오면 서버 상태로 되돌아가 기록 입력으로 다시 돌고, 끝날 때의 앞섬만큼 live 입력으로 따라잡는다(목표 틱 상한). 지금 서킷에서는 서버도 다음 틱에 끝나 따라잡기는 최대 1틱이다(S+L 상한 경로는 테스트로 끝까지 돌지 않았다).
   - **예측기 구멍 fix** (DECISIONS 2026-10-11 "P3 C1c 예측기 구멍 4개"): 예측기가 입력을 내준 뒤의 `Clear`(R·Enter·HUD 의 `StartRun`)는 재시작이라 고장이 되고, 고장은 무엇으로도 풀리지 않는다(새 경기 = 새 예측기). `OnServerState` 의 모든 예외도 고장을 세운다. `LargestJolt` 는 일시정지 중에도 그 틱의 예측 상태에서 잰다(DONE 줄 `jolt=` 를 다시 근거로 쓸 수 있다). 끝난 클라가 더 이른 서버 상태로 되살아나도 따라잡는다.
-  - **C1c-2a 순위** (DECISIONS 2026-10-11 "P3 C1c-2a"): 서버가 `RaceStandings`(레이서별 대기·달리는 중·결승·낙하, 순위, 확정)를 갖고 바뀔 때마다(출발·끝·확정) 모든 클라에 `race.standings` 를 보낸다(각 클라 자신의 `ToOwner` 큐, 자기 `race.end` 뒤). 순위는 **각자 출발부터 결승까지의 틱 수**, 같은 틱은 공동, 낙하는 순위 없음. 다른 레이서가 아직 그 틱 수 안에 결승할 수 있으면(대기 중이거나 그 틱을 아직 못 넘김) 잠정이다. 클라(`RaceClient.Standings`·`You`)는 받기만 하고 런은 읽지 않는다. 표시는 아직 없다(C1c-2b).
+  - **C1c-2a 순위** (DECISIONS 2026-10-11 "P3 C1c-2a"): 서버가 `RaceStandings`(레이서별 대기·달리는 중·결승·낙하, 순위, 확정)를 갖고 바뀔 때마다(출발·끝·확정) 모든 클라에 `race.standings` 를 보낸다(각 클라 자신의 `ToOwner` 큐, 자기 `race.end` 뒤). 순위는 **각자 출발부터 결승까지의 틱 수**, 같은 틱은 공동, 낙하는 순위 없음. 다른 레이서가 아직 그 틱 수 안에 결승할 수 있으면(대기 중이거나 그 틱을 아직 못 넘김) 잠정이다. 클라(`RaceClient.Standings`·`You`)는 받기만 하고 런은 읽지 않는다.
+  - **C1c-2b 순위 표시** (DECISIONS 2026-10-12 "P3 C1c-2b", 병합 전): `RaceClient` 가 `showRemote` 일 때 `RaceStandingsView`(Net, OnGUI, 런타임 추가)를 붙여 HUD 헤더 아래 왼쪽에 순위 줄을 그리고(`RaceStandingsText`), 상대가 결승·낙하하면 고스트를 숨긴다. 패널의 첫 그리기(약 130 ms)는 접속 전에 투명하게 해 둔다 — 첫 순위 때 처음 그리면 에디터 클라가 약 95 ms 멈춰 입력이 서버에 늦게 닿았다. 고스트 숨김은 실제 레이스에서 아직 일어나지 않았다(이 머신의 지터 레이스에서 낙하가 없었다).
   - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
-- 테스트: EditMode 237, PlayMode 124(Device 2 + Sweep 1 + `[Explicit]` 네트워크 레이스 2 + 게이트 119). 병합 조건 실행은 Device·Sweep 제외 121건 중 119 통과·2 skipped(Explicit), 약 556초/회. `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
+- 테스트: EditMode 237, PlayMode 130(Device 2 + Sweep 1 + `[Explicit]` 네트워크 레이스 2 + 게이트 125, C1c-2b 브랜치 기준). 병합 조건 실행은 Device·Sweep 제외 127건 중 125 통과·2 skipped(Explicit), 이 머신(19f1)에서 약 590~660초/회(이전 머신 약 556초/회, 121건). `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
-C1c-2a(순위 계산·알림)까지 끝났다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
+C1c-2b(순위 표시)까지 구현·검증했다(위 1절, 병합은 사용자 지시 대기). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **P3 C1c-2b (순위 표시)**: `RaceClient.Standings`·`You` 를 화면에 보인다. HUD(`ChainRushHud`, OnGUI, 씬 직렬화 참조)의 순위 줄·결과 패널, 상대가 낙하·결승했을 때 고스트 처리(지금은 마지막 위치에 멈춰 서 있다). HUD 는 씬 컴포넌트라 런타임 추가 컴포넌트(`RemoteGhost` 처럼)로 할지 HUD 를 고칠지부터 정한다. 진행 중 순위(랩·진행도로 누가 앞인지)는 상대 위치만으로는 못 하므로 메시지가 더 필요하다.
+- **네트워크 레이스 A 의 상대 위치 기준 (`fix/`)**: `NetworkRaceTests` A 의 `RemoteSamples > 900` 이 이 머신에서는 변경 전 `dev` 코드로도 899 로 떨어진다(2026-10-12, 이전 머신은 951~954). 상대 클라 접속 시각에 따라 받는 수가 달라지는 것으로 보이나 확인하지 않았다. 기준을 서버가 보낸 수 대비로 바꿀지 등 → 요청서부터.
+- **진행 중 순위**: 랩·진행도로 누가 앞인지는 상대 위치만으로는 못 하므로 메시지가 더 필요하다(C1c-2b 에서 하지 않음).
+- **네트워크 클라의 HUD 재시작 버튼**: 네트워크 클라에서도 HUD 결과 패널의 `R / RUN AGAIN` 버튼(`ChainRushHud.cs:226-228`)과 R 키가 `StartRun` 을 불러 예측기를 영구 고장 낸다(의도한 동작이지만 누를 수 있게 보인다). 막으려면 HUD 를 고쳐야 한다 → 별도 합의.
 
 - **C1c 의 남은 것**: 따라잡기의 S+L 상한은 표적·충돌 같은 다른 종료 조건이 생기면 다시 시험한다(지금 서킷에서는 만들 수 없다). `RaceClient.OnState`·`OnEnd` 에서 예측기에 넘기기 전 디코딩이 던지는 손상 바이트는 고장을 세우지 않는다(Netcode 가 예외를 로그로 남김).
 - **공격 판정 방향 (이슈, 설계 결정 대기)**: 공격 판정이 몸 방향도 트랙 방향도 아닌 **월드 +z** 를 앞으로 본다. `CourseTarget.TryHit`(`CourseTarget.cs:53-54`)은 플레이어 기준 월드 z 로 -0.5 ~ 5 m, |x|·|y| ≤ 2.5 m 상자다. 직선 코스 전제라 자유 조향·커브에서 바라보는 쪽과 맞는 쪽이 갈라진다. 공격 링 `Strike Arc` 는 루트 자식(local z=1.6, `ChainRushSceneBuilder.cs:159-161`)이라 프로토타입에서는 판정과 같은 +z 를 보여 주지만, 서킷은 루트가 출발선 방향으로 돌아가 있어(`ChainRushCircuitSceneBuilder.cs:109`) 링과 판정이 어긋날 수 있다(서킷에 공격 대상이 있는지는 미확인). 링만 몸 방향으로 돌리면 판정과 더 어긋나므로 하지 않았다(2026-10-10, `fix/runner-heading-visual` 에서 몸만 `Heading` 을 보게 함). 정할 것: 판정 기준을 몸 방향(`Heading`)으로 할지 트랙 진행 방향으로 할지. 판정은 시뮬레이션(`ChainRushGame.cs:281` 의 `racer.AddHit`)이다. P2 재생 해시에 영향이 있는지는 확인하지 못했다 → 요청서(§3-2)부터. 링은 같은 기준으로 같이 돌린다.
@@ -45,7 +48,7 @@ C1c-2a(순위 계산·알림)까지 끝났다(위 1절). 아래는 다음 후보
 | 3 | 헤딩 범위 제한 | 계속 꺾으면 뒤로도 돈다(가드에 닿으면 앞으로 돌려짐). 막을지 미정 | DECISIONS T2a |
 | 4 | 기존 PlayMode 테스트의 착지 확인 | `StartRun` 직후 `IsGrounded` 가 순간이동 전 발판 값을 돌려줘 "착지" 확인이 노면 없이도 통과한다(T3a 에서 발견). 새 테스트만 고정 틱 1회 뒤 확인으로 고쳤다. 기존 테스트(`ChainRushCurveTests` 등 `StartOn`)를 고칠지 **별도 `fix/` 합의 필요** | DECISIONS T3a |
 | 5 | ~~원격 `origin/dev` 와 갈라짐~~ **해결** | `feature/integrate-origin-dev`(`138446a`)로 통합하고 `dev` 를 푸시했다(경위는 DECISIONS 2026-10-09 "코스 T3b (다른 클론…)"). 남은 결정 둘: 통합 전 로컬 `dev`(`cb7e53b`)를 백업한 원격 `backup/dev-2026-10-10` 을 지울지(삭제는 승인 후), 앞보기 300m 를 로컬 생성기에 옮길지(별도 합의) | 2026-10-10 |
-| 6 | 끝난 브랜치 정리 | 로컬 브랜치가 많다. 모두 `dev` 에 병합돼 있으나 둘은 아니다: `spike/p3-ngo-prediction`(코드는 `Net` 으로 이식됨, 보고는 DECISIONS 에 있음)와 `feature/p3-ngo-package`(옛 패키지 커밋, `feature/p3-ngo-install` 로 대체). 삭제는 §0 에 따라 **승인 후**. 원격에는 `feature/course-t3c-endless` 가 있고 로컬에는 없다 | 2026-10-10 |
+| 6 | 끝난 브랜치 정리 | 로컬 브랜치가 많다. 모두 `dev` 에 병합돼 있으나 둘은 아니다: `spike/p3-ngo-prediction`(코드는 `Net` 으로 이식됨, 보고는 DECISIONS 에 있음)와 `feature/p3-ngo-package`(옛 패키지 커밋, `feature/p3-ngo-install` 로 대체). 삭제는 §0 에 따라 **승인 후**. `feature/course-t3c-endless` 는 원격과 로컬(2026-10-12 확인) 모두에 있다 | 2026-10-10 |
 | 7 | ~~미추적 `Assets/DefaultNetworkPrefabs.asset` (+`.meta`)~~ **해결** | NGO 가 자동 생성한 빈 목록(`IsDefault: 1`). 2026-10-10 사용자 "a" 대로 C1c-1 브랜치(`feature/p3-c1c-run-end`)에서 내용 수정 없이 커밋하고 게이트를 같이 치렀다(DECISIONS 2026-10-11 "P3 C1c-1"). `ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 수정으로 보여도 커밋하지 않는다 | 2026-10-11 |
 | 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). `main` 은 `origin/main` 과 같고(`7e4a0a8`) P0·P1-1·P1-2 시점이다. 지금 `dev` 는 P3 C1b 까지 와 있다. 사용자가 시킬 때만 | 2026-10-10 |
 | 9 | `.claude/settings.json` (읽기 전용 허용 8개 + 훅 3개) | 허용 목록은 `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다. 훅은 `docs/harness-automation` 에서 추가(DECISIONS 2026-10-10 "하네스 자동화") | 2026-10-10 |
@@ -65,7 +68,8 @@ C1c-2a(순위 계산·알림)까지 끝났다(위 1절). 아래는 다음 후보
 
 ## 4. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
-- 이 머신(`D:/PCUBE/ProtoHarness`, 2026-10-10)의 에디터는 **6000.3.25f1**(결정 버전과 같음, `Editor.log:2`)이고 Hub 에 18f1·25f1 이 있다(둘 다 Windows Mono 빌드 모듈 있음). 이전 머신(`C:/Users/User/Desktop/...`)은 19f1 이었고 그때 보이던 로컬 차이(`ProjectVersion.txt` 등)는 이 머신에서는 없다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다.
+- 작업 머신이 둘이다. `D:/PCUBE/ProtoHarness`(2026-10-10)의 에디터는 **6000.3.25f1**(결정 버전과 같음)이고 Hub 에 18f1·25f1 이 있다. `C:/Users/User/Desktop/PCUBE/ProtoHarness`(C1c-2b 를 한 곳, 2026-10-12)는 **6000.3.19f1** 이라 열면 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`(키 3개 빠짐)이 바뀌어 보인다 — 커밋하지 않는다. 이 머신의 `Path.GetTempPath()` 는 `C:\Users\User\AppData\Local\Temp\` 이고 Windows 빌드 모듈이 있다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다.
+- 네트워크 레이스가 도는 중에는 `Unity_RunCommand` 를 부르지 않는다. 2026-10-12 A 도중 `ScreenCapture` 를 부른 직후 에디터 클라 예측기가 고장 났다(`server's state is for tick 230 but the client is at tick 229`). 에디터가 멈춘 사이 서버가 클라를 앞지른 것으로 보이나 재현 실험은 하지 않았다.
 - 서버·클라 겸용 플레이어는 `BuildPipeline.BuildPlayer`(서킷 씬만, 출력은 리포 밖 `Path.GetTempPath()/ProtoHarnessRaceBuild/`)로 만든다. 서버·클라 코드를 바꾸면 다시 빌드해야 통합 테스트에 반영된다. 에디터에는 `NetworkManager` 가 프로세스당 하나뿐이라 통합 테스트의 두 번째 클라는 별도 프로세스다.
 - **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`, 2026-10-10 스파이크 서버 빌드 때 확인). 커밋하지 않고 파일을 지정해 `git restore` 한다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
 - `Assets/DefaultNetworkPrefabs.asset`(+`.meta`, NGO 가 자동 생성한 빈 목록)은 C1c-1 에서 커밋했다(3절 #7). `ProtoHarness.slnx` 가 수정으로 보이면 Unity 가 다시 만든 것이라 커밋하지 않는다. `.claude/settings.json` 은 커밋돼 있다(3절 #9).

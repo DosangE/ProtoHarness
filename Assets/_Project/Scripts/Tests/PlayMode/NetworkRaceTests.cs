@@ -104,6 +104,19 @@ namespace ProtoHarness.Tests.PlayMode
             // How many "RACE-SERVER-STANDINGS" lines the server logged, and its last.
             public int ServerStandingsLines;
             public string ServerLastStandings;
+            // Read with EditorStandings: whether the editor client's ghost is still shown, and whether it has a standings panel.
+            // BGhostHidden counts the player client's "RACE-CLIENT-GHOST hidden" lines.
+            public bool EditorGhostVisible;
+            public bool EditorHasStandingsView;
+            public int BGhostHidden;
+            // The editor's frames while its client is connected: the longest (ms, and the client's tick after it), how many
+            // went over 50 ms, the first of those (as "tick:ms"), and the client's tick in the frame its first standings arrived.
+            // Only measured, not judged: they tell whether a stall in the editor made its inputs late.
+            public float LongestFrameMs;
+            public int LongestFrameTick;
+            public int SlowFrames;
+            public string SlowFrameList;
+            public int FirstStandingsTick;
         }
 
         [UnitySetUp]
@@ -159,6 +172,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.EditorYou, Is.EqualTo(RacerOf(o, o.EditorId)), standings);
             Assert.That(o.BYou, Is.EqualTo(RacerOf(o, o.BId)), standings);
             Assert.That(o.BStandingsRefused, Is.False, "The player client refused a standings message. " + o.ClientB);
+            // Nobody ended, so neither ghost is hidden; the editor client draws its standings.
+            Assert.That(o.EditorHasStandingsView, Is.True, "The editor client has no standings panel.");
+            Assert.That(o.EditorGhostVisible, Is.True, "The editor client hid its ghost though the other racer is running. " + standings);
+            Assert.That(o.BGhostHidden, Is.EqualTo(0), "The player client hid its ghost though the other racer is running. " + o.ClientB);
         }
 
         // Jitter of up to 120 ms against a 1-tick buffer: inputs arrive late and the server repeats the last one. A missed jump
@@ -220,7 +237,18 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(FitsTheServersEnd(LineOf(o.EditorStandings, i), o.ServerEndOf[i], ticks), Is.True, $"The editor client's standings for racer {i} against the server's end {o.ServerEndOf[i]}. " + standings + " " + pairing);
                 Assert.That(FitsTheServersEnd(LineOf(o.BStandings, i), o.ServerEndOf[i], ticks), Is.True, $"The player client's standings for racer {i} against the server's end {o.ServerEndOf[i]}. " + standings + " " + pairing);
             }
+            // Each client's ghost is hidden exactly when its newest standings say the other racer's run has ended.
+            bool editorOtherEnded = HasEnded(LineOf(o.EditorStandings, 1 - editorRacer));
+            bool bOtherEnded = HasEnded(LineOf(o.BStandings, 1 - bRacer));
+            TestContext.WriteLine($"Net race B ghosts: editor client visible {o.EditorGhostVisible} (other ended {editorOtherEnded}), player client hidden lines {o.BGhostHidden} (other ended {bOtherEnded}).");
+            Assert.That(o.EditorHasStandingsView, Is.True, "The editor client has no standings panel.");
+            Assert.That(o.EditorGhostVisible, Is.EqualTo(!editorOtherEnded), "The editor client's ghost against its standings. " + standings);
+            Assert.That(o.BGhostHidden, Is.EqualTo(bOtherEnded ? 1 : 0), "The player client's ghost against its standings. " + standings + " " + o.ClientB);
         }
+
+        // A line of RaceStandings.Describe for a fall or a finish.
+        private static bool HasEnded(string line) =>
+            line != null && (line.StartsWith("Failed", StringComparison.Ordinal) || line.StartsWith("Finished", StringComparison.Ordinal));
 
         private static string Standings(Outcome o) =>
             $"editor client: you={o.EditorYou} \"{o.EditorStandings}\" ({o.EditorStandingsCount} taken); player client: you={o.BYou} \"{o.BStandings}\" ({o.BStandingsLines} lines, refused {o.BStandingsRefused}); " +
@@ -256,7 +284,8 @@ namespace ProtoHarness.Tests.PlayMode
         private static string Describe(Outcome o) =>
             $"editor client: finished {o.Finished}, {o.StatesCompared} states compared, {o.Corrections} corrections; player client: {o.BCompared} compared, {o.BCorrections} corrections, {o.BRemote} remote positions; " +
             $"remote positions at the editor: {o.RemoteSamples} ({o.RemoteChecked} checked against its own run, {o.RemoteMismatches} differ); ghost: {o.GhostFrames} frames, largest step {o.GhostLargestStep:F3} m, jumps {o.GhostJumps}; " +
-            $"server racer 0: ran {o.Ticks?[0]}, received {o.Received?[0]}, missed {o.Missed?[0]}, late {o.Late?[0]}; racer 1: ran {o.Ticks?[1]}, received {o.Received?[1]}, missed {o.Missed?[1]}, late {o.Late?[1]}.";
+            $"server racer 0: ran {o.Ticks?[0]}, received {o.Received?[0]}, missed {o.Missed?[0]}, late {o.Late?[0]}; racer 1: ran {o.Ticks?[1]}, received {o.Received?[1]}, missed {o.Missed?[1]}, late {o.Late?[1]}; " +
+            $"editor frames: longest {o.LongestFrameMs:F1} ms after tick {o.LongestFrameTick}, over 50 ms {o.SlowFrames} [{o.SlowFrameList}], first standings at tick {o.FirstStandingsTick}.";
 
         private IEnumerator Scenario(ushort port, int ticks, int bufferTicks, int delayMs, int jitterMs, Action<Outcome> done)
         {
@@ -303,13 +332,29 @@ namespace ProtoHarness.Tests.PlayMode
             host.SetActive(true);
             client.Begin();
 
-            var outcome = new Outcome();
+            var outcome = new Outcome { FirstStandingsTick = -1, LongestFrameTick = -1 };
+            var slowFrames = new List<string>();
             bool havePrevious = false;
             Vector3 previous = default;
             float deadline = Time.realtimeSinceStartup + ticks * 0.02f * 1.6f + 60f;
             while (!client.Finished && Time.realtimeSinceStartup < deadline && !server.HasExited)
             {
                 yield return null;
+                if (client.Connected)
+                {
+                    float frameMs = Time.unscaledDeltaTime * 1000f;
+                    if (frameMs > outcome.LongestFrameMs)
+                    {
+                        outcome.LongestFrameMs = frameMs;
+                        outcome.LongestFrameTick = game.Tick;
+                    }
+                    if (frameMs > 50f)
+                    {
+                        outcome.SlowFrames++;
+                        if (slowFrames.Count < 10) slowFrames.Add($"{game.Tick}:{frameMs:F0}");
+                    }
+                    if (outcome.FirstStandingsTick < 0 && client.StandingsReceived > 0) outcome.FirstStandingsTick = game.Tick;
+                }
                 RemoteGhost ghost = client.Ghost;
                 if (ghost != null && ghost.HasPosition)
                 {
@@ -325,6 +370,7 @@ namespace ProtoHarness.Tests.PlayMode
                     havePrevious = true;
                 }
             }
+            outcome.SlowFrameList = string.Join(" ", slowFrames);
 
             Application.logMessageReceived -= editorLogWatch;
             editorLogWatch = null;
@@ -358,6 +404,8 @@ namespace ProtoHarness.Tests.PlayMode
             outcome.EditorStandings = client.Standings == null ? null : RaceStandings.Describe(client.Standings);
             outcome.EditorYou = client.You;
             outcome.EditorStandingsCount = client.StandingsReceived;
+            outcome.EditorGhostVisible = client.Ghost != null && client.Ghost.Visible;
+            outcome.EditorHasStandingsView = client.StandingsView != null;
             client.Disconnect();
             exitDeadline = Time.realtimeSinceStartup + 15f;
             while (!server.HasExited && Time.realtimeSinceStartup < exitDeadline) yield return null;
@@ -457,6 +505,7 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.BYou = int.Parse(m.Groups[1].Value);
                 outcome.BStandings = m.Groups[2].Value;
             }
+            outcome.BGhostHidden = Regex.Matches(client, @"RACE-CLIENT-GHOST hidden").Count;
             outcome.BStandingsRefused = client.Contains("RaceClient: standings for racer") || client.Contains("RaceClient: the standings say");
             Match done =Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)(?: ended=(\S+))?");
             outcome.ClientB = done.Success ? done.Value : Tail(clientLog);

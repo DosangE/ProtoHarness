@@ -6,7 +6,7 @@ namespace ProtoHarness.Net
 {
     // Shows another racer as a capsule that follows a RemoteInterpolator. The capsule is made here, with no collider, so
     // the scene needs no edit and the ghost cannot touch the local runner. It is only a picture: the local simulation never
-    // reads it.
+    // reads it. Once that racer's run has ended (a fall or a finish) it is hidden for good (Hide).
     public sealed class RemoteGhost : MonoBehaviour
     {
         private RemoteInterpolator interpolator;
@@ -16,6 +16,8 @@ namespace ProtoHarness.Net
 
         public Vector3 Position => body != null ? body.position : default;
         public bool HasPosition => hasPosition;
+        // False once hidden; the capsule then stays where it was and no longer follows.
+        public bool Visible => body != null && body.gameObject.activeSelf;
 
         public void Initialize(RemoteInterpolator interpolator)
         {
@@ -30,9 +32,16 @@ namespace ProtoHarness.Net
             body.SetParent(transform, false);
         }
 
+        // The racer's run has ended: its last position is no longer where it is. Safe to call again.
+        public void Hide()
+        {
+            if (body == null) throw new InvalidOperationException("RemoteGhost: call Initialize before Hide.");
+            body.gameObject.SetActive(false);
+        }
+
         private void Update()
         {
-            if (interpolator == null) return;
+            if (interpolator == null || !Visible) return;
             interpolator.Advance(Time.deltaTime, 1f / Ticks.Seconds);
             if (!interpolator.TryEvaluate(out Vector3 position)) return;
             // Face the way it is moving; a standing racer keeps its last facing.

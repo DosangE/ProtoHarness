@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-10-12 · P3 C1c-2b: 클라가 순위를 화면에 보이고, 상대가 끝나면 고스트를 숨긴다
+
+- **결정 (사용자 승인, 2026-10-12 C1c-2b 요청서에 "추천대로해서 진행", 멈춤 측정에 "진행하라", 수정에 "진행하자")**: HANDOFF 의 C1c-2b 중 순위 표시와 고스트 처리를 한다. 진행 중 순위(누가 앞인지)는 하지 않는다.
+  - **표시는 `Net` 쪽 런타임 컴포넌트 `RaceStandingsView`(OnGUI)** 로 한다. `RaceClient.Begin` 이 `showRemote` 일 때 고스트와 함께 붙인다. 위치는 HUD 헤더 아래 왼쪽(1600×900 캔버스의 x=32, y=128, 폭 310), 색은 HUD 와 같다. 첫 순위 전에는 그리지 않는다. 줄은 새 순위가 왔을 때만 다시 만든다.
+  - 줄은 `RaceStandingsText`(static)가 만든다: 결승자를 순위순으로, 그다음 주행 중 → 대기 → 낙하(같은 무리는 번호순). 순위 칸은 결승만 숫자, 나머지 "–". 이름은 "YOU" / "RACER n". 상태는 "대기"·"주행 중"·"낙하"·"mm:ss.s  잠정|확정"(시간 = `Ticks.ToSeconds(EndTick)`, 순위의 시계와 같은 틱 수).
+  - **고스트는 상대의 줄이 결승이나 낙하가 되면 숨긴다**(`RemoteGhost.Hide`, `RACE-CLIENT-GHOST hidden`). 상대 위치에는 레이서 번호가 없어 "상대 = `1 - You`" 이므로, 고스트가 있는데 순위 줄이 2개가 아니면 던진다.
+  - **패널의 첫 그리기를 접속 전으로 옮긴다.** 폰트와 글리프는 `Initialize` 에서 만들고(`RequestCharactersInTexture`), 첫 repaint 에서 패널 전체를 투명하게 한 번 그린다. 그리는 시간은 `RACE-STANDINGS-VIEW warmed in … ms`·`first draw in … ms` 로 한 번씩 남긴다. 그래픽 장치가 없으면(`-nographics`) 패널을 끈다.
+- **이유**: `ChainRushHud` 는 `ProtoHarness.Runtime` 에 있어 `ProtoHarness.Net`(`RaceClient`)을 볼 수 없다(참조 방향). HUD 를 고치려면 Runtime 에 인터페이스를 새로 만들고 씬도 바꿔야 한다. `RemoteGhost` 와 같은 방식이면 씬·asmdef 를 건드리지 않는다.
+  - **첫 그리기를 옮긴 이유 (측정)**: 처음 구현은 첫 순위가 온 프레임에 패널을 처음 그렸다. 그러면 에디터 클라가 그 직후 93~97 ms 멈추고(틱 9 → 14), 고정 지연 레이스 A 에서 에디터 클라 입력이 서버에 1~6개 늦게 닿았다(버퍼 3틱 ≈ 60 ms). 변경 전 `dev` 의 A 2회는 늦은 입력 0 이었다. 글리프만 미리 그리는 1차 수정은 효과가 없었다(94.2 ms, 늦음 1). 첫 그리기 전체를 접속 전으로 옮기자 그 그리기가 131~135 ms 걸렸고, 실제 첫 그리기는 0.4~0.8 ms 가 됐다. 무엇이 무거운지(스타일·재질·텍스트 메시 생성 등)는 나누어 재지 않았다.
+  - 버린 대안: HUD 를 직접 고치기(위 이유), 상대가 결승하면 고스트를 결승선에 세워 두기(낙하·결승을 같이 다루는 쪽이 단순하다), 글리프만 미리 그리기(효과 없음, 위 측정).
+- **테스트**: `RaceStandingsTextTests` 6개(`Net`) — 상태 4종의 글자, 잠정 → 확정, 결승자는 번호가 아니라 순위순·공동 순위는 번호순, YOU 표시, 순위 없음·모르는 레이서는 던짐, 헤더. 새 클래스라 고치기 전 실패 실행은 없다. `NetworkRaceTests` 에 단언 추가: A 는 에디터 클라에 순위 패널이 있고 두 클라 모두 고스트를 숨기지 않았다. B 는 각 클라의 고스트가 자기 마지막 순위에서 상대가 끝났을 때만 숨겨졌다. 판정 없이 기록만 하는 측정(연결 중 에디터 프레임의 최장 시간과 그 틱, 50 ms 초과 프레임, 첫 순위의 틱)을 `Describe` 에 넣었다.
+- **검증 (`feature/p3-c1c2b-standings-view`, 에디터 6000.3.19f1 — 이 머신의 로컬 버전, 시각은 XML 의 UTC, 최종 코드 `git diff -- Assets` sha1 `2de0499a`)** — 실행한 것 전부
+  - 컴파일: `ProtoHarness.Net.dll` 15:24:58(+0900) 갱신, Console Error 0건.
+  - EditMode(06:31:44Z~06:31:52Z): `testcasecount=237 Passed passed=237 failed=0`.
+  - PlayMode 게이트(Device·Sweep 제외) 1회 `testcasecount=127 result=Passed passed=125 failed=0 skipped=2`(06:32:24Z~06:42:15Z, 591.1초), 2회 `127/Passed/125/0/2`(06:42:45Z~06:52:41Z, 595.3초). skipped 2 는 `[Explicit]` 네트워크 레이스.
+  - 플레이어 재빌드(서킷 씬만, `Succeeded errors=0`) 후 네트워크 레이스 `testcasecount=2 Passed passed=2 failed=0`(06:30:21Z~06:31:26Z, 65.5초). 그 직전 A 단독 1회도 `Passed`(06:28:55Z~06:29:29Z, 늦음 0, 50 ms 초과 프레임 0, warmed 135.2 ms, first draw 0.6 ms).
+    - A: 보정 0, 상대 위치 909개 중 908 비트 일치·0 다름, 고스트 점프 0, 서버 레이서 0·1 late 0. 에디터 프레임 최장 39.3 ms, 50 ms 초과 0. warmed 131.2 ms, first draw 0.4 ms.
+    - B: 이번에는 아무도 끝나지 않았다(`racer 0 none, racer 1 none`). 두 클라 마지막 순위 `0=Running 1=Running`, 고스트 숨김 없음(`editor client visible True (other ended False), player client hidden lines 0`). 에디터 클라 50 ms 초과 프레임 0. warmed 129.9 ms, first draw 0.8 ms.
+  - 화면: 처음 구현의 A 도중 `ScreenCapture` 1장(리포 밖 PNG)으로 패널을 봤다 — "RACE / 2 RACERS", 민트색 "– YOU 주행 중", "– RACER 1 주행 중", HUD 헤더와 겹치지 않음. 그 장면에는 아래 고장으로 PAUSED 패널이 같이 떠 있었다. 최종 코드로는 찍지 않았다(그리는 코드는 같고 첫 그리기 시점만 다르다).
+  - 중간에 실패한 실행(모두 처음 구현 또는 글리프 수정): A 도중 `Unity_RunCommand`(ScreenCapture) 직후 `RACE-CLIENT-FAULT the server's state for tick 230 could not be taken (the client at tick 229)` 1회, 늦은 입력으로 실패 6회(처음 구현 `racer 0: an input came late. But was: 6 / 2 / 1`, 측정 추가 뒤 `3 / 2`, 글리프 수정 뒤 `1`). 변경 전 `dev` 기준 A 2회: `Passed`(late 0) / `Failed`(late 0, `The other racer's positions must keep arriving. Expected: greater than 900 But was: 899`).
+  - 빌드가 자동으로 바꾼 5파일은 매번 빌드 전 상태로 되돌렸다(4개는 파일 지정 `git restore`, `ProjectSettings.asset` 은 이 머신의 버전 차이가 이미 있어 빌드 전 사본으로 덮음).
+  - 입력 장치 경로와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음.
+- **한계**: 고스트 숨김은 실제 네트워크 레이스에서 한 번도 일어나지 않았다(이 머신의 B 2회 모두 낙하 없음, 이전 머신은 657 낙하). 결승·낙하·잠정·확정 줄은 화면으로 보지 않았고 `RaceStandingsTextTests` 로만 확인했다. A 의 상대 위치 기준(`> 900`)은 이 머신에서 변경 전 코드로도 899 로 떨어진다(이전 머신 951~954) — 이번 변경과 무관한 기존 테스트의 여유 문제다. 접속 전 첫 그리기(약 130 ms)는 출발 전이라 런에는 닿지 않지만, 클라를 만든 직후 접속이 그보다 빨리 끝나면 겹칠 수 있다(이번 실행은 모두 `connected False`).
+- **하지 않은 것**: 진행 중 순위, 3인 이상 고스트, `ChainRushHud`·씬·프리팹·asmdef·`ProjectSettings`, 서버·예측기·시뮬 코드, A 의 상대 위치 기준(별도 `fix/`), HUD 의 `R / RUN AGAIN` 버튼이 네트워크 클라에서 예측기를 고장 내는 문제(HANDOFF 2절).
+
 ## 2026-10-11 · P3 C1c-2a: 서버가 순위를 정해 모든 클라에 알린다 (틱 수 기준, 잠정·확정)
 
 - **결정 (사용자 승인, 2026-10-11 C1c-2a 요청서에 "ㅇㅇㄱㄱ")**: HANDOFF 의 C1c-2(순위 계산·상대에게 종료 알림·표시) 중 **계산과 알림만** 한다. 표시는 C1c-2b 로 나눈다(화면 확인이라 검증 방식이 다르다).

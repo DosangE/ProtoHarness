@@ -5,9 +5,9 @@ using System.Text;
 namespace ProtoHarness.Net
 {
     // Who is where in the race, as the server sees it (DESIGN.md P3: the race's standings are the server's). Each racer is
-    // waiting, running, finished or failed. Finishers are placed by how many ticks their run took: every racer starts when
-    // its own inputs are buffered (RaceServer), at a different real time, and counts its ticks from that start, so the tick
-    // count is the fair clock. Equal ticks share a place (1, 1, 3). A fall has no place. A finisher's place is provisional
+    // waiting, running, finished or failed. Finishers are placed by how many ticks their run took. The server starts every
+    // racer in the same frame (RaceServer, race.go), so the tick count is the race clock; it stays the fair one even for a
+    // racer started on its own (this class does not assume a joint start). Equal ticks share a place (1, 1, 3). A fall has no place. A finisher's place is provisional
     // while another racer could still finish in fewer ticks: one still waiting, or one running that has not yet got past
     // that tick. Once every other racer has ended or run past it, the place is final. Events out of order throw.
     public sealed class RaceStandings

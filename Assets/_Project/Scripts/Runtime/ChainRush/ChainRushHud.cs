@@ -15,7 +15,13 @@ namespace ProtoHarness.ChainRush
         private GUIStyle title;
         private GUIStyle number;
         private GUIStyle button;
+        private GUIStyle waiting;
+        private GUIStyle cue;
         private Font font;
+        private const int CueSize = 160;
+        private const string CueGlyphs = "321GO!";
+        // How long "GO!" stays up once a run has started.
+        private const float GoSeconds = 1f;
         private static readonly Color Ink = new Color(0.025f, 0.055f, 0.08f, 0.94f);
         private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
         private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
@@ -57,6 +63,12 @@ namespace ProtoHarness.ChainRush
             number = Style(38, Mint, FontStyle.Bold);
             button = Style(22, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
+            waiting = Style(22, Color.white, FontStyle.Bold);
+            waiting.alignment = TextAnchor.MiddleCenter;
+            cue = Style(CueSize, Mint, FontStyle.Bold);
+            cue.alignment = TextAnchor.MiddleCenter;
+            // The first draw of new glyphs can stall a frame (DECISIONS P3 C1c-2b), and "GO!" is drawn on a run's first frame.
+            font.RequestCharactersInTexture(CueGlyphs, CueSize, FontStyle.Bold);
         }
 
         private static void Block(Rect rect, Color color)
@@ -79,9 +91,21 @@ namespace ProtoHarness.ChainRush
             DrawHeader(width);
             DrawControls(width, height);
             if (game.IsReady) DrawReady(width, height);
+            else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString());
             else if (game.IsPaused || game.HasFailed || game.HasFinished) DrawResult(width, height);
-            else DrawPlay(width, height, scale);
+            else
+            {
+                DrawPlay(width, height, scale);
+                if (game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
+            }
             GUI.matrix = previous;
+        }
+
+        // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen.
+        private void DrawCue(float width, float height, string text)
+        {
+            Block(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), Ink);
+            GUI.Label(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), text, cue);
         }
 
         private void DrawHeader(float width)
@@ -104,7 +128,8 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(232, height - 75, 390, 30), "좌클릭   점프 → 공중에서 다시 잡기", body);
             GUI.Label(new Rect(650, height - 75, 270, 30), "유지  스윙 / 놓기  해제", body);
             GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);
-            GUI.Label(new Rect(width - 405, height - 75, 390, 30), game.HasPresentation ? "R  재시작   ESC  정지   M  음소거" : "R  재시작     ESC  일시정지", body);
+            string restart = game.ManualStart ? "R  재시작   " : "";
+            GUI.Label(new Rect(width - 405, height - 75, 390, 30), restart + (game.HasPresentation ? "ESC  정지   M  음소거" : "  ESC  일시정지"), body);
         }
 
         private void DrawReady(float width, float height)
@@ -118,8 +143,16 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
             GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 점프 → 공중에서 다시 클릭하고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
-            Block(start, Mint);
-            if (GUI.Button(start, "ENTER   /   START RUN  →", button)) game.StartRun();
+            if (game.ManualStart)
+            {
+                Block(start, Mint);
+                if (GUI.Button(start, "ENTER   /   START RUN  →", button)) game.StartCountdown();
+            }
+            else
+            {
+                Block(start, new Color(0.2f, 0.3f, 0.33f));
+                GUI.Label(start, "출발 신호를 기다리는 중", waiting);
+            }
             GUI.Label(new Rect(470, height - 218, 240, 24), game.IsEndless ? "무한 생존  ·  체력 3칸" : game.IsCircuit ? game.Circuit.LapCount + "랩  ·  타임어택" : "약 50초  ·  체력 3칸", small);
 
             Block(new Rect(width - 420, height - 390, 388, 255), Ink);
@@ -221,11 +254,13 @@ namespace ProtoHarness.ChainRush
             string subtitle = game.IsPaused ? "잠시 쉬어가세요. ESC로 계속합니다." : game.HasFinished ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 노란 선에서 점프 후 앵커를 잡으세요.";
             GUI.Label(new Rect(x + 42, y + 147, 610, 35), subtitle, body);
             GUI.Label(new Rect(x + 42, y + 207, 600, 34), game.IsCircuit ? CircuitResult() : "TIME   " + game.Elapsed.ToString("0.0") + "s      LINKS   " + game.Grapples + "      HITS   " + game.Hits, body);
+            // A run that cannot be restarted from here (ManualStart off) shows no RUN AGAIN.
+            if (!game.IsPaused && !game.ManualStart) return;
             Rect action = new Rect(x + 42, y + 283, 586, 66);
             Block(action, Mint);
             if (GUI.Button(action, game.IsPaused ? "ESC  /  CONTINUE  →" : "R  /  RUN AGAIN  →", button))
             {
-                if (game.IsPaused) game.TogglePause(); else game.StartRun();
+                if (game.IsPaused) game.TogglePause(); else game.StartCountdown();
             }
         }
 

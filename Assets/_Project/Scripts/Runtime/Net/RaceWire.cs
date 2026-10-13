@@ -12,6 +12,7 @@ namespace ProtoHarness.Net
     // on. Remote (server to the other racer): where a racer was after a tick, for drawing it. Standings (server to every
     // racer, each time they change): every racer's line in the race (RaceStandings) and which of them the message is for.
     // Order (server to every racer, each time it changes): each running racer's place among those running (RaceOrder).
+    // Go (server to every racer, once, when every racer has a client): the number of racers; the client counts down and starts.
     // Decoding is strict: a short or long message, an end reason or status this build does not know, or a standings line
     // RaceStandings or an order RaceOrder cannot make, throws.
     public static class RaceWire
@@ -181,6 +182,21 @@ namespace ProtoHarness.Net
             string problem = OrderProblem(tick, places);
             if (problem != null) throw new InvalidDataException(problem);
             return places;
+        }
+
+        // Go: the number of racers in the race (1 byte).
+        public static byte[] EncodeGo(int racers)
+        {
+            if (racers < 1 || racers > byte.MaxValue) throw new ArgumentOutOfRangeException(nameof(racers), racers, "RaceWire: 1 to 255 racers.");
+            return new[] { (byte)racers };
+        }
+
+        public static int DecodeGo(byte[] bytes)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            if (bytes.Length != 1) throw new InvalidDataException($"RaceWire: a go is 1 byte, not {bytes.Length}.");
+            if (bytes[0] < 1) throw new InvalidDataException("RaceWire: a go for no racers.");
+            return bytes[0];
         }
 
         // What is wrong with an order RaceOrder cannot make, or null: places run 0 to the number of racers, and racers are

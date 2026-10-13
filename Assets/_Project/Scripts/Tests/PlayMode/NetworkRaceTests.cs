@@ -123,8 +123,9 @@ namespace ProtoHarness.Tests.PlayMode
             public int FirstStandingsTick;
             // The other racer's positions at the editor, as the editor's own clock sees them: its tick when the first arrived
             // and when it finished, the other racer's first tick received, and how many times a tick did not follow the one
-            // before by one (a gap, a repeat or a step back). The other racer starts later by however long its process takes
-            // to start, so how many arrive depends on that, not on the stream (DECISIONS 2026-10-12 "네트워크 레이스 A").
+            // before by one (a gap, a repeat or a step back). The two racers start together (race.go), so the first arrives a
+            // round trip and a buffer after this run started (before the joint start it came later by however long the other
+            // process took to start: DECISIONS 2026-10-12 "네트워크 레이스 A").
             public int FirstRemoteAt;
             public int EndAt;
             public int FirstRemoteTick;
@@ -142,12 +143,22 @@ namespace ProtoHarness.Tests.PlayMode
             public string ServerLastOrder;
             // Every order with a place for both racers, as (compared tick, places): the server's "RACE-SERVER-ORDER" lines, the
             // editor client's "RACE-CLIENT-ORDER" lines (from its log as they happen, until the player client has left) and the
-            // player client's. Orders with a racer still unplaced depend on which process started first, so they are left out.
+            // player client's. An order with a racer still unplaced comes only between the two racers' first states, in the
+            // order the server hands them out, so those are left out.
             public List<(int Tick, string Places)> ServerOrders;
             public List<(int Tick, string Places)> EditorOrders;
             public List<(int Tick, string Places)> BOrders;
             // The other racer's positions as they arrived at the editor, by its tick.
             public List<(int Tick, Vector3 Position)> RemotePositions;
+            // The joint start: the server's "RACE-SERVER-GO" lines, the frame each racer started on ("RACE-SERVER racer <i>
+            // started on frame <f>", -1 for none) and how many such lines; whether the editor client took the go; the player
+            // client's "RACE-CLIENT-GO" and "RACE-CLIENT-COUNTDOWN done" lines.
+            public int ServerGoLines;
+            public int[] ServerStartFrame;
+            public int[] ServerStartLines;
+            public bool EditorGo;
+            public int BGoLines;
+            public int BCountdownLines;
         }
 
         [UnitySetUp]
@@ -181,6 +192,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Scenario(7793, ticks, 3, 50, 0, r => o = r);
             Debug.Log($"Net race A (rtt 100 ms, buffer 3): {Describe(o)}");
             Assert.That(o.Finished, Is.True, "The editor client did not get to compare the server's last state. " + o.ServerLog);
+            AssertStartedTogether(o);
             Assert.That(o.Corrections, Is.EqualTo(0), "The editor client had to be corrected.");
             Assert.That(o.StatesCompared, Is.GreaterThan(900));
             Assert.That(o.BCorrections, Is.EqualTo(0), "The player client had to be corrected. " + o.ClientB);
@@ -191,9 +203,11 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(o.Missed[i], Is.EqualTo(o.Ticks[i] - o.Received[i]), $"racer {i}: an input was missing in the middle of the run (ticks {o.Ticks[i]}, received {o.Received[i]}, missed {o.Missed[i]}).");
             }
             // The other racer's positions keep arriving: from its first tick, with none missing or out of order (no jitter, an
-            // ordered reliable channel), for as long as both ran. How many that is depends on how much later its process
-            // started, so the count is judged against the editor's own ticks since the first arrived; 5 ticks cover frames.
-            Assert.That(o.FirstRemoteAt, Is.InRange(0, ticks / 2 - 1), "The other racer must start within the first half of this run, or there is little to judge.");
+            // ordered reliable channel), for as long as both ran. Both started together, so the first arrives a round trip and
+            // a buffer after this run started (here about 8 ticks); 25 ticks (0.5 s) leave room for frames and for the other
+            // client hearing the go a frame or two later. The count is judged against the editor's own ticks since the first
+            // arrived; 5 ticks cover frames.
+            Assert.That(o.FirstRemoteAt, Is.InRange(0, 25), "The other racer must start with this one.");
             Assert.That(o.FirstRemoteTick, Is.EqualTo(0), "The other racer's positions must arrive from its first tick.");
             Assert.That(o.RemoteBreaks, Is.EqualTo(0), "The other racer's positions must arrive one tick after another.");
             Assert.That(o.RemoteSamples, Is.GreaterThanOrEqualTo(o.EndAt - o.FirstRemoteAt - 5), "The other racer's positions must keep arriving.");
@@ -251,6 +265,7 @@ namespace ProtoHarness.Tests.PlayMode
             TestContext.WriteLine("Net race B pairing: " + pairing);
             Debug.Log($"Net race B (30 ms + 0..120 ms jitter, buffer 1): {Describe(o)}; {pairing}");
             Assert.That(o.Finished, Is.True, "The editor client neither compared the state for its last tick nor took the server's end. " + o.ServerLog);
+            AssertStartedTogether(o);
             Assert.That(o.BTimedOut, Is.False, "The player client timed out. " + o.ClientB);
             Assert.That(o.BDone, Is.True, "The player client did not finish. " + o.ClientB);
             Assert.That(o.BEnded, Is.Not.Null, "The player client's DONE line has no ended= field: the race build predates race.end. Rebuild it. " + o.ClientB);
@@ -331,6 +346,7 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log($"Net race C (rtt 100 ms, buffer 3, different runs): {Describe(o)}; editor client is racer {editorRacer}, player client is racer {bRacer}.");
             Assert.That(o.Finished, Is.True, "The editor client did not get to compare the server's last state. " + o.ServerLog);
             Assert.That(o.BDone, Is.True, "The player client did not finish. " + o.ClientB);
+            AssertStartedTogether(o);
             Assert.That(editorRacer, Is.GreaterThanOrEqualTo(0), "The server made no racer of the editor client. " + o.ServerLog);
             Assert.That(bRacer, Is.EqualTo(1 - editorRacer), "The player client must be the other racer. " + o.ServerLog);
             Assert.That(o.Corrections, Is.EqualTo(0), "The editor client had to be corrected.");
@@ -368,6 +384,20 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Join(Within(o.EditorOrders, ticks)), Is.EqualTo(Join(want)), "The editor client must take every order the server made. " + sequences);
             Assert.That(Join(Within(o.BOrders, ticks)), Is.EqualTo(Join(want)), "The player client must take every order the server made. " + sequences + " " + o.ClientB);
             Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
+        }
+
+        // Both clients were told to go once, counted down, and the server started both racers in one frame.
+        private static void AssertStartedTogether(Outcome o)
+        {
+            string start = $"server: {o.ServerGoLines} go lines, racer 0 started on frame {o.ServerStartFrame[0]} ({o.ServerStartLines[0]} lines), racer 1 on frame {o.ServerStartFrame[1]} ({o.ServerStartLines[1]} lines); " +
+                           $"editor client took the go {o.EditorGo}; player client: {o.BGoLines} go lines, {o.BCountdownLines} countdown lines.";
+            TestContext.WriteLine("Start: " + start);
+            Assert.That(o.ServerGoLines, Is.EqualTo(1), "The server must tell the racers to go exactly once. " + start + " " + o.ServerLog);
+            Assert.That(o.EditorGo, Is.True, "The editor client never took the go. " + start);
+            Assert.That(o.BGoLines, Is.EqualTo(1), "The player client must take the go exactly once. " + start + " " + o.ClientB);
+            Assert.That(o.BCountdownLines, Is.EqualTo(1), "The player client must count down and start once. " + start + " " + o.ClientB);
+            for (int i = 0; i < 2; i++) Assert.That(o.ServerStartLines[i], Is.EqualTo(1), $"racer {i} must start exactly once. " + start + " " + o.ServerLog);
+            Assert.That(o.ServerStartFrame[0], Is.EqualTo(o.ServerStartFrame[1]), "Both racers must start in the same server frame. " + start);
         }
 
         private static List<(int Tick, string Places)> Within(List<(int Tick, string Places)> orders, int ticks) =>
@@ -570,6 +600,7 @@ namespace ProtoHarness.Tests.PlayMode
             outcome.SlowFrameList = string.Join(" ", slowFrames);
 
             outcome.Finished = client.Finished;
+            outcome.EditorGo = client.GoReceived;
             ClientPredictor p = client.Predictor;
             outcome.EditorEnded = "none";
             if (p != null)
@@ -737,6 +768,22 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.BIdLines++;
                 outcome.BId = ulong.Parse(m.Groups[1].Value);
             }
+            outcome.ServerGoLines = Regex.Matches(server, @"RACE-SERVER-GO ").Count;
+            outcome.ServerStartFrame = new[] { -1, -1 };
+            outcome.ServerStartLines = new int[2];
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER racer (\d+) started on frame (\d+)"))
+            {
+                int racer = int.Parse(m.Groups[1].Value);
+                if (racer < 0 || racer > 1)
+                {
+                    outcome.StrayRacerLines++;
+                    continue;
+                }
+                outcome.ServerStartLines[racer]++;
+                outcome.ServerStartFrame[racer] = int.Parse(m.Groups[2].Value);
+            }
+            outcome.BGoLines = Regex.Matches(client, @"RACE-CLIENT-GO ").Count;
+            outcome.BCountdownLines = Regex.Matches(client, @"RACE-CLIENT-COUNTDOWN done").Count;
             if (done.Success)
             {
                 outcome.BCompared = int.Parse(done.Groups[1].Value);

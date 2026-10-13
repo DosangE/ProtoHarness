@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-10-13 · P3 C1 같은 시각 출발: 전원 접속 → 출발 신호 → 3·2·1 카운트다운 → 서버는 모든 레이서를 같은 프레임에 출발
+
+- **결정 (사용자 승인, 2026-10-13 "ㄱㄱ 카운트다운까지 넣어서", 싱글 카운트다운 "싱글플레이도 나오면 좋겟다", 수정 설계에 "ㅇㅋ")**: HANDOFF 2절 "진행 중 순위의 남은 것" 중 같은 시각 출발을 한다. 같은 자리의 **앞뒤 거리 표시는 하지 않는다**(사용자 "두 유저 사이의 거리는 필요없을거같다").
+  - **왜 따로 출발했나 (사용자 질문 "다르게 출발하게 시키는 이유가 있나?")**: 설계 이유는 없었다. P3 스파이크(서버 1 + 클라 1)의 "클라는 접속하면 달리고, 서버는 그 클라 입력이 버퍼에 차면 출발" 을 C1b 가 레이서마다 복제했고(`RaceServer.Update`), 결승 순위의 틱 수 기준(C1c-2a)·주행 순위의 같은 틱 비교(C1c-3)·테스트의 "먼저 출발한 쪽 줄 빼기" 가 그 어긋남을 보정하며 쌓였다. 카트라이더식 게임은 전원 로딩 뒤 카운트다운으로 같이 출발하고, **C2(충돌·추월)는 같은 시각에 같은 자리에 있어야 성립하므로 이것이 전제다.**
+  - **서버(`RaceServer`)**: 모든 자리에 클라가 차면 각 클라에 `race.go`(레이서 수 1바이트, `RaceWire.EncodeGo`)를 자기 `ToOwner` 큐로 1회 보낸다(`RACE-SERVER-GO`). 그 뒤 **클라가 붙어 있는 모든 레이서의 입력이 `bufferTicks` 만큼 쌓인 프레임에 한꺼번에** `StartRun` 한다(`RACE-SERVER racer <i> started on frame <f>`). 출발 순위(standings)는 출발을 모두 등록한 뒤 한 번 보낸다. 신호 뒤에 붙는 클라는 끊는다(신호를 못 받아 모두의 출발을 막는다). 신호 뒤에 나간 레이서는 출발하지 않는다(대기로 남음).
+  - **클라(`RaceClient`)**: 접속해도 출발하지 않는다. `race.go` 를 받으면 입력원을 예측기로 바꾸고 `ChainRushGame.StartCountdown()`, `CountdownFinished` 에서 `predictor.AfterTick()`(틱 0). `Begin` 에서 `ManualStart=false` 로 두고 경기 내내 유지한다 → **경기 중 R·RUN AGAIN 이 예측기를 고장 내던 문제(HANDOFF 2절 "네트워크 클라의 HUD 재시작 버튼")도 막힌다.** 두 번째 go 는 버그로 던진다. 타임아웃은 지금처럼 접속부터 잰다(상대 대기 + 카운트다운 3초 포함).
+  - **코어 카운트다운(`ChainRushGame`·`ChainRushHud`, 싱글에도 적용)**: `StartCountdown()` 이 런 초기화(지금 `StartRun` 이 하던 것, `ResetRun` 으로 분리)를 하고 `Countdown` 단계로 3초(`CountdownSeconds`, 게임 시간 `Time.deltaTime`)를 센 뒤 `StartRun()`(한 번 더 초기화)을 부르고 `CountdownFinished` 를 낸다. **`StartRun()` 은 그대로 즉시 출발** — 서버 월드·테스트·리플레이·롤백은 이 경로라 P2 해시는 바뀌지 않는다(게이트 1회 XML 의 로그: 서킷 1700틱 `0xF9A914DA3FAA680B`, 절차 2500틱 `0xE81912109A2EB020` — 2026-10-08 "롤백 안전성" 값과 같다. 리플레이 테스트는 해시를 상수와 비교하지 않고 로그로만 남긴다). Enter(대기·결과)·R·HUD 의 START RUN·RUN AGAIN 은 `StartCountdown` 을 부르고, 카운트다운 중 R 은 처음부터 다시 센다. `ManualStart=false` 면 키는 아무것도 안 하고 HUD 는 버튼 대신 "출발 신호를 기다리는 중" 을 보이며 RUN AGAIN 과 아래 줄의 "R 재시작" 을 숨긴다. HUD 는 카운트다운 중 가운데에 큰 3·2·1, 출발 후 1초 "GO!" 를 그린다. "321GO!" 글리프는 HUD 초기화 때 `RequestCharactersInTexture` 로 미리 만든다(C1c-2b 의 첫 그리기 멈춤 약 95 ms 가 출발 프레임에 나지 않게).
+  - **순위 로직(`RaceOrder`·`RaceStandings`)은 바꾸지 않았다.** 같이 출발하면 "같은 틱 수" 가 곧 "같은 시각" 이다. 주석만 고쳤다.
+  - **R(재시작)의 뜻 (사용자 질문)**: 처음부터 다시(`StartRun` 의 전체 초기화)다. 떨어지면 런이 끝난다(`RunnerMotor.cs:215` → `FailRun`) — 트랙 복귀는 없다. 복귀는 별도 큰 작업으로 HANDOFF 2절 후보에 올렸다.
+- **버린 대안**: 카운트다운을 Net 전용 뷰(`RaceCountdownView`, 새 파일)로 — 싱글에도 넣기로 해 코어 기능이 됐다. 서버가 카운트다운 시각을 정해 알리기 — 클라마다 신호 도착이 지연만큼 달라도 서버가 입력이 모두 쌓인 프레임에 출발시키면 공정하다(먼저 준비된 쪽은 서버 버퍼에서 기다릴 뿐). 이번 레이스에서 그 차이는 0~1틱(아래). 경기 중에도 R 을 허용하고 카운트다운 동안만 막기 — 멀티에서 혼자 처음부터 다시는 의미가 없고 예측기를 고장 낸다.
+- **검증 (`feature/p3-c1-same-start`, 에디터 6000.3.19f1 — 이 머신의 로컬 버전, 시각은 XML 의 UTC, 코드 `git diff -- Assets` sha1 `6cc816a7`)** — 실행한 것 전부
+  - 컴파일: `AssetDatabase.Refresh` 뒤 `ChainRushGame.CountdownSeconds` 를 참조한 `Unity_RunCommand` 가 컴파일·실행됨(값 3), `RaceWire`·`RaceNetwork`·`ChainRushTests` 타입 로드, Console Error 0건.
+  - 새 테스트만 먼저(06:13:22Z~06:13:32Z): `testcasecount=3 Passed passed=3 failed=0` — `StartCountdown_CountsThreeTwoOne_ThenStartsTheRunOnce`, `StartCountdown_TheRunBeginsAsOneStartedAtOnce_AndAgainStartsTheCountOver`, `NetRemoteTests.Wire_GoRoundTrips_AndAnythingElseThrows`. 새 동작의 테스트라 고치기 전 실패 실행은 없다(컴파일 불가).
+  - EditMode(06:13:45Z~06:13:51Z): `testcasecount=237 Passed passed=237 failed=0`.
+  - PlayMode 게이트 1회(전체, Device·Sweep 제외) `testcasecount=144 result=Passed passed=141 failed=0 skipped=3`(06:14:11Z~06:23:58Z, 587.2초). skipped 3 은 `[Explicit]` 네트워크 레이스.
+  - `Run Device Input Tests`(메뉴 키 경로를 바꿨으므로, 06:24:38Z~06:24:54Z): `testcasecount=3 Passed passed=3 failed=0`. 기존 2건은 Enter 뒤 바로 `IsRunning` 이던 단언을 "카운트다운 중 → 끝난 뒤 달림" 으로, R 뒤 공격을 카운트다운이 끝난 뒤로 바꿨다(의도한 동작 변경). 새 1건 `Input_ManualStartOff_EnterAndRDoNothing`.
+  - 플레이어 재빌드(서킷 씬만): `Build Succeeded: 0 errors`, Editor.log `Build Finished, Result: Success.`, `ProtoHarness.Net.dll` 15:25:35(+0900, 72192 바이트). 자동으로 바뀐 5파일은 되돌렸다(4개 지정 `git restore`, `ProjectSettings.asset` 은 빌드 전 사본, md5 `de64508f` 로 같음).
+  - 네트워크 레이스 A·B·C 한 실행(06:26:21Z~06:28:05Z) `testcasecount=3 Passed passed=3 failed=0`. 세 레이스 모두 새 단언 통과: 서버 go 1줄, 두 레이서가 같은 프레임에 출발(A 517, B 621, C 564), 에디터·플레이어 클라 go·카운트다운 각 1회. 출발 때 서버 버퍼: A 4/3, B 2/1, C 3/3(먼저 준비된 쪽의 추가 대기 0~1틱).
+    - A: 보정 0 / 0, late 0 / 0, 상대 위치 1001(0 differ, 빈틈 0), **에디터가 상대 첫 위치를 받은 자기 틱 9**(이전 따로 출발 때 80~180틱 늦음 — 새 단언 `0..25`), 고스트 최대 0.318 m, 프레임 최장 31.9 ms.
+    - B: 에디터 보정 143, 플레이어 1, 레이서 1 `Failed@657` 를 두 클라가 같게 받음, 에디터 고스트 숨김, 상대 첫 위치 자기 틱 12.
+    - C: 순서 `0:0=1 1=1, 155:0=1 1=2, 697:0=2 1=1` 을 서버·두 클라가 그대로 지남, 상대 위치 1001개가 오프라인 런과 비트 일치, 보정 0 / 0, late 0 / 0, 상대 첫 위치 자기 틱 10.
+  - PlayMode 게이트 2회(전체 — 코어 `ChainRush/` 를 바꿨으므로 축소 대상 아님): `testcasecount=144 result=Passed passed=141 failed=0 skipped=3`(06:28:44Z~06:38:37Z, 592.2초). 같은 코드(sha1 `6cc816a7`)에서 1회에 이은 연속 통과.
+- **한계**: 카운트다운·"GO!"·대기 문구는 화면으로 보지 않았다(레이스 도중 `Unity_RunCommand` 금지, 싱글은 테스트로 상태만 확인). 카운트다운 길이는 3초 상수. 신호 뒤 이탈·늦은 접속 거부 경로는 실제 레이스로 시험하지 않았다. 2인·같은 PC만.
+- **하지 않은 것**: 앞뒤 거리 표시(사용자 결정), 트랙 복귀, 소리, 출발 반칙 판정, 3인 이상, `RaceOrder`·`RaceStandings` 로직.
+
 ## 2026-10-13 · P3 C1 다른 입력의 두 레이서: 실제 네트워크 레이스에서 주행 중 순위가 뒤집혔다
 
 - **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ")**: HANDOFF 2절의 "실제 레이스에서 순서가 뒤집히는 실행" 과 "P3 C1 마무리 측정" 의 "서로 다른 입력" 을 `NetworkRaceTests` 레이스 C(`[Explicit]`, `NetRace`)로 한다. 런타임 코드는 바꾸지 않았다(플레이어 클라는 원래 `-raceInputLog` 로 로그 파일을 따로 받는다).

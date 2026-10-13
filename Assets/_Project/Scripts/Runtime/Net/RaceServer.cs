@@ -11,8 +11,10 @@ using UnityEngine.SceneManagement;
 
 namespace ProtoHarness.Net
 {
-    // The authoritative side: one racer per client, each in a world of its own (RaceWorld, DESIGN.md P3 C1). A client's
-    // inputs go to its racer's ServerInputBuffer; the racer's run starts once enough inputs are buffered. After every
+    // The authoritative side: one racer per client, each in a world of its own (RaceWorld, DESIGN.md P3 C1). Once every
+    // racer has a client, each is told to go (race.go); a client counts down and then sends its inputs, which go to its
+    // racer's ServerInputBuffer. Every racer starts in the same frame, once each one with a client has enough inputs
+    // buffered, so the worlds step together and the same tick of two runs is the same moment. After every
     // tick its state goes back to its owner (to reconcile with) and its position to every other client (to draw it),
     // both through a DelayedSender. The tick that ends a racer's run sends its owner the end (race.end) instead of a
     // state, through the same DelayedSender, so it arrives after the last state. The server keeps the standings
@@ -57,6 +59,8 @@ namespace ProtoHarness.Net
         private bool anyClientEver;
         private int connectedClients;
         private float startedAt;
+        private bool goSent;
+        private bool racersStarted;
 
         public int SlotCount => slots == null ? 0 : slots.Length;
         public ServerInputBuffer BufferOf(int slot) => slots[slot].Buffer;
@@ -192,6 +196,13 @@ namespace ProtoHarness.Net
         private void OnClientConnected(ulong id)
         {
             if (SlotOfClient(id) >= 0) return;
+            if (goSent)
+            {
+                // The go has gone out; a client taking a place now would never hear it, and its racer would hold every start.
+                Debug.LogError($"RaceServer: client {id} connected after the race was told to go; sending it away.", this);
+                manager.DisconnectClient(id);
+                return;
+            }
             for (int i = 0; i < slots.Length; i++)
             {
                 if (slots[i].HasClient) continue;
@@ -330,29 +341,64 @@ namespace ProtoHarness.Net
                 Application.Quit(2);
                 return;
             }
+            if (!goSent && connectedClients == slots.Length) SendGo(now);
+            if (goSent && !racersStarted && EveryClientBuffered()) StartRacers(now);
             for (int i = 0; i < slots.Length; i++)
             {
                 Slot slot = slots[i];
-                if (!slot.Running && slot.HasClient && slot.Buffer.HasBuffered(bufferTicks))
-                {
-                    ChainRushGame game = slot.World.Game;
-                    game.SetInputSource(slot.Buffer);
-                    game.StartRun();
-                    slot.Running = true;
-                    Debug.Log($"RACE-SERVER racer {i} started with {slot.Buffer.Buffered} inputs buffered.");
-                    // Before the state for tick 0 (AfterTick), which advances the racer in the standings and places it in the order.
-                    standings.Start(i);
-                    order.Start(i);
-                    SendStandingsIfChanged(now);
-                    slot.Buffer.AfterTick();
-                }
-                else if (slot.Running && !slot.EndReported && !slot.World.Game.IsRunning)
+                if (slot.Running && !slot.EndReported && !slot.World.Game.IsRunning)
                 {
                     slot.EndReported = true;
                     ChainRushGame game = slot.World.Game;
                     Debug.Log($"RACE-SERVER racer {i}: the run is no longer going at tick {game.Tick} (failed {game.HasFailed}, finished {game.HasFinished}).");
                 }
             }
+        }
+
+        // Every racer has a client: each is told to go (race.go), behind whatever its sender already holds.
+        private void SendGo(double now)
+        {
+            goSent = true;
+            Debug.Log($"RACE-SERVER-GO {slots.Length} racers have clients.");
+            byte[] bytes = RaceWire.EncodeGo(slots.Length);
+            for (int k = 0; k < slots.Length; k++) SendToOwner(slots[k], RaceNetwork.GoMessage, bytes, now);
+        }
+
+        // Whether every racer that still has a client has enough inputs buffered to start. A racer whose client left after the
+        // go does not hold the others back.
+        private bool EveryClientBuffered()
+        {
+            bool any = false;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (!slots[i].HasClient) continue;
+                if (!slots[i].Buffer.HasBuffered(bufferTicks)) return false;
+                any = true;
+            }
+            return any;
+        }
+
+        // Starts every racer that has a client in this one frame, so the worlds step together from here and a tick of one
+        // run is the same moment as that tick of every other. A racer without a client is not started (it stays waiting).
+        private void StartRacers(double now)
+        {
+            racersStarted = true;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Slot slot = slots[i];
+                if (!slot.HasClient) continue;
+                ChainRushGame game = slot.World.Game;
+                game.SetInputSource(slot.Buffer);
+                game.StartRun();
+                slot.Running = true;
+                Debug.Log($"RACE-SERVER racer {i} started on frame {Time.frameCount} with {slot.Buffer.Buffered} inputs buffered.");
+                standings.Start(i);
+                order.Start(i);
+            }
+            // The starts go out together, before any state for tick 0 (AfterTick), which advances a racer in the standings and
+            // places it in the order.
+            SendStandingsIfChanged(now);
+            for (int i = 0; i < slots.Length; i++) if (slots[i].Running) slots[i].Buffer.AfterTick();
         }
 
         private void Report(int i)

@@ -5,9 +5,10 @@ using System.Text;
 namespace ProtoHarness.Net
 {
     // Who is ahead among the racers still running, as the server sees it (DESIGN.md P3: the race's standings are the
-    // server's). Every racer starts at a different real time (RaceServer), and RaceStandings places finishers by the ticks
-    // their runs took, so running racers are compared the same way: by how far each had gone (LapCounter.Progress, metres
-    // from the start line counting laps) on the same tick of its own run, the newest tick every running racer has reached.
+    // server's). RaceStandings places finishers by the ticks their runs took, so running racers are compared the same way:
+    // by how far each had gone (LapCounter.Progress, metres from the start line counting laps) on the same tick of its own
+    // run, the newest tick every running racer has reached. The server starts every racer in the same frame (RaceServer,
+    // race.go), so the same tick is the same moment; this class does not assume it.
     // One racer more than `margin` metres ahead of another is ahead of it; equal progress is a tie; in between, the two
     // keep the order they last had, so racers side by side do not swap on every tick (a pair compared for the first time
     // goes by which is further). A racer's place is one more than the number of racers ahead of it, so a tie shares a place.

@@ -33,6 +33,10 @@ namespace ProtoHarness.Tests.PlayMode
         // RaceClient.OnConnected logs it with the id Netcode gave the client (its LocalClientId). The test assembly does not
         // reference Netcode, so for the editor client this line is where its id is read.
         private const string ConnectedPattern = @"RACE-CLIENT connected as (\d+);";
+        // RaceClient.OnOrder logs every order it takes; for the editor client this line is where the sequence is read.
+        private const string ClientOrderPattern = @"RACE-CLIENT-ORDER tick=(-?\d+) ([^\r\n]+)";
+        // RaceServer.OrderMarginMetres (private there): how far ahead a racer must be to pass another.
+        private const double OrderMarginMetres = 1d;
 
         private ChainRushGame game;
         // Listens to the editor's log for the editor client's ConnectedPattern line while a scenario runs; let go in TearDown
@@ -136,6 +140,14 @@ namespace ProtoHarness.Tests.PlayMode
             public bool BOrderRefused;
             public int ServerOrderLines;
             public string ServerLastOrder;
+            // Every order with a place for both racers, as (compared tick, places): the server's "RACE-SERVER-ORDER" lines, the
+            // editor client's "RACE-CLIENT-ORDER" lines (from its log as they happen, until the player client has left) and the
+            // player client's. Orders with a racer still unplaced depend on which process started first, so they are left out.
+            public List<(int Tick, string Places)> ServerOrders;
+            public List<(int Tick, string Places)> EditorOrders;
+            public List<(int Tick, string Places)> BOrders;
+            // The other racer's positions as they arrived at the editor, by its tick.
+            public List<(int Tick, Vector3 Position)> RemotePositions;
         }
 
         [UnitySetUp]
@@ -286,6 +298,130 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
         }
 
+        // Two different runs: the same bot, but the player client's racer drifts (slower on the ground) early and the editor
+        // client's racer later and for longer, so the editor's racer leads first and the other passes it. Both runs are first
+        // played offline here; the order the server must reach is what RaceOrder makes of those two runs tick by tick. Then
+        // over 100 ms round trip with no jitter (nothing late): both clients are never corrected, the other racer's positions
+        // at the editor are its offline run's to the bit, and the server and both clients go through exactly that order.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator TwoClients_DifferentRuns_TheOrderSwapsAsTheRunsSay_AndEveryoneAgrees()
+        {
+            const int ticks = 1000;
+            const int playerDriftFrom = 100, playerDriftTo = 300, editorDriftFrom = 400, editorDriftTo = 800;
+            Outcome o = default;
+            List<SimSnapshot> editorRun = null, playerRun = null;
+            List<(int Tick, string Places)> expected = null;
+            yield return Scenario(7795, ticks, 3, 50, 0, r => o = r, () =>
+            {
+                InputLog editorLog = RecordBot(BotTicks, editorDriftFrom, editorDriftTo);
+                InputLog playerLog = RecordBot(BotTicks, playerDriftFrom, playerDriftTo);
+                editorRun = Play(editorLog, ticks);
+                playerRun = Play(playerLog, ticks);
+                // Offline the editor's racer is 0. The premise: it leads, then the other passes it.
+                expected = ExpectedOrders(editorRun, playerRun, ticks);
+                string offline = string.Join(", ", expected.ConvertAll(e => $"{e.Tick}:{e.Places}"));
+                TestContext.WriteLine($"Net race C offline orders (0 = editor): {offline}; progress at tick {ticks}: editor {editorRun[ticks].Circuit.Laps.Progress:F2} m, player {playerRun[ticks].Circuit.Laps.Progress:F2} m.");
+                int led = expected.FindIndex(e => e.Places == "0=1 1=2");
+                Assert.That(led, Is.GreaterThanOrEqualTo(0), "Premise: offline, the editor's racer must lead at some point. " + offline);
+                Assert.That(expected.FindIndex(led, e => e.Places == "0=2 1=1"), Is.GreaterThan(led), "Premise: offline, the other racer must pass the editor's racer after it led. " + offline);
+                return (editorLog, playerLog);
+            });
+            int editorRacer = RacerOf(o, o.EditorId);
+            int bRacer = RacerOf(o, o.BId);
+            Debug.Log($"Net race C (rtt 100 ms, buffer 3, different runs): {Describe(o)}; editor client is racer {editorRacer}, player client is racer {bRacer}.");
+            Assert.That(o.Finished, Is.True, "The editor client did not get to compare the server's last state. " + o.ServerLog);
+            Assert.That(o.BDone, Is.True, "The player client did not finish. " + o.ClientB);
+            Assert.That(editorRacer, Is.GreaterThanOrEqualTo(0), "The server made no racer of the editor client. " + o.ServerLog);
+            Assert.That(bRacer, Is.EqualTo(1 - editorRacer), "The player client must be the other racer. " + o.ServerLog);
+            Assert.That(o.Corrections, Is.EqualTo(0), "The editor client had to be corrected.");
+            Assert.That(o.StatesCompared, Is.GreaterThan(900));
+            Assert.That(o.BCorrections, Is.EqualTo(0), "The player client had to be corrected. " + o.ClientB);
+            Assert.That(o.BCompared, Is.GreaterThan(900), o.ClientB);
+            for (int i = 0; i < 2; i++) Assert.That(o.Late[i], Is.EqualTo(0), $"racer {i}: an input came late.");
+            Assert.That(o.ServerEndOf[0] == "none" && o.ServerEndOf[1] == "none", Is.True, $"No run may end within {ticks} ticks: racer 0 {o.ServerEndOf[0]}, racer 1 {o.ServerEndOf[1]}. " + o.ServerLog);
+
+            // The other racer's positions at the editor are the player's offline run, to the bit, from its first tick.
+            int remoteChecked = 0, remoteMismatches = 0;
+            string firstMismatch = "";
+            foreach ((int tick, Vector3 position) in o.RemotePositions)
+            {
+                if (tick > ticks) continue;
+                remoteChecked++;
+                Vector3 offline = playerRun[tick].Position;
+                if (BitConverter.SingleToInt32Bits(offline.x) == BitConverter.SingleToInt32Bits(position.x)
+                    && BitConverter.SingleToInt32Bits(offline.y) == BitConverter.SingleToInt32Bits(position.y)
+                    && BitConverter.SingleToInt32Bits(offline.z) == BitConverter.SingleToInt32Bits(position.z)) continue;
+                if (remoteMismatches == 0) firstMismatch = $" first at tick {tick}: received {position:F4}, offline {offline:F4}.";
+                remoteMismatches++;
+            }
+            TestContext.WriteLine($"Net race C remote positions: {o.RemotePositions.Count} received, {remoteChecked} within {ticks} ticks checked against the player's offline run, {remoteMismatches} differ.{firstMismatch}");
+            Assert.That(o.FirstRemoteTick, Is.EqualTo(0), "The other racer's positions must arrive from its first tick.");
+            Assert.That(o.RemoteBreaks, Is.EqualTo(0), "The other racer's positions must arrive one tick after another.");
+            Assert.That(remoteChecked, Is.GreaterThan(ticks / 2), "Too few of the other racer's positions to judge.");
+            Assert.That(remoteMismatches, Is.EqualTo(0), "The other racer's positions must be its offline run's." + firstMismatch);
+
+            // The server's order, and each client's, is the offline one (with the server's racer numbers) within the ticks.
+            List<(int Tick, string Places)> want = editorRacer == 0 ? expected : expected.ConvertAll(e => (e.Tick, Swapped(e.Places)));
+            string sequences = $"expected {Join(want)}; server {Join(Within(o.ServerOrders, ticks))}; editor client {Join(Within(o.EditorOrders, ticks))}; player client {Join(Within(o.BOrders, ticks))}.";
+            TestContext.WriteLine("Net race C orders: " + sequences);
+            Assert.That(Join(Within(o.ServerOrders, ticks)), Is.EqualTo(Join(want)), "The server's order must be what the two runs make of it. " + sequences);
+            Assert.That(Join(Within(o.EditorOrders, ticks)), Is.EqualTo(Join(want)), "The editor client must take every order the server made. " + sequences);
+            Assert.That(Join(Within(o.BOrders, ticks)), Is.EqualTo(Join(want)), "The player client must take every order the server made. " + sequences + " " + o.ClientB);
+            Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
+        }
+
+        private static List<(int Tick, string Places)> Within(List<(int Tick, string Places)> orders, int ticks) =>
+            orders.FindAll(e => e.Tick <= ticks);
+
+        private static string Join(List<(int Tick, string Places)> orders) =>
+            string.Join(", ", orders.ConvertAll(e => $"{e.Tick}:{e.Places}"));
+
+        // "0=1 1=2" with the two racers' numbers exchanged: "0=2 1=1".
+        private static string Swapped(string places)
+        {
+            string[] parts = places.Split(' ');
+            Assert.That(parts.Length, Is.EqualTo(2), $"Not a two-racer order: \"{places}\".");
+            return $"0={parts[1].Substring(2)} 1={parts[0].Substring(2)}";
+        }
+
+        // Plays a log offline and keeps the state after every tick (index = tick; tick 0 is the state StartRun leaves), the
+        // way the server hands states out (ServerInputBuffer.AfterTick). The run must still be going after `ticks`.
+        private List<SimSnapshot> Play(InputLog log, int ticks)
+        {
+            var replay = new InputReplay(log);
+            Time.timeScale = 0f;
+            game.SetInputSource(replay);
+            game.StartRun();
+            var states = new List<SimSnapshot>(ticks + 1) { game.CaptureSnapshot() };
+            while (game.IsRunning && game.Tick < ticks)
+            {
+                game.StepTick(replay);
+                if (game.IsRunning) states.Add(game.CaptureSnapshot());
+            }
+            Assert.That(game.IsRunning, Is.True, $"Premise: the run must still be going after {ticks} ticks; it ended at tick {game.Tick} (failed {game.HasFailed}, finished {game.HasFinished}).");
+            Assert.That(states[ticks].Tick, Is.EqualTo(ticks));
+            return states;
+        }
+
+        // The orders the server's RaceOrder goes through for these two runs (racer 0, racer 1), each when it changes, as
+        // (compared tick, places), only those that place both racers, within the ticks.
+        private static List<(int Tick, string Places)> ExpectedOrders(List<SimSnapshot> run0, List<SimSnapshot> run1, int ticks)
+        {
+            var order = new RaceOrder(2, OrderMarginMetres);
+            var orders = new List<(int Tick, string Places)>();
+            order.Start(0);
+            order.Start(1);
+            for (int t = 0; t <= ticks; t++)
+            {
+                for (int racer = 0; racer < 2; racer++)
+                {
+                    if (!order.Advance(racer, t, (racer == 0 ? run0 : run1)[t].Circuit.Laps.Progress)) continue;
+                    if (order[0] > 0 && order[1] > 0) orders.Add((order.ComparedTick, RaceOrder.Describe(order.ToArray())));
+                }
+            }
+            return orders;
+        }
+
         private static string Orders(Outcome o) =>
             $"editor client \"{o.EditorOrder}\" ({o.EditorOrderCount} taken); player client \"{o.BOrder}\" ({o.BOrderLines} lines, refused {o.BOrderRefused}); " +
             $"server: {o.ServerOrderLines} lines, last \"{o.ServerLastOrder}\".";
@@ -331,14 +467,19 @@ namespace ProtoHarness.Tests.PlayMode
             $"server racer 0: ran {o.Ticks?[0]}, received {o.Received?[0]}, missed {o.Missed?[0]}, late {o.Late?[0]}; racer 1: ran {o.Ticks?[1]}, received {o.Received?[1]}, missed {o.Missed?[1]}, late {o.Late?[1]}; " +
             $"editor frames: longest {o.LongestFrameMs:F1} ms after tick {o.LongestFrameTick}, over 50 ms {o.SlowFrames} [{o.SlowFrameList}], first standings at tick {o.FirstStandingsTick}.";
 
-        private IEnumerator Scenario(ushort port, int ticks, int bufferTicks, int delayMs, int jitterMs, Action<Outcome> done)
+        // record: the editor client's and the player client's logs, made once the circuit is loaded; without it both play the
+        // same bot run.
+        private IEnumerator Scenario(ushort port, int ticks, int bufferTicks, int delayMs, int jitterMs, Action<Outcome> done,
+            Func<(InputLog Editor, InputLog Player)> record = null)
         {
             if (!File.Exists(RaceBuildExe)) Assert.Inconclusive($"No race build at {RaceBuildExe}. Build the circuit scene as a Windows standalone player there first.");
             yield return Load();
-            InputLog log = RecordBot(BotTicks);
+            InputLog log, playerLog;
+            if (record != null) (log, playerLog) = record();
+            else playerLog = log = RecordBot(BotTicks);
             string dir = Path.GetDirectoryName(RaceBuildExe);
             string logFile = Path.Combine(dir, $"input-{port}.bin");
-            InputLogFile.Save(logFile, log);
+            InputLogFile.Save(logFile, playerLog);
             string serverLog = Path.Combine(dir, $"server-{port}.log");
             string clientLog = Path.Combine(dir, $"client-{port}.log");
             foreach (string stale in new[] { serverLog, clientLog }) if (File.Exists(stale)) File.Delete(stale);
@@ -370,8 +511,15 @@ namespace ProtoHarness.Tests.PlayMode
             };
             ulong editorId = 0;
             int editorIdLines = 0;
+            var editorOrders = new List<(int Tick, string Places)>();
             editorLogWatch = (message, stackTrace, type) =>
             {
+                Match order = Regex.Match(message, ClientOrderPattern);
+                if (order.Success)
+                {
+                    AddIfBothPlaced(editorOrders, order);
+                    return;
+                }
                 Match m = Regex.Match(message, ConnectedPattern);
                 if (!m.Success) return;
                 editorIdLines++;
@@ -421,10 +569,6 @@ namespace ProtoHarness.Tests.PlayMode
             }
             outcome.SlowFrameList = string.Join(" ", slowFrames);
 
-            Application.logMessageReceived -= editorLogWatch;
-            editorLogWatch = null;
-            outcome.EditorId = editorId;
-            outcome.EditorIdLines = editorIdLines;
             outcome.Finished = client.Finished;
             ClientPredictor p = client.Predictor;
             outcome.EditorEnded = "none";
@@ -435,6 +579,7 @@ namespace ProtoHarness.Tests.PlayMode
                 if (p.ServerEnded) outcome.EditorEnded = $"{p.EndReason}@{p.EndTick}";
             }
             outcome.RemoteSamples = client.RemoteSamples;
+            outcome.RemotePositions = received;
             outcome.EndAt = game.Tick;
             outcome.FirstRemoteAt = firstRemoteAt;
             outcome.FirstRemoteTick = received.Count > 0 ? received[0].Tick : -1;
@@ -461,6 +606,12 @@ namespace ProtoHarness.Tests.PlayMode
             outcome.EditorHasStandingsView = client.StandingsView != null;
             outcome.EditorOrder = client.Order == null ? null : RaceOrder.Describe(client.Order);
             outcome.EditorOrderCount = client.OrderReceived;
+            // Watched until here: orders for ticks the other racer reaches after this client finished still come.
+            Application.logMessageReceived -= editorLogWatch;
+            editorLogWatch = null;
+            outcome.EditorId = editorId;
+            outcome.EditorIdLines = editorIdLines;
+            outcome.EditorOrders = editorOrders;
             client.Disconnect();
             exitDeadline = Time.realtimeSinceStartup + 15f;
             while (!server.HasExited && Time.realtimeSinceStartup < exitDeadline) yield return null;
@@ -560,15 +711,19 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.BYou = int.Parse(m.Groups[1].Value);
                 outcome.BStandings = m.Groups[2].Value;
             }
-            foreach (Match m in Regex.Matches(server, @"RACE-SERVER-ORDER v=\d+ tick=-?\d+ ([^\r\n]+)"))
+            outcome.ServerOrders = new List<(int Tick, string Places)>();
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER-ORDER v=\d+ tick=(-?\d+) ([^\r\n]+)"))
             {
                 outcome.ServerOrderLines++;
-                outcome.ServerLastOrder = m.Groups[1].Value;
+                outcome.ServerLastOrder = m.Groups[2].Value;
+                AddIfBothPlaced(outcome.ServerOrders, m);
             }
-            foreach (Match m in Regex.Matches(client, @"RACE-CLIENT-ORDER tick=-?\d+ ([^\r\n]+)"))
+            outcome.BOrders = new List<(int Tick, string Places)>();
+            foreach (Match m in Regex.Matches(client, ClientOrderPattern))
             {
                 outcome.BOrderLines++;
-                outcome.BOrder = m.Groups[1].Value;
+                outcome.BOrder = m.Groups[2].Value;
+                AddIfBothPlaced(outcome.BOrders, m);
             }
             outcome.BOrderRefused = client.Contains("RaceClient: an order for");
             outcome.BGhostHidden = Regex.Matches(client, @"RACE-CLIENT-GHOST hidden").Count;
@@ -591,6 +746,13 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // An order line matched with (tick, places) groups; kept when it places every racer (RaceOrder.Describe writes "-" for none).
+        private static void AddIfBothPlaced(List<(int Tick, string Places)> orders, Match m)
+        {
+            string places = m.Groups[2].Value.TrimEnd();
+            if (!places.Contains("-")) orders.Add((int.Parse(m.Groups[1].Value), places));
+        }
+
         private IEnumerator Load()
         {
 #if UNITY_EDITOR
@@ -607,16 +769,49 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
-        private InputLog RecordBot(int ticks)
+        // driftFrom..driftTo: ticks of the run (from inclusive) on which the bot also holds drift; none by default.
+        private InputLog RecordBot(int ticks, int driftFrom = 0, int driftTo = 0)
         {
             var log = new InputLog();
-            var recorder = new InputRecorder(new CircuitBot(game, player, grapple, circuit), log);
+            IInputSource bot = new CircuitBot(game, player, grapple, circuit);
+            if (driftTo > driftFrom) bot = new DriftWindow(bot, game, driftFrom, driftTo);
+            var recorder = new InputRecorder(bot, log);
             Time.timeScale = 0f;
             game.SetInputSource(recorder);
             game.StartRun();
             while (game.IsRunning && game.Tick < ticks) game.StepTick(recorder);
             Assert.That(game.IsRunning, Is.True, $"The bot's run ended at tick {game.Tick}.");
             return log;
+        }
+
+        // Another source's input with drift held on ticks from..to (from inclusive) of the run. Drift slows a grounded
+        // runner (RunnerMotor driftSpeedScale), so two runs that drift on different ticks gain and lose ground on each other.
+        private sealed class DriftWindow : IInputSource
+        {
+            private readonly IInputSource inner;
+            private readonly ChainRushGame game;
+            private readonly int from;
+            private readonly int to;
+
+            public DriftWindow(IInputSource inner, ChainRushGame game, int from, int to)
+            {
+                if (from < 0 || to <= from) throw new ArgumentOutOfRangeException(nameof(to), to, $"DriftWindow: ticks {from}..{to} is not a window.");
+                this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                this.game = game ?? throw new ArgumentNullException(nameof(game));
+                this.from = from;
+                this.to = to;
+            }
+
+            public void Poll() => inner.Poll();
+            public void Clear() => inner.Clear();
+
+            // Read while the tick runs: game.Tick is the tick being run.
+            public TickInput Consume()
+            {
+                TickInput input = inner.Consume();
+                bool drift = input.Drift || (game.Tick >= from && game.Tick < to);
+                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, drift, input.ChainActionPressed);
+            }
         }
     }
 }

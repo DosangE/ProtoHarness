@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-13 · P3 C1 다른 입력의 두 레이서: 실제 네트워크 레이스에서 주행 중 순위가 뒤집혔다
+
+- **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ")**: HANDOFF 2절의 "실제 레이스에서 순서가 뒤집히는 실행" 과 "P3 C1 마무리 측정" 의 "서로 다른 입력" 을 `NetworkRaceTests` 레이스 C(`[Explicit]`, `NetRace`)로 한다. 런타임 코드는 바꾸지 않았다(플레이어 클라는 원래 `-raceInputLog` 로 로그 파일을 따로 받는다).
+  - **다른 입력 = 같은 봇 + 다른 드리프트 구간.** 드리프트는 지상 달리기 속도를 0.9배로 만든다(`RunnerMotor.cs:36, 150`). 플레이어 클라 레이서는 100–300틱, 에디터 클라 레이서는 400–800틱에 드리프트를 덧씌운다(`NetworkRaceTests.DriftWindow`, 이 파일 안의 중첩 클래스). 봇에는 속도 입력이 없어 이것이 가장 작은 변경이다.
+  - **기대값은 오프라인에서 만든다.** 두 로그를 에디터에서 각각 재생해 틱별 상태를 서버와 같은 방식으로 찍고(틱 0 = `StartRun` 직후, 이후 매 틱 — `ServerInputBuffer.AfterTick`), 그 진행 거리를 같은 `RaceOrder`(임계 1 m)에 넣어 순서 변화 목록을 만든다. 같은 틱의 반복 비교는 결과를 바꾸지 않고 비교 틱은 1씩만 오르므로, 출발 시각 차이와 무관하게 서버가 같은 목록을 지나야 한다. 한 레이서만 순위가 있는 줄은 어느 프로세스가 먼저 출발했는지에 달려 빼고 비교한다.
+  - **판정**: 오프라인 전제(두 런 모두 1000틱까지 낙하 없음, 에디터 레이서가 앞섰다가 추월당함), 두 클라 보정 0, 늦은 입력 0, 1000틱 안에 런 끝 없음, 에디터가 받은 상대 위치가 상대 오프라인 런과 비트 단위로 같음(틱 0부터, 빈틈 0), 서버·에디터 클라·플레이어 클라의 순서 변화 목록(1000틱 안)이 오프라인 목록과 같음.
+  - 레이스 A·B 의 판정은 그대로다. `Scenario` 는 클라별 로그를 받을 수 있게 됐고, 에디터 로그 감시는 `RACE-CLIENT-ORDER` 줄도 모으며 플레이어 클라가 떠날 때까지 붙어 있다(상대가 늦게 출발하면 에디터가 끝난 뒤에도 1000틱 안의 순서가 온다).
+- **결과**: 오프라인 `0:0=1 1=1, 155:0=1 1=2, 697:0=2 1=1`(1000틱 진행 거리 에디터 190.82 m, 플레이어 193.86 m). 실제 레이스에서 서버·두 클라가 모두 이 순서를 지났다 — **주행 중 순위가 처음으로 실제로 뒤집혔다.**
+- **버린 대안**: 체인 액션(슬링샷)으로 추월 — 게이지 한 칸이 있어야 발동하고(`RunnerMotor.ChainAction`) 봇의 런에서 게이지가 언제 차는지는 확인하지 않았다. 드리프트만으로 안 되면 보고하기로 했던 대안이고, 드리프트만으로 됐다. 봇을 지그재그로 — 진행 거리 손실을 예측할 수 없다. 별도 봇 파일 — 이 테스트에서만 쓰여 새 파일을 만들지 않았다.
+- **검증 (`feature/p3-c1-different-inputs`, 에디터 6000.3.19f1 — 이 머신의 로컬 버전, 시각은 XML 의 UTC, 코드 `git diff -- Assets` sha1 `877386a8`)** — 실행한 것 전부
+  - 컴파일: `EditorUtility.scriptCompilationFailed=False`, `NetworkRaceTests` 의 새 메서드 로드 확인, Console Error 0건(Warning 19건은 모두 리로드의 `Deleting invalid font reference.`).
+  - 플레이어 재빌드(서킷 씬만): Editor.log `Build Finished, Result: Success.`, `ProtoHarness.Net.dll` 14:30:57(+0900, 70144 바이트). 자동으로 바뀐 5파일은 되돌렸다(4개 파일 지정 `git restore`, `ProjectSettings.asset` 은 빌드 전 사본, md5 `de64508f` 로 같음).
+  - 레이스 C 1회 05:31:57Z~05:32:28Z **`Failed`**: `racer 0: an input came late. Expected: 0 But was: 7`. `editor frames: longest 136.3 ms after tick 439, over 50 ms 1 [439:136]`, `server racer 0: ran 1243, received 1000, missed 250, late 7`. 그 판정 뒤의 값은 로그로 확인했다: 두 클라 `corrections=0`, 서버 `RACE-SERVER-ORDER` v=2 `tick=0 0=1 1=1` → v=3 `tick=155 0=1 1=2` → v=4 `tick=697 0=2 1=1`, 에디터·플레이어 클라 `RACE-CLIENT-ORDER` 같은 세 줄.
+  - 레이스 C 2회 05:33:27Z~05:34:01Z `Passed`: `remote positions: 1161 received, 1001 within 1000 ticks checked against the player's offline run, 0 differ`, `orders: expected 0:0=1 1=1, 155:0=1 1=2, 697:0=2 1=1; server 같음; editor client 같음; player client 같음`, 보정 0 / 0, late 0 / 0, `longest 47.4 ms after tick 168, over 50 ms 0`.
+  - 레이스 A·B(한 실행 05:34:25Z~05:35:29Z, `testcasecount=2 Failed(Child) passed=1 failed=1`): A **`Failed`** `racer 0: an input came late. Expected: 0 But was: 5`, `longest 125.7 ms after tick 282, over 50 ms 1 [282:126]`, 보정 0 / 0, 상대 위치 894(0 differ). B `Passed`: 에디터 보정 155, 낙하 없음, order 3줄 마지막 `0=2 1=1`.
+  - 레이스 A 재실행 05:47:38Z~05:48:11Z `Passed`: late 0 / 0, `longest 29.7 ms after tick 2, over 50 ms 0 []`.
+  - EditMode(05:36:08Z~05:36:14Z): `testcasecount=237 Passed passed=237 failed=0`.
+  - PlayMode 게이트 1회(전체, Device·Sweep 제외) `testcasecount=141 result=Passed passed=138 failed=0 skipped=3`(05:36:32Z~05:46:13Z, 581.2초). skipped 3 은 `[Explicit]` 네트워크 레이스 A·B·C.
+  - 2회(`^Net$` — 바뀐 `Assets/` 파일은 `NetRace` 카테고리 클래스 `NetworkRaceTests.cs` 하나) `testcasecount=61 Passed passed=61 failed=0 skipped=0`(05:46:46Z~05:47:14Z), `NetworkRaceTests` 0건.
+- **실패 두 건의 원인 (증명 못 함)**: 둘 다 레이스 도중 에디터 프레임 한 번이 125~136 ms 멈춘 것과 같이 났다. 입력 버퍼 3틱(약 60 ms)을 넘는 멈춤이라 에디터 입력이 늦게 닿는다. 2026-10-12 "네트워크 레이스 A" 의 한계(같은 증상, 원인 미분리)와 같은 모양이다. 사용자 판단(2026-10-13): **에디터에 포커스가 없어서** 그런 것 같다. 이번 실행 중 포커스 상태는 기록하지 않았고 나누어 시험하지도 않았다. A 경로에서 바뀐 것은 로그 감시의 정규식 하나와 감시를 떼는 시점뿐이다. 같은 코드의 재실행은 각각 통과했다 — 재실행 통과로 실패를 지우지 않는다. 레이스 A·C 는 병합 게이트 밖(`[Explicit]`)이다.
+- **한계**: 2인·같은 PC·고정 지연(지터 없음)만. 순서 변화는 두 번(동률 → 앞섬 → 추월)이고 1 m 임계 안에서 오가는 경우는 실제 레이스로 보지 않았다. 패널의 숫자는 화면으로 보지 않았다(레이스 도중 `Unity_RunCommand` 금지).
+- **하지 않은 것**: 런타임 코드, 앞뒤 거리 표시, 같은 시각 출발, 3인 이상, 패킷 유실, 모바일/IL2CPP, 에디터 프레임 멈춤 조사.
+
 ## 2026-10-13 · 병합 2회차 축소: Net 쪽만 바꾼 브랜치는 PlayMode 2회차를 `Net` 카테고리만 돌린다
 
 - **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ" — HANDOFF 3절 #1 의 B안을 어셈블리 경계로 좁힌 안)**: 병합 조건의 PlayMode 는 1회차를 지금처럼 전체(`Device`·`Sweep` 제외)로 돌린다. 2회차는 `git diff --name-only dev...HEAD` 의 `Assets/` 파일이 모두 `Runtime/Net/`, `Tests/EditMode/`, `Net`·`NetRace` 카테고리 테스트 클래스 파일일 때만 `Net` 카테고리로 줄이고, 그 밖이 하나라도 있으면 전체다. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.

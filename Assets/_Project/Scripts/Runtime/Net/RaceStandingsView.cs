@@ -7,7 +7,8 @@ namespace ProtoHarness.Net
 {
     // Draws the standings a RaceClient holds as a panel under the HUD's header, on the left where the HUD draws nothing while
     // a run goes. Added by the client at run time, like RemoteGhost, so the scene needs no edit. Nothing is drawn before the
-    // first standings arrive. The lines are rebuilt only when new standings have come (RaceClient.StandingsReceived).
+    // first standings arrive. The lines are rebuilt only when new standings or a new order of the running racers have come
+    // (RaceClient.StandingsReceived, OrderReceived).
     // Right after the first standings the editor client stalled for about 95 ms, long enough for its inputs to reach the
     // server late (DECISIONS P3 C1c-2b). So the font and its glyphs are made in Initialize, and the panel's first draw is
     // done unseen on the first repaint, before the run has standings; both draws log how long they took
@@ -33,6 +34,7 @@ namespace ProtoHarness.Net
         private RaceStandingsText.Line[] lines;
         private string header;
         private int shownReceived;
+        private int shownOrder;
         private Font font;
         private GUIStyle small;
         private GUIStyle body;
@@ -114,11 +116,12 @@ namespace ProtoHarness.Net
             }
             if (client.Standings == null) return;
             long drawStart = repaint && !firstDrawLogged ? Stopwatch.GetTimestamp() : 0;
-            if (lines == null || shownReceived != client.StandingsReceived)
+            if (lines == null || shownReceived != client.StandingsReceived || shownOrder != client.OrderReceived)
             {
-                lines = RaceStandingsText.Lines(client.Standings, client.You);
+                lines = RaceStandingsText.Lines(client.Standings, client.Order, client.You);
                 header = RaceStandingsText.Header(lines.Length);
                 shownReceived = client.StandingsReceived;
+                shownOrder = client.OrderReceived;
             }
             Matrix4x4 previous = GUI.matrix;
             GUI.matrix = CanvasMatrix();

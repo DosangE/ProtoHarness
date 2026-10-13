@@ -11,8 +11,9 @@ namespace ProtoHarness.Net
     // racer it belongs to, after its last state): the tick the run ended on, why, and the controls the server ran that tick
     // on. Remote (server to the other racer): where a racer was after a tick, for drawing it. Standings (server to every
     // racer, each time they change): every racer's line in the race (RaceStandings) and which of them the message is for.
+    // Order (server to every racer, each time it changes): each running racer's place among those running (RaceOrder).
     // Decoding is strict: a short or long message, an end reason or status this build does not know, or a standings line
-    // RaceStandings cannot make, throws.
+    // RaceStandings or an order RaceOrder cannot make, throws.
     public static class RaceWire
     {
         // Why a run ended. The values are the bytes on the wire.
@@ -147,6 +148,52 @@ namespace ProtoHarness.Net
             }
             if (stream.Position != stream.Length) throw new InvalidDataException("RaceWire: unread bytes after the standings.");
             return entries;
+        }
+
+        // Order: the tick of their own runs the running racers were compared on (-1 for none), the number of racers, then each
+        // racer's place among those running (RaceOrder, 0 = none; 1 byte).
+        public static byte[] EncodeOrder(int tick, IReadOnlyList<int> places)
+        {
+            if (places == null) throw new ArgumentNullException(nameof(places));
+            if (places.Count < 1 || places.Count > byte.MaxValue) throw new ArgumentOutOfRangeException(nameof(places), places.Count, "RaceWire: 1 to 255 racers.");
+            string problem = OrderProblem(tick, places);
+            if (problem != null) throw new ArgumentException(problem, nameof(places));
+            using var stream = new MemoryStream(5 + places.Count);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(tick);
+            writer.Write((byte)places.Count);
+            for (int i = 0; i < places.Count; i++) writer.Write((byte)places[i]);
+            writer.Flush();
+            return stream.ToArray();
+        }
+
+        public static int[] DecodeOrder(byte[] bytes, out int tick)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            using var stream = new MemoryStream(bytes, false);
+            using var reader = new BinaryReader(stream);
+            tick = reader.ReadInt32();
+            int count = reader.ReadByte();
+            if (count < 1) throw new InvalidDataException("RaceWire: an order with no racers.");
+            var places = new int[count];
+            for (int i = 0; i < count; i++) places[i] = reader.ReadByte();
+            if (stream.Position != stream.Length) throw new InvalidDataException("RaceWire: unread bytes after an order.");
+            string problem = OrderProblem(tick, places);
+            if (problem != null) throw new InvalidDataException(problem);
+            return places;
+        }
+
+        // What is wrong with an order RaceOrder cannot make, or null: places run 0 to the number of racers, and racers are
+        // placed only once they have been compared on a tick.
+        private static string OrderProblem(int tick, IReadOnlyList<int> places)
+        {
+            if (tick < -1) return $"RaceWire: an order compared on tick {tick}.";
+            for (int i = 0; i < places.Count; i++)
+            {
+                if (places[i] < 0 || places[i] > places.Count) return $"RaceWire: racer {i}'s place is {places[i]} of {places.Count}.";
+                if (places[i] > 0 && tick < 0) return $"RaceWire: racer {i} has place {places[i]}, but nobody was compared.";
+            }
+            return null;
         }
 
         // What is wrong with a line RaceStandings cannot make, or null. A racer still going has no end, no place and nothing

@@ -16,8 +16,9 @@ namespace ProtoHarness.Net
     // Finished. It is Finished too once the server has said that this racer's run ended within those ticks (race.end).
     // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart from the
     // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished. The standings the
-    // server sends (race.standings) are kept as they come (Standings, You); they only tell, the run never reads them. With
-    // showRemote they are drawn (RaceStandingsView), and the ghost is hidden once they say the other racer's run has ended.
+    // server sends (race.standings) are kept as they come (Standings, You), and so is the order of the racers still running
+    // (race.order: Order, OrderTick); they only tell, the run never reads them. With showRemote they are drawn
+    // (RaceStandingsView), and the ghost is hidden once the standings say the other racer's run has ended.
     public sealed class RaceClient : MonoBehaviour
     {
         private ChainRushGame game;
@@ -45,6 +46,9 @@ namespace ProtoHarness.Net
         private RaceStandings.Entry[] standings;
         private int you = -1;
         private int standingsReceived;
+        private int[] order;
+        private int orderTick = -1;
+        private int orderReceived;
 
         public ClientPredictor Predictor => predictor;
         // The newest standings from the server, by racer, or null before the first arrive.
@@ -52,6 +56,11 @@ namespace ProtoHarness.Net
         // Which racer the server made this client (from the standings), or -1 before the first arrive.
         public int You => you;
         public int StandingsReceived => standingsReceived;
+        // The newest order from the server: each racer's place among those running (RaceOrder, 0 = none), or null before the
+        // first arrives; and the tick of their own runs it compared them on.
+        public IReadOnlyList<int> Order => order;
+        public int OrderTick => orderTick;
+        public int OrderReceived => orderReceived;
         public RemoteInterpolator Remote => remote;
         // The picture of the other racer, or null when the client was made without one.
         public RemoteGhost Ghost { get; private set; }
@@ -108,6 +117,7 @@ namespace ProtoHarness.Net
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.EndMessage, OnEnd);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.RemoteMessage, OnRemote);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.StandingsMessage, OnStandings);
+            manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.OrderMessage, OnOrder);
         }
 
         // Closes the connection (the server notices when its client leaves).
@@ -212,6 +222,21 @@ namespace ProtoHarness.Net
                     Debug.Log($"RACE-CLIENT-GHOST hidden: racer {other} {RaceStandings.Describe(entries[other])}");
                 }
             }
+        }
+
+        // The server sends the standings of a race before any order (a racer's start is in the standings first), so an order
+        // for a different number of racers than the standings or the order before it is a bug and throws (Netcode logs it).
+        private void OnOrder(ulong sender, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out byte[] payload);
+            int[] places = RaceWire.DecodeOrder(payload, out int tick);
+            int expected = standings != null ? standings.Length : order != null ? order.Length : places.Length;
+            if (places.Length != expected)
+                throw new InvalidDataException($"RaceClient: an order for {places.Length} racers, but the race has {expected}.");
+            order = places;
+            orderTick = tick;
+            orderReceived++;
+            Debug.Log($"RACE-CLIENT-ORDER tick={tick} {RaceOrder.Describe(places)}");
         }
 
         private void OnRemote(ulong sender, FastBufferReader reader)

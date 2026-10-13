@@ -125,6 +125,17 @@ namespace ProtoHarness.Tests.PlayMode
             public int EndAt;
             public int FirstRemoteTick;
             public int RemoteBreaks;
+            // The newest order of the running racers each client holds when the player client has left (RaceOrder.Describe),
+            // and how many it took; for the player client its last "RACE-CLIENT-ORDER tick=<t> <places>" line, and
+            // BOrderRefused is its log holding an order message the client threw on. The server's "RACE-SERVER-ORDER" lines:
+            // how many, and the places in its last.
+            public string EditorOrder;
+            public int EditorOrderCount;
+            public string BOrder;
+            public int BOrderLines;
+            public bool BOrderRefused;
+            public int ServerOrderLines;
+            public string ServerLastOrder;
         }
 
         [UnitySetUp]
@@ -192,6 +203,13 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.EditorHasStandingsView, Is.True, "The editor client has no standings panel.");
             Assert.That(o.EditorGhostVisible, Is.True, "The editor client hid its ghost though the other racer is running. " + standings);
             Assert.That(o.BGhostHidden, Is.EqualTo(0), "The player client hid its ghost though the other racer is running. " + o.ClientB);
+            // Both racers play the same run, so on the same tick of their runs they have gone exactly as far: level, both first.
+            string orders = Orders(o);
+            TestContext.WriteLine("Net race A orders: " + orders);
+            Assert.That(o.ServerLastOrder, Is.EqualTo("0=1 1=1"), orders);
+            Assert.That(o.EditorOrder, Is.EqualTo("0=1 1=1"), orders);
+            Assert.That(o.BOrder, Is.EqualTo("0=1 1=1"), orders + " " + o.ClientB);
+            Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
         }
 
         // Jitter of up to 120 ms against a 1-tick buffer: inputs arrive late and the server repeats the last one. A missed jump
@@ -260,7 +278,17 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.EditorHasStandingsView, Is.True, "The editor client has no standings panel.");
             Assert.That(o.EditorGhostVisible, Is.EqualTo(!editorOtherEnded), "The editor client's ghost against its standings. " + standings);
             Assert.That(o.BGhostHidden, Is.EqualTo(bOtherEnded ? 1 : 0), "The player client's ghost against its standings. " + standings + " " + o.ClientB);
+            // With jitter the runs differ, so the order is only recorded; every order message must still be taken.
+            string orders = Orders(o);
+            TestContext.WriteLine("Net race B orders: " + orders);
+            Assert.That(o.EditorOrderCount, Is.GreaterThan(0), "The editor client took no order. " + orders);
+            Assert.That(o.BOrderLines, Is.GreaterThan(0), "The player client took no order. " + orders + " " + o.ClientB);
+            Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
         }
+
+        private static string Orders(Outcome o) =>
+            $"editor client \"{o.EditorOrder}\" ({o.EditorOrderCount} taken); player client \"{o.BOrder}\" ({o.BOrderLines} lines, refused {o.BOrderRefused}); " +
+            $"server: {o.ServerOrderLines} lines, last \"{o.ServerLastOrder}\".";
 
         // A line of RaceStandings.Describe for a fall or a finish.
         private static bool HasEnded(string line) =>
@@ -431,6 +459,8 @@ namespace ProtoHarness.Tests.PlayMode
             outcome.EditorStandingsCount = client.StandingsReceived;
             outcome.EditorGhostVisible = client.Ghost != null && client.Ghost.Visible;
             outcome.EditorHasStandingsView = client.StandingsView != null;
+            outcome.EditorOrder = client.Order == null ? null : RaceOrder.Describe(client.Order);
+            outcome.EditorOrderCount = client.OrderReceived;
             client.Disconnect();
             exitDeadline = Time.realtimeSinceStartup + 15f;
             while (!server.HasExited && Time.realtimeSinceStartup < exitDeadline) yield return null;
@@ -530,6 +560,17 @@ namespace ProtoHarness.Tests.PlayMode
                 outcome.BYou = int.Parse(m.Groups[1].Value);
                 outcome.BStandings = m.Groups[2].Value;
             }
+            foreach (Match m in Regex.Matches(server, @"RACE-SERVER-ORDER v=\d+ tick=-?\d+ ([^\r\n]+)"))
+            {
+                outcome.ServerOrderLines++;
+                outcome.ServerLastOrder = m.Groups[1].Value;
+            }
+            foreach (Match m in Regex.Matches(client, @"RACE-CLIENT-ORDER tick=-?\d+ ([^\r\n]+)"))
+            {
+                outcome.BOrderLines++;
+                outcome.BOrder = m.Groups[1].Value;
+            }
+            outcome.BOrderRefused = client.Contains("RaceClient: an order for");
             outcome.BGhostHidden = Regex.Matches(client, @"RACE-CLIENT-GHOST hidden").Count;
             outcome.BStandingsRefused = client.Contains("RaceClient: standings for racer") || client.Contains("RaceClient: the standings say");
             Match done =Regex.Match(client, @"RACE-CLIENT-DONE compared=(\d+) corrections=(\d+) .* remote=(\d+)(?: ended=(\S+))?");

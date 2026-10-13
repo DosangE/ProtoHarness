@@ -52,7 +52,7 @@ C1c-3(진행 중 순위)와 다른 입력의 두 레이서(레이스 C)까지 `d
 | 5 | ~~원격 `origin/dev` 와 갈라짐~~ **해결** | `feature/integrate-origin-dev`(`138446a`)로 통합하고 `dev` 를 푸시했다(경위는 DECISIONS 2026-10-09 "코스 T3b (다른 클론…)"). 남은 결정 둘: 통합 전 로컬 `dev`(`cb7e53b`)를 백업한 원격 `backup/dev-2026-10-10` 을 지울지(삭제는 승인 후), 앞보기 300m 를 로컬 생성기에 옮길지(별도 합의) | 2026-10-10 |
 | 6 | 끝난 브랜치 정리 | 로컬 브랜치가 많다. 모두 `dev` 에 병합돼 있으나 둘은 아니다: `spike/p3-ngo-prediction`(코드는 `Net` 으로 이식됨, 보고는 DECISIONS 에 있음)와 `feature/p3-ngo-package`(옛 패키지 커밋, `feature/p3-ngo-install` 로 대체). 삭제는 §0 에 따라 **승인 후**. `feature/course-t3c-endless` 는 원격과 로컬(2026-10-12 확인) 모두에 있다 | 2026-10-10 |
 | 7 | ~~미추적 `Assets/DefaultNetworkPrefabs.asset` (+`.meta`)~~ **해결** | NGO 가 자동 생성한 빈 목록(`IsDefault: 1`). 2026-10-10 사용자 "a" 대로 C1c-1 브랜치(`feature/p3-c1c-run-end`)에서 내용 수정 없이 커밋하고 게이트를 같이 치렀다(DECISIONS 2026-10-11 "P3 C1c-1"). `ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 수정으로 보여도 커밋하지 않는다 | 2026-10-11 |
-| 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). `main` 은 `origin/main` 과 같고(`7e4a0a8`) P0·P1-1·P1-2 시점이다. 지금 `dev` 는 P3 C1b 까지 와 있다. 사용자가 시킬 때만 | 2026-10-10 |
+| 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). 2026-10-13 `main` 을 P3 C1(2인 네트워크 레이스·같은 시각 출발)까지 올리고 첫 태그 `v0.1` 을 달았다(DECISIONS 2026-10-13 "main v0.1"). 그 전 `main` 은 `7e4a0a8`(P0·P1-1·P1-2). 다음 병합도 사용자가 시킬 때만 | 2026-10-13 |
 | 9 | `.claude/settings.json` (읽기 전용 허용 8개 + 훅 3개) | 허용 목록은 `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다. 훅은 `docs/harness-automation` 에서 추가(DECISIONS 2026-10-10 "하네스 자동화") | 2026-10-10 |
 
 튜닝 대상 시작값 (`RunnerMotor`/`FollowCamera`/`GrappleController` 인스펙터, 씬 값이 없으면 코드 기본값):

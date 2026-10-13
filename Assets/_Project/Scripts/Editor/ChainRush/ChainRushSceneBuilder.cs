@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.TestTools.TestRunner.Api;
@@ -54,7 +55,8 @@ namespace ProtoHarness.Editor.ChainRush
                 var chunk = new GameObject("Sector " + (section + 1).ToString("00")).transform;
                 chunk.SetParent(world);
                 float center = (start + end) * 0.5f;
-                Cube("Deck", chunk, new Vector3(0f, -0.6f, center), new Vector3(12f, 1.2f, end - start), deck, true);
+                GameObject deckObject = Cube("Deck", chunk, new Vector3(0f, -0.6f, center), new Vector3(12f, 1.2f, end - start), deck, true);
+                AddGuards(deckObject.transform, frame, mint);
                 Cube("Undercarriage", chunk, new Vector3(0f, -2f, center), new Vector3(10.8f, 1.7f, end - start - 2f), frame);
                 for (int side = -1; side <= 1; side += 2)
                 {
@@ -131,6 +133,7 @@ namespace ProtoHarness.Editor.ChainRush
             controller.stepOffset = 0.2f;
             var motor = playerObject.AddComponent<RunnerMotor>();
             var grapple = playerObject.AddComponent<GrappleController>();
+            var tilt = playerObject.AddComponent<RunnerTilt>();
             var model = new GameObject("Runner Visual").transform;
             model.SetParent(playerObject.transform, false);
             Primitive("Torso", PrimitiveType.Capsule, model, new Vector3(0f, -0.05f, 0f), new Vector3(0.62f, 0.52f, 0.48f), suit);
@@ -171,7 +174,8 @@ namespace ProtoHarness.Editor.ChainRush
             camera.transform.position = playerObject.transform.position + new Vector3(0f, 5.5f, -10f);
             camera.transform.LookAt(playerObject.transform.position + Vector3.up * 1.5f + Vector3.forward * 9f);
             var hud = gameObject.AddComponent<ChainRushHud>();
-            Assign(motor, "controller", controller, "game", game, "grapple", grapple, "bodyVisual", model);
+            Assign(motor, "controller", controller, "game", game, "grapple", grapple);
+            Assign(tilt, "motor", motor, "body", model);
             Assign(grapple, "game", game, "motor", motor, "rope", rope, "ropeOrigin", hand);
             AssignArray(grapple, "anchors", anchors.ToArray());
             Assign(follow, "target", motor, "game", game, "viewCamera", camera);
@@ -206,11 +210,78 @@ namespace ProtoHarness.Editor.ChainRush
             EditorSceneManager.OpenScene(ScenePath);
         }
 
+        // Adds the same deck guards the builder now makes to an existing, open scene (both ChainRush scenes
+        // predate them). Skips decks that already have guards. Inactive copies are included: called on an
+        // inactive root, GetComponentsInChildren still returns its children, so the endless scene's stored
+        // prototype course gets guards too and keeps matching the prototype scene. Undo-able; the scene is
+        // marked dirty and must be saved.
+        [MenuItem("ProtoHarness/Chain Rush/Add Deck Guards To Open Scene")]
+        public static void AddDeckGuardsToOpenScene()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before editing the scene.");
+            Scene scene = SceneManager.GetActiveScene();
+            Material rail = Material("Frame", new Color(0.035f, 0.09f, 0.12f), 0f);
+            Material light = Material("Link", new Color(0.25f, 0.95f, 0.72f), 1.7f);
+            int added = 0;
+            foreach (GameObject root in scene.GetRootGameObjects())
+                foreach (Transform item in root.GetComponentsInChildren<Transform>())
+                {
+                    if (item.name != "Deck" || item.GetComponent<BoxCollider>() == null || item.parent == null) continue;
+                    if (item.parent.Find(GuardRailName) != null) continue;
+                    foreach (GameObject created in AddGuards(item, rail, light)) Undo.RegisterCreatedObjectUndo(created, "Add deck guards");
+                    added++;
+                }
+            EditorSceneManager.MarkSceneDirty(scene);
+            Debug.Log("ChainRush: added guards to " + added + " decks in " + scene.path + ". Save the scene to keep them.");
+        }
+
+        private const string GuardRailName = "Guard rail";
+        private const float GuardRailHeight = 1.1f;
+        private const float GuardRailThickness = 0.3f;
+        // Taller than the 2.9 m jump apex, so a jump cannot clear a guard sideways.
+        private const float GuardBlockHeight = 4f;
+
+        // A visible rail just outside each long edge of a deck, as siblings of the deck. The rail's collider
+        // reaches GuardBlockHeight above the deck top; the light strip on top has none. Gaps between decks
+        // get no guards, so falling there stays possible (COURSE.md T2a).
+        internal static List<GameObject> AddGuards(Transform deck, Material rail, Material light)
+        {
+            Transform parent = deck.parent;
+            Vector3 size = deck.localScale;
+            float top = deck.localPosition.y + size.y * 0.5f;
+            var created = new List<GameObject>(4);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float x = deck.localPosition.x + side * (size.x + GuardRailThickness) * 0.5f;
+                Vector3 railCenter = parent.TransformPoint(new Vector3(x, top + GuardRailHeight * 0.5f, deck.localPosition.z));
+                GameObject guard = Cube(GuardRailName, parent, railCenter, new Vector3(GuardRailThickness, GuardRailHeight, size.z), rail, true);
+                var box = guard.GetComponent<BoxCollider>();
+                float localTop = (GuardBlockHeight - GuardRailHeight * 0.5f) / GuardRailHeight;
+                box.size = new Vector3(1f, localTop + 0.5f, 1f);
+                box.center = new Vector3(0f, (localTop - 0.5f) * 0.5f, 0f);
+                created.Add(guard);
+                Vector3 lightCenter = parent.TransformPoint(new Vector3(x, top + GuardRailHeight + 0.03f, deck.localPosition.z));
+                created.Add(Cube("Guard light", parent, lightCenter, new Vector3(0.12f, 0.06f, size.z), light));
+            }
+            return created;
+        }
+
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device and Sweep categories.
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests()
+        public static void RunTests() => RunPlayMode("!Device", "!Sweep");
+
+        // Tests that need virtual Keyboard/Mouse devices. Not part of the merge gate.
+        [MenuItem("ProtoHarness/Chain Rush/Run Device Input Tests")]
+        public static void RunDeviceTests() => RunPlayMode("Device");
+
+        // The 20-seed course sweep that proves the T3c completion criterion. Run once, outside the merge gate.
+        [MenuItem("ProtoHarness/Chain Rush/Run Course Sweep")]
+        public static void RunCourseSweep() => RunPlayMode("Sweep");
+
+        private static void RunPlayMode(params string[] categories)
         {
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" } }));
+            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, categoryNames = categories }));
         }
 
         private sealed class TestCallbacks : ICallbacks

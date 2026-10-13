@@ -28,7 +28,16 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 | P0 | 수치를 ScriptableObject로 분리 (`RunRules`, `EncounterTuning`), 첫 EditMode 테스트 | 완료 (dev 병합) |
 | P1-1 | 고정 틱 — 시뮬레이션은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행 | 완료 (dev 병합) |
 | P1-2 | 입력 추상화 — 시뮬레이션이 장치가 아니라 `TickInput`을 받는다 | 완료 (dev 병합) |
-| P1 이후 | 시드 기반 코스, 레이서 상태 분리, 적 다변화, 점수·결과 화면 | 예정 |
+| P1-3a | 레이서 상태 분리 — 레이서 한 명분 상태(체력·적중·쿨다운)를 `RacerState`로 꺼낸다 | 완료 (dev 병합) |
+| P1-3b | 표현 분리 — 몸체 기울이기를 시뮬레이션(`RunnerMotor`)에서 표현 컴포넌트 `RunnerTilt`로 옮긴다 | 완료 (dev 병합) |
+| P1-3c | 운동 상태 분리 — 모터·그래플의 속도·조향·점프·앵커·줄 길이를 `RacerState`로 옮긴다 (위치 제외) | 완료 (dev 병합) |
+| 코스 T0 | 트랙 좌표계 — "앞"을 월드 +z 대신 트랙 중심선 접선으로 (직선만, 보이는 변화 없음). 설계 `docs/COURSE.md` | 완료 (dev 병합) |
+| 코스 T1 | 오르막·내리막 — 종단 곡선, 경사 속도 보정, 내리막 땅 붙잡기. 점프 도달 거리 실측. 씬 코스에는 아직 경사 없음(테스트 도로로 검증) | 완료 (dev 병합) |
+| 코스 T2a | 자유 조향(A/D 가 진행 방향을 돌림)과 발판 양쪽의 보이는 가드 난간. 옆 낙사 없음, 틈 낙사는 유지 | 완료 (dev 병합) |
+| 코스 T2b | 커브(수평 원호)와 그립 한계(카트라이더 방향: 평소 깔끔, 미끄러짐은 드리프트로). 씬 코스는 아직 직선(테스트 도로로 검증) | 완료 (dev 병합) |
+| 코스 T2c | 드리프트(Shift)로 체인 게이지를 모으고 체인 액션(Ctrl)으로 가속: 슬링샷, 그래플 강화 | 완료 (dev 병합) |
+| 코스 T2d | 코너 앵커 스윙: 커브에서 드리프트 중 Ctrl 로 원호 중심에 체인을 걸고 빠르게 돈 뒤 Shift 를 떼면 튀어 나감 | 완료 (dev 병합) |
+| P1 이후 | 코스 T3~T4(시드 생성·곡선 노면, 서킷), 적 다변화, 점수·결과 화면 | 예정 |
 
 ## 방향 (초안, 합의 대기)
 
@@ -61,9 +70,9 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 
 씬(`Assets/_Project/Scenes/`)이 이미 저장소에 있으면 열기만 하면 된다. 기존 씬은 덮어쓰지 않는다.
 
-**조작**: A/D 또는 방향키 좌우 이동 · 좌클릭 지상 점프, 공중에서 재클릭 시 그래플(유지하면 스윙, 놓거나 우클릭하면 해제) · Space 공격 · R 재시작 · Esc 일시정지 · M 음소거
+**조작**: A/D 또는 방향키로 진행 방향 틀기(자유 조향, 놓으면 그 방향 유지) · 좌클릭 지상 점프, 공중에서 재클릭 시 그래플(유지하면 스윙, 놓거나 우클릭하면 해제) · Space 공격 · 왼쪽 Shift 드리프트(미끄러지며 체인 게이지 충전) · 왼쪽 Ctrl 체인 액션(게이지 1칸: 평소엔 슬링샷 가속, 그래플 중엔 강화, 커브 드리프트 중엔 코너 스윙) · R 재시작 · Esc 일시정지 · M 음소거
 
-**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests`, 또는 Test Runner 창에서 EditMode / PlayMode 실행.
+**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (가상 장치 테스트 제외), `Run Device Input Tests` (가상 키보드·마우스 테스트만), 또는 Test Runner 창에서 EditMode / PlayMode 실행.
 
 ## 폴더
 
@@ -74,7 +83,7 @@ Assets/_Project/        우리가 만드는 모든 것
   Scripts/Tests/        EditMode / PlayMode 테스트
   Data/                 ScriptableObject 인스턴스
   Scenes/               ChainRushPrototype, ChainRushEndless
-docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵)
+docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵) · RULES/(작업별 규칙)
 index/, tools/          심볼 인덱스와 재생성 스크립트
 ```
 
@@ -85,6 +94,7 @@ index/, tools/          심볼 인덱스와 재생성 스크립트
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 시스템 지도, 진입점, 검증 기록 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 왜 이렇게 했나 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 최종 목표와 단계별 로드맵 (초안) |
-| [`CLAUDE.md`](CLAUDE.md) | 작업 규칙 |
+| [`CLAUDE.md`](CLAUDE.md) | 작업 규칙 (항상 지킬 것) |
+| [`docs/RULES/`](docs/RULES/) | 작업별 규칙 — 형태·검증·조회·서브에이전트·브랜치. 언제 읽는지는 `CLAUDE.md` 맨 위 표 |
 
 원작 참조: [DosangE/Chain-Rush](https://github.com/DosangE/Chain-Rush)

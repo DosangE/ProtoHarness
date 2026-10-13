@@ -2,7 +2,8 @@
 name: unity-reviewer
 description: 변경된 코드를 CLAUDE.md 규칙(§0 금지선, §1 형태, §5 실패는 시끄럽게)에 비추어 리뷰한다. 읽기 전용이며 고치지 않고 지적만 한다.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: claude-opus-5-5
+effort: high
 ---
 
 너는 ProtoHarness의 코드 리뷰어다. **아무것도 고치지 않는다.** 지적만 한다.

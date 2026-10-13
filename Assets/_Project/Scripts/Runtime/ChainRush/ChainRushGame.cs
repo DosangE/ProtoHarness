@@ -3,12 +3,16 @@ using UnityEngine.InputSystem;
 using ProtoHarness.ChainRush.Endless;
 using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Race;
+using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush
 {
     public sealed class ChainRushGame : MonoBehaviour
     {
-        private enum Phase { Ready, Running, Paused, Failed, Complete }
+        private enum Phase { Ready, Countdown, Running, Paused, Failed, Complete }
+        // How long the 3, 2, 1 before a run lasts (StartCountdown).
+        public const float CountdownSeconds = 3f;
         [SerializeField] private RunnerMotor player;
         [SerializeField] private GrappleController grapple;
         [SerializeField] private FollowCamera followCamera;
@@ -17,41 +21,50 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private AudioSource audioSource;
         [SerializeField] private float finishZ = 496f;
         [SerializeField] private bool endlessMode;
-        [SerializeField] private EndlessCourse endlessCourse;
+        [SerializeField] private CourseStream endlessCourse;
         [SerializeField] private EnemyDirector enemies;
+        [SerializeField] private CircuitRace circuit;
         [SerializeField] private RunRules rules;
         [SerializeField] private bool enhancedPresentation;
         [SerializeField] private Audio.ChainRushAudio presentationAudio;
         [SerializeField] private Visuals.RunnerAnimation presentationAnimation;
         private Phase phase;
-        private int health;
-        private int hits;
-        private int grapples;
+        private RacerState racer;
+        private Centerline track;
         private int tick;
-        private int damageUntilTick;
-        private int attackUntilTick;
-        private int nextAttackTick;
         private IInputSource inputSource;
         private AudioClip[] cues;
+        private float countdownLeft;
 
         public bool IsRunning => phase == Phase.Running;
         public bool IsPaused => phase == Phase.Paused;
         public bool IsReady => phase == Phase.Ready;
+        public bool IsCountingDown => phase == Phase.Countdown;
+        // 3, 2, 1 while counting down; 0 otherwise.
+        public int CountdownNumber => IsCountingDown ? Mathf.CeilToInt(countdownLeft) : 0;
+        // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
+        // so the keyboard cannot restart a run the server is simulating.
+        public bool ManualStart { get; set; } = true;
         public bool HasFailed => phase == Phase.Failed;
         public bool HasFinished => phase == Phase.Complete;
-        public int Health => health;
-        public int Hits => hits;
-        public int Grapples => grapples;
+        public int Health => racer.Health;
+        public int Hits => racer.Hits;
+        public int Grapples => racer.Grapples;
         public int Tick => tick;
         public float Elapsed => Ticks.ToSeconds(tick);
-        public float Progress => Mathf.Clamp01(player.transform.position.z / finishZ);
+        public float Progress => circuit != null ? circuit.RaceFraction : Mathf.Clamp01((float)(PlayerS / finishZ));
         public float FinishZ => finishZ;
-        public bool DamageFlash => tick < damageUntilTick && IsRunning;
-        public bool AttackActive => tick < attackUntilTick;
+        public bool DamageFlash => racer.IsInvulnerable(tick) && IsRunning;
+        public bool AttackActive => racer.IsAttackShown(tick);
         public bool IsEndless => endlessMode;
+        public bool IsCircuit => circuit != null;
+        public CircuitRace Circuit => circuit;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
-        public double Distance => endlessMode ? endlessCourse.Distance : System.Math.Max(0d, player.transform.position.z - 5d);
+        public RacerState Racer => racer;
+        public Centerline Track => track;
+        public double Distance => endlessMode ? endlessCourse.Distance : System.Math.Max(0d, PlayerS - 5d);
+        private double PlayerS => track.Project(player.transform.position).S;
 
         private void Awake()
         {
@@ -80,6 +93,12 @@ namespace ProtoHarness.ChainRush
                 enabled = false;
                 return;
             }
+            if (endlessMode && circuit != null)
+            {
+                Debug.LogError("ChainRushGame: a scene is either endless or a circuit race, not both.", this);
+                enabled = false;
+                return;
+            }
             if (enhancedPresentation && (presentationAudio == null || presentationAnimation == null))
             {
                 Debug.LogError("ChainRushGame: enhanced presentation requires audio and animation references.", this);
@@ -101,7 +120,19 @@ namespace ProtoHarness.ChainRush
                 cues[i] = AudioClip.Create("ChainRush cue " + i, samples.Length, 1, SampleRate, false);
                 cues[i].SetData(samples, 0);
             }
-            health = rules.MaxHealth;
+            racer = new RacerState(rules);
+            // T0: both scenes are laid out along +z from the world origin. A track definition asset replaces this (COURSE.md T4).
+            if (circuit != null)
+            {
+                // A circuit race runs on the closed centerline of its definition (COURSE.md T4).
+                track = circuit.BuildTrack();
+            }
+            else
+            {
+                track = new Centerline(Vector3.zero, 0f);
+                if (endlessMode) endlessCourse.SeedTrack(track);
+                else track.AppendStraight(finishZ);
+            }
             inputSource = new KeyboardMouseInputSource();
             attackVisual.gameObject.SetActive(false);
         }
@@ -114,6 +145,17 @@ namespace ProtoHarness.ChainRush
             inputSource = source;
         }
 
+        // Replaces the course centerline (test roads now, hand-built circuits later). The finish line stays
+        // at finishZ along it. Endless mode streams its own track, so it refuses a replacement.
+        public void SetTrack(Centerline replacement)
+        {
+            if (replacement == null) throw new System.ArgumentNullException(nameof(replacement));
+            if (circuit != null) throw new System.InvalidOperationException("ChainRushGame: a circuit race builds its own track; SetTrack is for finite straight courses.");
+            if (replacement.PieceCount == 0) throw new System.ArgumentException("Track needs at least one piece.", nameof(replacement));
+            if (endlessMode) throw new System.InvalidOperationException("ChainRushGame: endless mode builds its own track; SetTrack is for finite courses.");
+            track = replacement;
+        }
+
         private void OnValidate()
         {
             if (finishZ <= 0f) Debug.LogError("ChainRushGame: finishZ must be positive.", this);
@@ -124,25 +166,53 @@ namespace ProtoHarness.ChainRush
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
-                if (keyboard.rKey.wasPressedThisFrame) StartRun();
-                else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused) StartRun();
+                if (ManualStart)
+                {
+                    if (keyboard.rKey.wasPressedThisFrame) StartCountdown();
+                    else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused && !IsCountingDown) StartCountdown();
+                }
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
+            }
+            if (IsCountingDown)
+            {
+                countdownLeft -= Time.deltaTime;
+                if (countdownLeft > 0f) return;
+                StartRun();
+                CountdownFinished?.Invoke();
             }
             if (!IsRunning) return;
             inputSource.Poll();
             float elapsed = Elapsed;
             for (int i = 0; i < targets.Length; i++) targets[i].Animate(elapsed);
             attackVisual.gameObject.SetActive(AttackActive);
-            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(attackUntilTick - tick) * 4f);
+            if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(racer.AttackTicksLeft(tick)) * 4f);
         }
 
+        private void FixedUpdate() => StepTick(inputSource);
+
         // The only simulation entry point. One call is one tick, and the order below is the
-        // contract: consumed input, runner, hazards, finish, enemies, course recycling.
-        private void FixedUpdate()
+        // contract: consumed input, runner, hazards, finish, enemies, course recycling. FixedUpdate calls it
+        // with the game's input source; a test or a rollback can call it directly, as often as it likes, with
+        // another source (the phase must be Running, so the caller stops FixedUpdate with Time.timeScale = 0).
+        public void StepTick(IInputSource source)
         {
+            if (source == null) throw new System.ArgumentNullException(nameof(source));
             if (!IsRunning) return;
+            RunTick(source);
+            TickCompleted?.Invoke(tick);
+        }
+
+        // Raised at the end of every tick that ran, with that tick's number, whether it came from FixedUpdate or a direct
+        // StepTick. The state is then between ticks: a snapshot taken here is the state after that tick, which a snapshot
+        // taken while the input is being read (inside IInputSource.Consume) is not. The run may have ended during the tick.
+        public event System.Action<int> TickCompleted;
+
+        private void RunTick(IInputSource source)
+        {
             tick++;
-            TickInput input = inputSource.Consume();
+            // The closed track looks for the runner near where it was, so a return leg is not mistaken for the start.
+            if (circuit != null) circuit.PrepareTick();
+            TickInput input = source.Consume();
             if (input.AttackPressed) Attack();
             player.Step(input);
             if (!IsRunning) return;
@@ -150,32 +220,79 @@ namespace ProtoHarness.ChainRush
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].Touches(position)) TakeDamage();
             if (!IsRunning) return;
-            if (!endlessMode && position.z >= finishZ) CompleteRun();
+            if (circuit != null)
+            {
+                circuit.Step(tick);
+                if (circuit.IsFinished) CompleteRun();
+            }
+            else if (!endlessMode && track.Project(position).S >= finishZ) CompleteRun();
             if (!IsRunning || !endlessMode) return;
             enemies.Step();
             if (!IsRunning) return;
             endlessCourse.Step();
         }
 
+        // Everything the simulation carries from one tick to the next, as of now (between ticks). Only a circuit
+        // race has a fixed world to roll back in, so other modes throw (DESIGN.md P3, DECISIONS "롤백 안전성").
+        public SimSnapshot CaptureSnapshot()
+        {
+            RequireSnapshotSupport();
+            if (phase != Phase.Running) throw new System.InvalidOperationException("ChainRushGame: take a snapshot while the run is going.");
+            return new SimSnapshot(tick, racer.Capture(), player.transform.position, circuit.Capture());
+        }
+
+        // Puts the simulation back to a snapshot. A fall or a finish after the snapshot is undone too: the run is going again.
+        public void RestoreSnapshot(in SimSnapshot snapshot)
+        {
+            RequireSnapshotSupport();
+            player.SetPosition(snapshot.Position);
+            racer.Restore(snapshot.Racer);
+            circuit.Restore(snapshot.Circuit);
+            tick = snapshot.Tick;
+            phase = Phase.Running;
+        }
+
+        private void RequireSnapshotSupport()
+        {
+            if (circuit == null || endlessMode)
+                throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race (a fixed world); the endless course moves the world.");
+        }
+
+        // Starts a run at once. Servers, rollbacks and tests start here; a player at the keyboard goes through StartCountdown.
         public void StartRun()
         {
+            ResetRun();
+            phase = Phase.Running;
+        }
+
+        // Puts the runner on the start line and counts 3, 2, 1 (CountdownSeconds, game time); then starts the run (StartRun,
+        // which resets everything again, so the run begins exactly as one started at once) and raises CountdownFinished.
+        // Calling it again while counting down starts the count over.
+        public void StartCountdown()
+        {
+            ResetRun();
+            countdownLeft = CountdownSeconds;
+            phase = Phase.Countdown;
+        }
+
+        // Raised right after a countdown has started the run, before its first tick.
+        public event System.Action CountdownFinished;
+
+        private void ResetRun()
+        {
             phase = Phase.Ready;
+            if (circuit != null) circuit.ResetRace();
             if (enhancedPresentation) { presentationAudio.ResetAudio(); presentationAnimation.ResetPose(); }
             if (endlessMode) endlessCourse.ResetCourse();
             player.ResetAtSpawn();
             followCamera.Snap();
             for (int i = 0; i < targets.Length; i++) targets[i].Restore();
-            health = rules.MaxHealth;
-            hits = 0;
-            grapples = 0;
+            racer.Reset();
+            player.FaceTrack();
             tick = 0;
-            damageUntilTick = 0;
-            attackUntilTick = 0;
-            nextAttackTick = 0;
             inputSource.Clear();
             if (endlessMode) enemies.ResetEncounters();
             attackVisual.gameObject.SetActive(false);
-            phase = Phase.Running;
         }
 
         public void TogglePause()
@@ -184,31 +301,29 @@ namespace ProtoHarness.ChainRush
             else if (phase == Phase.Paused) phase = Phase.Running;
         }
 
-        public void RegisterGrapple() => grapples++;
-        public void RegisterEnemyHit() { if (IsRunning) { hits++; PlayPresentationCue(5); } }
+        public void RegisterGrapple() => racer.AddGrapple();
+        public void RegisterEnemyHit() { if (IsRunning) { racer.AddHit(); PlayPresentationCue(5); } }
 
         public void Attack()
         {
-            if (!IsRunning || tick < nextAttackTick) return;
+            if (!IsRunning || !racer.CanAttack(tick)) return;
             if (endlessMode)
             {
-                if (enemies.TryAttack()) nextAttackTick = tick + rules.AttackCooldownTicks;
+                if (enemies.TryAttack()) racer.BeginAttackCooldown(tick);
                 return;
             }
-            attackUntilTick = tick + rules.AttackVisualTicks;
-            nextAttackTick = tick + rules.AttackCooldownTicks;
+            racer.ShowAttack(tick);
+            racer.BeginAttackCooldown(tick);
             PlayCue(2);
             for (int i = 0; i < targets.Length; i++)
-                if (targets[i].TryHit(player.transform.position)) hits++;
+                if (targets[i].TryHit(player.transform.position)) racer.AddHit();
         }
 
         public void TakeDamage()
         {
-            if (!IsRunning || tick < damageUntilTick) return;
-            health--;
-            damageUntilTick = tick + rules.DamageInvulnerabilityTicks;
+            if (!IsRunning || !racer.TryTakeDamage(tick)) return;
             PlayCue(3);
-            if (health <= 0) FailRun();
+            if (racer.IsDown) FailRun();
         }
 
         public void FailRun()

@@ -82,7 +82,8 @@ foreach ($f in Get-ChildItem -Path $src -Filter *.md -File) {
 
     $same = $false
     if (Test-Path $target) {
-        $existing = [System.IO.File]::ReadAllText($target, $utf8NoBom)
+        # autocrlf 로 작업 트리가 CRLF 이어도 내용이 같으면 일치로 본다 (줄바꿈만 다른 거짓 양성 방지).
+        $existing = [System.IO.File]::ReadAllText($target, $utf8NoBom).Replace("`r`n", "`n")
         if ($existing -eq $text) { $same = $true }
     }
 

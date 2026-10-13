@@ -1,0 +1,418 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Race;
+using Unity.Collections;
+using Unity.Netcode;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace ProtoHarness.Net
+{
+    // The authoritative side: one racer per client, each in a world of its own (RaceWorld, DESIGN.md P3 C1). Once every
+    // racer has a client, each is told to go (race.go); a client counts down and then sends its inputs, which go to its
+    // racer's ServerInputBuffer. Every racer starts in the same frame, once each one with a client has enough inputs
+    // buffered, so the worlds step together and the same tick of two runs is the same moment. After every
+    // tick its state goes back to its owner (to reconcile with) and its position to every other client (to draw it),
+    // both through a DelayedSender. The tick that ends a racer's run sends its owner the end (race.end) instead of a
+    // state, through the same DelayedSender, so it arrives after the last state. The server keeps the standings
+    // (RaceStandings: starts, states, ends) and each time they change sends them to every racer through that racer's own
+    // DelayedSender, so a racer always hears of its own end before the standings that hold it. It also keeps the order of
+    // the racers still running (RaceOrder: progress on the same tick of each run) and sends it the same way, behind the
+    // standings, each time it changes. Racers do not touch each other, so each world simply runs on its own.
+    public sealed class RaceServer : MonoBehaviour
+    {
+        // How far one running racer has to get ahead of another to swap places with it (DECISIONS P3 C1c-3).
+        private const double OrderMarginMetres = 1d;
+
+        private sealed class Slot
+        {
+            public RaceWorld World;
+            public ServerInputBuffer Buffer;
+            public DelayedSender ToOwner;
+            // The message name of each payload waiting in ToOwner, in the same order (states and the end share its queue).
+            public readonly Queue<string> ToOwnerNames = new Queue<string>(64);
+            public DelayedSender[] ToOthers;
+            public ulong ClientId;
+            public bool HasClient;
+            public bool Running;
+            public bool EndReported;
+            // Messages for this racer's client that had nowhere to go (it was not connected, or had left).
+            public int Dropped;
+        }
+
+        private Slot[] slots;
+        private RaceStandings standings;
+        private int sentStandings;
+        private RaceOrder order;
+        private int sentOrder;
+        private ushort port;
+        private int bufferTicks;
+        private double delaySeconds;
+        private double jitterSeconds;
+        private int seed;
+        private float connectTimeoutSeconds;
+        private NetworkManager manager;
+        private bool began;
+        private bool anyClientEver;
+        private int connectedClients;
+        private float startedAt;
+        private bool goSent;
+        private bool racersStarted;
+
+        public int SlotCount => slots == null ? 0 : slots.Length;
+        public ServerInputBuffer BufferOf(int slot) => slots[slot].Buffer;
+        public bool IsRunning(int slot) => slots[slot].Running;
+        public RaceStandings Standings => standings;
+        public RaceOrder Order => order;
+
+        public void Configure(IReadOnlyList<RaceWorld> worlds, ushort port, int bufferTicks, double delaySeconds, double jitterSeconds, int seed, float connectTimeoutSeconds)
+        {
+            if (worlds == null || worlds.Count == 0) throw new ArgumentException("The server needs at least one world.", nameof(worlds));
+            if (bufferTicks < 1) throw new ArgumentOutOfRangeException(nameof(bufferTicks), bufferTicks, "The server needs at least one buffered input.");
+            slots = new Slot[worlds.Count];
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (worlds[i] == null) throw new ArgumentException($"World {i} is missing.", nameof(worlds));
+                slots[i] = new Slot { World = worlds[i] };
+            }
+            this.port = port;
+            this.bufferTicks = bufferTicks;
+            this.delaySeconds = delaySeconds;
+            this.jitterSeconds = jitterSeconds;
+            this.seed = seed;
+            this.connectTimeoutSeconds = connectTimeoutSeconds;
+        }
+
+        // For a player started on one circuit scene: loads the other racers' worlds as isolated copies of it, then begins.
+        // A failure here is logged and ends the process, so a half-set-up server never sits waiting.
+        public void Launch(int racers, ushort port, int bufferTicks, double delaySeconds, double jitterSeconds, int seed, float connectTimeoutSeconds)
+        {
+            if (racers < 1) throw new ArgumentOutOfRangeException(nameof(racers), racers, "At least one racer.");
+            StartCoroutine(LaunchRoutine(racers, port, bufferTicks, delaySeconds, jitterSeconds, seed, connectTimeoutSeconds));
+        }
+
+        private IEnumerator LaunchRoutine(int racers, ushort port, int bufferTicks, double delaySeconds, double jitterSeconds, int seed, float connectTimeoutSeconds)
+        {
+            Scene firstScene = SceneManager.GetActiveScene();
+            var worlds = new List<RaceWorld>(racers);
+            bool ok = TryAdd(worlds, firstScene);
+            // Each copy brings its own camera and AudioListener, and Unity logs every frame that there are two. A server has no use for either.
+            if (ok) SwitchOffViews(firstScene);
+            for (int i = 1; i < racers && ok; i++)
+            {
+                AsyncOperation load = SceneManager.LoadSceneAsync(firstScene.name, RaceWorld.IsolatedLoad);
+                if (load == null)
+                {
+                    Debug.LogError($"RaceServer: could not load a copy of scene '{firstScene.name}' (is it in the build?).", this);
+                    ok = false;
+                    break;
+                }
+                yield return load;
+                Scene copy = SceneManager.GetSceneAt(SceneManager.sceneCount - 1);
+                ok = TryAdd(worlds, copy);
+                if (ok) SwitchOffViews(copy);
+            }
+            if (ok)
+            {
+                try
+                {
+                    Configure(worlds, port, bufferTicks, delaySeconds, jitterSeconds, seed, connectTimeoutSeconds);
+                    Begin();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e, this);
+                    ok = false;
+                }
+            }
+            if (!ok) Application.Quit(1);
+        }
+
+        private bool TryAdd(List<RaceWorld> worlds, Scene scene)
+        {
+            try
+            {
+                worlds.Add(RaceWorld.FromScene(scene));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e, this);
+                return false;
+            }
+        }
+
+        private static void SwitchOffViews(Scene scene)
+        {
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (AudioListener listener in root.GetComponentsInChildren<AudioListener>(true)) listener.enabled = false;
+                foreach (Camera camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+            }
+        }
+
+        public void Begin()
+        {
+            if (slots == null) throw new InvalidOperationException("RaceServer: call Configure before Begin.");
+            standings = new RaceStandings(slots.Length);
+            sentStandings = standings.Version;
+            order = new RaceOrder(slots.Length, OrderMarginMetres);
+            sentOrder = order.Version;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                int index = i;
+                Slot slot = slots[i];
+                slot.Buffer = new ServerInputBuffer(slot.World.Game);
+                slot.ToOwner = new DelayedSender(bytes => SendTo(NextOwnerName(slot, index), index, bytes), delaySeconds, jitterSeconds, seed + i * 101);
+                slot.ToOthers = new DelayedSender[slots.Length];
+                for (int j = 0; j < slots.Length; j++)
+                {
+                    if (j == i) continue;
+                    int target = j;
+                    slot.ToOthers[j] = new DelayedSender(bytes => SendTo(RaceNetwork.RemoteMessage, target, bytes), delaySeconds, jitterSeconds, seed + i * 101 + j * 7 + 1);
+                }
+                slot.Buffer.StateReady += bytes => OnState(index, bytes);
+                slot.Buffer.RunEnded += (tick, reason, input) => OnRunEnded(index, tick, reason, input);
+            }
+            manager = RaceNetwork.Create("127.0.0.1", port);
+            manager.OnClientConnectedCallback += OnClientConnected;
+            manager.OnClientDisconnectCallback += OnClientDisconnected;
+            if (!manager.StartServer()) throw new InvalidOperationException($"RaceServer: could not listen on port {port}.");
+            manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.InputMessage, OnInput);
+            startedAt = Time.realtimeSinceStartup;
+            began = true;
+            Debug.Log($"RACE-SERVER listening on {port}: {slots.Length} racers, buffer {bufferTicks} ticks, delay {delaySeconds * 1000d:F0} ms + jitter {jitterSeconds * 1000d:F0} ms.");
+        }
+
+        private int SlotOfClient(ulong id)
+        {
+            for (int i = 0; i < slots.Length; i++) if (slots[i].HasClient && slots[i].ClientId == id) return i;
+            return -1;
+        }
+
+        private void OnClientConnected(ulong id)
+        {
+            if (SlotOfClient(id) >= 0) return;
+            if (goSent)
+            {
+                // The go has gone out; a client taking a place now would never hear it, and its racer would hold every start.
+                Debug.LogError($"RaceServer: client {id} connected after the race was told to go; sending it away.", this);
+                manager.DisconnectClient(id);
+                return;
+            }
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i].HasClient) continue;
+                slots[i].ClientId = id;
+                slots[i].HasClient = true;
+                anyClientEver = true;
+                connectedClients++;
+                Debug.Log($"RACE-SERVER client {id} is racer {i}.");
+                return;
+            }
+            Debug.LogError($"RaceServer: client {id} connected but all {slots.Length} racers have a client; sending it away.", this);
+            manager.DisconnectClient(id);
+        }
+
+        private void OnClientDisconnected(ulong id)
+        {
+            int slot = SlotOfClient(id);
+            if (slot < 0) return;
+            slots[slot].HasClient = false;
+            connectedClients--;
+            Debug.Log($"RACE-SERVER client {id} (racer {slot}) disconnected.");
+            Report(slot);
+            if (connectedClients == 0) Application.Quit();
+        }
+
+        private void OnInput(ulong sender, FastBufferReader reader)
+        {
+            int slot = SlotOfClient(sender);
+            if (slot < 0)
+            {
+                Debug.LogError($"RaceServer: input from client {sender}, who has no racer.", this);
+                return;
+            }
+            reader.ReadValueSafe(out byte[] payload);
+            TickInput input = RaceWire.DecodeInput(payload, out int tick);
+            slots[slot].Buffer.Receive(tick, input);
+        }
+
+        // A racer's state after a tick: to its owner whole, to the others as a position. The racer has run past that tick,
+        // which can make another racer's place final, and how far it had got can change the order.
+        private void OnState(int index, byte[] bytes)
+        {
+            double now = Time.realtimeSinceStartupAsDouble;
+            Slot slot = slots[index];
+            SendToOwner(slot, RaceNetwork.StateMessage, bytes, now);
+            SimSnapshot snapshot = SimSnapshotCodec.Decode(bytes);
+            byte[] remote = RaceWire.EncodeRemote(snapshot.Tick, snapshot.Position);
+            for (int j = 0; j < slots.Length; j++) if (j != index) slot.ToOthers[j].Send(remote, now);
+            standings.Advance(index, snapshot.Tick);
+            order.Advance(index, snapshot.Tick, snapshot.Circuit.Laps.Progress);
+            SendStandingsIfChanged(now);
+            SendOrderIfChanged(now);
+        }
+
+        // A racer's run ended on `tick`: its owner is told how, with the controls the server ran that tick on, after the
+        // states already queued. Every racer then hears of it in the standings.
+        private void OnRunEnded(int index, int tick, RaceWire.EndReason reason, TickInput input)
+        {
+            Debug.Log($"RACE-SERVER-END racer={index} reason={reason} tick={tick}");
+            double now = Time.realtimeSinceStartupAsDouble;
+            SendToOwner(slots[index], RaceNetwork.EndMessage, RaceWire.EncodeEnd(tick, reason, input), now);
+            standings.End(index, tick, reason);
+            order.End(index);
+            SendStandingsIfChanged(now);
+            SendOrderIfChanged(now);
+        }
+
+        // Every racer gets the standings, with which of them it is, behind whatever its own sender already holds. A racer
+        // with no client drops them (counted in Dropped) and hears the next ones.
+        private void SendStandingsIfChanged(double now)
+        {
+            if (standings.Version == sentStandings) return;
+            sentStandings = standings.Version;
+            RaceStandings.Entry[] entries = standings.ToArray();
+            Debug.Log($"RACE-SERVER-STANDINGS v={standings.Version} {RaceStandings.Describe(entries)}");
+            for (int k = 0; k < slots.Length; k++) SendToOwner(slots[k], RaceNetwork.StandingsMessage, RaceWire.EncodeStandings(k, entries), now);
+        }
+
+        // Every racer gets the order of the racers still running, the same way, after any standings sent for the same event.
+        private void SendOrderIfChanged(double now)
+        {
+            if (order.Version == sentOrder) return;
+            sentOrder = order.Version;
+            int[] places = order.ToArray();
+            Debug.Log($"RACE-SERVER-ORDER v={order.Version} tick={order.ComparedTick} {RaceOrder.Describe(places)}");
+            byte[] bytes = RaceWire.EncodeOrder(order.ComparedTick, places);
+            for (int k = 0; k < slots.Length; k++) SendToOwner(slots[k], RaceNetwork.OrderMessage, bytes, now);
+        }
+
+        // Every payload waiting in ToOwner has its name waiting in ToOwnerNames, in the same order; a count that disagrees
+        // would send a payload under another message's name, so it throws.
+        private static void SendToOwner(Slot slot, string name, byte[] bytes, double now)
+        {
+            slot.ToOwner.Send(bytes, now);
+            slot.ToOwnerNames.Enqueue(name);
+            if (slot.ToOwnerNames.Count != slot.ToOwner.Pending)
+                throw new InvalidOperationException($"RaceServer: {slot.ToOwner.Pending} messages wait for the owner but {slot.ToOwnerNames.Count} names do (after queuing a {name}).");
+        }
+
+        // The name of the payload ToOwner is handing out now. DelayedSender takes the payload off its queue before it calls
+        // the sink, so at this point the names are one ahead.
+        private static string NextOwnerName(Slot slot, int index)
+        {
+            if (slot.ToOwnerNames.Count != slot.ToOwner.Pending + 1)
+                throw new InvalidOperationException($"RaceServer: racer {index}: a message for the owner is going out with {slot.ToOwner.Pending} still waiting, but {slot.ToOwnerNames.Count} names wait (expected {slot.ToOwner.Pending + 1}).");
+            return slot.ToOwnerNames.Dequeue();
+        }
+
+        private void SendTo(string name, int slotIndex, byte[] bytes)
+        {
+            Slot target = slots[slotIndex];
+            if (!target.HasClient)
+            {
+                // Nobody to send to (not connected yet, or gone): the message is dropped, and counted for the report.
+                target.Dropped++;
+                return;
+            }
+            using var writer = new FastBufferWriter(bytes.Length + 8, Allocator.Temp);
+            writer.WriteValueSafe(bytes);
+            manager.CustomMessagingManager.SendNamedMessage(name, target.ClientId, writer);
+        }
+
+        private void Update()
+        {
+            if (!began) return;
+            double now = Time.realtimeSinceStartupAsDouble;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Slot slot = slots[i];
+                slot.ToOwner.Pump(now);
+                for (int j = 0; j < slots.Length; j++) if (j != i) slot.ToOthers[j].Pump(now);
+            }
+            if (!anyClientEver && connectTimeoutSeconds > 0f && Time.realtimeSinceStartup - startedAt > connectTimeoutSeconds)
+            {
+                Debug.LogError($"RaceServer: no client within {connectTimeoutSeconds:F0} s; quitting.", this);
+                Application.Quit(2);
+                return;
+            }
+            if (!goSent && connectedClients == slots.Length) SendGo(now);
+            if (goSent && !racersStarted && EveryClientBuffered()) StartRacers(now);
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Slot slot = slots[i];
+                if (slot.Running && !slot.EndReported && !slot.World.Game.IsRunning)
+                {
+                    slot.EndReported = true;
+                    ChainRushGame game = slot.World.Game;
+                    Debug.Log($"RACE-SERVER racer {i}: the run is no longer going at tick {game.Tick} (failed {game.HasFailed}, finished {game.HasFinished}).");
+                }
+            }
+        }
+
+        // Every racer has a client: each is told to go (race.go), behind whatever its sender already holds.
+        private void SendGo(double now)
+        {
+            goSent = true;
+            Debug.Log($"RACE-SERVER-GO {slots.Length} racers have clients.");
+            byte[] bytes = RaceWire.EncodeGo(slots.Length);
+            for (int k = 0; k < slots.Length; k++) SendToOwner(slots[k], RaceNetwork.GoMessage, bytes, now);
+        }
+
+        // Whether every racer that still has a client has enough inputs buffered to start. A racer whose client left after the
+        // go does not hold the others back.
+        private bool EveryClientBuffered()
+        {
+            bool any = false;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (!slots[i].HasClient) continue;
+                if (!slots[i].Buffer.HasBuffered(bufferTicks)) return false;
+                any = true;
+            }
+            return any;
+        }
+
+        // Starts every racer that has a client in this one frame, so the worlds step together from here and a tick of one
+        // run is the same moment as that tick of every other. A racer without a client is not started (it stays waiting).
+        private void StartRacers(double now)
+        {
+            racersStarted = true;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Slot slot = slots[i];
+                if (!slot.HasClient) continue;
+                ChainRushGame game = slot.World.Game;
+                game.SetInputSource(slot.Buffer);
+                game.StartRun();
+                slot.Running = true;
+                Debug.Log($"RACE-SERVER racer {i} started on frame {Time.frameCount} with {slot.Buffer.Buffered} inputs buffered.");
+                standings.Start(i);
+                order.Start(i);
+            }
+            // The starts go out together, before any state for tick 0 (AfterTick), which advances a racer in the standings and
+            // places it in the order.
+            SendStandingsIfChanged(now);
+            for (int i = 0; i < slots.Length; i++) if (slots[i].Running) slots[i].Buffer.AfterTick();
+        }
+
+        private void Report(int i)
+        {
+            Slot slot = slots[i];
+            if (slot.Buffer == null) return;
+            Debug.Log($"RACE-SERVER-DONE racer={i} ticks={slot.World.Game.Tick} received={slot.Buffer.Received} missed={slot.Buffer.Missed} late={slot.Buffer.Late} buffered={slot.Buffer.Buffered} dropped={slot.Dropped}");
+        }
+
+        private void OnDestroy()
+        {
+            if (slots != null)
+                for (int i = 0; i < slots.Length; i++) slots[i].Buffer?.Detach();
+            RaceNetwork.Destroy(manager);
+        }
+    }
+}

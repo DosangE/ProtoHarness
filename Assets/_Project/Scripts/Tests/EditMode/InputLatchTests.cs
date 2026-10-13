@@ -35,6 +35,30 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Consume_ChainActionEdge_DeliversOnceAndSurvivesQuietFrame()
+        {
+            latch.Record(0f, false, false, false, false, true);
+            latch.Record(0f, false, false, false);
+            Assert.That(latch.Consume().ChainActionPressed, Is.True);
+            Assert.That(latch.Consume().ChainActionPressed, Is.False);
+        }
+
+        [Test]
+        public void Consume_DriftLevel_KeepsLatestAndClearResetsIt()
+        {
+            latch.Record(0f, false, false, false, true);
+            Assert.That(latch.Consume().Drift, Is.True);
+            Assert.That(latch.Consume().Drift, Is.True, "Drift is held, not an edge.");
+            latch.Record(0f, false, false, false, false);
+            Assert.That(latch.Consume().Drift, Is.False);
+            latch.Record(0f, false, false, false, true, true);
+            latch.Clear();
+            TickInput cleared = latch.Consume();
+            Assert.That(cleared.Drift, Is.False);
+            Assert.That(cleared.ChainActionPressed, Is.False);
+        }
+
+        [Test]
         public void Consume_EdgeThenQuietFrame_KeepsEdgeUntilConsumed()
         {
             latch.Record(0f, false, true, false);

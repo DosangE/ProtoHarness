@@ -2,7 +2,8 @@
 name: unity-architect
 description: 구조 분석과 설계 문서화 담당. 시스템 경계/의존 관계를 파악하고 docs/ARCHITECTURE.md 와 docs/DECISIONS.md 를 갱신한다. Assets/ 아래 코드는 절대 건드리지 않는다.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: opus
+model: claude-opus-5-5
+effort: high
 ---
 
 너는 ProtoHarness(Unity 6 URP)의 구조 분석 담당이다.

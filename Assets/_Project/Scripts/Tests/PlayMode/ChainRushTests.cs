@@ -109,7 +109,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Health, Is.EqualTo(1));
         }
 
+        // Device: depends on virtual Keyboard/Mouse event delivery, which failed repeatedly in the editor
+        // (docs/DECISIONS.md 2026-10-04). Excluded from the merge gate run; run it with the Device menu.
         [UnityTest]
+        [Category("Device")]
         public IEnumerator Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts()
         {
             Keyboard originalKeyboard = Keyboard.current;
@@ -118,18 +121,24 @@ namespace ProtoHarness.Tests.PlayMode
             Mouse mouse = InputSystem.AddDevice<Mouse>();
             try
             {
+                // Enter counts down 3, 2, 1, then the run starts.
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
                 yield return new WaitForSeconds(0.15f);
+                Assert.That(game.IsCountingDown, Is.True);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return WaitOutCountdown();
                 Assert.That(game.IsRunning, Is.True);
+                // Free steering (2026-10-05, T2a): A/D turn the facing.
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.A));
                 yield return new WaitForSeconds(0.3f);
-                float leftX = player.transform.position.x;
-                Assert.That(leftX, Is.LessThan(-0.5f));
+                float leftHeading = player.Heading;
+                Assert.That(leftHeading, Is.LessThan(-10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.D));
                 yield return new WaitForSeconds(0.4f);
-                Assert.That(player.transform.position.x, Is.GreaterThan(leftX + 0.5f));
+                Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 MovePlayer(new Vector3(0f, 1f, 44f));
+                player.FaceTrack();
                 yield return new WaitForFixedUpdate();
                 InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
                 yield return new WaitForSeconds(0.15f);
@@ -144,11 +153,15 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(mouse, new MouseState());
                 yield return new WaitForSeconds(0.05f);
                 Assert.That(grapple.IsAttached, Is.False);
+                // R puts the runner back on the start line at once and counts down again.
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.R));
                 yield return new WaitForSeconds(0.05f);
+                Assert.That(game.IsCountingDown, Is.True);
                 Assert.That(game.Grapples, Is.Zero);
                 Assert.That(player.transform.position.z, Is.LessThan(7f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return WaitOutCountdown();
+                Assert.That(game.IsRunning, Is.True);
                 MovePlayer(new Vector3(0f, 1f, 15f));
                 yield return null;
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Space));
@@ -162,6 +175,164 @@ namespace ProtoHarness.Tests.PlayMode
                 if (originalKeyboard != null) originalKeyboard.MakeCurrent();
                 if (originalMouse != null) originalMouse.MakeCurrent();
             }
+        }
+
+        // Device: left Shift held drifts and fills the gauge; left Ctrl spends a slot (T2c, KartRider keys).
+        [UnityTest]
+        [Category("Device")]
+        public IEnumerator Input_ShiftAndCtrl_DriftsAndFiresChainAction()
+        {
+            Keyboard originalKeyboard = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return new WaitForSeconds(0.15f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return WaitOutCountdown();
+                yield return new WaitForSeconds(0.35f);
+                Assert.That(game.IsRunning, Is.True);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.D));
+                yield return new WaitForSeconds(0.4f);
+                Assert.That(player.IsDrifting, Is.True, "Holding left Shift on the ground must drift.");
+                Assert.That(game.Racer.Gauge, Is.GreaterThan(0f), "Drifting must fill the chain gauge.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return new WaitForSeconds(0.1f);
+                Assert.That(player.IsDrifting, Is.False);
+                game.Racer.AddGauge(1f);
+                float before = game.Racer.Gauge;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftCtrl));
+                yield return new WaitForSeconds(0.1f);
+                Assert.That(game.Racer.Gauge, Is.EqualTo(before - 1f).Within(0.05f), "Left Ctrl must spend one slot.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+                if (originalKeyboard != null) originalKeyboard.MakeCurrent();
+            }
+        }
+
+        // Device: with ManualStart off (a network race), Enter and R neither start nor restart a run.
+        [UnityTest]
+        [Category("Device")]
+        public IEnumerator Input_ManualStartOff_EnterAndRDoNothing()
+        {
+            Keyboard originalKeyboard = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            game.ManualStart = false;
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return new WaitForSeconds(0.15f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return new WaitForSeconds(0.05f);
+                Assert.That(game.IsReady, Is.True, "Enter must not start a run while ManualStart is off.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.R));
+                yield return new WaitForSeconds(0.15f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                Assert.That(game.IsReady, Is.True, "R must not start a run while ManualStart is off.");
+
+                game.StartRun();
+                yield return new WaitForSeconds(0.3f);
+                int tick = game.Tick;
+                Assert.That(tick, Is.GreaterThan(0));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.R));
+                yield return new WaitForSeconds(0.15f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                Assert.That(game.IsRunning, Is.True, "R must not restart a run while ManualStart is off.");
+                Assert.That(game.Tick, Is.GreaterThan(tick), "The run must go on, not start over.");
+            }
+            finally
+            {
+                game.ManualStart = true;
+                InputSystem.RemoveDevice(keyboard);
+                if (originalKeyboard != null) originalKeyboard.MakeCurrent();
+            }
+        }
+
+        // The countdown before a run: 3, 2, 1 (game time), then one CountdownFinished and the run starts at tick 0.
+        [UnityTest]
+        public IEnumerator StartCountdown_CountsThreeTwoOne_ThenStartsTheRunOnce()
+        {
+            Assert.That(game.ManualStart, Is.True, "Enter and R start runs unless something turns that off.");
+            int finished = 0;
+            int tickAtFinish = -1;
+            System.Action onFinished = () => { finished++; tickAtFinish = game.Tick; };
+            game.CountdownFinished += onFinished;
+            try
+            {
+                float startedAt = Time.time;
+                game.StartCountdown();
+                Assert.That(game.IsCountingDown, Is.True);
+                Assert.That(game.IsRunning, Is.False);
+                Assert.That(game.CountdownNumber, Is.EqualTo(3));
+                var seen = new System.Collections.Generic.List<int> { game.CountdownNumber };
+                float deadline = Time.realtimeSinceStartup + ChainRushGame.CountdownSeconds + 2f;
+                while (game.IsCountingDown && Time.realtimeSinceStartup < deadline)
+                {
+                    yield return null;
+                    int number = game.CountdownNumber;
+                    if (number > 0 && number != seen[seen.Count - 1]) seen.Add(number);
+                    Assert.That(game.Tick, Is.Zero, "No tick may run during the countdown.");
+                }
+                Assert.That(game.IsRunning, Is.True, "The run must start when the countdown ends.");
+                Assert.That(seen, Is.EqualTo(new[] { 3, 2, 1 }));
+                Assert.That(Time.time - startedAt, Is.GreaterThanOrEqualTo(ChainRushGame.CountdownSeconds - 0.05f));
+                Assert.That(finished, Is.EqualTo(1));
+                Assert.That(tickAtFinish, Is.Zero, "CountdownFinished comes before the run's first tick.");
+                Assert.That(game.CountdownNumber, Is.Zero);
+                yield return new WaitForSeconds(0.3f);
+                Assert.That(finished, Is.EqualTo(1));
+                Assert.That(game.Tick, Is.GreaterThan(0));
+            }
+            finally
+            {
+                game.CountdownFinished -= onFinished;
+            }
+        }
+
+        // A run a countdown starts begins exactly as one started at once, wherever the runner was before: on the start line,
+        // facing the track. Counting down again starts the count over.
+        [UnityTest]
+        public IEnumerator StartCountdown_TheRunBeginsAsOneStartedAtOnce_AndAgainStartsTheCountOver()
+        {
+            game.StartRun();
+            Vector3 atOnce = player.transform.position;
+            float headingAtOnce = player.Heading;
+            yield return new WaitForSeconds(0.3f);
+            MovePlayer(new Vector3(3f, 1f, 30f));
+            game.StartCountdown();
+            Assert.That(player.transform.position, Is.EqualTo(atOnce), "The runner waits on the start line.");
+            yield return new WaitForSeconds(1.5f);
+            Assert.That(game.CountdownNumber, Is.EqualTo(2).Or.EqualTo(1));
+            game.StartCountdown();
+            Assert.That(game.CountdownNumber, Is.EqualTo(3), "Counting down again starts from 3.");
+            Vector3 atStart = default;
+            float headingAtStart = float.NaN;
+            System.Action onFinished = () => { atStart = player.transform.position; headingAtStart = player.Heading; };
+            game.CountdownFinished += onFinished;
+            try
+            {
+                yield return WaitOutCountdown();
+                Assert.That(game.IsRunning, Is.True);
+                Assert.That(BitsOf(atStart), Is.EqualTo(BitsOf(atOnce)), "The run must begin where one started at once begins.");
+                Assert.That(System.BitConverter.SingleToInt32Bits(headingAtStart), Is.EqualTo(System.BitConverter.SingleToInt32Bits(headingAtOnce)));
+            }
+            finally
+            {
+                game.CountdownFinished -= onFinished;
+            }
+        }
+
+        private static (int, int, int) BitsOf(Vector3 v) =>
+            (System.BitConverter.SingleToInt32Bits(v.x), System.BitConverter.SingleToInt32Bits(v.y), System.BitConverter.SingleToInt32Bits(v.z));
+
+        // Until the countdown is over (with a second to spare; a countdown that never ends fails the caller's next check).
+        private IEnumerator WaitOutCountdown()
+        {
+            float deadline = Time.realtimeSinceStartup + ChainRushGame.CountdownSeconds + 1f;
+            while (game.IsCountingDown && Time.realtimeSinceStartup < deadline) yield return null;
         }
 
         [UnityTest]

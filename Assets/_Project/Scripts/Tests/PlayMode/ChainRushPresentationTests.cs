@@ -3,6 +3,8 @@ using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -19,12 +21,13 @@ namespace ProtoHarness.Tests.PlayMode
         private ChainRushAudio sound;
         private RunnerAnimation animation;
         private RunnerMotor player;
+        private ProceduralCourse course;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
 #if UNITY_EDITOR
-            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushEndless.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushProcedural.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("Presentation tests require the Unity Editor.");
             yield break;
@@ -33,6 +36,7 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 if (root.TryGetComponent(out ChainRushGame g)) { game = g; sound = root.GetComponent<ChainRushAudio>(); }
                 if (root.TryGetComponent(out RunnerMotor p)) { player = p; animation = root.GetComponent<RunnerAnimation>(); }
+                if (root.TryGetComponent(out ProceduralCourse c)) course = c;
             }
             Assert.That(game.HasPresentation, Is.True);
             Assert.That(sound, Is.Not.Null);
@@ -73,13 +77,17 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Animation_JumpAndGrapple_ChangesArmPoseWithoutMovingMotor()
         {
-            game.StartRun();
-            var controller = player.GetComponent<CharacterController>();
-            controller.enabled = false;
-            player.transform.position = new Vector3(0f, 1f, 28f);
-            controller.enabled = true;
-            controller.Move(Vector3.down * 0.2f);
+            // Four metres before the edge of a grapple gap, as the old deck test stood: jump, then grab the anchor.
+            double gapStart = FindGrappleGap();
+            Assert.That(gapStart, Is.GreaterThan(0d), "No seed below 100 lays a grapple gap in its first 300 m.");
+            TrackFrame frame = game.Track.FrameAt(gapStart - 4d);
+            player.ShiftOrigin(frame.TransformPoint(new Vector3(0f, 1.05f, 0f)) - player.transform.position);
+            player.FaceTrack();
+            Physics.SyncTransforms();
             yield return new WaitForFixedUpdate();
+            float landed = Time.time + 2f;
+            while (!player.IsGrounded && Time.time < landed) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.True, "Runner never landed on the procedural road.");
             player.PrimaryAction();
             yield return new WaitForSeconds(0.25f);
             Assert.That(player.GetComponent<GrappleController>().TryAttach(), Is.True);
@@ -106,6 +114,18 @@ namespace ProtoHarness.Tests.PlayMode
             }
             WritePreview(sound.MusicClip, Path.Combine(Path.GetTempPath(), "ChainRush-music-preview.wav"));
             yield return null;
+        }
+
+        // Seeds 0..99 until a grapple gap shows up in the first 300 m, past S 40; returns its start S. The run is started.
+        private double FindGrappleGap()
+        {
+            for (ulong seed = 0; seed < 100; seed++)
+            {
+                course.SetSeed(seed);
+                game.StartRun();
+                if (course.TryGetNextGap(out double startS, out _, out bool hasAnchor) && hasAnchor && startS > 40d) return startS;
+            }
+            return 0d;
         }
 
         private static void WritePreview(AudioClip clip, string path)

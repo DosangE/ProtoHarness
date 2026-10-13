@@ -1,32 +1,12 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-10-12 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix·C1c-2a 순위·C1c-2b 순위 표시). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> 작성 2026-10-05, 갱신 2026-10-13 (P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix·C1c-2a 순위·C1c-2b 순위 표시·네트워크 레이스 A 기준 fix). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
-## 0. 중단된 작업 — 다음 세션은 이것부터 (2026-10-12 저장)
+## 1. 지금 상태 (2026-10-13)
 
-**`fix/net-race-remote-count` — 네트워크 레이스 A 의 상대 위치 기준.** 이미 승인된 작업이다(2026-10-12 요청서에 사용자 "ㄱㄱ"). 범위: `NetworkRaceTests.cs` 의 A 판정 교체 + docs. 런타임·서버·클라 코드와 플레이어 빌드는 범위 밖. 코드는 끝났고 **네트워크 레이스 검증만 남았다**. 사용자가 "PC 를 다른 데 쓰지 않을 때 다시 돌린다"고 중단했다.
-
-- **원인 (확인함)**: 서버는 레이서마다 입력이 쌓이면 따로 출발시키고(`RaceServer.cs:312-318`) 매 상태를 상대에게 위치로 보낸다(`RaceServer.cs:226-233`). 플레이어 클라는 별도 프로세스라 부팅만큼(Δ ≈ 80~180틱) 늦게 출발하므로 에디터는 약 1000−Δ 개를 받는다. 실행 12회: 플레이어 클라 1009~1016개(일정), 에디터 834~921개. 채널은 `ReliableSequenced`(`CustomMessageManager.cs:300` 기본값), 지연 큐는 순서 보장(`DelayedSender.cs:40-42`). 자기 틱 0 은 `TickCompleted` 로 보고되지 않는다(`ChainRushGame.cs:193` 에서 틱을 올린 뒤 `:183` 호출).
-- **바꾼 것** (`NetworkRaceTests.cs`, 커밋돼 있음): A 의 `RemoteSamples > 900`·`RemoteChecked > 900` 을 ① 상대 첫 위치가 에디터 틱 500 전에 도착 ② 상대 틱 0 부터 ③ 빈틈·중복 0 ④ 받은 수 ≥ (에디터 끝 틱 − 첫 도착 틱) − 5 ⑤ `RemoteChecked ≥ RemoteSamples − 1` 로. Outcome 에 `FirstRemoteAt`·`EndAt`·`FirstRemoteTick`·`RemoteBreaks`, `Describe` 에 같은 값. `BRemote > 900` 은 그대로(약 1010 으로 안정).
-- **지금까지의 실행 (에디터 6000.3.19f1, `C:/Users/User/Desktop/...` 머신)** — 컴파일 OK(Console Error 0). 새 기준 ①~⑤ 는 A 3회 모두 성립:
-  - A 1회 07:11:57Z **Passed** — 925 ≥ 910, 틱 0부터, 빈틈 0, 첫 도착 85, 50 ms 초과 프레임 0.
-  - A 2회 07:12:56Z Failed — 912 ≥ 897 (새 기준 성립). 실패는 바꾸지 않은 판정: `racer 0: an input came late. Expected: 0 But was: 3`. 에디터 50 ms 초과 프레임 5번(최대 93 ms, 틱 54~339).
-  - A 3회 + B 07:14:12Z 둘 다 Failed — A: 919 ≥ 905, `But was: 7`(늦은 입력), 85·88 ms 멈춤. B: 에디터가 600~866 ms 씩 멈춰 `RACE-CLIENT-FAULT the server's state for tick 175 could not be taken (the client at tick 174)`.
-  - 멈춤의 원인은 확인 못 했다. 남은 레이스 프로세스는 없었고 PC 에서 Media Player·브라우저 등이 돌고 있었다. 순위 패널 첫 그리기는 0.4 ms 로 정상(C1c-2b 수정이 작동).
-  - 덤: 이 B 에서 처음으로 낙하(`Failed@657`)가 나서 **플레이어 클라의 고스트 숨김이 실제로 동작했다**(`RACE-CLIENT-GHOST hidden: racer 0 Failed@657`, `RaceStandingsView: no graphics device; the standings are not drawn.`). C1c-2b DECISIONS 의 "고스트 숨김 미실행" 한계를 이 근거로 고쳐 적는다.
-- **재개 절차** (사용자가 "돌려라"고 하면 묻지 말고 이대로):
-  1. `git branch --show-current` 가 `fix/net-race-remote-count` 인지, `git status` 에 이 머신의 버전 차이 4파일(`packages-lock.json`·`ProjectSettings.asset`·`ProjectVersion.txt`·`ProtoHarness.slnx`)만 있는지 본다. Unity 에디터가 이 브랜치 코드로 컴파일됐는지(`Library/ScriptAssemblies/ProtoHarness.Tests.PlayMode.dll` 시각 > `NetworkRaceTests.cs` 시각, Console Error 0) 확인한다. 아니면 `AssetDatabase.Refresh()`.
-  2. 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`)는 다시 만들지 않는다 — 이 브랜치는 테스트만 바꿨고, 2026-10-12 15:27(+0900) 빌드가 `dev`(`eb4d0d7`) 런타임 코드다(`RaceBuild_Data/Managed/ProtoHarness.Net.dll` 64000 바이트). 빌드가 없거나 크기가 다르면 4절 방식으로 다시 빌드하고 설정 파일 5개를 되돌린다.
-  3. 사용자에게 PC 의 다른 작업을 멈추고 Unity 에디터를 앞에 두라고 한 줄 알린 뒤, `TestRunnerApi.Execute`(PlayMode, `testNames` 에 A·B 전체 이름)로 **A 3회**(A 단독 3번) + **B 1회**를 돌린다. **도는 동안 `Unity_RunCommand` 를 부르지 않는다**(4절). 완료는 Editor.log 의 `ChainRush tests:` 줄 수 증가로 기다리고, 결과 XML 을 실행마다 scratchpad 로 복사한다.
-  4. 각 실행의 `result`, 시각, `remote positions at the editor: … (from its tick …, … breaks; first at …, ended at …)`, `server racer 0: … late`, `editor frames: …` 줄을 보고에 그대로 적는다.
-  5. A 3회 모두 Passed 면: EditMode + PlayMode 게이트(`Run PlayMode Tests`) 2회 → DECISIONS 에 새 항목("네트워크 레이스 A 의 상대 위치 기준", 위 원인·실행 전부·실패 원문 포함) → 이 0절과 2절의 해당 후보를 지움 → 커밋 → 병합은 사용자 지시 때.
-  6. 또 멈춤으로 실패하면 고치지 말고 멈춘다. 실패 원문과 `editor frames` 줄을 보고하고, 다음 후보로 "에디터 프레임 멈춤 조사"(에디터 포커스·백그라운드 스로틀·다른 프로세스 부하 구분)를 올린다.
-
-## 1. 지금 상태 (2026-10-12)
-
-- 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)**, C1c-1·C1c-1b·예측기 구멍 fix·**C1c-2a 순위(`28a9fc7`)** 가 병합돼 있다. `dev`(`28a9fc7`)는 `origin/dev` 와 같다(2026-10-12 확인). **C1c-2b 순위 표시는 `feature/p3-c1c2b-standings-view` 에 있고 병합 전이다**(검증은 DECISIONS 2026-10-12 "P3 C1c-2b"). 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐으므로 필요 없다(지워도 되는지는 사용자 결정, 삭제는 승인 후).
+- 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)**, C1c-1·C1c-1b·예측기 구멍 fix·C1c-2a 순위(`28a9fc7`)·**C1c-2b 순위 표시(`eb4d0d7`)** 가 병합돼 있다. `dev`(`eb4d0d7`)는 `origin/dev` 와 같다(2026-10-13 확인). **`fix/net-race-remote-count`(네트워크 레이스 A 의 상대 위치 기준)는 검증을 마쳤고 병합 전이다**(병합 조건 충족 근거는 DECISIONS 2026-10-12 "네트워크 레이스 A 의 상대 위치 기준", 병합은 사용자 지시 때). 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐으므로 필요 없다(지워도 되는지는 사용자 결정, 삭제는 승인 후).
 - 구현된 것 요약
   - 트랙 좌표계 `Centerline`(루프·초점), 이동·드리프트·체인 액션, 절차 노면(T3a)·시드 생성기(T3b)·절차 무한 코스(T3c)·서킷(T4), 직선 무한 코스 정리(T3d).
   - **P2** (DECISIONS 2026-10-08 "P2"): 입력 기록·재생(`InputLog`·`InputRecorder`·`InputReplay`, `Control/`)과 상태 트레이스 비교(`StateTrace`, 테스트). **같은 시드 + 같은 입력 = 같은 런이 같은 머신·같은 에디터에서 비트 단위로 성립한다**: 서킷 1700틱·절차 코스 2500틱을 같은 세션(6배속)·씬 재로드(2배속)·별도 세션에서 모두 재현했다.
@@ -37,16 +17,15 @@
   - **C1c-1b 클라만 먼저 끝나는 경우** (DECISIONS 2026-10-11 "P3 C1c-1b"): 클라 런이 끝난 뒤 그 틱 이후의 서버 상태가 오면 서버 상태로 되돌아가 기록 입력으로 다시 돌고, 끝날 때의 앞섬만큼 live 입력으로 따라잡는다(목표 틱 상한). 지금 서킷에서는 서버도 다음 틱에 끝나 따라잡기는 최대 1틱이다(S+L 상한 경로는 테스트로 끝까지 돌지 않았다).
   - **예측기 구멍 fix** (DECISIONS 2026-10-11 "P3 C1c 예측기 구멍 4개"): 예측기가 입력을 내준 뒤의 `Clear`(R·Enter·HUD 의 `StartRun`)는 재시작이라 고장이 되고, 고장은 무엇으로도 풀리지 않는다(새 경기 = 새 예측기). `OnServerState` 의 모든 예외도 고장을 세운다. `LargestJolt` 는 일시정지 중에도 그 틱의 예측 상태에서 잰다(DONE 줄 `jolt=` 를 다시 근거로 쓸 수 있다). 끝난 클라가 더 이른 서버 상태로 되살아나도 따라잡는다.
   - **C1c-2a 순위** (DECISIONS 2026-10-11 "P3 C1c-2a"): 서버가 `RaceStandings`(레이서별 대기·달리는 중·결승·낙하, 순위, 확정)를 갖고 바뀔 때마다(출발·끝·확정) 모든 클라에 `race.standings` 를 보낸다(각 클라 자신의 `ToOwner` 큐, 자기 `race.end` 뒤). 순위는 **각자 출발부터 결승까지의 틱 수**, 같은 틱은 공동, 낙하는 순위 없음. 다른 레이서가 아직 그 틱 수 안에 결승할 수 있으면(대기 중이거나 그 틱을 아직 못 넘김) 잠정이다. 클라(`RaceClient.Standings`·`You`)는 받기만 하고 런은 읽지 않는다.
-  - **C1c-2b 순위 표시** (DECISIONS 2026-10-12 "P3 C1c-2b", 병합 전): `RaceClient` 가 `showRemote` 일 때 `RaceStandingsView`(Net, OnGUI, 런타임 추가)를 붙여 HUD 헤더 아래 왼쪽에 순위 줄을 그리고(`RaceStandingsText`), 상대가 결승·낙하하면 고스트를 숨긴다. 패널의 첫 그리기(약 130 ms)는 접속 전에 투명하게 해 둔다 — 첫 순위 때 처음 그리면 에디터 클라가 약 95 ms 멈춰 입력이 서버에 늦게 닿았다. 고스트 숨김은 실제 레이스에서 아직 일어나지 않았다(이 머신의 지터 레이스에서 낙하가 없었다).
+  - **C1c-2b 순위 표시** (DECISIONS 2026-10-12 "P3 C1c-2b"): `RaceClient` 가 `showRemote` 일 때 `RaceStandingsView`(Net, OnGUI, 런타임 추가)를 붙여 HUD 헤더 아래 왼쪽에 순위 줄을 그리고(`RaceStandingsText`), 상대가 결승·낙하하면 고스트를 숨긴다. 패널의 첫 그리기(약 130 ms)는 접속 전에 투명하게 해 둔다 — 첫 순위 때 처음 그리면 에디터 클라가 약 95 ms 멈춰 입력이 서버에 늦게 닿았다. 고스트 숨김은 실제 레이스에서 플레이어 클라 쪽만 한 번 일어났다(2026-10-12 지터 레이스의 낙하 `Failed@657`, 에디터 클라 쪽은 미확인).
   - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
 - 테스트: EditMode 237, PlayMode 130(Device 2 + Sweep 1 + `[Explicit]` 네트워크 레이스 2 + 게이트 125, C1c-2b 브랜치 기준). 병합 조건 실행은 Device·Sweep 제외 127건 중 125 통과·2 skipped(Explicit), 이 머신(19f1)에서 약 590~660초/회(이전 머신 약 556초/회, 121건). `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
-C1c-2b(순위 표시)까지 구현·검증했다(위 1절, 병합은 사용자 지시 대기). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
+C1c-2b(순위 표시)까지 `dev` 에 병합했고, 네트워크 레이스 A 기준 fix 는 병합 대기다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **네트워크 레이스 A 의 상대 위치 기준 (`fix/`)**: 진행 중, 검증만 남음 → 위 0절.
 - **진행 중 순위**: 랩·진행도로 누가 앞인지는 상대 위치만으로는 못 하므로 메시지가 더 필요하다(C1c-2b 에서 하지 않음).
 - **네트워크 클라의 HUD 재시작 버튼**: 네트워크 클라에서도 HUD 결과 패널의 `R / RUN AGAIN` 버튼(`ChainRushHud.cs:226-228`)과 R 키가 `StartRun` 을 불러 예측기를 영구 고장 낸다(의도한 동작이지만 누를 수 있게 보인다). 막으려면 HUD 를 고쳐야 한다 → 별도 합의.
 

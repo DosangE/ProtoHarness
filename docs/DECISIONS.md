@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-12 · 네트워크 레이스 A 의 상대 위치 기준: 받은 개수를 출발 시각 차이와 무관하게 판정한다
+
+- **결정 (사용자 승인, 2026-10-12 요청서에 "ㄱㄱ")**: `NetworkRaceTests` A 의 `RemoteSamples > 900`·`RemoteChecked > 900` 을 다섯 판정으로 바꾼다. ① 상대 첫 위치가 에디터 틱 500(= `ticks / 2`) 전에 도착 ② 상대 틱 0 부터 ③ 틱이 하나씩 이어진다(빈틈·중복·역행 0, `RemoteBreaks`) ④ 받은 수 ≥ (에디터 끝 틱 − 첫 도착 때 에디터 틱) − 5 ⑤ `RemoteChecked ≥ RemoteSamples − 1`. `Outcome` 에 `FirstRemoteAt`·`EndAt`·`FirstRemoteTick`·`RemoteBreaks` 를 더하고 `Describe` 에 같은 값을 적는다. B 의 `BRemote > 900` 은 그대로 둔다(플레이어 클라는 약 1010개로 안정).
+- **이유 (원인 확인)**: 서버는 레이서마다 입력이 쌓이면 따로 출발시키고(`RaceServer.cs:312-318`) 매 상태를 상대에게 위치로 보낸다(`RaceServer.cs:226-233`). 플레이어 클라는 별도 프로세스라 부팅만큼(Δ ≈ 80~180틱) 늦게 출발하므로 에디터는 약 1000 − Δ 개를 받는다. 실행 12회(2026-10-12): 플레이어 클라 1009~1016개(일정), 에디터 834~921개. 그래서 고정 900 은 받은 흐름이 아니라 상대 프로세스의 부팅 시간을 쟀다(이 머신 변경 전 코드 899, 이전 머신 951~954). 채널은 `ReliableSequenced`(`CustomMessageManager.cs:300` 기본값)이고 지연 큐는 순서를 지키므로(`DelayedSender.cs:40-42`) A(지터 없음)에서는 빈틈 0 을 요구할 수 있다. 자기 틱 0 은 `TickCompleted` 로 보고되지 않아(`ChainRushGame.cs:193` 에서 틱을 올린 뒤 `:183` 호출) 대조 수는 받은 수 − 1 이 최소다. ④ 의 5틱은 첫 도착과 끝 틱을 잰 프레임 차이 몫이다.
+  - 버린 대안: 900 을 낮추기(부팅이 더 느린 머신에서 또 깨진다), 서버가 보낸 수와 맞추기(서버 로그에 보낸 수가 없어 서버 코드를 바꿔야 한다 — 범위 밖), 두 클라를 같은 시각에 출발시키기(서버 동작 변경, 진행 중 순위·같은 시각 출발과 함께 정할 일).
+- **검증 (`fix/net-race-remote-count`, 에디터 6000.3.19f1 — 이 머신의 로컬 버전, 시각은 XML 의 UTC, 코드 `git diff eb4d0d7 HEAD -- Assets` sha1 `f912746e`, 플레이어 빌드는 `dev`(`eb4d0d7`) 런타임 그대로 2026-10-12 15:27(+0900), `ProtoHarness.Net.dll` 64000 바이트)** — 실행한 것 전부
+  - 컴파일: `ProtoHarness.Tests.PlayMode.dll` 16:09:11(+0900) > `NetworkRaceTests.cs` 16:08:52, `NetworkRaceTests` 타입 로드, Console Error 0건(실행 전·후).
+  - 2026-10-12 (PC 를 다른 데 쓰는 중): A 3회 — 새 기준 ①~⑤ 는 3회 모두 성립.
+    - A 07:11:57Z `Passed` — 925 ≥ 910, 틱 0부터, 빈틈 0, 첫 도착 85, 50 ms 초과 프레임 0.
+    - A 07:12:56Z `Failed` — 912 ≥ 897(새 기준 성립). 실패는 바꾸지 않은 판정: `racer 0: an input came late. Expected: 0 But was: 3`. 에디터 50 ms 초과 프레임 5번(최대 93 ms, 틱 54~339).
+    - A + B 07:14:12Z 둘 다 `Failed` — A: 919 ≥ 905, `But was: 7`(늦은 입력), 85·88 ms 멈춤. B: 에디터가 600~866 ms 씩 멈춰 `RACE-CLIENT-FAULT the server's state for tick 175 could not be taken (the client at tick 174)`.
+    - 멈춤의 원인은 확인 못 했다. 남은 레이스 프로세스는 없었고 PC 에서 Media Player·브라우저 등이 돌고 있었다. 사용자가 중단했다.
+  - 2026-10-13 (PC 를 쉬게 두고 에디터를 앞에 둠): A 3회 + B 1회 모두 `Passed`, 각 `testcasecount=1 passed=1 failed=0`.
+    - A 04:01:39Z~04:02:31Z: `remote positions at the editor: 894 (893 checked against its own run, 0 differ; from its tick 0, 0 breaks; first at the editor's tick 118, the editor ended at tick 1000)` (기준 877), `server racer 0: … late 0; racer 1: … late 0`, `editor frames: longest 66.0 ms after tick 1000, over 50 ms 2 [5:53 1000:66]`.
+    - A 04:03:06Z~04:03:41Z: `887 (886 checked …, 0 differ; from its tick 0, 0 breaks; first at the editor's tick 122, the editor ended at tick 1000)` (기준 873), late 0 / 0, `longest 37.1 ms after tick 2, over 50 ms 0 []`.
+    - A 04:04:09Z~04:04:43Z: `893 (892 checked …, 0 differ; from its tick 0, 0 breaks; first at the editor's tick 117, the editor ended at tick 1000)` (기준 878), late 0 / 0, `longest 39.6 ms after tick 3, over 50 ms 0 []`.
+    - B 04:05:11Z~04:05:45Z: 에디터 `892 (891 checked …, 0 differ; from its tick 0, 0 breaks; first at the editor's tick 121, the editor ended at tick 1001)`, 플레이어 클라 1015개, 에디터 보정 1, `server racer 0: ran 1277, received 1000, missed 278, late 1; racer 1: … late 0`, `longest 49.0 ms after tick 1000, over 50 ms 0 []`. 낙하 없음(`racer 0 none, racer 1 none`), 고스트 숨김 없음.
+  - EditMode(04:06:06Z~04:06:09Z): `testcasecount=237 Passed passed=237 failed=0`.
+  - PlayMode 게이트(Device·Sweep 제외) 1회 `testcasecount=127 result=Passed passed=125 failed=0 skipped=2`(04:06:35Z~04:15:59Z, 563.7초), 2회 `127/Passed/125/0/2`(04:17:02Z~04:26:32Z, 570.2초). skipped 2 는 `[Explicit]` 네트워크 레이스(`Needs the race build at NetworkRaceTests.RaceBuildExe and takes about a minute; select it by name.`) — 위에서 이름으로 따로 돌렸다.
+  - 입력 장치 경로와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음. 플레이어 빌드를 다시 만들지 않아 설정 파일 자동 변경 없음.
+- **한계**: 10-12 의 실패(늦은 입력·예측기 고장)는 바꾸지 않은 판정이고 에디터 프레임 멈춤과 같이 났다. 멈춤의 원인(포커스·백그라운드 스로틀·다른 프로세스 부하)은 나누어 보지 않았다 — PC 를 쉬게 둔 10-13 에는 50 ms 초과가 끝 틱 근처 2번뿐이었다. ④ 는 상대가 늦게 출발한 만큼은 판정하지 않으므로, 부팅이 에디터 틱 500 을 넘기면 ① 로 실패한다.
+- **하지 않은 것**: 런타임·서버·클라 코드, 플레이어 재빌드, B 의 판정, 두 클라 같은 시각 출발, 에디터 프레임 멈춤 조사.
+
 ## 2026-10-12 · P3 C1c-2b: 클라가 순위를 화면에 보이고, 상대가 끝나면 고스트를 숨긴다
 
 - **결정 (사용자 승인, 2026-10-12 C1c-2b 요청서에 "추천대로해서 진행", 멈춤 측정에 "진행하라", 수정에 "진행하자")**: HANDOFF 의 C1c-2b 중 순위 표시와 고스트 처리를 한다. 진행 중 순위(누가 앞인지)는 하지 않는다.
@@ -29,7 +52,7 @@
   - 중간에 실패한 실행(모두 처음 구현 또는 글리프 수정): A 도중 `Unity_RunCommand`(ScreenCapture) 직후 `RACE-CLIENT-FAULT the server's state for tick 230 could not be taken (the client at tick 229)` 1회, 늦은 입력으로 실패 6회(처음 구현 `racer 0: an input came late. But was: 6 / 2 / 1`, 측정 추가 뒤 `3 / 2`, 글리프 수정 뒤 `1`). 변경 전 `dev` 기준 A 2회: `Passed`(late 0) / `Failed`(late 0, `The other racer's positions must keep arriving. Expected: greater than 900 But was: 899`).
   - 빌드가 자동으로 바꾼 5파일은 매번 빌드 전 상태로 되돌렸다(4개는 파일 지정 `git restore`, `ProjectSettings.asset` 은 이 머신의 버전 차이가 이미 있어 빌드 전 사본으로 덮음).
   - 입력 장치 경로와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음.
-- **한계**: 고스트 숨김은 실제 네트워크 레이스에서 한 번도 일어나지 않았다(이 머신의 B 2회 모두 낙하 없음, 이전 머신은 657 낙하). 결승·낙하·잠정·확정 줄은 화면으로 보지 않았고 `RaceStandingsTextTests` 로만 확인했다. A 의 상대 위치 기준(`> 900`)은 이 머신에서 변경 전 코드로도 899 로 떨어진다(이전 머신 951~954) — 이번 변경과 무관한 기존 테스트의 여유 문제다. 접속 전 첫 그리기(약 130 ms)는 출발 전이라 런에는 닿지 않지만, 클라를 만든 직후 접속이 그보다 빨리 끝나면 겹칠 수 있다(이번 실행은 모두 `connected False`).
+- **한계**: ~~고스트 숨김은 실제 네트워크 레이스에서 한 번도 일어나지 않았다(이 머신의 B 2회 모두 낙하 없음, 이전 머신은 657 낙하).~~ → 2026-10-12 07:14Z `fix/net-race-remote-count` 의 B(런타임은 C1c-2b 가 병합된 `dev` `eb4d0d7` 빌드)에서 레이서 0 이 낙하(`Failed@657`)해 **플레이어 클라가 고스트를 숨겼다**(`RACE-CLIENT-GHOST hidden: racer 0 Failed@657`). 그 실행은 에디터 멈춤으로 `RACE-CLIENT-FAULT` 실패했으므로 에디터 클라 쪽 숨김과 B 의 숨김 단언 통과는 확인 못 했다(DECISIONS 2026-10-12 "네트워크 레이스 A 의 상대 위치 기준"). 결승·낙하·잠정·확정 줄은 화면으로 보지 않았고 `RaceStandingsTextTests` 로만 확인했다. A 의 상대 위치 기준(`> 900`)은 이 머신에서 변경 전 코드로도 899 로 떨어진다(이전 머신 951~954) — 이번 변경과 무관한 기존 테스트의 여유 문제다(→ 같은 날 "네트워크 레이스 A 의 상대 위치 기준" 에서 고침). 접속 전 첫 그리기(약 130 ms)는 출발 전이라 런에는 닿지 않지만, 클라를 만든 직후 접속이 그보다 빨리 끝나면 겹칠 수 있다(이번 실행은 모두 `connected False`).
 - **하지 않은 것**: 진행 중 순위, 3인 이상 고스트, `ChainRushHud`·씬·프리팹·asmdef·`ProjectSettings`, 서버·예측기·시뮬 코드, A 의 상대 위치 기준(별도 `fix/`), HUD 의 `R / RUN AGAIN` 버튼이 네트워크 클라에서 예측기를 고장 내는 문제(HANDOFF 2절).
 
 ## 2026-10-11 · P3 C1c-2a: 서버가 순위를 정해 모든 클라에 알린다 (틱 수 기준, 잠정·확정)

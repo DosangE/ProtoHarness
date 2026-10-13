@@ -9,13 +9,14 @@ using UnityEngine;
 
 namespace ProtoHarness.Net
 {
-    // The predicting side: runs the game at once on its own controls, sends every tick's controls to the server through a
+    // The predicting side: once the server says every racer is here (race.go) it counts down and runs the game on its own
+    // controls (the keyboard cannot start or restart it: ManualStart off), sends every tick's controls to the server through a
     // DelayedSender, and hands the server's states for this racer to ClientPredictor, which corrects the game when they
     // disagree (DESIGN.md P3). The other racers' positions go to a RemoteInterpolator and are drawn by a RemoteGhost. After
     // `targetTicks` ticks it stops sending and, once the server's state for the last of them has been compared, it is
     // Finished. It is Finished too once the server has said that this racer's run ended within those ticks (race.end).
-    // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart from the
-    // keyboard, leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished. The standings the
+    // A state or an end the predictor cannot take (any exception from OnServerState or OnServerEnd), or a restart (StartRun
+    // called on the game mid-race), leaves it Faulted: the run is then stopped for good (RACE-CLIENT-FAULT), not Finished. The standings the
     // server sends (race.standings) are kept as they come (Standings, You), and so is the order of the racers still running
     // (race.order: Order, OrderTick); they only tell, the run never reads them. With showRemote they are drawn
     // (RaceStandingsView), and the ghost is hidden once the standings say the other racer's run has ended.
@@ -49,8 +50,11 @@ namespace ProtoHarness.Net
         private int[] order;
         private int orderTick = -1;
         private int orderReceived;
+        private bool goReceived;
 
         public ClientPredictor Predictor => predictor;
+        // True once the server has said every racer has a client (race.go) and the countdown has begun.
+        public bool GoReceived => goReceived;
         // The newest standings from the server, by racer, or null before the first arrive.
         public IReadOnlyList<RaceStandings.Entry> Standings => standings;
         // Which racer the server made this client (from the standings), or -1 before the first arrive.
@@ -102,6 +106,9 @@ namespace ProtoHarness.Net
             predictor = new ClientPredictor(game, live, targetTicks);
             delayed = new DelayedSender(SendInput, delaySeconds, jitterSeconds, seed);
             predictor.InputConsumed += OnInputConsumed;
+            // The server starts the run (race.go); the keyboard and the HUD may not start or restart it.
+            game.ManualStart = false;
+            game.CountdownFinished += OnCountdownFinished;
             remote = new RemoteInterpolator();
             if (showRemote)
             {
@@ -118,6 +125,7 @@ namespace ProtoHarness.Net
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.RemoteMessage, OnRemote);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.StandingsMessage, OnStandings);
             manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.OrderMessage, OnOrder);
+            manager.CustomMessagingManager.RegisterNamedMessageHandler(RaceNetwork.GoMessage, OnGo);
         }
 
         // Closes the connection (the server notices when its client leaves).
@@ -126,15 +134,33 @@ namespace ProtoHarness.Net
             if (manager != null && manager.IsListening) manager.Shutdown();
         }
 
+        // Connected: the run waits for the server's go (OnGo), which comes once every racer has a client.
         private void OnConnected(ulong id)
         {
             if (started) return;
             started = true;
             connectedAt = Time.realtimeSinceStartup;
+            Debug.Log($"RACE-CLIENT connected as {id}; waiting for the go.");
+        }
+
+        // Every racer has a client: count down (ChainRushGame.StartCountdown), then the run starts (OnCountdownFinished).
+        // The server starts every racer together once each has sent enough inputs, so a client that hears the go a little
+        // later than another only makes the other wait in the server's buffer. A second go is a bug and throws (Netcode logs it).
+        private void OnGo(ulong sender, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out byte[] payload);
+            int racers = RaceWire.DecodeGo(payload);
+            if (goReceived) throw new InvalidDataException($"RaceClient: a second go (for {racers} racers).");
+            goReceived = true;
             game.SetInputSource(predictor);
-            game.StartRun();
+            game.StartCountdown();
+            Debug.Log($"RACE-CLIENT-GO {racers} racers; counting down {ChainRushGame.CountdownSeconds:F0} s.");
+        }
+
+        private void OnCountdownFinished()
+        {
             predictor.AfterTick();
-            Debug.Log($"RACE-CLIENT connected as {id}; run started.");
+            Debug.Log("RACE-CLIENT-COUNTDOWN done; run started.");
         }
 
         private void OnInputConsumed(int tick, TickInput input)
@@ -315,6 +341,11 @@ namespace ProtoHarness.Net
 
         private void OnDestroy()
         {
+            if (game != null)
+            {
+                game.CountdownFinished -= OnCountdownFinished;
+                game.ManualStart = true;
+            }
             predictor?.Detach();
             RaceNetwork.Destroy(manager);
         }

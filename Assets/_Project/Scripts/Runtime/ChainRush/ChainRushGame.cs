@@ -10,7 +10,9 @@ namespace ProtoHarness.ChainRush
 {
     public sealed class ChainRushGame : MonoBehaviour
     {
-        private enum Phase { Ready, Running, Paused, Failed, Complete }
+        private enum Phase { Ready, Countdown, Running, Paused, Failed, Complete }
+        // How long the 3, 2, 1 before a run lasts (StartCountdown).
+        public const float CountdownSeconds = 3f;
         [SerializeField] private RunnerMotor player;
         [SerializeField] private GrappleController grapple;
         [SerializeField] private FollowCamera followCamera;
@@ -32,10 +34,17 @@ namespace ProtoHarness.ChainRush
         private int tick;
         private IInputSource inputSource;
         private AudioClip[] cues;
+        private float countdownLeft;
 
         public bool IsRunning => phase == Phase.Running;
         public bool IsPaused => phase == Phase.Paused;
         public bool IsReady => phase == Phase.Ready;
+        public bool IsCountingDown => phase == Phase.Countdown;
+        // 3, 2, 1 while counting down; 0 otherwise.
+        public int CountdownNumber => IsCountingDown ? Mathf.CeilToInt(countdownLeft) : 0;
+        // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
+        // so the keyboard cannot restart a run the server is simulating.
+        public bool ManualStart { get; set; } = true;
         public bool HasFailed => phase == Phase.Failed;
         public bool HasFinished => phase == Phase.Complete;
         public int Health => racer.Health;
@@ -157,9 +166,19 @@ namespace ProtoHarness.ChainRush
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
-                if (keyboard.rKey.wasPressedThisFrame) StartRun();
-                else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused) StartRun();
+                if (ManualStart)
+                {
+                    if (keyboard.rKey.wasPressedThisFrame) StartCountdown();
+                    else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused && !IsCountingDown) StartCountdown();
+                }
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
+            }
+            if (IsCountingDown)
+            {
+                countdownLeft -= Time.deltaTime;
+                if (countdownLeft > 0f) return;
+                StartRun();
+                CountdownFinished?.Invoke();
             }
             if (!IsRunning) return;
             inputSource.Poll();
@@ -239,7 +258,27 @@ namespace ProtoHarness.ChainRush
                 throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race (a fixed world); the endless course moves the world.");
         }
 
+        // Starts a run at once. Servers, rollbacks and tests start here; a player at the keyboard goes through StartCountdown.
         public void StartRun()
+        {
+            ResetRun();
+            phase = Phase.Running;
+        }
+
+        // Puts the runner on the start line and counts 3, 2, 1 (CountdownSeconds, game time); then starts the run (StartRun,
+        // which resets everything again, so the run begins exactly as one started at once) and raises CountdownFinished.
+        // Calling it again while counting down starts the count over.
+        public void StartCountdown()
+        {
+            ResetRun();
+            countdownLeft = CountdownSeconds;
+            phase = Phase.Countdown;
+        }
+
+        // Raised right after a countdown has started the run, before its first tick.
+        public event System.Action CountdownFinished;
+
+        private void ResetRun()
         {
             phase = Phase.Ready;
             if (circuit != null) circuit.ResetRace();
@@ -254,7 +293,6 @@ namespace ProtoHarness.ChainRush
             inputSource.Clear();
             if (endlessMode) enemies.ResetEncounters();
             attackVisual.gameObject.SetActive(false);
-            phase = Phase.Running;
         }
 
         public void TogglePause()

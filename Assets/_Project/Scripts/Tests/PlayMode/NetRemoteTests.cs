@@ -8,7 +8,7 @@ using UnityEngine;
 namespace ProtoHarness.Tests.PlayMode
 {
     // The parts of the two-racer race that need neither a scene nor a connection (DESIGN.md P3 C1): drawing another racer
-    // from late positions, the position message, and the input log file the player processes read.
+    // from late positions, the position and go messages, and the input log file the player processes read.
     [Category("Net")]
     public sealed class NetRemoteTests
     {
@@ -106,6 +106,20 @@ namespace ProtoHarness.Tests.PlayMode
             var longBytes = new byte[bytes.Length + 1];
             Array.Copy(bytes, longBytes, bytes.Length);
             Assert.Throws<InvalidDataException>(() => RaceWire.DecodeRemote(longBytes, out _));
+        }
+
+        [Test]
+        public void Wire_GoRoundTrips_AndAnythingElseThrows()
+        {
+            Assert.That(RaceWire.DecodeGo(RaceWire.EncodeGo(2)), Is.EqualTo(2));
+            Assert.That(RaceWire.DecodeGo(RaceWire.EncodeGo(255)), Is.EqualTo(255));
+            Assert.That(RaceWire.EncodeGo(2), Is.EqualTo(new byte[] { 2 }));
+            Assert.Throws<InvalidDataException>(() => RaceWire.DecodeGo(new byte[0]), "Empty.");
+            Assert.Throws<InvalidDataException>(() => RaceWire.DecodeGo(new byte[] { 2, 0 }), "Too long.");
+            Assert.Throws<InvalidDataException>(() => RaceWire.DecodeGo(new byte[] { 0 }), "No racers.");
+            Assert.Throws<ArgumentNullException>(() => RaceWire.DecodeGo(null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => RaceWire.EncodeGo(0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => RaceWire.EncodeGo(256));
         }
 
         // ---- the input codec and the input log file -------------------------------------------

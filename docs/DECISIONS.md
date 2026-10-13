@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-10-13 · P3 C1c-3: 서버가 주행 중 순위를 같은 틱 수의 진행 거리로 정해 알린다
+
+- **결정 (사용자 승인, 2026-10-13 C1c-3 요청서에 "ㄱㄱ" — 기준 A·임계 1 m 추천안)**: HANDOFF 2절의 "진행 중 순위" 를 한다.
+  - **기준은 각자 런의 같은 틱에서의 진행 거리**다. 서버의 `RaceOrder`(Net, 순수 로직)가 레이서마다 틱별 `LapCounter.Progress`(출발선부터 랩 포함 미터, 서버가 이미 디코드하는 상태에 들어 있음 — `RaceServer.OnState` 의 `snapshot.Circuit.Laps.Progress`)를 쌓고, 달리는 레이서 모두가 도달한 가장 최근 틱에서 비교한다.
+  - **흔들림 막기**: 1 m(`RaceServer.OrderMarginMetres`) 넘게 앞서야 앞선 것으로 바꾼다. 거리가 정확히 같으면 공동이다. 그 사이면 직전 관계를 유지하고, 처음 비교하는 쌍은 더 간 쪽이 앞이다. 순위 = 1 + 앞선 레이서 수(공동은 같은 순위). 달리지 않거나 아직 상태가 없는 레이서는 순위 0.
+  - **메시지는 새 `race.order`**(비교 틱 4바이트, 레이서 수 1바이트, 레이서별 순위 1바이트). 순위가 바뀔 때만 모든 클라에 각자의 `ToOwner` 큐로, 같은 사건의 standings 뒤에 보낸다. 디코딩은 엄격하다(순위 > 레이서 수, 비교 틱 < -1, 비교 틱 -1 인데 순위 있음은 던짐). 클라(`RaceClient.Order`·`OrderTick`·`OrderReceived`)는 받아 두기만 하고, 레이서 수가 standings·이전 order 와 다르면 던진다.
+  - **표시**: `RaceStandingsText.Lines(entries, order, you)` 오버로드. 주행 중 레이서는 결승자 수 + 1 + (standings 도 주행 중이라고 하는, order 상 앞선 레이서 수)로 숫자를 보이고 그 순서로 줄을 선다. order 가 아직 그 레이서를 매기지 않으면 "–". 두 메시지 사이에 standings 가 이미 끝냈다고 하는 레이서는 standings 줄을 따르고 주행 중 순위 계산에서 빠진다(2인 레이스에 "3" 이 뜨지 않게). 기존 `Lines(entries, you)` 는 order 없이 같은 결과. `RaceStandingsView` 는 order 가 바뀔 때도 줄을 다시 만든다(새 글리프 없음).
+- **이유**: 레이서는 각자 입력이 쌓이면 따로 출발하고(`RaceServer.cs` Update) 플레이어 클라는 80~180틱 늦다. 결승 순위가 각자 걸린 틱 수로 정해지므로(`RaceStandings.cs:7-12`), 같은 시계로 비교해야 도중 순위와 결승 순위가 어긋나지 않는다. 지금 순간의 거리로 비교하면 먼저 출발한 쪽이 출발 차이만큼 늘 앞선다(같은 입력이면 항상 1등).
+  - 버린 대안: 지금 순간의 거리(위 이유), 같은 시각 출발 후 지금 거리(서버 출발 방식 변경 — 범위 밖), 기존 `race.standings` 의 주행 중 줄에 순위 넣기(와이어 규칙 "주행 중은 순위 0" 과 기존 테스트 기대값 "0=Running 1=Running" 이 바뀐다. 순서는 결승 순위보다 훨씬 자주 바뀌므로 메시지를 나눴다), 임계 없이 매 틱 비교(붙어 달리면 매 틱 메시지).
+- **테스트**: `RaceOrderTests` 9개(`Net`, 새 클래스라 고치기 전 실패 실행은 없다) — 같은 틱 비교라 먼저 출발한 것은 앞섬이 아니다, 임계 안에서는 유지·넘으면 교체, 같은 거리는 공동, 비교 틱은 모두가 도달한 가장 최근 틱, 달리지 않거나 상태 없는 레이서는 순위 없음·끝나면 빠짐, 변화 없으면 `false`·버전 유지, 순서가 틀린 사건은 던짐, 와이어 왕복, 손상된 메시지는 던짐. `RaceStandingsTextTests` 4개 추가 — 결승자 다음에 order 순, 공동 순위는 번호순, order 와 standings 가 엇갈리면 standings 를 따름, 크기가 다른 order 는 던짐. `NetworkRaceTests` 단언 추가(기존 단언은 그대로): A 는 서버·두 클라의 마지막 order 가 `0=1 1=1`(같은 입력이라 같은 틱의 거리가 비트 단위로 같다 — 서버는 빠진 입력에 직전 입력을 반복하므로 클라가 멈춘 뒤에도 같다, `ServerInputBuffer.cs:8-10`), B 는 두 클라가 order 를 1개 이상 받았고 거부하지 않았다.
+- **검증 (`feature/p3-c1c3-running-order`, 에디터 6000.3.19f1 — 이 머신의 로컬 버전, 시각은 XML 의 UTC, 코드 `git diff -- Assets` + 새 파일 2개 sha1 `da00da1e`)** — 실행한 것 전부
+  - 컴파일: `ProtoHarness.Net.dll` 13:40:09(+0900), `ProtoHarness.Tests.PlayMode.dll` 13:40:05 갱신, Editor.log `error CS` 없음, `RaceOrder`·`RaceOrderTests` 타입 로드, Console Error 0건.
+  - 단위(`RaceOrderTests`·`RaceStandingsTextTests`·`RaceStandingsTests`, 04:41:32Z): `testcasecount=28 Passed passed=28 failed=0`.
+  - 플레이어 재빌드(서킷 씬만): Editor.log `Build Finished, Result: Success.`, `Build Succeeded errors=0`(MCP 는 Sentis 셰이더 경고로 "실패" 라 보고), `ProtoHarness.Net.dll` 64000 → 70144 바이트(13:42:39). 자동으로 바뀐 5파일은 되돌렸다(4개 파일 지정 `git restore`, `ProjectSettings.asset` 은 빌드 전 사본, sha1 `fcef33b8b0b8` 로 같음).
+  - 네트워크 레이스 (PC 를 쉬게 두고 에디터를 앞에 둠) — 모두 `testcasecount=1 passed=1 failed=0`:
+    - A 04:43:38Z~04:44:21Z `Passed`: `remote positions at the editor: 922 (921 checked …, 0 differ; from its tick 0, 0 breaks; first at the editor's tick 88, the editor ended at tick 1000)`, late 0 / 0, `editor frames: longest 33.7 ms after tick 2, over 50 ms 0 []`. `orders: editor client "0=1 1=1" (2 taken); player client "0=1 1=1" (1 lines, refused False); server: 2 lines, last "0=1 1=1"`.
+    - A 04:44:42Z~04:45:13Z `Passed`: 919 (첫 도착 91), late 0 / 0, `longest 29.2 ms`, 50 ms 초과 0. order 같음(서버 2줄).
+    - A 04:45:32Z~04:46:04Z `Passed`: 921 (첫 도착 88), late 0 / 0, `longest 30.6 ms`, 50 ms 초과 0. order 같음(서버 2줄).
+    - B 04:46:23Z~04:46:50Z `Passed`: 에디터 보정 12, 플레이어 클라 보정 1, `server racer 0: ran 1005, received 1000, missed 50, late 45; racer 1: ran 657, received 657, missed 23, late 23`, 레이서 1 낙하 `Failed@657`(플레이어 클라가 받음), **에디터 클라 고스트 숨김**(`editor client visible False (other ended True)`). 서버 order `v=1 tick=0 0=1 1=-` → `v=2 tick=0 0=1 1=1` → `v=3 tick=742 0=1 1=-`, 두 클라 마지막 `0=1 1=-`(에디터 3개, 플레이어 클라 2줄, 거부 없음). 에디터 상대 위치 657개 중 54개가 자기 런과 달랐지만 같은 틱 진행 거리 차이가 1 m 를 넘지 않아 순서는 끝까지 공동이었다.
+  - EditMode(04:47:09Z~04:47:12Z): `testcasecount=237 Passed passed=237 failed=0`.
+  - PlayMode 게이트(Device·Sweep 제외) 1회 `testcasecount=140 result=Passed passed=138 failed=0 skipped=2`(04:47:30Z~04:57:11Z, 580.3초), 2회 `140/Passed/138/0/2`(04:57:49Z~05:07:33Z, 584.2초). 게이트 뒤 Console Error 0건. skipped 2 는 `[Explicit]` 네트워크 레이스.
+  - 입력 장치 경로와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음.
+- **한계**: 실제 네트워크 레이스에서 순서가 **뒤집힌** 적은 없다(A 는 같은 입력이라 공동, B 는 차이가 1 m 안). 교체·임계는 `RaceOrderTests` 로만 확인했다. 패널의 숫자는 화면으로 보지 않았다(레이스 도중 `Unity_RunCommand` 금지) — 글자는 `RaceStandingsTextTests` 로만 확인했다. 3인 이상에서 쌍마다 따로 유지하는 관계가 비이행적이 되면(A>B, B>C, C≈A 를 유지) 순위가 어색할 수 있다(던지지는 않는다). 서버는 레이서마다 틱당 8바이트를 런 끝까지 쌓는다(3랩 약 8000틱 → 64 KB).
+- **하지 않은 것**: 앞뒤 거리 표시, 같은 시각 출발, 3인 이상 실험, `RaceStandings`·`race.standings`, HUD·씬·프리팹·asmdef·`ProjectSettings`, 시뮬·예측기 코드, 에디터 프레임 멈춤 조사.
+
 ## 2026-10-12 · 네트워크 레이스 A 의 상대 위치 기준: 받은 개수를 출발 시각 차이와 무관하게 판정한다
 
 - **결정 (사용자 승인, 2026-10-12 요청서에 "ㄱㄱ")**: `NetworkRaceTests` A 의 `RemoteSamples > 900`·`RemoteChecked > 900` 을 다섯 판정으로 바꾼다. ① 상대 첫 위치가 에디터 틱 500(= `ticks / 2`) 전에 도착 ② 상대 틱 0 부터 ③ 틱이 하나씩 이어진다(빈틈·중복·역행 0, `RemoteBreaks`) ④ 받은 수 ≥ (에디터 끝 틱 − 첫 도착 때 에디터 틱) − 5 ⑤ `RemoteChecked ≥ RemoteSamples − 1`. `Outcome` 에 `FirstRemoteAt`·`EndAt`·`FirstRemoteTick`·`RemoteBreaks` 를 더하고 `Describe` 에 같은 값을 적는다. B 의 `BRemote > 900` 은 그대로 둔다(플레이어 클라는 약 1010개로 안정).
@@ -52,7 +77,7 @@
   - 중간에 실패한 실행(모두 처음 구현 또는 글리프 수정): A 도중 `Unity_RunCommand`(ScreenCapture) 직후 `RACE-CLIENT-FAULT the server's state for tick 230 could not be taken (the client at tick 229)` 1회, 늦은 입력으로 실패 6회(처음 구현 `racer 0: an input came late. But was: 6 / 2 / 1`, 측정 추가 뒤 `3 / 2`, 글리프 수정 뒤 `1`). 변경 전 `dev` 기준 A 2회: `Passed`(late 0) / `Failed`(late 0, `The other racer's positions must keep arriving. Expected: greater than 900 But was: 899`).
   - 빌드가 자동으로 바꾼 5파일은 매번 빌드 전 상태로 되돌렸다(4개는 파일 지정 `git restore`, `ProjectSettings.asset` 은 이 머신의 버전 차이가 이미 있어 빌드 전 사본으로 덮음).
   - 입력 장치 경로와 코스 코드를 바꾸지 않아 Device·Sweep 은 해당 없음.
-- **한계**: ~~고스트 숨김은 실제 네트워크 레이스에서 한 번도 일어나지 않았다(이 머신의 B 2회 모두 낙하 없음, 이전 머신은 657 낙하).~~ → 2026-10-12 07:14Z `fix/net-race-remote-count` 의 B(런타임은 C1c-2b 가 병합된 `dev` `eb4d0d7` 빌드)에서 레이서 0 이 낙하(`Failed@657`)해 **플레이어 클라가 고스트를 숨겼다**(`RACE-CLIENT-GHOST hidden: racer 0 Failed@657`). 그 실행은 에디터 멈춤으로 `RACE-CLIENT-FAULT` 실패했으므로 에디터 클라 쪽 숨김과 B 의 숨김 단언 통과는 확인 못 했다(DECISIONS 2026-10-12 "네트워크 레이스 A 의 상대 위치 기준"). 결승·낙하·잠정·확정 줄은 화면으로 보지 않았고 `RaceStandingsTextTests` 로만 확인했다. A 의 상대 위치 기준(`> 900`)은 이 머신에서 변경 전 코드로도 899 로 떨어진다(이전 머신 951~954) — 이번 변경과 무관한 기존 테스트의 여유 문제다(→ 같은 날 "네트워크 레이스 A 의 상대 위치 기준" 에서 고침). 접속 전 첫 그리기(약 130 ms)는 출발 전이라 런에는 닿지 않지만, 클라를 만든 직후 접속이 그보다 빨리 끝나면 겹칠 수 있다(이번 실행은 모두 `connected False`).
+- **한계**: ~~고스트 숨김은 실제 네트워크 레이스에서 한 번도 일어나지 않았다(이 머신의 B 2회 모두 낙하 없음, 이전 머신은 657 낙하).~~ → 2026-10-12 07:14Z `fix/net-race-remote-count` 의 B(런타임은 C1c-2b 가 병합된 `dev` `eb4d0d7` 빌드)에서 레이서 0 이 낙하(`Failed@657`)해 **플레이어 클라가 고스트를 숨겼다**(`RACE-CLIENT-GHOST hidden: racer 0 Failed@657`). 그 실행은 에디터 멈춤으로 `RACE-CLIENT-FAULT` 실패했으므로 에디터 클라 쪽 숨김과 B 의 숨김 단언 통과는 확인 못 했다(DECISIONS 2026-10-12 "네트워크 레이스 A 의 상대 위치 기준"). → 2026-10-13 C1c-3 의 B(04:46:23Z, `Passed`)에서 레이서 1 이 `Failed@657` 로 낙하해 **에디터 클라가 고스트를 숨겼고** B 의 숨김 단언이 통과했다(`editor client visible False (other ended True)`, DECISIONS 2026-10-13 "P3 C1c-3"). 결승·낙하·잠정·확정 줄은 화면으로 보지 않았고 `RaceStandingsTextTests` 로만 확인했다. A 의 상대 위치 기준(`> 900`)은 이 머신에서 변경 전 코드로도 899 로 떨어진다(이전 머신 951~954) — 이번 변경과 무관한 기존 테스트의 여유 문제다(→ 같은 날 "네트워크 레이스 A 의 상대 위치 기준" 에서 고침). 접속 전 첫 그리기(약 130 ms)는 출발 전이라 런에는 닿지 않지만, 클라를 만든 직후 접속이 그보다 빨리 끝나면 겹칠 수 있다(이번 실행은 모두 `connected False`).
 - **하지 않은 것**: 진행 중 순위, 3인 이상 고스트, `ChainRushHud`·씬·프리팹·asmdef·`ProjectSettings`, 서버·예측기·시뮬 코드, A 의 상대 위치 기준(별도 `fix/`), HUD 의 `R / RUN AGAIN` 버튼이 네트워크 클라에서 예측기를 고장 내는 문제(HANDOFF 2절).
 
 ## 2026-10-11 · P3 C1c-2a: 서버가 순위를 정해 모든 클라에 알린다 (틱 수 기준, 잠정·확정)

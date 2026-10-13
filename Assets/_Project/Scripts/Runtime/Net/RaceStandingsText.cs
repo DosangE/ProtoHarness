@@ -8,7 +8,11 @@ namespace ProtoHarness.Net
     // The standings a client holds (RaceClient.Standings, You) as the lines RaceStandingsView draws, kept apart so they can be
     // checked without a screen. Finishers come first by place, then racers still running, then waiting, then fallen; racers
     // in the same group keep their order by number. A finish shows the run's time from its own start (its tick count, the
-    // clock the places go by) and whether the place is still provisional.
+    // clock the places go by) and whether the place is still provisional. With the order of the racers still running
+    // (RaceClient.Order), a running racer is placed after every finisher by that order, and running racers go by it. The
+    // order and the standings come in separate messages, so for a moment they can disagree: a racer the standings have
+    // running but the order does not place shows "–" (its place is on the way), and a racer the order places but the
+    // standings have ended shows its standings line and is left out of the running racers' places.
     public static class RaceStandingsText
     {
         public readonly struct Line
@@ -39,41 +43,69 @@ namespace ProtoHarness.Net
         // "RACE  /  2 RACERS"
         public static string Header(int racers) => "RACE  /  " + racers + (racers == 1 ? " RACER" : " RACERS");
 
-        public static Line[] Lines(IReadOnlyList<RaceStandings.Entry> entries, int you)
+        public static Line[] Lines(IReadOnlyList<RaceStandings.Entry> entries, int you) => Lines(entries, null, you);
+
+        // order: each racer's place among those running (RaceOrder, 0 = none), or null before any has arrived.
+        public static Line[] Lines(IReadOnlyList<RaceStandings.Entry> entries, IReadOnlyList<int> order, int you)
         {
             if (entries == null) throw new ArgumentNullException(nameof(entries));
             if (you < 0 || you >= entries.Count) throw new ArgumentOutOfRangeException(nameof(you), you, $"RaceStandingsText: there are {entries.Count} racers.");
-            var order = new int[entries.Count];
-            for (int i = 0; i < order.Length; i++) order[i] = i;
-            // Insertion sort: stable, so racers that tie keep their order by number.
-            for (int i = 1; i < order.Length; i++)
+            if (order != null && order.Count != entries.Count)
+                throw new ArgumentException($"RaceStandingsText: an order for {order.Count} racers, but the standings have {entries.Count}.", nameof(order));
+            // A running racer's place: after every finisher, then one more than the racers the standings also have running that
+            // the order puts ahead of it (0 while the order does not place it). Counting only those keeps the places right while
+            // the order still holds a racer the standings have ended.
+            int finishers = 0;
+            for (int i = 0; i < entries.Count; i++) if (entries[i].Status == RaceStandings.Status.Finished) finishers++;
+            var places = new int[entries.Count];
+            for (int i = 0; i < entries.Count; i++)
             {
-                int racer = order[i];
-                int j = i - 1;
-                while (j >= 0 && Compare(entries[order[j]], entries[racer]) > 0)
+                RaceStandings.Entry e = entries[i];
+                if (e.Status == RaceStandings.Status.Finished) places[i] = e.Place;
+                else if (PlacedRunning(entries, order, i))
                 {
-                    order[j + 1] = order[j];
+                    int place = finishers + 1;
+                    for (int o = 0; o < entries.Count; o++) if (o != i && PlacedRunning(entries, order, o) && order[o] < order[i]) place++;
+                    places[i] = place;
+                }
+            }
+            var sorted = new int[entries.Count];
+            for (int i = 0; i < sorted.Length; i++) sorted[i] = i;
+            // Insertion sort: stable, so racers that tie keep their order by number.
+            for (int i = 1; i < sorted.Length; i++)
+            {
+                int racer = sorted[i];
+                int j = i - 1;
+                while (j >= 0 && Compare(entries, places, sorted[j], racer) > 0)
+                {
+                    sorted[j + 1] = sorted[j];
                     j--;
                 }
-                order[j + 1] = racer;
+                sorted[j + 1] = racer;
             }
-            var lines = new Line[order.Length];
-            for (int i = 0; i < order.Length; i++)
+            var lines = new Line[sorted.Length];
+            for (int i = 0; i < sorted.Length; i++)
             {
-                int racer = order[i];
+                int racer = sorted[i];
                 RaceStandings.Entry e = entries[racer];
-                string place = e.Status == RaceStandings.Status.Finished ? e.Place.ToString(CultureInfo.InvariantCulture) : "–";
+                string place = places[racer] > 0 ? places[racer].ToString(CultureInfo.InvariantCulture) : "–";
                 string name = racer == you ? "YOU" : "RACER " + racer.ToString(CultureInfo.InvariantCulture);
                 lines[i] = new Line(place, name, StatusOf(e), racer, racer == you, e.Status);
             }
             return lines;
         }
 
-        private static int Compare(RaceStandings.Entry a, RaceStandings.Entry b)
+        private static bool PlacedRunning(IReadOnlyList<RaceStandings.Entry> entries, IReadOnlyList<int> order, int racer) =>
+            entries[racer].Status == RaceStandings.Status.Running && order != null && order[racer] > 0;
+
+        // Within a group, by place; a racer with no place goes after those with one.
+        private static int Compare(IReadOnlyList<RaceStandings.Entry> entries, int[] places, int a, int b)
         {
-            int group = Group(a.Status).CompareTo(Group(b.Status));
+            int group = Group(entries[a].Status).CompareTo(Group(entries[b].Status));
             if (group != 0) return group;
-            return a.Status == RaceStandings.Status.Finished ? a.Place.CompareTo(b.Place) : 0;
+            int placeA = places[a] > 0 ? places[a] : int.MaxValue;
+            int placeB = places[b] > 0 ? places[b] : int.MaxValue;
+            return placeA.CompareTo(placeB);
         }
 
         private static int Group(RaceStandings.Status status)

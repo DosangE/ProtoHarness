@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-13 · 병합 2회차 축소: Net 쪽만 바꾼 브랜치는 PlayMode 2회차를 `Net` 카테고리만 돌린다
+
+- **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ" — HANDOFF 3절 #1 의 B안을 어셈블리 경계로 좁힌 안)**: 병합 조건의 PlayMode 는 1회차를 지금처럼 전체(`Device`·`Sweep` 제외)로 돌린다. 2회차는 `git diff --name-only dev...HEAD` 의 `Assets/` 파일이 모두 `Runtime/Net/`, `Tests/EditMode/`, `Net`·`NetRace` 카테고리 테스트 클래스 파일일 때만 `Net` 카테고리로 줄이고, 그 밖이 하나라도 있으면 전체다. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.
+- **이유**: ① 사용자 질문(2026-10-05 "작업한 부분만 검증하면 안 되나"). 게이트 1회가 이 머신에서 약 584~660초라 병합마다 약 20분이 든다. ② 2026-10-13 14:07 게이트 XML(140건, 584.2초)의 클래스별 시간: `ChainRushProceduralTests` 154초, `ChainRushReplayTests` 99초, `ChainRushCircuitTests` 73초 … `Net` 카테고리 5개 클래스 합계 약 30초. ③ 최근 코드 병합 7건 중 6건(C1c-1 ~ C1c-3)이 `Runtime/Net`·`Tests/PlayMode` 만 바꿨다(C1c-1 은 `DefaultNetworkPrefabs.asset` 도 — 새 규칙에서는 전체 2회차다). ④ asmdef 상 `ProtoHarness.Net` 을 참조하는 것은 PlayMode 테스트 어셈블리뿐이다(`ProtoHarness.Runtime` 은 `Unity.InputSystem` 만, `ProtoHarness.Editor` 는 `ProtoHarness.Runtime`·TestRunner 만 참조). Net 변경은 코어 테스트의 동작을 바꿀 수 없다.
+- **감수한 것**: 2회 실행은 간헐 실패를 잡으려고 넣었다(아래 2026-10-02 "병합 조건 강화"). 그때의 간헐 실패는 지금 게이트에서 빠진 `Device` 테스트였다. Net 만 바꾼 브랜치에서는 코어 테스트를 1회만 보므로, 코어 테스트에 새 간헐 실패가 생겨도 그 브랜치에서는 한 번만 볼 수 있다. 그 코드는 이번 변경이 바꿀 수 없는 코드다.
+- **필터에서 확인한 것** (test-framework 패키지 소스 `RuntimeTestRunnerFilter.cs`): `categoryNames` 는 정규식(`IsRegex = true`, `:31`)이라 `"Net"` 이 `NetRace` 에도 걸린다 — 2026-10-11 C1c-2a 에서 `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스가 같이 돈 원인이다. 그래서 `"^Net$"` 를 쓴다. 필터 종류끼리는 AND(`:43`)라 "카테고리 + 다른 클래스" 를 한 실행으로 고를 수 없어서, 다른 PlayMode 테스트 클래스를 바꾼 브랜치는 2회차 전체로 정했다.
+- **시험 실행** (`docs/merge-gate-second-run`, 에디터 6000.3.19f1, 시각은 XML 의 UTC): `categoryNames = { "^Net$" }` → `testcasecount="61" result="Passed" passed="61" failed="0" skipped="0"` (05:19:01Z~05:19:29Z, 28.6초). `NetworkRaceTests` 0건. 61 = 직전 게이트 XML 의 `NetReconcileTests` 24 + `NetRemoteTests` 9 + `RaceOrderTests` 9 + `RaceStandingsTests` 9 + `RaceStandingsTextTests` 10 과 같다.
+- **버린 대안**: B 원안("바뀐 영역의 클래스만") — 코어 코드는 거의 모든 테스트가 거쳐 가서 "영역" 을 사람이 판단하게 되고, 그 판단이 조용한 우회가 된다. C(영향 범위만, 1회) — 간헐 실패 경보가 없어진다. D(1400 m 장거리 테스트 배속 3 → 5) — 테스트 동작을 바꾸므로 별도 합의. 2회차용 메뉴 항목 추가 — `Assets/` 변경이 되어 이 브랜치가 게이트를 치러야 하고, `Unity_RunCommand` 한 줄로 충분하다.
+- **하지 않은 것**: 코어를 바꾼 브랜치의 2회차 축소, D안, Device·Sweep·네트워크 레이스 규칙.
+
 ## 2026-10-13 · P3 C1c-3: 서버가 주행 중 순위를 같은 틱 수의 진행 거리로 정해 알린다
 
 - **결정 (사용자 승인, 2026-10-13 C1c-3 요청서에 "ㄱㄱ" — 기준 A·임계 1 m 추천안)**: HANDOFF 2절의 "진행 중 순위" 를 한다.
@@ -580,6 +590,7 @@
 
 ## 2026-10-02 · 병합 조건 강화: PlayMode 연속 2회 통과, 간헐 실패 기록
 
+- → 2026-10-13 "병합 2회차 축소" 로 일부 대체: Net 쪽만 바꾼 브랜치는 2회차를 `Net` 카테고리만 돌린다. 그 밖은 아래 그대로다.
 - **결정**: 병합 조건을 "컴파일 0 + EditMode 통과 + **같은 코드에서 PlayMode 연속 2회 통과**"로 바꾼다. 병합 보고에는 각 실행의 결과 XML 값을 모두 적고, 한 번이라도 실패하면 원문과 함께 보고하며 원인을 설명하지 못하면 병합하지 않는다. 규칙 본문은 `CLAUDE.md` §9-2.
 - **이유**: P0(`103270b`), P1-1(`6ed7676`), P1-2(`8520a1c`)를 PlayMode **1회 통과**로 병합했다. 그 뒤 같은 코드(`Assets` 차이 0, `git diff 8520a1c HEAD -- Assets`)에서 1회 실패가 나왔다. 아래 표가 근거다.
 

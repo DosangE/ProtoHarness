@@ -91,4 +91,8 @@ Editor 실행 여부 확인: `Temp/UnityLockfile` 존재 = 열려 있음.
 ```
 
 - 결과는 `results.xml` 의 `<test-run ... failed="N">` 를 읽어서 보고한다. 로그 눈대중 금지.
+- **병합 게이트 PlayMode** (§9-2): 1회차와 전체 2회차는 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests`. 줄인 2회차(`Net` 카테고리만)는 `Unity_RunCommand` 로 `TestRunnerApi.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, categoryNames = new[] { "^Net$" } }))` 를 부른다. 결과 XML 은 메뉴 실행과 같은 파일에 쓰인다.
+  - `categoryNames` 는 **정규식**으로 비교한다(test-framework 패키지 `RuntimeTestRunnerFilter.cs:31`). `"Net"` 은 `NetRace` 에도 걸려 `[Explicit]` 네트워크 레이스까지 돈다. 반드시 `"^Net$"` 로 쓴다.
+  - 필터 종류(`testNames`·`groupNames`·`assemblyNames`·`categoryNames`)끼리는 AND 로 묶인다(같은 파일 `:43`). "카테고리 + 다른 클래스"를 한 번의 실행으로 고를 수 없다.
+  - 줄인 2회차 XML 에 `NetworkRaceTests` 가 없고 `skipped="0"` 인지 확인한다. 2026-10-13 확인값: `testcasecount="61" passed="61" skipped="0"`, 약 29초. `Net` 테스트가 늘면 개수도 는다.
 - 버그를 고쳤다고 말하려면, **고치기 전에 실패하는 테스트**가 있어야 한다.

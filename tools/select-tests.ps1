@@ -142,7 +142,8 @@ Write-Output '① 빠른 확인 (병합 근거가 아니다):'
 Write-Output '  EditMode: 전체'
 
 if ($all) {
-    Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests'
+    Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests + Run Long Tests'
+    Write-Output '② 병합: 이 브랜치는 Long 도 돈다 (Run Long Tests, CLAUDE.md §9-2)'
     exit 0
 }
 if (-not $touchesAssets) {

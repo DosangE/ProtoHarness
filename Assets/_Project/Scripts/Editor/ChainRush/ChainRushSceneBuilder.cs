@@ -266,9 +266,13 @@ namespace ProtoHarness.Editor.ChainRush
             return created;
         }
 
-        // Merge gate run (CLAUDE.md §9-2): everything except the Device and Sweep categories.
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device, Sweep and Long categories.
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests() => RunPlayMode("!Device", "!Sweep");
+        public static void RunTests() => RunPlayMode("!Device", "!Sweep", "!Long");
+
+        // Long tests covered elsewhere. The merge gate adds them when the branch changes core code.
+        [MenuItem("ProtoHarness/Chain Rush/Run Long Tests")]
+        public static void RunLongTests() => RunPlayMode("Long");
 
         // Tests that need virtual Keyboard/Mouse devices. Not part of the merge gate.
         [MenuItem("ProtoHarness/Chain Rush/Run Device Input Tests")]

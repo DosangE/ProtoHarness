@@ -91,7 +91,7 @@ Editor 실행 여부 확인: `Temp/UnityLockfile` 존재 = 열려 있음.
 ```
 
 - 결과는 `results.xml` 의 `<test-run ... failed="N">` 를 읽어서 보고한다. 로그 눈대중 금지.
-- **병합 게이트 PlayMode** (§9-2 ②, 그리고 ③ 의 2회차): 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests`.
+- **병합 게이트 PlayMode** (§9-2 ②, 그리고 ③ 의 2회차): 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (`Device`·`Sweep`·`Long` 제외). `Long` 이 필요하면(§9-2) 이어서 메뉴 `Run Long Tests`.
 - **① 빠른 확인** (§9-2, 병합 근거가 아니다): `powershell -ExecutionPolicy Bypass -File tools/select-tests.ps1` 를 돌린다. 기본은 `dev...HEAD` + 커밋하지 않은 변경 + 추적하지 않는 파일이고, `-Range <a>..<b>` 로 바꿀 수 있다. 출력 마지막 줄의 `ScriptableObject.CreateInstance<TestRunnerApi>().Execute(...)` 를 `Unity_RunCommand` 로 부른다. "전체" 가 나오면 위 메뉴를 쓴다. 결과 XML 은 메뉴 실행과 같은 파일에 쓰인다. 보고에는 도구 출력 전체와 XML 값을 붙인다.
   - 고르는 방식: 한 `Filter` 안에서 **같은 종류의 값끼리는 OR**(test-framework 패키지 `RuntimeTestRunnerFilter.cs:81,85`), **필터 종류(`testNames`·`groupNames`·`assemblyNames`·`categoryNames`)끼리는 AND**(같은 파일 `:43`)다. 그래서 고른 클래스와 지문 테스트를 `groupNames` 한 배열에 넣고, `categoryNames = { "!Device", "!Sweep" }` 로 뺀다.
   - 2026-10-14 확인(에디터 6000.3.19f1, `dev` 와 같은 `Assets/`): `-Range 75df74d^..75df74d` 출력(클래스 3개 + 지문)을 그대로 실행 → `testcasecount="18" result="Passed" passed="18" failed="0" skipped="0"`, 78.4초. 고른 3개 클래스의 17건과 지문 1건만 돌았고, 같은 클래스의 다른 리플레이 테스트 2건은 돌지 않았다. 보고에는 XML 의 테스트 목록이 도구 출력과 맞는지도 적는다.

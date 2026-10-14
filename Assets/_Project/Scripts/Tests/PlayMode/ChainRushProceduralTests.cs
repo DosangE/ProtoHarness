@@ -84,7 +84,8 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- the bot runs seeded courses ----------------------------------------------------------------
 
-        [UnityTest, Timeout(180000)]
+        // Long (CLAUDE.md §9-2): the sweep below runs these seeds too; out of the merge gate unless the branch changes core code.
+        [UnityTest, Category("Long"), Timeout(180000)]
         public IEnumerator Course_BotRunsFourteenHundredMetres_GateSeeds([Values(0, 1, 2)] int seed)
         {
             var report = new Report();

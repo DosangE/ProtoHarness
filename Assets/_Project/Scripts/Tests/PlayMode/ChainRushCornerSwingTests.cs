@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -121,6 +122,48 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForFixedUpdate();
             Assert.That(player.IsSwinging, Is.False, "Releasing drift must end the swing.");
             Assert.That(player.ForwardSpeed, Is.GreaterThan(15.5f), "The exit throws at 17 m/s and the carry holds 16.");
+        }
+
+        // Presentation only (SwingLook): the body slews into the curve, the chain bites the inside rail, the root never turns.
+        [UnityTest]
+        public IEnumerator SwingLook_WhileSwinging_TurnsOnlyTheBodyInsideAndHooksTheInnerRail()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot);
+            Transform body = player.transform.Find("Runner Visual");
+            LineRenderer chain = player.transform.Find("Chain Line").GetComponent<LineRenderer>();
+            Quaternion root = player.transform.rotation;
+            yield return RunTo(line, ArcStart + 1d);
+            game.Racer.AddGauge(1f);
+            bot.Drift = true;
+            yield return new WaitForFixedUpdate();
+            bot.ChainAction = true;
+            // Past the pose's blend time.
+            yield return new WaitForSeconds(SwingLook.BlendTime + 0.25f);
+            Assert.That(player.IsSwinging, Is.True);
+            yield return new WaitForEndOfFrame();
+
+            Quaternion upright = Quaternion.Euler(0f, player.Heading, 0f) * RunnerTilt.Evaluate(player.Velocity, player.Steer);
+            Quaternion slewed = Quaternion.Euler(0f, player.Heading + SwingLook.SlipAngle, 0f) * RunnerTilt.Evaluate(player.Velocity, player.Steer);
+            // The R30 arc turns right, so the inside is to the right: a positive yaw.
+            Assert.That(Quaternion.Angle(body.rotation, slewed), Is.LessThan(3f), "The body must slew into the curve while swinging.");
+            Assert.That(Quaternion.Angle(body.rotation, upright), Is.GreaterThan(SwingLook.SlipAngle - 3f));
+            Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f), "Only the body turns; the root carries physics.");
+
+            Assert.That(chain.enabled, Is.True);
+            Vector3 bite = chain.GetPosition(1);
+            TrackCoord coord = line.Project(bite);
+            Assert.That(coord.D, Is.EqualTo(HalfWidth).Within(0.3f), "The chain must bite the inside (right) rail, not the arc center.");
+            Assert.That(coord.H, Is.EqualTo(RoadMeshBuilder.GuardRailHeight).Within(0.3f));
+
+            bot.Drift = false;
+            yield return new WaitForSeconds(SwingLook.BlendTime + 0.25f);
+            Assert.That(player.IsSwinging, Is.False);
+            yield return new WaitForEndOfFrame();
+            upright = Quaternion.Euler(0f, player.Heading, 0f) * RunnerTilt.Evaluate(player.Velocity, player.Steer);
+            Assert.That(Quaternion.Angle(body.rotation, upright), Is.LessThan(3f), "After the swing the body must face the heading again.");
+            Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f));
         }
 
         [UnityTest]

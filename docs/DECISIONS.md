@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-10-14 · 코너 스윙 S1 연출: 줄은 안쪽 난간에, 몸은 커브 안으로, 카메라는 바깥으로 — 시뮬은 그대로
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ", `docs/PROPOSAL_CORNER_SWING_LOOK.md` S1)**: 표현 계층만 바꾼다. 새 정적 클래스 `Visuals/SwingLook`(계산만), 그것을 부르는 기존 컴포넌트 셋 — `GrappleController`(스윙 중 줄 끝 = 러너 옆 **안쪽 난간 위**, 반폭 `RoadProfile.DeckHalfWidth` 6 m, 높이 `RoadMeshBuilder.GuardRailHeight` 1.1 m), `RunnerTilt`(스윙 중 **몸만** 안쪽으로 25°, 0.15초 블렌드), `FollowCamera`(바깥쪽 0.6 m, 시야각 +4°). 시뮬의 `RunnerMotor.swingAnchor`(원 중심)는 그대로다.
+- **제안서와 달라진 것**: ① 새 컴포넌트 대신 정적 클래스 — 컴포넌트를 붙이면 씬 3개를 고쳐 연결해야 한다(씬 수정 = 별도 합의, 동시 1개). 기존 직렬화 참조만으로 된다. ② 안쪽 방향은 트랙 대신 `motor.SwingAnchor`(원 중심)가 진행 방향의 어느 쪽인지로 정한다 — `RunnerTilt` 는 트랙 참조가 없다. ③ 불꽃·끊어지는 연출·잔상·소리는 머티리얼·파티클 에셋이 새로 필요해 **S1b** 로 나눴다. ④ 아크 끝을 지나 트랙 프레임이 직선인데 아직 스윙 중인 프레임에서는 줄 끝을 원 중심(이전 동작)에 둔다(`RailPoint` 는 직선에서 던진다).
+- **한계**: 반폭을 상수 6 m 로 쓴다. 서킷 정의(`Circuit_Stadium.asset` `roadHalfWidth`)를 바꾸면 줄 끝이 난간과 어긋난다(그림만).
+- **검증** (`feature/corner-swing-look`, 에디터 6000.3.19f1): EditMode `testcasecount="242" result="Passed" passed="242"` (11:32:01Z~11:32:13Z, 새 `SwingLook_*` 5건). 빠른 확인(코너 스윙 클래스 + 지문) `5/5 Passed` (11:32:56Z~11:34:00Z). `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (11:34:32Z~11:41:50Z, 438.1초) — 새 `SwingLook_WhileSwinging_TurnsOnlyTheBodyInsideAndHooksTheInnerRail` 포함. **서킷 지문 `0xF9A914DA3FAA680B` 그대로**(HANDOFF 1절 값) → 연출이 시뮬에 닿지 않았다. 코어 파일(`GrappleController`)이라 "전체" → `Run Long Tests` `4/4 Passed` (11:42:30Z~11:45:48Z, 198.1초), 절차 코스 해시 `0xE81912109A2EB020` 그대로.
+- **확인 못 한 것**: 실제 느낌(사용자가 서킷 커브에서 직접 플레이해야 한다). 무한 모드 `chainVisual` 이 난간을 따라 움직이는 끝점을 자연스럽게 그리는지(테스트는 비무한 `LineRenderer` 만 봤다).
+
 ## 2026-10-14 · 맵 정리 2단계: `ChainRushPrototype` → `ChainRushTestBench` (이름만)
 
 - **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ", `docs/PROPOSAL_SCENE_CLEANUP.md` B안 7절 2단계)**: 구 머리 캐릭터가 있는 맵을 플레이용이 아니라 **테스트 작업대**로 이름 붙인다. `Unity_RunCommand` 로 `AssetDatabase.MoveAsset` — GUID `d6b2b0e31af07d844824abd448970241` 그대로, `.meta` 는 Unity 가 함께 옮겼다. 테스트 8개 파일과 `ChainRushSceneBuilder` 의 경로 문자열, 메뉴 `Create/Open Prototype Scene` → `Create/Open Test Bench Scene`, 문서(ARCHITECTURE·README·HANDOFF)를 바꿨다. 빌드 설정에는 이 씬이 없다.

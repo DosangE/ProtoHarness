@@ -45,7 +45,8 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
 | 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 드리프트(그립 저하·게이지 충전)와 체인 액션(우선순위: 그래플 강화 → 커브 드리프트 중 코너 스윙 → 슬링샷, 게이지 1칸). 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
-| 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate` | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
+| 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate`. 코너 스윙 중에는 몸만 커브 안쪽으로 `SwingLook.SlipAngle` 만큼 튼다 | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
+| 코너 스윙 연출 계산(표현 전용, 2026-10-14). 안쪽 난간 걸림점 `RailPoint`, 안쪽 방향 `InsideSign`, 0.15초 블렌드. `GrappleController`(줄 끝)·`RunnerTilt`(몸)·`FollowCamera`(바깥쪽 0.6 m, 시야각 +4°)가 부른다. 시뮬의 `RunnerMotor.SwingAnchor`(원 중심)는 바꾸지 않는다 | `Runtime/ChainRush/Visuals/SwingLook.cs` (static class) | Track(`TrackFrame`, `RoadMeshBuilder.GuardRailHeight`) |
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |

@@ -63,7 +63,7 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 
 1. Unity Hub에서 **6000.3.25f1**으로 이 폴더를 연다.
 2. 메뉴 `ProtoHarness > Chain Rush`
-   - `Create Prototype Scene` (Ctrl+Shift+G) — 기본 테스트 씬
+   - `Create Test Bench Scene` (Ctrl+Shift+G) — 테스트 작업대 (플레이용 맵이 아니다)
    - `Create Circuit Scene` — 서킷 씬 (`ChainRushProcedural` 을 원본으로 만든다)
    - 무한 코스 씬은 `Assets/_Project/Scenes/ChainRushProcedural` 을 연다 (만드는 메뉴는 T3d 에서 지웠다)
 3. Play → Enter 또는 START RUN 버튼.
@@ -72,7 +72,7 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝�
 
 **조작**: A/D 또는 방향키로 진행 방향 틀기(자유 조향, 놓으면 그 방향 유지) · 좌클릭 지상 점프, 공중에서 재클릭 시 그래플(유지하면 스윙, 놓거나 우클릭하면 해제) · Space 공격 · 왼쪽 Shift 드리프트(미끄러지며 체인 게이지 충전) · 왼쪽 Ctrl 체인 액션(게이지 1칸: 평소엔 슬링샷 가속, 그래플 중엔 강화, 커브 드리프트 중엔 코너 스윙) · R 재시작 · Esc 일시정지 · M 음소거
 
-**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (가상 장치·20 시드 스윕 제외), `Run Device Input Tests` (가상 키보드·마우스 테스트만), `Run Course Sweep` (20 시드 스윕만, 약 16분), 또는 Test Runner 창에서 EditMode / PlayMode 실행. 작업 중에 바꾼 부분만 돌리려면 `tools/select-tests.ps1` 이 고를 테스트를 알려 준다 (병합 근거는 아니다, `CLAUDE.md` §9-2).
+**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (가상 장치·20 시드 스윕·`Long` 제외), `Run Long Tests` (장거리 4건), `Run Device Input Tests` (가상 키보드·마우스 테스트만), `Run Course Sweep` (20 시드 스윕만, 약 16분), 또는 Test Runner 창에서 EditMode / PlayMode 실행. 작업 중에 바꾼 부분만 돌리려면 `tools/select-tests.ps1` 이 고를 테스트를 알려 준다 (병합 근거는 아니다, `CLAUDE.md` §9-2).
 
 ## 폴더
 
@@ -82,7 +82,7 @@ Assets/_Project/        우리가 만드는 모든 것
   Scripts/Editor/       씬 생성기 등 에디터 전용 코드
   Scripts/Tests/        EditMode / PlayMode 테스트
   Data/                 ScriptableObject 인스턴스
-  Scenes/               ChainRushPrototype, ChainRushEndless
+  Scenes/               ChainRushProcedural(무한), ChainRushCircuit(서킷), ChainRushTestBench(테스트 작업대)
 docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵) · RULES/(작업별 규칙)
 index/, tools/          심볼 인덱스와 재생성 스크립트
 ```

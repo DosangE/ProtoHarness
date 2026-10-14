@@ -15,7 +15,7 @@ namespace ProtoHarness.Editor.ChainRush
     [InitializeOnLoad]
     public static class ChainRushSceneBuilder
     {
-        public const string ScenePath = "Assets/_Project/Scenes/ChainRushPrototype.unity";
+        public const string ScenePath = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         public const string RulesPath = "Assets/_Project/Data/RunRules_Default.asset";
         private const string MaterialFolder = "Assets/_Project/Art/Materials";
 
@@ -24,12 +24,12 @@ namespace ProtoHarness.Editor.ChainRush
             TestRunnerApi.RegisterTestCallback(new TestCallbacks());
         }
 
-        [MenuItem("ProtoHarness/Chain Rush/Create Prototype Scene %#g")]
-        public static void CreatePrototypeScene()
+        [MenuItem("ProtoHarness/Chain Rush/Create Test Bench Scene %#g")]
+        public static void CreateTestBenchScene()
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before creating the scene.");
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) != null)
-                throw new InvalidOperationException("ChainRushPrototype already exists. Open it instead of overwriting it.");
+                throw new InvalidOperationException("ChainRushTestBench already exists. Open it instead of overwriting it.");
             var rules = AssetDatabase.LoadAssetAtPath<RunRules>(RulesPath);
             if (rules == null) throw new InvalidOperationException("Run rules asset is missing: " + RulesPath);
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -203,8 +203,8 @@ namespace ProtoHarness.Editor.ChainRush
             Debug.Log("ChainRush: prototype scene saved. 9 platforms, 8 anchors, 496m finish. Press Play, then Enter.");
         }
 
-        [MenuItem("ProtoHarness/Chain Rush/Open Prototype Scene")]
-        public static void OpenPrototypeScene()
+        [MenuItem("ProtoHarness/Chain Rush/Open Test Bench Scene")]
+        public static void OpenTestBenchScene()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(ScenePath);

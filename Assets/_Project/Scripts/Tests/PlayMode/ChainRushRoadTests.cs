@@ -35,7 +35,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;

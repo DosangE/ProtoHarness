@@ -7,6 +7,13 @@
 
 ---
 
+## 2026-10-14 · 맵 정리 2단계: `ChainRushPrototype` → `ChainRushTestBench` (이름만)
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ", `docs/PROPOSAL_SCENE_CLEANUP.md` B안 7절 2단계)**: 구 머리 캐릭터가 있는 맵을 플레이용이 아니라 **테스트 작업대**로 이름 붙인다. `Unity_RunCommand` 로 `AssetDatabase.MoveAsset` — GUID `d6b2b0e31af07d844824abd448970241` 그대로, `.meta` 는 Unity 가 함께 옮겼다. 테스트 8개 파일과 `ChainRushSceneBuilder` 의 경로 문자열, 메뉴 `Create/Open Prototype Scene` → `Create/Open Test Bench Scene`, 문서(ARCHITECTURE·README·HANDOFF)를 바꿨다. 빌드 설정에는 이 씬이 없다.
+- **이유**: 사용자 "플레이어 머리가 구 모양으로 된 씬은 필요 없는 씬이다"(2026-10-14). 그 씬을 불러오는 PlayMode 테스트 8개 파일 대부분은 코드로 시험 도로를 깔고 씬은 그릇으로만 쓴다(제안서 2절). 지우지 않고 이름을 바꿔 플레이 맵은 Procedural·Circuit 둘로 보이게 한다.
+- **하지 않은 것 (3단계, 별도 합의)**: 발판·앵커·결승선·표적 걷어내기, `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 삭제, `Guards_PrototypeDecksAndProceduralRoad_AreGuarded` 축소, 구 머리 캐릭터. 테스트 이름에 남은 `Prototype` 도 그때 정리한다.
+- **검증** (`feature/scene-test-bench`, 에디터 6000.3.19f1): EditMode `237/237 Passed` (11:16:46Z~11:16:58Z). `Run PlayMode Tests` `testcasecount="140" result="Passed" passed="137" failed="0" skipped="3"` (11:17:34Z~11:24:47Z, 433.0초) — 서킷 지문(`Replay_CircuitBotRun_…`) 포함. 씬·Editor 변경이라 "전체" → `Run Long Tests` `4/4 Passed` (11:25:24Z~11:28:42Z, 198.0초). 메뉴: `Open Test Bench Scene` 있음, `Open Prototype Scene` 없음.
+
 ## 2026-10-14 · Long 묶음: 다른 곳에서 덮이는 장거리 테스트 4건을 병합 게이트에서 조건부로 뺀다
 
 - **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ")**: `Category("Long")` 4건 — `ChainRushProceduralTests.Course_BotRunsFourteenHundredMetres_GateSeeds(0,1,2)`, `ChainRushReplayTests.Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit`. 메뉴 `Run PlayMode Tests` 는 `Long` 을 빼고, 새 메뉴 `Run Long Tests` 가 이것만 돈다. 병합(②)에서는 `tools/select-tests.ps1 -Range dev...HEAD` 가 "전체"(코어·Editor·씬·설정 변경)로 판정한 브랜치만 `Long` 도 돌린다. 마일스톤(③)은 늘 돈다. 규칙 본문 `CLAUDE.md` §9-2.

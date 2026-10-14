@@ -19,7 +19,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 우리 에디터 스크립트 | **2** (`ChainRushSceneBuilder`, `ChainRushCircuitSceneBuilder`) |
 | 우리 테스트 | PlayMode **12 파일 / 46 테스트** (그중 `Device` 카테고리 2개, 공용 헬퍼 `TestRoad.cs`·`TrackFollower.cs` 포함), EditMode **9 파일 / 131 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-07 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (직선 유한 테스트 맵), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제 |
+| 게임 씬 | `Assets/_Project/Scenes/ChainRushTestBench.unity` (테스트 작업대 — 시험 도로를 코드로 까는 PlayMode 테스트의 그릇. 플레이용이 아니다. 2026-10-14 `ChainRushPrototype` 에서 이름만 바꿈), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제 |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
 
 참조 게임: https://github.com/DosangE/Chain-Rush · 조사 기준 커밋 `17294d85943dfa9fecd6a70272411e035b1ca6bf`.
@@ -90,14 +90,14 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 심볼 인덱스 (B모드) | `index/symbols.tsv` — 생성물, `tools/reindex.ps1` 로 재생성 |
 | 서브에이전트 정의 | `.claude/agents/*.md` (5종) |
 | 인덱스 재생성 | `tools/reindex.ps1` |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` |
-| 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Prototype Scene` (Ctrl+Shift+G). 기존 게임 씬을 덮어쓰지 않는다. |
+| 게임 씬 | 플레이: `ChainRushProcedural.unity`(무한), `ChainRushCircuit.unity`(서킷). 테스트 작업대: `ChainRushTestBench.unity` |
+| 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Test Bench Scene` (Ctrl+Shift+G, 작업대), `Create Circuit Scene` (서킷). 기존 게임 씬을 덮어쓰지 않는다. |
 | 열기 | `ProtoHarness > Chain Rush > Open Prototype Scene` |
 | 무한 씬 만들기 | `ProtoHarness > Chain Rush > Create Endless Scene` (Ctrl+Shift+E). 기존 테스트 씬을 복사한 후 별도 경로에만 저장. 재생성으로 덮어쓰지 않음. |
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |
 | 조작 | A/D 또는 방향키로 진행 방향 틀기(자유 조향, 2026-10-05), 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, 왼쪽 Shift 드리프트(게이지 충전), 왼쪽 Ctrl 체인 액션(슬링샷 / 그래플 중 강화), R 재시작, Esc 일시정지 |
-| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device` 카테고리 제외) / `Run Device Input Tests` (가상 키보드·마우스 테스트만) |
+| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device`·`Sweep`·`Long` 카테고리 제외) / `Run Long Tests` / `Run Device Input Tests` (가상 키보드·마우스 테스트만) / `Run Course Sweep` |
 | 테스트 결과 | Unity 프로세스의 `Path.GetTempPath()` 아래 `ChainRush-PlayMode-results.xml` (EditMode 결과도 같은 파일에 덮어쓴다). 경로는 머신마다 다르므로 실행할 때 `Unity_RunCommand` 로 `Path.GetTempPath()` 를 읽어 확인한다 |
 
 코스: 9개 플랫폼, 8개 낭떠러지와 앵커, 결승 z=496. 노란 점프선은 각 가장자리 4m 앞이다.

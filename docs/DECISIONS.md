@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-10-14 · 테스트 3단: 병합은 PlayMode 1회, 2회는 마일스톤으로, 작업 중에는 바꾼 부분만
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "A+B+C 진행")**: `docs/PROPOSAL_TEST_TIERS.md` 의 3단을 들인다. ① 빠른 확인(작업 중) — `tools/select-tests.ps1` 이 바뀐 파일로 고른 PlayMode 테스트 + EditMode 전체, **병합 근거가 아니다**. ② 병합(`feature → dev`) — PlayMode 전체(`Device`·`Sweep` 제외) **1회**. ③ 마일스톤(`dev → main`·태그 전) — ② + 같은 코드 2회차 + `Sweep` + `Device` + 네트워크 레이스. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.
+- **이유**: ① 사용자 "테스트만 20분 정도로 상당히 오래 걸린다 … 수정한 부분만 QA 를 돌리거나 시뮬레이션 해 보면 될 것 같다"(2026-10-14). 게이트 1회 약 580~660초 × 2회. ② 2회 규칙(2026-10-02)을 만든 간헐 실패는 가상 장치 테스트였고 `Device` 로 이미 게이트에서 빠졌다(2026-10-13 "병합 2회차 축소" 의 "감수한 것"). ③ 2회는 ③ 에 남겨 마일스톤마다 간헐 실패 경보를 울린다.
+- **감수한 것**: 코어 테스트에 새 간헐 실패가 생겨도 `dev` 병합 때는 한 번만 본다. 마일스톤 전까지 늦게 드러날 수 있다. "한 번이라도 실패하면 원문 보고, 원인을 설명 못 하면 병합하지 않는다" 는 그대로다.
+- **제안서와 달라진 것**:
+  - **카테고리 대신 클래스 이름으로 고른다.** 제안서 6절 3단계(`[Category]` 달기)는 `Assets/` 변경이라 게이트를 치러야 한다. `groupNames` 는 한 배열 안에서 OR(`RuntimeTestRunnerFilter.cs:81,85`)이라 클래스 여러 개 + 지문 테스트 1건을 `Filter` 하나로 고를 수 있다. 제안서가 근거로 든 "`Filter` 여러 개 OR" 는 쓰지 않는다.
+  - **매핑을 폴더가 아니라 파일 단위로 나눴다.** 2026-10-14 런타임 타입별 참조 grep 결과, `Track/Centerline`·`TrackFrame`·`TrackCoord` 는 `RunnerMotor`·`GrappleController` 가, `Control/TickInput`·`IInputSource` 는 `RunnerMotor`·`ChainRushGame`·Net 이 쓴다 → 전체. `Track/LapCounter`·`TrackDefinition` 은 서킷 + Net(`RaceOrder`·`SimSnapshotCodec`). `RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests` 는 이미 `[Category("Net")]` 이고 Net 코드를 시험하므로 Net 묶음이다(제안서 표의 `Race` 가 틀렸다).
+  - **지문 테스트는 테스트·Net 밖의 `Assets/` 가 바뀔 때만 넣는다.** `ProtoHarness.Net` 은 시뮬 어셈블리가 참조하지 않아 지문을 바꿀 수 없다(2026-10-13 "병합 2회차 축소" ④).
+  - "Net 만 바꾼 브랜치는 2회차를 `Net` 카테고리만" 조항은 ② 에 2회차가 없어져 지웠다.
+- **도구 시험 실행** (2026-10-14, 이 머신의 Windows PowerShell 5.1, Unity 없이): 커밋 5개의 diff 에 돌렸다. `fb6798d`(`NetworkRaceTests` 만) → PlayMode 없음 + `[Explicit]` 안내. `8073939`(C1c-3, Net + Net 테스트) → Net 5개 클래스, 지문 없음. `246d433`(`ChainRushGame.cs` 포함) → 전체. `75df74d`(`RunnerTilt.cs`) → Presentation·Combat·InputSource 3개 + 지문. `faeb50a`(docs 만) → PlayMode 없음. 표에서 `ChainRushTests` 를 뺀 사본은 경고 2줄을 내고 전체로 떨어졌다.
+- **Unity 실행 확인** (2026-10-14, 에디터 6000.3.19f1, `Assets/` 는 `dev` 와 같음): `75df74d` 출력의 `Filter` 를 그대로 실행 → `testcasecount="18" result="Passed" passed="18" failed="0" skipped="0"` (10:52:42Z~10:54:00Z, 78.4초). Combat 5 + InputSource 9 + Presentation 3 + 지문 1 = 18 로, 고른 것만 돌았다(`ChainRushReplayTests` 의 다른 2건은 돌지 않음).
+- **측정 (제안서 6-1)**: 같은 날 06:22:55Z~06:33:47Z 게이트 XML(144건, 651.2초, 140 통과·1 실패·3 skipped). **`feature/circuit-fall-respawn` 의 커밋 전 WIP 위에서 돈 실행이다**(reflog: 15:22~15:33 KST 에 그 브랜치, WIP 커밋은 15:37). 시간 분포를 보는 데만 쓴다. 클래스별: `ChainRushProceduralTests` 163.7초(게이트 시드 3건이 각 약 49초), `ChainRushReplayTests` 104.6초(절차 코스 55.0 · 서킷 지문 38.3 · 한 틱 바꾸기 11.3), `ChainRushCircuitTests` 77.0초(3랩 54.8), `ChainRushRoadTests` 45.4초, `ChainRushTests` 37.1초, 나머지 코어·코스 클래스 각 4~29초, Net 5개 클래스 합 27.3초. 상위 6건(절차 게이트 시드 3, 절차 리플레이, 서킷 3랩, 서킷 지문)이 약 295초로 게이트의 45% 다. 그 실행의 실패 1건(`ChainRushTests.Course_TimedJumpsAndHeldGrapple_ReachesFinish`, `Course did not finish: position=(0.35, -12.00, 394.14)`)은 WIP 쪽 결과라 이 결정과 무관하다 — 그 브랜치를 검증할 때 다룬다.
+- **확인 못 한 것**: `Long` 묶음 배정(제안서 5절). 측정값으로 후보는 위 상위 6건이지만, 배정은 `[Category]` 를 다는 `Assets/` 변경이라 별도 합의.
+- **버린 대안**: 제안서 7절과 같다. 카테고리 달기 — 지금은 클래스 이름으로 충분하고 `Assets/` 변경이 든다. 필요해지면(예: 한 클래스 안의 일부만 고를 때) 별도 합의.
+
 ## 2026-10-13 · main v0.1: `dev` 를 `main` 에 병합하고 첫 태그를 단다
 
 - **결정 (사용자 "메인까지 하는게 나아보이면 해라" — 판단을 맡김)**: `dev`(P3 C1 같은 시각 출발 병합 `f95a184` + 이 문서 브랜치)를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.1` 을 단다. 둘 다 `origin` 에 푸시한다.
@@ -64,6 +80,7 @@
 
 ## 2026-10-13 · 병합 2회차 축소: Net 쪽만 바꾼 브랜치는 PlayMode 2회차를 `Net` 카테고리만 돌린다
 
+- → 2026-10-14 "테스트 3단" 으로 대체: 병합(②)에서 2회차가 없어져 이 조항도 지웠다. 아래 근거(asmdef 경계, 필터 소스)는 그 결정이 그대로 쓴다.
 - **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ" — HANDOFF 3절 #1 의 B안을 어셈블리 경계로 좁힌 안)**: 병합 조건의 PlayMode 는 1회차를 지금처럼 전체(`Device`·`Sweep` 제외)로 돌린다. 2회차는 `git diff --name-only dev...HEAD` 의 `Assets/` 파일이 모두 `Runtime/Net/`, `Tests/EditMode/`, `Net`·`NetRace` 카테고리 테스트 클래스 파일일 때만 `Net` 카테고리로 줄이고, 그 밖이 하나라도 있으면 전체다. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.
 - **이유**: ① 사용자 질문(2026-10-05 "작업한 부분만 검증하면 안 되나"). 게이트 1회가 이 머신에서 약 584~660초라 병합마다 약 20분이 든다. ② 2026-10-13 14:07 게이트 XML(140건, 584.2초)의 클래스별 시간: `ChainRushProceduralTests` 154초, `ChainRushReplayTests` 99초, `ChainRushCircuitTests` 73초 … `Net` 카테고리 5개 클래스 합계 약 30초. ③ 최근 코드 병합 7건 중 6건(C1c-1 ~ C1c-3)이 `Runtime/Net`·`Tests/PlayMode` 만 바꿨다(C1c-1 은 `DefaultNetworkPrefabs.asset` 도 — 새 규칙에서는 전체 2회차다). ④ asmdef 상 `ProtoHarness.Net` 을 참조하는 것은 PlayMode 테스트 어셈블리뿐이다(`ProtoHarness.Runtime` 은 `Unity.InputSystem` 만, `ProtoHarness.Editor` 는 `ProtoHarness.Runtime`·TestRunner 만 참조). Net 변경은 코어 테스트의 동작을 바꿀 수 없다.
 - **감수한 것**: 2회 실행은 간헐 실패를 잡으려고 넣었다(아래 2026-10-02 "병합 조건 강화"). 그때의 간헐 실패는 지금 게이트에서 빠진 `Device` 테스트였다. Net 만 바꾼 브랜치에서는 코어 테스트를 1회만 보므로, 코어 테스트에 새 간헐 실패가 생겨도 그 브랜치에서는 한 번만 볼 수 있다. 그 코드는 이번 변경이 바꿀 수 없는 코드다.
@@ -646,6 +663,7 @@
 ## 2026-10-02 · 병합 조건 강화: PlayMode 연속 2회 통과, 간헐 실패 기록
 
 - → 2026-10-13 "병합 2회차 축소" 로 일부 대체: Net 쪽만 바꾼 브랜치는 2회차를 `Net` 카테고리만 돌린다. 그 밖은 아래 그대로다.
+- → 2026-10-14 "테스트 3단" 으로 대체: 같은 코드 2회 통과는 마일스톤(`dev → main`) 조건으로 옮겼다. 병합(`feature → dev`)은 1회. 실패 보고 규칙은 그대로다.
 - **결정**: 병합 조건을 "컴파일 0 + EditMode 통과 + **같은 코드에서 PlayMode 연속 2회 통과**"로 바꾼다. 병합 보고에는 각 실행의 결과 XML 값을 모두 적고, 한 번이라도 실패하면 원문과 함께 보고하며 원인을 설명하지 못하면 병합하지 않는다. 규칙 본문은 `CLAUDE.md` §9-2.
 - **이유**: P0(`103270b`), P1-1(`6ed7676`), P1-2(`8520a1c`)를 PlayMode **1회 통과**로 병합했다. 그 뒤 같은 코드(`Assets` 차이 0, `git diff 8520a1c HEAD -- Assets`)에서 1회 실패가 나왔다. 아래 표가 근거다.
 

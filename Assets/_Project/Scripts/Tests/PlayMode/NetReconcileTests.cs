@@ -412,39 +412,38 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- the end of the server's run ----------------------------------------------------------------
 
-        // The server missed a press (a jump or a grapple), so its run falls on a tick where the client's run, on the controls
-        // the client really typed, goes on. The client's prediction is corrected once by the server's states, and then the
-        // server's end arrives: the client's run must have ended on the same tick for the same reason. The correction comes
-        // from the states, not from the end: by the time the end arrives the state for the tick before it has been compared,
-        // so the client already plays the server's run, which falls on its own (OnServerEnd returns false).
+        // The server missed a press (a jump or a grapple), so its run falls into a gap where the client's run, on the controls
+        // the client really typed, goes on. A fall does not end a circuit run: the server's run is put back on the track and
+        // held there (RunnerMotor.RespawnOnTrack), and its states correct the client once, after which the client follows
+        // the server's run through the fall, the respawn and the hold, bit for bit. With the longer latency the correction's
+        // replay runs the respawn itself.
         [UnityTest, Timeout(300000)]
-        public IEnumerator ClientEnd_WhenTheServersRunFellAfterAMissedInput_CorrectsOnceAndFailsOnTheSameTick()
+        public IEnumerator Client_WhenTheServersRunFellAfterAMissedInput_CorrectsOnceAndFollowsItsRespawn()
         {
             yield return Load();
             InputLog log = RecordBot(BotTicks);
             byte[][] truth = RunTruth(log, BotTicks);
-            int dropTick = FindFallingDrop(log, truth, out int fallTick);
-            byte[][] server = RunServerToEnd(log, BotTicks, dropTick, out ServerEnd end);
-            Assert.That(end.Tick, Is.EqualTo(fallTick), "The buffer's run must fall where repeating the input by hand did.");
-            Assert.That(end.Reason, Is.EqualTo(RaceWire.EndReason.Failed));
-            Assert.That(end.Input.Steer, Is.EqualTo(log[end.Tick - 1].Steer), "The end carries the controls the server ran its last tick on.");
-            Assert.That(TickInputCodec.ToFlags(end.Input), Is.EqualTo(TickInputCodec.ToFlags(log[end.Tick - 1])));
-            // The server's states end before its fall, so they go first: FirstDifference walks the first one.
-            int diverge = FirstDifference(server, truth);
+            int dropTick = FindRespawningDrop(log, truth, out int respawnTick);
+            byte[][] server = RunServer(log, BotTicks, dropTick, out _);
+            Assert.That(RespawnHoldOf(server[respawnTick - 1]), Is.Zero, "The buffer's run must not be held before it falls.");
+            Assert.That(RespawnHoldOf(server[respawnTick]), Is.GreaterThan(0), "The buffer's run must be put back on the tick repeating the input by hand was.");
+            int diverge = FirstDifference(truth, server);
             Assert.That(diverge, Is.EqualTo(dropTick), "The missed press must change the server's state on that very tick.");
 
-            foreach (int latency in new[] { 5, 15, 40 })
+            foreach (int latency in new[] { 5, respawnTick - dropTick + 5 })
             {
-                bool corrected = RunClientToEnd(log, server, end, latency, out ClientPredictor predictor);
+                Assert.That(latency, Is.LessThan(ClientPredictor.Window - 8), "precondition: the client must not outrun its window while it waits.");
+                byte[][] client = RunClient(log, BotTicks, server, latency, out ClientPredictor predictor);
+                int arrival = diverge + latency;
                 Assert.That(predictor.Corrections, Is.EqualTo(1), $"latency {latency}: one missed input is one correction.");
                 Assert.That(predictor.FirstMismatchTick, Is.EqualTo(diverge), $"latency {latency}");
-                Assert.That(corrected, Is.False, $"latency {latency}: the states already put the client on the server's run, which falls by itself.");
-                Assert.That(predictor.ServerEnded, Is.True, $"latency {latency}");
-                Assert.That((predictor.EndTick, predictor.EndReason), Is.EqualTo((end.Tick, RaceWire.EndReason.Failed)), $"latency {latency}");
-                Assert.That(game.HasFailed, Is.True, $"latency {latency}: the client's run must have fallen.");
-                Assert.That(game.Tick, Is.EqualTo(end.Tick), $"latency {latency}: the client's run must end on the server's tick.");
-                Assert.That(predictor.StatesCompared, Is.EqualTo(end.Tick), $"latency {latency}: every state the server sent (ticks 0..{end.Tick - 1}) is compared.");
-                Debug.Log($"Net end: missed press at tick {dropTick}, server fell at tick {end.Tick}; latency {latency} ticks: client corrected at tick {diverge + latency}, failed at tick {game.Tick}.");
+                Assert.That(predictor.ReplayedTicks, Is.EqualTo(latency), $"latency {latency}: the correction replays the ticks since the server's state.");
+                Assert.That(predictor.Faulted, Is.False, $"latency {latency}");
+                for (int t = 0; t < arrival; t++)
+                    Assert.That(SimSnapshotCodec.SameState(client[t], truth[t]), Is.True, $"latency {latency}: before the correction the client predicts the truth (tick {t}).");
+                for (int t = arrival; t <= BotTicks; t++)
+                    Assert.That(SimSnapshotCodec.SameState(client[t], server[t]), Is.True, $"latency {latency}: after the correction the client follows the server's run (tick {t}).");
+                Debug.Log($"Net respawn: missed press at tick {dropTick}, server put back on the track at tick {respawnTick}; latency {latency} ticks: client corrected at tick {arrival}, replayed {predictor.ReplayedTicks} ticks.");
             }
         }
 
@@ -453,9 +452,8 @@ namespace ProtoHarness.Tests.PlayMode
         // prediction (the inputs before were all the same), so it is the end that corrects: the client goes back to the
         // state before that tick, runs it on the controls the end carries, and ends on the same tick for the same reason
         // (OnServerEnd returns true). The end must carry the repeated controls, not the ones the client typed.
-        // The finish, not a fall: a missed press makes the run fall only long after (ticks into the gap, RunnerMotor's fall
-        // check at H < -12), where no input of that tick holds the runner up (a PlayMode run on 2026-10-10 found every one of
-        // the 96 inputs still falling, for each of the three falling presses). A finish is the lap counter's progress reaching
+        // The finish: in a circuit race a fall puts the runner back on the track and does not end the run
+        // (RunnerMotor.RespawnOnTrack), so the finish is the only end. A finish is the lap counter's progress reaching
         // the race length on the tick, so a run that crosses the line by less than one tick's controls can change stays short
         // of it on the client's controls; FindFinishReplayCase looks for such a run.
         [UnityTest, Timeout(300000)]
@@ -760,61 +758,6 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log($"Net catch-up limit: {found.Found}; latency {latency} ticks: the catch-up stopped at the limit {finish}; the client then finished on tick {game.Tick} with the server.");
         }
 
-        // The mirror of the fall above: the client missed a press on tick d (its own controls repeat the tick before's), so its
-        // run falls on tick E, while the server's run (here the truth, every press in it) goes on. The server's state for d
-        // reaches the client after its run has fallen: it is older than E, so it is an ordinary correction, and its replay on
-        // the remembered controls after d does not fall. The client had stopped running while it waited, so it is behind: it
-        // catches up on live controls (sent like any other) until it is as far ahead of the state as when its run ended, as
-        // after a state past its end. Then it follows the truth with no other correction.
-        [UnityTest, Timeout(300000)]
-        public IEnumerator ClientEnd_WhenAnOlderStateBringsAFallenClientBack_CatchesUp()
-        {
-            yield return Load();
-            InputLog log = RecordBot(BotTicks);
-            byte[][] truth = RunTruth(log, BotTicks);
-            int dropTick = FindFallingDrop(log, truth, out int fallTick);
-            var clientLog = new InputLog();
-            for (int t = 1; t <= log.Count; t++) clientLog.Add(t == dropTick ? log[t - 2] : log[t - 1]);
-            // The state for d arrives a few steps after the client's run has fallen.
-            int latency = fallTick - dropTick + 5;
-            Assert.That(latency, Is.LessThan(ClientPredictor.Window - 8), "precondition: the client must not outrun its window while it waits.");
-            // The lead is measured on the falling tick, from the state that arrived the step before (tick d - 6).
-            Assert.That(dropTick, Is.GreaterThanOrEqualTo(6), "precondition: a server state must have been compared before the client's run falls.");
-            int arrivalStep = dropTick + latency;
-            int caughtUpTo = arrivalStep + 1;
-            Assert.That(caughtUpTo + 20, Is.LessThanOrEqualTo(BotTicks), "precondition: the truth must go on past the catch-up.");
-
-            var sent = new List<int>();
-            ClientPredictor predictor = StartClient(clientLog, int.MaxValue, sent);
-            for (int step = 1; step <= caughtUpTo + 20; step++)
-            {
-                game.StepTick(predictor);
-                int arrived = step - latency;
-                if (arrived < 0) continue;
-                predictor.OnServerState(truth[arrived]);
-                if (arrived == dropTick - 1)
-                {
-                    Assert.That((game.HasFailed, game.Tick), Is.EqualTo((true, fallTick)), "precondition: the client's own run has fallen before the state for d arrives.");
-                    Assert.That((predictor.ClientEndTick, predictor.ClientEndLead), Is.EqualTo((fallTick, latency + 1)), "The client's end and its lead then are remembered.");
-                    Assert.That(predictor.Corrections, Is.EqualTo(0), "Every state before d agrees.");
-                }
-                else if (arrived == dropTick)
-                {
-                    Assert.That(predictor.Corrections, Is.EqualTo(1), "The server's state for d is a correction.");
-                    Assert.That(predictor.FirstMismatchTick, Is.EqualTo(dropTick));
-                    Assert.That(predictor.ReplayedTicks, Is.EqualTo(fallTick - dropTick), "The remembered controls after d, up to the last one taken, are run again.");
-                    Assert.That(predictor.ClientEndTick, Is.EqualTo(-1), "The run is going again; its end is forgotten.");
-                    Assert.That((predictor.CatchUps, predictor.CaughtUpTicks), Is.EqualTo((1, caughtUpTo - fallTick)), "The client catches up on live controls until it is as far ahead as when its run ended.");
-                    Assert.That((game.IsRunning, game.Tick), Is.EqualTo((true, caughtUpTo)));
-                    Assert.That(SimSnapshotCodec.SameState(SimSnapshotCodec.Encode(game.CaptureSnapshot()), truth[caughtUpTo]), Is.True, "After d the client's controls are the truth's, so it stands on the truth's state.");
-                    Assert.That(sent, Is.EqualTo(TickRange(1, caughtUpTo)), "Every tick's controls are sent once and in order, the caught-up ones too.");
-                }
-            }
-            Assert.That(predictor.Corrections, Is.EqualTo(1), "After the catch-up the client follows the truth.");
-            Assert.That(predictor.Faulted, Is.False);
-            Debug.Log($"Net older state after a fall: the client missed the press on tick {dropTick} and fell on tick {fallTick}; latency {latency} ticks: the state for {dropTick} brought it back and it caught up {predictor.CaughtUpTicks} ticks to tick {caughtUpTo}.");
-        }
-
         // ---- a broken prediction stays broken -------------------------------------------------------------
 
         // A state the predictor refuses (from the future, or older than one already compared) is a broken stream, like an end
@@ -1067,9 +1010,10 @@ namespace ProtoHarness.Tests.PlayMode
             return log;
         }
 
-        // A tick whose input, when the server misses it, makes the server's run fall: a press of the primary control (a jump
-        // or a grapple) that the repeated input of the tick before loses. Each press is tried from the truth's state before it.
-        private int FindFallingDrop(InputLog log, byte[][] truth, out int fallTick)
+        // A tick whose input, when the server misses it, makes the server's run fall and be put back on the track: a press of
+        // the primary control (a jump or a grapple) that the repeated input of the tick before loses. Each press is tried from
+        // the truth's state before it; respawnTick is the tick the run was put back on.
+        private int FindRespawningDrop(InputLog log, byte[][] truth, out int respawnTick)
         {
             Time.timeScale = 0f;
             var tried = new System.Text.StringBuilder();
@@ -1078,18 +1022,20 @@ namespace ProtoHarness.Tests.PlayMode
                 if (!log[d - 1].PrimaryPressed || log[d - 2].PrimaryPressed) continue;
                 var source = new TickReplay(game, log, d);
                 game.RestoreSnapshot(SimSnapshotCodec.Decode(truth[d - 1]));
-                while (game.IsRunning && game.Tick < BotTicks) game.StepTick(source);
-                tried.Append($" {d}:{(game.HasFailed ? "fell" : "ran")}@{game.Tick}");
-                if (game.HasFailed)
+                while (game.IsRunning && !player.IsRespawning && game.Tick < BotTicks) game.StepTick(source);
+                tried.Append($" {d}:{(player.IsRespawning ? "fell" : "ran")}@{game.Tick}");
+                if (player.IsRespawning)
                 {
-                    fallTick = game.Tick;
+                    respawnTick = game.Tick;
                     return d;
                 }
             }
             Assert.Fail($"No single missed press makes the run fall within {BotTicks} ticks. Presses tried (tick:outcome@last tick):{tried}");
-            fallTick = -1;
+            respawnTick = -1;
             return -1;
         }
+
+        private static int RespawnHoldOf(byte[] state) => SimSnapshotCodec.Decode(state).Racer.RespawnHoldTicks;
 
         // Where the variants start, in ticks before the recorded finish, and the most ticks a variant flips drift on. The search
         // is bounded by this fixed set of variants, not by the clock, so its outcome does not depend on the machine; the

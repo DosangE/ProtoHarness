@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-10-14 · 서킷 낙하 → 트랙 복귀: 떨어져도 런이 끝나지 않고, 마지막 착지 지점 4 m 뒤로 돌아가 1초 선다 (검증 남음, 병합 보류)
+
+- **결정 (사용자 선택 2026-10-14, 구현 승인 "진행")**: HANDOFF 2절의 첫 후보. ① **서킷만** 복귀한다(직선·무한 모드는 지금처럼 낙하 = 종료). ② 복귀 위치는 **마지막으로 서 있던 S**(`RacerState.LastGroundedS`, 착지한 틱마다 기록)에서 `respawnBackoff` 4 m 뒤의 중심선, 출발 슬롯과 같은 높이(1.05 m 위에서 0.3 m 내려 착지), 트랙 방향, 속도 0. ③ 벌칙은 **복귀 후 1초(50틱) 정지**(`respawnHoldTime`, `RacerState.RespawnHoldTicks`): 그동안 입력을 무시하고 움직이지 않지만 틱(기록)은 흐른다. 게이지는 유지하고 그래플·슬링·스윙은 부스트 없이 끝낸다. 두 번째 낙하가 착지 전에 나면 같은 자리로 돌아간다(`LastGroundedS` 를 복귀 때 바꾸지 않는다). ④ **"낙하 = 런 종료" 경로는 서킷에서 완전히 제거**(스위치를 두지 않음). 서킷에는 공격 대상이 없어 이제 서킷 런이 끝나는 길은 결승뿐이다.
+- **구현**: `RunnerMotor.Step`(정지 틱 처리, 낙하 판정에서 서킷이면 `RespawnOnTrack`), `RacerState`(필드 2개, `Snapshot`/`Capture`/`Restore`/`Reset`), `SimSnapshotCodec`(두 필드 직렬화 — 와이어 형식이 바뀌어 레이스 플레이어 재빌드 필요). 판정 기준 H < -12 m 는 그대로. `RaceWire.EndReason.Failed`·`RaceStandings.Status.Failed`·패널 "낙하" 는 지우지 않았다(다른 모드의 HP 0 종료 경로로 남음, 서킷에서는 이제 나오지 않는다).
+- **테스트**: `ChainRushCircuitTests` 틈 테스트를 "틈 앞 4 m 로 복귀, 정확히 50틱 정지 후 다음 틱에 다시 달림, 중심선·착지·속도 0·트랙 방향, 랩 없음" 으로 바꿨다(사양 변경). `NetReconcileTests` 의 "서버가 입력을 놓쳐 낙하·종료" 를 "놓친 입력으로 서버 런이 복귀 → 클라 보정 1회 후 복귀·정지까지 비트 단위로 따라감"(지연 5틱과, 보정 재실행이 복귀를 직접 지나는 지연 59틱)으로 바꿨다. "낙하로 끝난 클라가 이전 상태로 되살아남"(`ClientEnd_WhenAnOlderStateBringsAFallenClientBack_CatchesUp`)은 서킷에서 만들 수 없어 **삭제** — C1c-1b 의 같은 경로는 결승 쪽 3건이 계속 다룬다. `ChainRushRollbackTests` 에 낙하 중·정지 중 스냅샷의 되감기 테스트를 추가하고, 롤백 트레이스에 두 필드를 넣었다. 스냅샷 가드(`SnapshotTests`, `Codec_EveryFieldOfTheSnapshotChangesTheBytes`)는 리플렉션이라 고치지 않고 새 필드를 잡았다(34개 필드).
+- **검증 (6000.3.19f1, 이 머신, 커밋 전 작업 트리, UTC)**: 컴파일 에러 0(Console Error 0). EditMode `testcasecount="237" result="Passed" passed="237" failed="0"` (05:45:13~05:45:20). 바뀐 PlayMode 5건 `Passed 5/0` (05:44:40~05:44:55): 복귀 틱 657, 지연 59틱 보정 재실행 비트 일치, 낙하 중(633)·정지 중(677) 스냅샷이 857틱까지 동일. **P2 해시 불변**: 세 게이트 모두 서킷 `0xF9A914DA3FAA680B`, 절차 `0xE81912109A2EB020`.
+  - 게이트 1회차 `testcasecount="144" result="Failed(Child)" passed="140" failed="1" skipped="3"` (05:45:47~05:56:14). `ChainRushCombatTests.Combat_EachDirection_AttackFiresConnectsAndRetracts` — `Expected: Firing / But was: Retracting` (`:104`).
+  - 게이트 2회차 `testcasecount="144" result="Passed" passed="141" failed="0" skipped="3"` (05:58:44~06:10:39).
+  - 게이트 3회차 `testcasecount="144" result="Failed(Child)" passed="140" failed="1" skipped="3"` (06:22:55~06:33:47). `ChainRushTests.Course_TimedJumpsAndHeldGrapple_ReachesFinish` — `Course did not finish: position=(0.35, -12.00, 394.14), links=6, health=3`.
+  - 레이스 플레이어 재빌드 `Succeeded`, 에러 0(경고 485 는 Sentis 셰이더). 빌드가 바꾼 `Assets/Settings/*.asset` 3개·`UnityConnectSettings.asset` 은 파일을 지정해 되돌렸다.
+  - 네트워크 레이스 1차(06:13:30~06:17:47) A·B·C 실패: A 보정 1회(`late 1`, 에디터 프레임 최장 60.3 ms), B·C 는 `the server's state is for tick 909(790) but the client is at tick 908(789)` 로 예측기 고장(에디터 프레임 50 ms 초과 183·241회, 최장 452.7·288.8 ms). 2차(06:19:12~06:22:09) B 통과, A 보정 2회(`late 18`, 50 ms 초과 75회, 최장 274.6 ms), C 같은 고장(틱 577, 50 ms 초과 159회, 최장 388.3 ms).
+- **실패의 판단 (추정, 증명하지 못함)**: 실패 5종이 모두 프레임 시간에 기대는 테스트다 — 전투는 게임 시간 0.07초 대기 중 비행 8틱이 끝남(한 프레임 ≥ 약 0.09초), 직선 코스는 프레임마다 점프를 눌러 3배속에서 긴 프레임이 4.5 m 점프 구간을 건너뜀, 네트워크 레이스는 입력이 제때 닿아야 함. 틱 단위로 직접 돌리는 결정성·롤백·재생 테스트와 P2 해시는 매번 같았고, 전투·직선 코스는 이번 변경이 동작을 바꾸지 않는 모드이며, 레이스 C 의 에디터 런은 오프라인에서 낙하가 없다. 실행 내내 Unity 창이 비활성(`isApplicationActive=False`)이었다. 그래서 원인은 비활성 에디터의 프레임 멈춤으로 본다. `dev` 로 같은 조건을 돌리는 대조 실험은 하지 않았다(사용자 "너무 오래걸린다").
+- **복귀가 드러낸 것**: 서킷 런이 낙하로 끝나지 않으므로 클라가 고장 나 입력이 끊긴 레이서도 서버에서 계속 달린다(`ran 4285`). 레이스 B 의 에디터 런은 예전엔 657틱 낙하로 끝났는데 이제 1000틱 끝까지 가서, 서버가 클라를 앞지르는 고장(HANDOFF 4절, 2026-10-12)에 더 오래 노출된다.
+- **병합 보류**: §9-2 의 "같은 코드에서 연속 2회 통과" 와 네트워크 레이스 통과를 채우지 못했다. 사용자 결정(2026-10-14 "1,2,3 ㄱㄱ")으로 브랜치에 WIP 커밋하고, Unity 창을 앞에 둔 다음 세션에서 게이트 연속 2회 + 네트워크 레이스 A·B·C 를 다시 돌린다.
+- **버린 대안**: 복귀 스위치로 낙하 = 종료를 남기기(사용자 "완전히 제거"), 마지막 체크포인트로 복귀(체크포인트가 적어 벌칙이 크고 들쭉날쭉), 정지 없음·2초 정지(사용자 1초 선택), 검증을 건너뛴 병합.
+
 ## 2026-10-13 · main v0.1: `dev` 를 `main` 에 병합하고 첫 태그를 단다
 
 - **결정 (사용자 "메인까지 하는게 나아보이면 해라" — 판단을 맡김)**: `dev`(P3 C1 같은 시각 출발 병합 `f95a184` + 이 문서 브랜치)를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.1` 을 단다. 둘 다 `origin` 에 푸시한다.

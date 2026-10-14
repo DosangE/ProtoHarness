@@ -34,6 +34,8 @@ namespace ProtoHarness.ChainRush
         private float ropeLength;
         private int missUntilTick;
         private bool grounded;
+        private double lastGroundedS;
+        private int respawnHoldTicks;
 
         // Every field of this class except the rules, by value (the guard test in SnapshotTests keeps the two in step).
         // Treat it as read-only. A copy taken between ticks puts the racer back exactly where it was.
@@ -60,6 +62,8 @@ namespace ProtoHarness.ChainRush
             public float RopeLength;
             public int MissUntilTick;
             public bool Grounded;
+            public double LastGroundedS;
+            public int RespawnHoldTicks;
         }
 
         public RacerState(RunRules rules)
@@ -90,6 +94,10 @@ namespace ProtoHarness.ChainRush
         // the controller, and every simulation read goes through this copy. That makes it restorable.
         // Reset does not clear it: it is the controller's answer, not a rule of the run.
         public ref bool Grounded => ref grounded;
+        // The track S where the runner last stood after a move; a circuit runner who falls comes back near it.
+        public ref double LastGroundedS => ref lastGroundedS;
+        // Ticks left in which a runner just put back on the track stands still and ignores its controls; zero otherwise.
+        public ref int RespawnHoldTicks => ref respawnHoldTicks;
 
         // Index into the grapple's anchor array rather than a Transform, so the state stays plain data.
         public int AnchorIndex => anchorIndex;
@@ -149,6 +157,8 @@ namespace ProtoHarness.ChainRush
             anchorIndex = NoAnchor;
             ropeLength = 0f;
             missUntilTick = 0;
+            lastGroundedS = 0d;
+            respawnHoldTicks = 0;
         }
 
         public Snapshot Capture() => new Snapshot
@@ -174,6 +184,8 @@ namespace ProtoHarness.ChainRush
             RopeLength = ropeLength,
             MissUntilTick = missUntilTick,
             Grounded = grounded,
+            LastGroundedS = lastGroundedS,
+            RespawnHoldTicks = respawnHoldTicks,
         };
 
         public void Restore(in Snapshot snapshot)
@@ -199,6 +211,8 @@ namespace ProtoHarness.ChainRush
             ropeLength = snapshot.RopeLength;
             missUntilTick = snapshot.MissUntilTick;
             grounded = snapshot.Grounded;
+            lastGroundedS = snapshot.LastGroundedS;
+            respawnHoldTicks = snapshot.RespawnHoldTicks;
         }
 
         public void Attach(int index, float length)

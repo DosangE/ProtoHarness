@@ -239,7 +239,8 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Jitter of up to 120 ms against a 1-tick buffer: inputs arrive late and the server repeats the last one. A missed jump
-        // can make the server's run fall and end; the server then tells that racer's client (race.end), which ends its own run
+        // can make the server's run fall, which since 2026-10-14 puts it back on the track instead of ending it (RunnerMotor
+        // .RespawnOnTrack), so within these ticks a run ends only by a finish. When a run does end, the server tells that racer's client (race.end), which ends its own run
         // on the same tick. So each client finishes, with no timeout: by comparing the state for its last tick, or by taking the
         // end of a server run that ended within its ticks. Each client takes exactly the end of its own racer, at the same tick
         // and for the same reason, and none ("none") when its racer's run did not end within the ticks. Every correction still

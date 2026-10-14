@@ -89,6 +89,21 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // The circuit bot's steering without its jumps and grapples, so the runner falls into the first gap it meets.
+        private sealed class NoPressBot : IInputSource
+        {
+            private readonly CircuitBot driver;
+
+            public NoPressBot(ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit)
+            {
+                driver = new CircuitBot(game, player, grapple, circuit);
+            }
+
+            public void Poll() { }
+            public void Clear() { }
+            public TickInput Consume() => new TickInput(driver.Consume().Steer, false, false, false);
+        }
+
         [UnitySetUp]
         public IEnumerator SetUp()
         {
@@ -244,6 +259,45 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log("ChainRush rollback: drift, sling and corner swing snapshots " + string.Join(", ", marks.ConvertAll(m => m.Name + "@" + m.Tick)) + " replay identically.");
         }
 
+        // A fall in a circuit race puts the runner back on the track and holds it (RunnerMotor.RespawnOnTrack). Snapshots
+        // taken while falling and in the middle of the hold replay every tick bit for bit, through the respawn, the rest of
+        // the hold and the running on after it (where the bot, still pressing nothing, may fall again).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit()
+        {
+            yield return Load(CircuitScene);
+            var log = new InputLog();
+            var marks = new List<Mark>();
+            StateTrace original = CircuitTrace(new InputRecorder(new NoPressBot(game, player, grapple, circuit), log));
+            Time.timeScale = 0f;
+            game.StartRun();
+            const int heldFor = 20;
+            const int after = 200;
+            int respawnTick = -1;
+            while (game.IsRunning && game.Tick < 3000)
+            {
+                if (respawnTick < 0 && marks.Count == 0 && game.Tick > 50 && game.Track.Project(player.transform.position).H < -3f) marks.Add(Take("falling"));
+                game.StepTick(original);
+                if (respawnTick < 0 && player.IsRespawning) respawnTick = game.Tick;
+                if (respawnTick > 0 && game.Tick == respawnTick + heldFor) marks.Add(Take("held"));
+                if (respawnTick > 0 && game.Tick >= respawnTick + after) break;
+            }
+            Assert.That(respawnTick, Is.GreaterThan(0), $"The bot pressing nothing never fell (tick {game.Tick}, running {game.IsRunning}, failed {game.HasFailed}).");
+            Assert.That(game.IsRunning, Is.True, "A fall must not end a circuit run.");
+            Assert.That(marks.Count, Is.EqualTo(2), "The run must be snapshotted while falling and during the hold.");
+            Assert.That(marks[0].Tick, Is.LessThan(respawnTick));
+            Assert.That(marks[1].Snapshot.Racer.RespawnHoldTicks, Is.EqualTo(Ticks.FromSeconds(1f) - heldFor), "The held snapshot is in the middle of the hold.");
+
+            foreach (Mark mark in marks)
+            {
+                int count = original.Samples - mark.Tick;
+                string difference = Replay(original, log, mark, count);
+                Assert.That(difference, Is.Null, $"snapshot '{mark.Name}' at tick {mark.Tick}: {difference}");
+                Assert.That(game.Tick, Is.EqualTo(mark.Tick + count));
+            }
+            Debug.Log($"ChainRush rollback: respawn at tick {respawnTick}; falling@{marks[0].Tick} and held@{marks[1].Tick} replay to tick {respawnTick + after} identically.");
+        }
+
         // ---- the manual step is the same simulation --------------------------------------------------
 
         [UnityTest, Timeout(240000)]
@@ -325,7 +379,9 @@ namespace ProtoHarness.Tests.PlayMode
         private StateTrace CircuitTrace(IInputSource inner) => new StateTrace(game, player, inner,
             ("lapProgress", () => circuit.Laps.Progress),
             ("checkpoints", () => circuit.Laps.CheckpointsPassed),
-            ("laps", () => circuit.Laps.CompletedLaps));
+            ("laps", () => circuit.Laps.CompletedLaps),
+            ("lastGroundedS", () => game.Racer.LastGroundedS),
+            ("respawnHold", () => game.Racer.RespawnHoldTicks));
 
         private Mark Take(string name) => new Mark { Name = name, Tick = game.Tick, Snapshot = game.CaptureSnapshot() };
 

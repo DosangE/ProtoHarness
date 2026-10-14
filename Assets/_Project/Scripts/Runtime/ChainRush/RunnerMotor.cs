@@ -55,6 +55,10 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float swingMaxTime = 2f;
         [SerializeField] private float swingExitSpeed = 17f;
         [SerializeField] private float swingExitCarryTime = 0.6f;
+        // Falling in a circuit race (KartRider style): the runner comes back on the centerline respawnBackoff metres
+        // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
+        [SerializeField] private float respawnBackoff = 4f;
+        [SerializeField] private float respawnHoldTime = 1f;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
@@ -79,6 +83,7 @@ namespace ProtoHarness.ChainRush
         public Vector3 SlingTarget => slingTarget;
         public bool IsSwinging => game.Racer.SwingTicks > 0;
         public Vector3 SwingAnchor => swingAnchor;
+        public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
 
         private void Awake()
         {
@@ -110,6 +115,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
             if (swingSpeed <= runSpeed || swingAcceleration <= 0f || swingMaxTime <= 0f || swingExitSpeed < swingSpeed || swingExitCarryTime < 0f)
                 Debug.LogError("RunnerMotor: swing speed must beat run speed, acceleration and time must be positive, exit speed at least the swing speed.", this);
+            if (respawnBackoff < 0f || respawnHoldTime < 0f)
+                Debug.LogError("RunnerMotor: respawn backoff and hold time cannot be negative.", this);
         }
 
         public void PrimaryAction()
@@ -126,6 +133,14 @@ namespace ProtoHarness.ChainRush
             if (!game.IsRunning) return;
             NormalizeController();
             RacerState racer = game.Racer;
+            // A runner just put back on the track stands still and ignores its controls until the hold runs out.
+            if (racer.RespawnHoldTicks > 0)
+            {
+                racer.RespawnHoldTicks--;
+                racer.Steer = 0f;
+                drifting = false;
+                return;
+            }
             ref Vector3 velocity = ref racer.Velocity;
             ref float steer = ref racer.Steer;
             ref bool jumpQueued = ref racer.JumpQueued;
@@ -211,8 +226,41 @@ namespace ProtoHarness.ChainRush
                 grapple.Release(true);
             if (slingTicks > 0) slingTicks--;
             if (swingTicks > 0 && --swingTicks == 0) EndSwing(ref velocity, heading);
-            // Falling is measured from the track surface, so a long downhill is not a fall.
-            if (game.Track.Project(transform.position).H < -12f) game.FailRun();
+            // Falling is measured from the track surface, so a long downhill is not a fall. A circuit race puts the runner
+            // back on the track; the other courses end the run.
+            TrackCoord here = game.Track.Project(transform.position);
+            if (here.H < -12f)
+            {
+                if (game.IsCircuit) RespawnOnTrack();
+                else game.FailRun();
+                return;
+            }
+            if (racer.Grounded) racer.LastGroundedS = here.S;
+        }
+
+        // Puts a fallen runner on the centerline respawnBackoff metres before where it last stood, as high as the start
+        // slot, facing along the track and at rest, and starts the hold. The chain gauge is kept; a grapple, slingshot or
+        // swing ends without its boost. LastGroundedS stays, so a second fall before landing comes back to the same place.
+        private void RespawnOnTrack()
+        {
+            RacerState racer = game.Racer;
+            grapple.Release(false);
+            TrackFrame frame = game.Track.FrameAt(racer.LastGroundedS - respawnBackoff);
+            controller.enabled = false;
+            transform.position = frame.TransformPoint(new Vector3(0f, 1.05f, 0f));
+            controller.enabled = true;
+            controller.Move(Vector3.down * 0.3f);
+            SyncGrounded();
+            Physics.SyncTransforms();
+            racer.Velocity = Vector3.zero;
+            racer.JumpQueued = false;
+            racer.CoyoteTime = 0f;
+            racer.SlingTicks = 0;
+            racer.SwingTicks = 0;
+            racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+            racer.TurnRate = 0f;
+            racer.RespawnHoldTicks = Ticks.FromSeconds(respawnHoldTime);
+            drifting = false;
         }
 
         // One gauge slot buys the chain action that fits the moment, in this order: while grappling it

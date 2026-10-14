@@ -1,5 +1,6 @@
 using UnityEngine;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.ChainRush
 {
@@ -16,6 +17,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float maxYawSpeed = 180f;
         private Vector3 smoothingVelocity;
         private float yaw;
+        private float swingBlend;
+        private float insideSign = 1f;
 
         private void Awake()
         {
@@ -36,19 +39,24 @@ namespace ProtoHarness.ChainRush
         private void Start() => Snap();
 
         // Sits behind the runner's facing (free steering), never below the track surface plus the offset height.
+        // A corner swing moves it toward the outside of the curve and widens the view (SwingLook).
         private void LateUpdate()
         {
             if (game.IsPaused) return;
             Vector3 targetPosition = target.transform.position;
             yaw = Mathf.MoveTowardsAngle(yaw, target.Heading, maxYawSpeed * Time.deltaTime);
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
-            Vector3 desired = targetPosition + turn * offset;
+            bool swinging = target.IsSwinging;
+            if (swinging) insideSign = SwingLook.InsideSign(targetPosition, target.Heading, target.SwingAnchor);
+            swingBlend = SwingLook.Blend(swingBlend, swinging, Time.deltaTime);
+            Vector3 swingShift = Vector3.right * (-insideSign * SwingLook.CameraShift * swingBlend);
+            Vector3 desired = targetPosition + turn * (offset + swingShift);
             desired.y = Mathf.Max(game.Track.Frame(targetPosition).Position.y + offset.y, desired.y);
             transform.position = Vector3.SmoothDamp(transform.position, desired, ref smoothingVelocity, 0.16f);
             Vector3 lookPoint = targetPosition + turn * LookAhead;
             transform.rotation = Quaternion.Slerp(transform.rotation,
                 Quaternion.LookRotation(lookPoint - transform.position), 8f * Time.deltaTime);
-            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 20f) * 0.5f, Time.deltaTime * 3f);
+            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 20f) * 0.5f + SwingLook.CameraFieldOfView * swingBlend, Time.deltaTime * 3f);
         }
 
         public void ShiftOrigin(Vector3 offset) => transform.position += offset;

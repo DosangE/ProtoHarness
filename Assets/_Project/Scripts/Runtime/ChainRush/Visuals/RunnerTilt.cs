@@ -11,6 +11,8 @@ namespace ProtoHarness.ChainRush.Visuals
     {
         [SerializeField] private RunnerMotor motor;
         [SerializeField] private Transform body;
+        private float swingBlend;
+        private float insideSign = 1f;
 
         private void Awake()
         {
@@ -23,8 +25,15 @@ namespace ProtoHarness.ChainRush.Visuals
 
         // Motor state only changes on ticks, so recomputing every frame yields the tick's value.
         // World rotation, so a root already turned in the scene (the circuit's start line) is not added on top.
+        // A corner swing slews the body into the curve like a drifting kart (SwingLook), blended in and out.
         private void LateUpdate()
-            => body.rotation = Quaternion.Euler(0f, motor.Heading, 0f) * Evaluate(motor.Velocity, motor.Steer);
+        {
+            bool swinging = motor.IsSwinging;
+            if (swinging) insideSign = SwingLook.InsideSign(motor.transform.position, motor.Heading, motor.SwingAnchor);
+            swingBlend = SwingLook.Blend(swingBlend, swinging, Time.deltaTime);
+            float slip = insideSign * SwingLook.SlipAngle * swingBlend;
+            body.rotation = Quaternion.Euler(0f, motor.Heading + slip, 0f) * Evaluate(motor.Velocity, motor.Steer);
+        }
 
         public static Quaternion Evaluate(Vector3 velocity, float steer)
             => Quaternion.Euler(velocity.y * -0.9f, steer * 12f, steer * -16f);

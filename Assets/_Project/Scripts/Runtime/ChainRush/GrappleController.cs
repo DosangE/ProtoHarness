@@ -68,7 +68,7 @@ namespace ProtoHarness.ChainRush
             bool swinging = game.IsRunning && !IsAttached && motor.IsSwinging;
             bool slinging = game.IsRunning && !IsAttached && !swinging && motor.IsSlingPulling;
             bool linked = IsAttached || swinging || slinging;
-            Vector3 target = IsAttached ? AnchorPosition : swinging ? motor.SwingAnchor : motor.SlingTarget;
+            Vector3 target = IsAttached ? AnchorPosition : swinging ? SwingRailPoint() : motor.SlingTarget;
             if (game.IsEndless)
             {
                 if (linked) lastAnchor = target;
@@ -81,6 +81,14 @@ namespace ProtoHarness.ChainRush
             if (!linked) return;
             rope.SetPosition(0, ropeOrigin.position);
             rope.SetPosition(1, target);
+        }
+
+        // A corner swing's chain bites the inside rail beside the runner (SwingLook). The motor's own swing anchor (the
+        // arc center) stays the simulation's; past the arc's end, where the frame is straight, the chain keeps to it.
+        private Vector3 SwingRailPoint()
+        {
+            TrackFrame frame = game.Track.Frame(transform.position);
+            return frame.Curvature != 0f ? SwingLook.RailPoint(frame, RoadProfile.DeckHalfWidth) : motor.SwingAnchor;
         }
 
         private Transform AnchorAt(int index) => index == RacerState.NoAnchor ? null : anchors[index];

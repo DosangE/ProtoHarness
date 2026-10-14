@@ -18,7 +18,7 @@ namespace ProtoHarness.Tests.PlayMode
     {
         private const float RoadX = 300f;
         private const float RoadHalfWidth = 4f;
-        // ChainRushPrototype.unity runner values (COURSE.md section 2): runSpeed 10; slope factor 1.5, scale 0.7..1.3.
+        // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 10; slope factor 1.5, scale 0.7..1.3.
         private const float RunSpeed = 10f;
 
         private ChainRushGame game;
@@ -32,7 +32,7 @@ namespace ProtoHarness.Tests.PlayMode
             previousTimeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;

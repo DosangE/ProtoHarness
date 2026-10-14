@@ -24,7 +24,7 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { }
         }
 
-        private const string PrototypeScene = "Assets/_Project/Scenes/ChainRushPrototype.unity";
+        private const string TestBenchScene = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
         // Deck half width 6 m (ChainRushSceneBuilder) minus the runner's 0.38 m capsule radius.
         private const float InnerEdge = 6f - 0.38f;
@@ -36,7 +36,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            yield return Load(PrototypeScene);
+            yield return Load(TestBenchScene);
         }
 
         [UnityTearDown]

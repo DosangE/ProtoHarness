@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-10-14 · Long 묶음: 다른 곳에서 덮이는 장거리 테스트 4건을 병합 게이트에서 조건부로 뺀다
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ")**: `Category("Long")` 4건 — `ChainRushProceduralTests.Course_BotRunsFourteenHundredMetres_GateSeeds(0,1,2)`, `ChainRushReplayTests.Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit`. 메뉴 `Run PlayMode Tests` 는 `Long` 을 빼고, 새 메뉴 `Run Long Tests` 가 이것만 돈다. 병합(②)에서는 `tools/select-tests.ps1 -Range dev...HEAD` 가 "전체"(코어·Editor·씬·설정 변경)로 판정한 브랜치만 `Long` 도 돌린다. 마일스톤(③)은 늘 돈다. 규칙 본문 `CLAUDE.md` §9-2.
+- **이유**: 위 "테스트 3단" 의 측정에서 상위 6건이 게이트의 45% 였다. 그중 ① 게이트 시드 0·1·2 는 `Sweep`(시드 0~19)이 같은 `RunSeed` 로 다시 돈다. 빠지는 단언은 풀 크기(24·10)뿐이다. ② 절차 리플레이는 절차 코스 결정성을 보는 **유일한** 테스트다(롤백은 서킷 전용, 절차 코스에서는 `NotSupportedException`). 그래서 무조건 빼지 않고, 코어를 바꾼 브랜치에서는 돌린다. Net·연출·테스트만 바꾼 브랜치는 절차 시뮬을 바꿀 수 없다.
+- **남긴 것**: 서킷 3랩(55초)과 서킷 지문(38초)은 ② 에 그대로 둔다 — 서킷과 결정성의 핵심이고 다른 곳에서 덮이지 않는다.
+- **검증** (`feature/test-long-tier`, 에디터 6000.3.19f1): EditMode `testcasecount="237" result="Passed" passed="237"` (11:01:23Z~11:01:35Z). `Run PlayMode Tests` `testcasecount="140" result="Passed" passed="137" failed="0" skipped="3"` (11:02:09Z~11:09:17Z, **427.8초**, 이전 651.2초) — `Long` 4건 없음, skipped 3 은 `[Explicit]` 네트워크 레이스. 이 브랜치는 Editor 파일을 바꿔 "전체" 이므로 `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (11:09:54Z~11:13:11Z, 197.9초). 오전 WIP 실행에서 실패한 `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 는 `dev` 코드인 이 실행에서 통과했다 → 그 실패는 `feature/circuit-fall-respawn` WIP 쪽이다.
+- **발견**: 이 머신(19f1)에서는 에디터가 `ProjectSettings/ProjectSettings.asset`·`ProjectVersion.txt`·`packages-lock.json` 을 자동으로 바꿔, `select-tests.ps1` 기본 실행(커밋 안 한 변경 포함)은 늘 "전체" 가 된다. 병합 판정은 `-Range dev...HEAD` 로 돌린다고 §9-2 에 적었다.
+- **버린 대안**: 6건 모두 Long — 서킷 지문을 빼면 코어가 아닌 변경에서도 결정성 경보가 ① 에만 남는다. Long 을 무조건 ② 에서 빼기 — 코어 변경의 절차 코스 결정성 깨짐이 마일스톤까지 숨는다.
+
 ## 2026-10-14 · 테스트 3단: 병합은 PlayMode 1회, 2회는 마일스톤으로, 작업 중에는 바꾼 부분만
 
 - **결정 (사용자 승인, 2026-10-14 요청서에 "A+B+C 진행")**: `docs/PROPOSAL_TEST_TIERS.md` 의 3단을 들인다. ① 빠른 확인(작업 중) — `tools/select-tests.ps1` 이 바뀐 파일로 고른 PlayMode 테스트 + EditMode 전체, **병합 근거가 아니다**. ② 병합(`feature → dev`) — PlayMode 전체(`Device`·`Sweep` 제외) **1회**. ③ 마일스톤(`dev → main`·태그 전) — ② + 같은 코드 2회차 + `Sweep` + `Device` + 네트워크 레이스. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.

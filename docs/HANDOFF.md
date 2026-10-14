@@ -24,13 +24,13 @@
   - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
 - 씬 3개: `ChainRushPrototype`(직선 유한), `ChainRushProcedural`(절차 무한), `ChainRushCircuit`(서킷).
 - 테스트: EditMode 237, PlayMode 148(Device 3 + Sweep 1 + `[Explicit]` 네트워크 레이스 3 + 게이트 141, `feature/p3-c1-same-start` 기준). 병합 조건 실행은 Device·Sweep 제외 144건 중 141 통과·3 skipped(Explicit), 이 머신(19f1)에서 약 580~660초/회(이전 머신 약 556초/회, 121건). `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
-- **테스트 3단** (DECISIONS 2026-10-14 "테스트 3단", `docs/test-tiers`): 병합(`feature → dev`)은 PlayMode 전체 **1회**, 2회차·Sweep·Device·네트워크 레이스는 마일스톤(`dev → main`)으로 옮겼다(`CLAUDE.md` §9-2). 작업 중 빠른 확인은 `tools/select-tests.ps1` 이 바뀐 파일로 고른 테스트(병합 근거 아님). 도구가 만든 필터는 Unity 에서 실행해 고른 테스트만 도는 것을 확인했다(2026-10-14, 18건 78초, VERIFICATION §4-4).
+- **테스트 3단** (DECISIONS 2026-10-14 "테스트 3단", `docs/test-tiers`): 병합(`feature → dev`)은 PlayMode 전체(`Long` 제외, 코어 변경이면 `Long` 도) **1회**, 2회차·Sweep·Device·네트워크 레이스는 마일스톤(`dev → main`)으로 옮겼다(`CLAUDE.md` §9-2). 작업 중 빠른 확인은 `tools/select-tests.ps1` 이 바뀐 파일로 고른 테스트(병합 근거 아님). 도구가 만든 필터는 Unity 에서 실행해 고른 테스트만 도는 것을 확인했다(2026-10-14, 18건 78초, VERIFICATION §4-4).
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
 C1c-3(진행 중 순위)와 다른 입력의 두 레이서(레이스 C)까지 `dev` 에 병합했다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
-- **설계 제안서 3건의 남은 단계 (모두 Unity 필요)**: ① `PROPOSAL_TEST_TIERS.md` `Long` 묶음 — 측정은 끝났다(DECISIONS 2026-10-14 "테스트 3단" 의 측정: 상위 6건이 게이트의 45%). 배정은 `[Category]` 를 다는 `Assets/` 변경이라 별도 합의. ② `PROPOSAL_SCENE_CLEANUP.md`(Prototype → 테스트 작업대 B안) — 측정 뒤. ③ `PROPOSAL_CORNER_SWING_LOOK.md` S1 연출(방향 나안은 승인됨). 각 단계 §3-2 합의.
+- **설계 제안서 3건의 남은 단계 (모두 Unity 필요)**: ① ~~`Long` 묶음~~ 끝남(DECISIONS 2026-10-14 "Long 묶음": 게이트 651 → 428초, 코어 변경이면 `Run Long Tests` 198초 추가). ② `PROPOSAL_SCENE_CLEANUP.md`(Prototype → 테스트 작업대 B안) — 측정 뒤. ③ `PROPOSAL_CORNER_SWING_LOOK.md` S1 연출(방향 나안은 승인됨). 각 단계 §3-2 합의.
 - **떨어지면 트랙으로 복귀 (설계 결정 대기)**: 지금은 노면 12 m 아래로 떨어지면 런이 끝난다(`RunnerMotor.cs:215` → `ChainRushGame.FailRun`). 카트라이더식이면 마지막 지점 근처 트랙 위로 복귀하고 몇 초를 잃는 것이 벌칙이다. 시뮬 규칙(복귀 위치·시간), 롤백·리플레이 결정성, 서버 판정, 순위 규칙("낙하는 순위 없음")이 함께 바뀐다(2026-10-13 사용자 질문에서 나옴).
 - ~~진행 중 순위의 앞뒤 거리 표시~~: **하지 않는다**(2026-10-13 사용자 "두 유저 사이의 거리는 필요없을거같다"). ~~같은 시각 출발~~ 과 ~~네트워크 클라의 HUD 재시작 버튼~~ 은 `feature/p3-c1-same-start` 가 다룬다(경기 내내 `ManualStart` 를 꺼 R·RUN AGAIN 을 막는다).
 

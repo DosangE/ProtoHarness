@@ -256,6 +256,38 @@ namespace ProtoHarness.ChainRush.Track
             return FrameOn(piece, (float)(s - piece.StartS));
         }
 
+        // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1). Of the poles
+        // within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading) and no farther than their
+        // arc's radius plus extraReach, the nearest, measured level; ties go to the earlier piece. False when there is none.
+        // The pole sits at the arc's start height. All pieces are searched, focus or not: a runner asks only when it acts.
+        public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole)
+        {
+            if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
+            if (!IsFinite(headingDegrees)) throw new ArgumentOutOfRangeException(nameof(headingDegrees), headingDegrees, "Heading must be finite.");
+            if (!(maxAngleDegrees >= 0f && maxAngleDegrees <= 180f))
+                throw new ArgumentOutOfRangeException(nameof(maxAngleDegrees), maxAngleDegrees, "The angle must be within [0, 180] degrees.");
+            if (!(extraReach >= 0f) || float.IsInfinity(extraReach))
+                throw new ArgumentOutOfRangeException(nameof(extraReach), extraReach, "The extra reach must be finite and not negative.");
+            pole = default;
+            bool found = false;
+            float bestDistance = float.MaxValue;
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                Piece piece = pieces[i];
+                if (piece.Curvature == 0f) continue;
+                Vector3 toward = piece.Center - world;
+                toward.y = 0f;
+                float distance = toward.magnitude;
+                if (distance > 1f / Mathf.Abs(piece.Curvature) + extraReach || distance >= bestDistance) continue;
+                float yaw = Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg;
+                if (Mathf.Abs(Mathf.DeltaAngle(headingDegrees, yaw)) > maxAngleDegrees) continue;
+                pole = piece.Center;
+                bestDistance = distance;
+                found = true;
+            }
+            return found;
+        }
+
         private static TrackFrame FrameOn(Piece piece, float along)
         {
             Vector3 position;

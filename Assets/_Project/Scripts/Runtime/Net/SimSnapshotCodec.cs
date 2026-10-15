@@ -70,6 +70,7 @@ namespace ProtoHarness.Net
             w.Write(s.SlingTicks);
             w.Write(s.SwingTicks);
             w.Write(s.SwingRadius);
+            Write(w, s.SwingCenter);
             w.Write(s.GrappleEmpowered);
             w.Write(s.Health);
             w.Write(s.Hits);
@@ -97,6 +98,7 @@ namespace ProtoHarness.Net
             SlingTicks = r.ReadInt32(),
             SwingTicks = r.ReadInt32(),
             SwingRadius = r.ReadSingle(),
+            SwingCenter = ReadVector(r),
             GrappleEmpowered = r.ReadBoolean(),
             Health = r.ReadInt32(),
             Hits = r.ReadInt32(),

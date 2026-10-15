@@ -12,10 +12,11 @@ namespace ProtoHarness.ChainRush.Control
         private bool attackPressed;
         private bool drift;
         private bool chainActionPressed;
+        private bool chainActionHeld;
 
-        // Drift is a level like steer; the chain action is an edge like the buttons.
+        // Drift and the held chain key are levels like steer; the chain action is an edge like the buttons.
         public void Record(float steer, bool primaryPressed, bool releasePressed, bool attackPressed,
-            bool drift = false, bool chainActionPressed = false)
+            bool drift = false, bool chainActionPressed = false, bool chainActionHeld = false)
         {
             if (!(steer >= -1f && steer <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(steer), steer, "Steer must be within [-1, 1].");
@@ -25,11 +26,12 @@ namespace ProtoHarness.ChainRush.Control
             this.attackPressed |= attackPressed;
             this.drift = drift;
             this.chainActionPressed |= chainActionPressed;
+            this.chainActionHeld = chainActionHeld;
         }
 
         public TickInput Consume()
         {
-            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, drift, chainActionPressed);
+            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, drift, chainActionPressed, chainActionHeld);
             primaryPressed = false;
             releasePressed = false;
             attackPressed = false;
@@ -45,6 +47,7 @@ namespace ProtoHarness.ChainRush.Control
             attackPressed = false;
             drift = false;
             chainActionPressed = false;
+            chainActionHeld = false;
         }
     }
 }

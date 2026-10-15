@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-10-15 · R4 코너 봉 스윙 P1 (시뮬): 원호 중심의 봉에 걸고, 줄 길이 고정·관성·Ctrl 유지 동안 돈다
+
+- **결정 (사용자 승인, 2026-10-15 "ㄱㄱ", `docs/NEXT_REQUESTS.md` R4, 규칙은 `docs/PROPOSAL_CORNER_POLE.md` 2절 — 2026-10-14 사용자 결정 7개)**: 지금 코너 스윙(T2d: 드리프트 중 원호 중심에 걸고 14 m/s 로 2초)을 **봉 스윙으로 대체**한다. 표현(봉 모델, 줄 끝을 봉으로, 걸 수 있는 봉 표시)은 R5.
+  - **봉 찾기** `Centerline.TryFindPole(world, heading, maxAngle, extraReach, out pole)`: 원호 조각마다 중심에 봉이 하나 있다. 진행 방향 좌우 `poleMaxAngle`(75°) 안, 거리 ≤ 원호 반지름 + `poleReach`(5 m)인 봉 중 수평 거리로 가장 가까운 것을 고르고, 같으면 앞 조각을 고른다. 트랙만 읽는 순수 함수다. 체인 액션 때만 부르므로 조각 전체를 본다.
+  - **체인 액션 우선순위** (`RunnerMotor.ChainAction`): 그래플 강화 → 봉 스윙 → 슬링샷. 드리프트·땅 위·안쪽 조향 조건은 없앴다. `RunnerMotor.TryFindPole` 을 공개해 표현(R5)과 테스트 봇이 같은 판정을 쓴다.
+  - **도는 동안** (`SwingStep`): 줄 길이 = 건 순간의 수평 거리(`RacerState.SwingRadius`, 이제 양수). 봉 위치는 `RacerState.SwingCenter`(새 필드)이고, 원점 이동 때 함께 옮긴다. 접선 방향은 지금 바라보는 쪽이다. 가속 없음(`acceleration = 0`), **조향 무시**(회전율 0), 시간 제한 없음. `SwingTicks` 는 "남은 틱"에서 "지난 틱"(0 = 스윙 아님)으로 뜻이 바뀌었다.
+  - **끊김**: Ctrl 을 떼면 지금처럼 접선 최소 17 m/s + 0.6초 캐리. 가드에 닿으면 가속 없이 끊기고 평소 가드 감속을 받는다. 그래플이 붙으면 지금처럼 끊긴다. 누름은 그 틱에서 누르고 있는 것으로 친다 — 틱 사이에 눌렀다 뗀 탭도 슬롯만 쓰고 끝나지 않게 한다.
+  - **입력**: `TickInput.ChainActionHeld`(레벨). `TickInputCodec` 비트 32, `InputLatch`, `KeyboardMouseInputSource`(왼쪽 Ctrl 누르고 있음), `InputLogFile` 버전 2. 버전 1 파일은 거절한다(저장된 `.phil` 파일 0개 확인).
+  - **스냅샷·와이어**: `RacerState.Snapshot.SwingCenter`, `SimSnapshotCodec` 이 `SwingRadius` 뒤에 씀.
+  - **설정값**: `swingSpeed`·`swingAcceleration`·`swingMaxTime` 을 지우고 `poleMaxAngle`·`poleReach` 를 더했다. 지운 필드는 씬 YAML 에 줄로 남아 있다. Unity 는 무시하고, 다음에 씬을 저장할 때 사라진다. 씬은 이번에 건드리지 않았다.
+  - HUD 문구 `SHIFT` → `CTRL`, `COURSE.md` 4-5 ② 규칙 원본.
+- **테스트**:
+  - `ChainRushCornerSwingTests` 를 다시 썼다(4 → 6건). 원호 직전에서 걸면 줄 길이·속력 유지 / 원호 안에서는 봉이 옆이라 슬링샷 / R + 5 밖은 슬링샷 / Ctrl 을 떼면 17 m/s / 계속 잡으면 원호를 지나 가드에서 가속 없이 끊김 / S1 연출 — 거는 위치만 원호 직전으로 바꿨다.
+  - 롤백 테스트의 `DriftBot` 은 봉이 범위에 들면 누르고, 원호를 지나 직선에 오면 뗀다.
+  - 코덱 테스트는 6비트 전 조합으로 바꿨다(사양 변경). EditMode 는 봉 찾기 7건(테스트 케이스 12개)과 누름 유지 입력을 더했다.
+  - 입력을 복사하는 테스트 3곳(Replay·NetReconcile·NetworkRace)은 새 비트를 그대로 넘긴다.
+- **검증** (`feature/corner-pole-sim`, 커밋 전 작업 트리, 에디터 6000.3.19f1):
+  - 컴파일 1회차 `KeyboardMouseInputSource.cs(35,79): error CS0103: The name 'chainHeld' does not exist` — 제 일괄 치환이 줄바꿈(CRLF) 때문에 일부만 들어갔다. 고친 뒤 `Tundra build success`, Console Error 0.
+  - EditMode `testcasecount="255" result="Passed" passed="255" failed="0"` (06:46:02Z~06:46:14Z).
+  - 코너 스윙 6건 1회차 `Failed(Child) passed=5 failed=1` (06:46:50Z~06:47:31Z): `Swing_HookedBeforeTheArc_KeepsItsRopeAndItsSpeed` — `Nothing slows the swing down on flat ground. Expected: greater than 8.76517868f`. 기록은 걸 때 9.07 m/s → 스윙 중 6.02 m/s. **원인**: 스윙 중에도 조향 입력이 헤딩을 먼저 돌려, 속도가 새 헤딩 기준으로 갈리고 옆 그립이 깎았다. 설계서 2-3 "조향 입력은 무시된다" 대로 스윙 중 회전율을 0 으로 고쳤다.
+  - 고친 뒤 6건 `Passed 6/6` (06:51:46Z~06:52:20Z): 줄 33.09 m 오차 0.000 m, 속력 9.02~9.07 m/s, 최대 옆 위치 3.09 m. 계속 잡으면 s=99.5(원호 끝 77.1)에서 안쪽 가드(d=5.59)에 닿아 끊김, 그 뒤 5.98 m/s.
+  - `Run PlayMode Tests` `testcasecount="143" result="Passed" passed="140" failed="0" skipped="3"` (06:52:44Z~06:59:07Z, 382.7초). 서킷 지문 `0xF9A914DA3FAA680B` 그대로. 롤백 `drift, sling and corner swing snapshots sling@10, swing@570, drift@2149 replay identically`.
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (06:59:33Z~07:02:49Z). 절차 지문 `0xE81912109A2EB020` 그대로. 봇은 체인 액션을 쓰지 않으므로 그대로여야 정상이다(설계서 4절).
+  - `Run Device Input Tests` 1회차 `Failed(Child) passed=1 failed=2` (07:03:12Z~07:03:17Z, 에디터 `isApplicationActive=False`): `Input_KeyboardAndMouse_…`(`ChainRushTests.cs:127`)·`Input_ShiftAndCtrl_…`(`:194`) 둘 다 `Expected: True But was: False` — 가상 Enter 뒤 카운트다운이 시작되지 않음. Ctrl 단계 전이고, 메뉴 키 경로는 바꾸지 않았다.
+  - 같은 코드로 사용자가 Unity 를 앞에 둔 2회차 `Passed 3/3` (07:04:53Z~07:05:08Z, `isApplicationActive=True`). **판단**: 에디터 포커스가 없으면 가상 키보드 이벤트가 게임에 닿지 않는다(추정. 포커스 유무만 다르고 결과가 갈렸다). 1회차 실패는 지우지 않고 여기 남긴다.
+  - **네트워크 레이스·플레이어 재빌드는 하지 않았다** (2026-10-15 로드맵: M5). 와이어 형식이 바뀌었으므로(`SimSnapshotCodec`, `TickInputCodec`) 임시 폴더의 레이스 플레이어(R2 코드로 빌드)는 낡았다. M5 에서 다시 빌드한다.
+- **확인 못 한 것**: 실제 느낌(관성만으로 도는 R40 180° 가 재미있는지, 75°·+5 m 가 맞는지) — R5 뒤 사용자 플레이. 서킷에서 봉 스윙이 노면 틈 위를 지날 때. 무한 모드 원점 이동 중 스윙(`SwingCenter` 이동)은 테스트로 돌리지 않았다.
+- **버린 대안**: 봉을 트랙 S 로 기억하기 — 루프·절차 코스의 조각 재활용에서 조각 찾기가 더 복잡하다. 스윙 중 조향 허용 — 속력이 새는 것이 테스트로 드러났다. 탭(누름만, 누르고 있음 없음)을 무시하기 — 슬롯만 쓰고 아무 일도 안 일어난다.
+
 ## 2026-10-15 · 플레이 경험 순서 로드맵: M1~M5, 실제 네트워크 레이스는 M5 로, 마일스톤에 사용자 플레이 확인
 
 - **결정 (사용자, 2026-10-15 "전반적인 게임 돌아가는 것에 집중을 해보자" → 제안에 "a ㄱㄱ, 추천대로 / b ㅇㅇ / c 승인한다")**:

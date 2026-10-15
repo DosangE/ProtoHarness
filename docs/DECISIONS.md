@@ -7,6 +7,19 @@
 
 ---
 
+## 2026-10-15 · 테스트 대기를 틱으로: 몇 틱만 이어지는 상태를 보는 대기 3곳
+
+- **결정 (사용자 승인, 2026-10-15 "R1 시작하자", `docs/NEXT_REQUESTS.md` R1)**: 게임 시간 초(`WaitForSeconds`)로 기다린 뒤 **잠깐만 이어지는 상태**를 단언하는 테스트를 틱 수로 기다리게 바꾼다. 각 클래스에 비공개 보조 `WaitTicks(int)` 를 두고(이 프로젝트는 `LandOnRoad`·`RunTo` 같은 보조를 클래스마다 둔다), 초 값은 `Ticks.FromSeconds(같은 초)` 로 옮겨 정상 프레임에서 돌던 틱 수를 그대로 쓴다. 단언 값은 바꾸지 않았다.
+  - `ChainRushCombatTests.Combat_EachDirection_AttackFiresConnectsAndRetracts`: 공격 뒤 0.07초 → 4틱(그 뒤 0.5초 → 25틱). 비행은 8틱(0.16초)이다.
+  - `ChainRushSteeringTests.Guard_AngledHit_TurnsAlongRailAndRecoversSpeed`: 대기 5개 모두. 조향 0.3초가 길어지면 더 꺾여 "아직 가드에 안 닿음" 확인 전에 가드(5.62 m)에 닿는다.
+  - `ChainRushInputSourceTests.Primary_ScriptedPressOnGround_JumpsOnce`: 점프 뒤 0.15초 → 8틱. 오르막은 0.52초(11.5 m/s, 중력 22)라 여유가 2틱뿐이었다.
+- **이유**: 시뮬은 `FixedUpdate` 한 번에 한 틱이다(`ChainRushGame.cs:191`). 프레임 하나가 길면 코루틴이 깨어나기 전에 여러 틱이 돈다. 한 프레임의 게임 시간은 최대 0.333초다(`TimeManager.asset` Maximum Allowed Timestep). 그래서 `WaitForSeconds(x)` 는 x + 0.333초까지 갈 수 있다. 2026-10-14 `feature/circuit-fall-respawn` 게이트 실패의 하나가 바로 전투 테스트였다(그 브랜치 DECISIONS "실패의 판단").
+- **`WaitTicks` 의 가정**: `WaitForFixedUpdate` 는 고정 스텝마다 깨어난다고 보고, 기다린 뒤 `game.Tick` 이 목표와 **정확히 같다고 단언**한다. 가정이 틀리면 조용히 넘치는 대신 그 자리에서 실패한다. 아래 실행에서 모두 같았다.
+- **바꾸지 않은 대기 (분류 근거)**: 나머지 `WaitForSeconds` 58곳(67곳 중 9곳을 바꿈) 중 게이트에 드는 것은 **기다릴수록 단언이 더 확실해지는 것**(속도 회복, 착지 뒤 상태, 피해 무적 시간 경과 등), **실시간 일시정지 확인**, **표현 계층**(블렌드·애니메이션·LateUpdate — 틱이 아니라 프레임이 필요하다)이다. 위의 상한 0.333초로 따져 본 여유는 점프 뒤 그래플 4곳(체공 약 1.05초, 사거리 32 m), `Combat_GapAndJump`(점프 0.2초 뒤 공중), 조향 감기기 `Tilt_…_TurnsBodyToFaceHeading`(0.2초 → 최대 64° 회전, 단언은 90° 넘게 남음), 코너 스윙 0.3초(최대 시간 2초)다. `Device` 테스트(가상 장치 입력은 `Update` 에서 들어온다)는 게이트 밖이라 두었다. `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 는 R3 에서 지운다.
+- **검증** (`fix/test-frame-timing`, 에디터 6000.3.19f1, Unity 창 포커스 상태는 기록하지 않음): 컴파일 — `AssetDatabase.Refresh` 뒤 Editor.log `*** Tundra build success (7.82 seconds)`(`ProtoHarness.Tests.PlayMode.dll` 포함), Console Error·Warning 0건. 빠른 확인(고친 3개 클래스, `!Device !Sweep`) 3회 연속: `testcasecount="17" result="Passed" passed="17" failed="0"` (04:21:27Z~04:22:27Z, 60.1초) / 같음 (04:23:21Z~04:24:29Z, 68.3초) / 같음 (04:25:19Z~04:26:20Z, 61.4초). EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (04:26:46Z~04:26:59Z). `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (04:27:43Z~04:35:52Z, 489.4초, skipped 3 은 `[Explicit]` 네트워크 레이스).
+- **확인 못 한 것**: **고치기 전 코드가 실패하는 것을 재현하지 않았다.** 긴 프레임이 없으면 옛 대기도 통과하므로, 위 통과는 "고쳐서 바뀐 것이 없다(회귀 없음)" 까지의 증거다. 실패 원인 분석은 위 "이유" 의 계산과 2026-10-14 실패 기록에 기댄다.
+- **버린 대안**: 모든 `WaitForSeconds` 를 틱으로 — 표현 테스트는 프레임이 돌아야 하고, 기다릴수록 확실해지는 대기는 바꿀 이유가 없다. 공용 보조 파일 — 새 파일(§1-1)이 필요하고, 기존 보조 `TestRoad` 는 도로 전용이다. `Time.timeScale = 0` + `StepTick` 직접 호출 — 테스트 구조가 크게 바뀐다.
+
 ## 2026-10-14 · 코너 스윙을 봉 스윙으로 대체: S1b·S2 는 하지 않는다 (설계 결정, 구현 전)
 
 - **결정 (사용자, 2026-10-14 "커브 마다 줄을 걸 수 있는 봉을 놓는 것이다(코너마다 한개 뿐) … 웹스윙을 90도 돌린 느낌", 결정 7개는 `docs/PROPOSAL_CORNER_POLE.md` 1절)**: 지금 코너 스윙(드리프트 + 커브 안 Ctrl, 원 중심으로 레일처럼 14 m/s)을 **코너 중앙 봉 + 고정 줄 길이 + 관성 + Ctrl 유지**로 바꾼다. 둘을 공존시키지 않는다. 그래서 `docs/PROPOSAL_CORNER_SWING_LOOK.md` 의 S1b(불꽃·끊어짐·잔상)·S2(스윙 수치)·S3(기둥 진자 판단)은 하지 않는다. S1 의 몸 미끄럼 각·카메라는 남고, 줄 끝은 난간 대신 봉으로 간다(봉 스윙 P2).

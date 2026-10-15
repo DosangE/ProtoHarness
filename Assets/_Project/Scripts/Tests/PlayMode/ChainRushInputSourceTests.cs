@@ -48,7 +48,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;
@@ -134,10 +134,11 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Primary_ScriptedPressOnGround_JumpsOnce()
         {
             game.StartRun();
-            yield return new WaitForSeconds(0.15f);
+            yield return WaitTicks(Ticks.FromSeconds(0.15f));
             Assert.That(player.IsGrounded, Is.True);
             source.Primary = true;
-            yield return new WaitForSeconds(0.15f);
+            // In ticks: the climb lasts 0.52 s, and a 0.15 s wait with one long frame comes within 2 ticks of it.
+            yield return WaitTicks(Ticks.FromSeconds(0.15f));
             Assert.That(player.IsGrounded, Is.False);
             Assert.That(player.Velocity.y, Is.GreaterThan(0f), "The jump impulse must have been applied exactly by this press.");
         }
@@ -157,7 +158,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Tilt_ScriptedSteerLeft_LeansBodyFromMotorState()
         {
             Assert.That(player.GetComponent<RunnerTilt>(), Is.Not.Null, "RunnerTilt must sit on the runner.");
-            Transform body = player.transform.Find("Runner Visual");
+            Transform body = player.GetComponent<RunnerTilt>().Body;
             Assert.That(body, Is.Not.Null);
             game.StartRun();
             source.Steer = -1f;
@@ -185,7 +186,7 @@ namespace ProtoHarness.Tests.PlayMode
         // Only the body turns: the root carries the physics capsule, and turning it per frame breaks bit-for-bit replay.
         public IEnumerator Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading()
         {
-            Transform body = player.transform.Find("Runner Visual");
+            Transform body = player.GetComponent<RunnerTilt>().Body;
             Assert.That(body, Is.Not.Null);
             Quaternion rootRotation = player.transform.rotation;
             game.StartRun();
@@ -203,6 +204,17 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer)),
                 Is.LessThan(0.5f), "The body must face its heading after it wraps.");
             Assert.That(player.transform.rotation, Is.EqualTo(rootRotation), "The root must not turn.");
+        }
+
+        // Until the game has run exactly `ticks` more ticks. A wait in game seconds lets one long frame run several
+        // ticks before the coroutine resumes (up to the 0.33 s maximum timestep), so a check of something that lasts
+        // only a few ticks waits in ticks. The final check fails if a resume ever skipped a tick.
+        private IEnumerator WaitTicks(int ticks)
+        {
+            int target = game.Tick + ticks;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (game.Tick < target && Time.realtimeSinceStartup < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Tick, Is.EqualTo(target), $"Waited for {ticks} ticks.");
         }
     }
 }

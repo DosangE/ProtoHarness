@@ -7,6 +7,72 @@
 
 ---
 
+## 2026-10-15 · R3 맵 정리 3단계 + 네모 통일 2단계: 작업대는 첫 구간만, 러너 모형은 프리팹 `ArmoredRunner` 하나
+
+- **결정 (사용자 승인, 2026-10-15 "ㄱㄱ, 네가 저장" / 작업대 단계 재승인 "A로 진행하라", `docs/NEXT_REQUESTS.md` R3, 3-1 "남긴다", 3-2 ①)**:
+  - **첫 프리팹** `Assets/_Project/Prefabs/ArmoredRunner.prefab` (폴더도 새로 만듦): 서킷 씬의 `Armored Runner` 33개 오브젝트를 그대로 담는다. 스크립트는 없고, 꺼진 BoxCollider 25개도 그대로다. 프리팹 형식(이 프로젝트의 첫 사례): 이름은 PascalCase, 모형만 담고 동작 컴포넌트는 씬의 러너 루트에 둔다. 인스턴스 이름은 씬에서 `Armored Runner` 로 둔다.
+  - **서킷**: `SaveAsPrefabAssetAndConnect` 로 프리팹을 만들고 그 자리에서 인스턴스로 연결했다. 꺼진 둥근 `Runner Visual` 은 지웠다.
+  - **절차**: `ConvertToPrefabInstance`(계층 기준 짝 맞춤, 루트 이름 유지)로 같은 프리팹 인스턴스가 됐다. 참조 10개(`GrappleController.ropeOrigin`, `RunnerAnimation` model·관절 6, `RunnerTilt.body`, `ChainVisual.origin` ×2)가 인스턴스를 가리킨다. 덮어쓴 값은 루트 위치·회전·이름뿐이다. 꺼진 `Runner Visual` 은 지웠다. 두 씬의 `Armored Runner` 는 33개 오브젝트의 이름·켜짐·위치·회전·크기·메시·머티리얼이 같았다(씬 grep 비교).
+  - **작업대**: 프리팹 인스턴스를 놓고 `RunnerTilt.body`·`GrappleController.ropeOrigin` 을 다시 연결했다. 둥근 `Runner Visual`, Sector 02~09, 결승 게이트 4개를 지웠다. `GrappleController.anchors` 는 `Link Anchor 1` 하나, `ChainRushGame.targets` 는 (0, 1.1, 18) 하나만 남겼다. 배경 빌딩은 남겼다.
+  - **빌더** `ChainRushSceneBuilder.CreateTestBenchScene`: 구간 1개(`Sections = 1`)만 만들고, 결승 게이트는 만들지 않으며, 모형은 프리팹(`RunnerModelPath`)이다. 쓰지 않게 된 `Visor` 머티리얼 생성 줄은 지웠다.
+  - **테스트**: `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 삭제 — 직선 결승은 작업대에만 있었고, 완주는 서킷 3랩 테스트가 본다. `ChainRushCornerSwingTests:134`·`ChainRushInputSourceTests:161,189` 는 모형을 `Find("Runner Visual")` 대신 `RunnerTilt.Body` 로 찾는다. 찾는 방법만 바꿨고 단언은 그대로다.
+  - 문서: ARCHITECTURE 씬 줄과 열기 메뉴. 열기 메뉴의 `Open Prototype Scene` 은 2026-10-14 이름 변경 때 남은 옛 이름이라 `Open Test Bench Scene` 으로 고쳤다. HANDOFF 씬 줄.
+- **이유**: 사용자 "네모로 맞춘다", "테스트하는 걸 보았을 때 원치 않는 동그란 플레이어가 보였다". 작업대에 남긴 Sector 01(발판 -8~48 m, 앵커 (0, 10, 56), 표적 z 18)은 그래플 틈 2건(z 44, x 50), `Restart_AfterAttackAndFall`·`Attack_ScriptedPressNearTarget`(z 15), `Damage_RepeatedContact`, 가드 테스트(발판 1개 이상)가 쓰는 전부라서 테스트를 옮길 필요가 없었다(`ChainRushSceneBuilder.cs` 구간 루프, 각 테스트 본문).
+- **진행 중 있었던 일**:
+  - 작업대 단계의 첫 `Unity_RunCommand` 는 권한 분류기에 막혔다. 사용자가 다시 승인한 뒤 실행했다.
+  - 다시 실행했을 때는 지우기 전 참조 검사가 13건을 잡아 저장 없이 멈췄다. 13건은 모두 부모 Transform 의 `m_Children` 목록, 곧 계층 자체였다. `m_Children`·`m_Father` 를 검사에서 빼고, 씬을 디스크에서 다시 열어(dirty=False 확인) 처음부터 다시 했다.
+- **검증** (`feature/scene-test-bench-strip`, 에디터 6000.3.19f1):
+  - 컴파일: `Tundra build success (14.96 seconds)`, Console Error 0.
+  - 씬 grep: 세 씬 모두 `Runner Visual`·`Helmet` 이름 0개, 프리팹 GUID 참조가 있다. 작업대의 `Finish` 0개.
+  - EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (05:44:53Z~05:44:59Z).
+  - `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (05:45:18Z~05:51:34Z, 376.2초 — 142 → 141 은 지운 1건, skipped 3 은 `[Explicit]` 네트워크 레이스). 지문 테스트 포함.
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (05:52:28Z~05:55:44Z, 196.2초).
+  - 작업대 `Main Camera` 캡처: 네모 러너, 발판·표적·앵커 각 1개.
+- **확인 못 한 것**: 고친 빌더로 작업대를 새로 만들지는 않았다. 빌더 결과가 지금 씬과 정확히 같은지는 모른다. 네트워크 레이스는 이번 변경 경로(`RunnerTilt.Body` → 고스트 복제)가 같아서 다시 돌리지 않았다. 다만 서킷 씬의 모형이 이제 프리팹 인스턴스라서, 고스트가 복제하는 대상도 인스턴스다.
+
+## 2026-10-15 · R9 네모 통일 1단계: 네트워크 상대를 캡슐 대신 내 러너 모형의 복제로 그린다
+
+- **결정 (사용자 승인, 2026-10-15 "셋다 좋다", `docs/NEXT_REQUESTS.md` R9)**: `RemoteGhost.Initialize(interpolator, model)` 가 받은 모형을 복제한다. 위치를 따라가는 빈 루트 `Remote racer` 아래에 원본과 같은 로컬 위치·크기로 놓고, 회전은 루트 정면(identity)으로 둔다. 콜라이더는 끈 뒤 지운다(이전 캡슐과 같다). `RaceClient.Begin` 은 `game.Player` 의 `RunnerTilt.Body` 를 넘긴다. `RunnerTilt` 가 없으면 `InvalidOperationException` 을 던진다. 공개 API 추가: `ChainRushGame.Player`, `RunnerTilt.Body` (읽기 전용).
+- **이유**: 사용자 "네모로 맞춘다". 서킷의 `RunnerTilt.body`·`RunnerAnimation.model` 은 둘 다 `Armored Runner` 다(`ChainRushCircuit.unity:114962,114981`). 씬의 모형을 복제하면 새 에셋도 씬 수정도 없고, 모형 원본이 한 곳으로 남는다. `Armored Runner` 부품 25개에는 BoxCollider 가 붙어 있지만 모두 `m_Enabled: 0` 이다(서킷·절차 씬 grep).
+- **한계**: 복제본은 복제한 순간의 자세 그대로다. `RunnerAnimation` 이 움직이지 않는다. 상대의 몸 기울기·관절 연출은 범위 밖이다.
+- **검증** (`feature/net-boxy-ghost`, 커밋하지 않은 작업 트리, 에디터 6000.3.19f1, 에디터 포커스는 모든 실행에서 `isApplicationActive=False`):
+  - 컴파일: Editor.log `*** Tundra build success (25.75 seconds)`. 리플렉션으로 새 멤버 4개가 올라온 것을 확인했다. Console Error 0, Warning 20 은 모두 `Deleting invalid font reference.` 다.
+  - `tools/select-tests.ps1` 기본 실행: `ChainRushGame.cs → 전체 (코어 시뮬)`. 빠른 확인 `NetRemoteTests` `testcasecount="11" result="Passed" passed="11"` (05:03:30Z, 새 테스트 `Ghost_CopiesTheLocalModelWithoutColliders_AndFollowsTheRacer` 포함).
+  - EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (05:03:47Z~05:03:55Z).
+  - `Run PlayMode Tests` `testcasecount="142" result="Passed" passed="139" failed="0" skipped="3"` (05:04:20Z~05:11:22Z, 421.9초, skipped 3 은 `[Explicit]` 네트워크 레이스).
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (05:12:48Z~05:16:06Z, 198.2초).
+  - 플레이어 빌드: `BuildPipeline.BuildPlayer`(서킷 씬만, `BuildOptions.None`) `result=Succeeded errors=0 warnings=485` (05:17:40Z). 빌드가 바꾼 `Assets/Settings/` 3개와 `ProjectSettings/UnityConnectSettings.asset` 은 `git restore -- <파일>` 로 되돌렸다. `ProjectSettings.asset` 은 빌드 전 사본으로 되돌렸다. git status 와 바이트 비교 모두 빌드 전과 같다.
+  - **네트워크 레이스 A 1회차 실패** (05:18:27Z~05:20:31Z): `Unhandled log message: '[Error] RACE-CLIENT-FAULT the server's state for tick 336 could not be taken (the client at tick 335): InvalidOperationException: ClientPredictor: the server's state is for tick 336 but the client is at tick 335.'`. 같은 실행 요약: 에디터 프레임 최장 613.3 ms(tick 49 뒤), 50 ms 넘는 프레임 6개 `[1731:61 32:201 49:613 53:84 335:80 335:70]`, 서버 기준 늦은 입력 레이서 0 = 316, 레이서 1(플레이어 프로세스) = 394, 플레이어 클라 보정 197회. 고스트는 정상이었다: 상대 위치 335개 비교 중 어긋남 0, 순간 이동 0, 최대 한 걸음 1.096 m.
+  - **네트워크 레이스 A 2회차 통과** (05:21:26Z~05:22:04Z, 같은 코드·같은 빌드): 에디터·플레이어 클라 모두 1001개 비교 보정 0, 상대 위치 1000개 어긋남 0, 늦은 입력 0 / 0, 고스트 2840 프레임 순간 이동 0·최대 한 걸음 0.440 m, 에디터 프레임 최장 44.5 ms.
+  - **눈으로 확인 (사용자, 병합 뒤 `dev` `5234be8`, 같은 플레이어 빌드)**: Test Runner 에서 레이스 C(`TwoClients_DifferentRuns_…`)를 직접 돌렸다. 사용자 "문제 없이 내가 원하는 네모 스프라이트였다. 대신 달리는 연출은 없긴 했다". Editor.log 에는 출발·카운트다운·`RACE-CLIENT-ORDER tick=155 0=1 1=2` 까지 남았다. 그 뒤 Play 가 멈춰 `Playmode tests were aborted because the player was stopped` 로 끝났다. **이 실행에는 통과/실패 결과가 없다.** 멈춘 직후 `RaceClient.SendInput` (`RaceClient.cs:179`) NullReferenceException 이 한 번 났다 → `docs/NEXT_REQUESTS.md` 후보.
+- **1회차 실패의 판단 (증명 못 함)**: 고장 형태는 HANDOFF 4절의 "서버가 클라를 앞지름" 과 같다. 늦은 입력이 에디터와 별도 플레이어 프로세스 **양쪽에서** 많았고, 플레이어 빌드 바로 다음 실행이었다. 그래서 기계 부하를 의심한다. 이번 변경은 `Begin` 에서 한 번 복제할 뿐이고, 레이스 도중의 일은 바뀌지 않았다(고스트 `Update` 는 위치·회전만 쓴다). 하지만 613 ms 프레임의 원인은 확인하지 못했다. **같은 코드를 다시 돌려 통과한 것으로 실패를 지우지 않는다(§9-2).** 병합 판단은 사용자에게 맡긴다.
+- **버린 대안**: 첫 프리팹으로 모형을 빼기 — R3(3-2 ①)에서 한다. 이 경로는 그대로 쓴다. 고스트용 네모 모형을 코드로 따로 만들기 — 모형 원본이 둘이 된다.
+
+## 2026-10-15 · 서킷 집중: 무한 모드와 멀티의 새 기능을 멈추고 서킷(속도전) 싱글을 먼저 다듬는다
+
+- **결정 (사용자, 2026-10-15 "서킷 집중으로 하자", 요청서 A 승인 "셋다 좋다")**: 다음 작업은 **서킷 싱글**(속도전)에 모은다.
+  - **무한 모드**: 새 기능을 멈춘다. `docs/NEXT_REQUESTS.md` R6(절차 코스 봉 스윙)은 보류.
+  - **멀티**: 새 기능을 멈춘다(C1 마무리 측정, C2 충돌·추월). 예외는 같은 날 승인된 "네트워크 상대를 네모 모형으로"(R9) 하나다 — 기능이 아니라 캐릭터 모양 통일이다.
+  - **R7 공격 판정 방향**: 보류. 서킷에는 적·표적이 없다(2026-10-08 "T4" 범위).
+  - **테스트·병합 조건은 그대로 둔다.** 무한 모드 테스트, `Net` 카테고리, `Sweep`·`Long` 규칙(`CLAUDE.md` §9-2)을 바꾸지 않는다.
+- **이유**: 사용자 질문 "한 모드에 집중해서 개발한 뒤 나머지를 구현하는게 낫지 않나". 확인한 사실: ① 멀티 테스트는 병합 게이트에서 이미 대부분 빠져 있다. 네트워크 레이스는 `[Explicit]` 이고 마일스톤(③)에서만 돈다. 2026-10-15 게이트(04:27:43Z~04:35:52Z, 489.4초)에서 `NetReconcileTests` 가 55.8초, 나머지 Net 클래스는 합쳐 0.2초 미만이다. ② 무한 모드 전용 클래스(`ChainRushCombatTests` 21.8초, `ChainRushProceduralTests` 18.7초, `ChainRushSteeringTests` 13.2초, `ChainRushPresentationTests` 8.1초)는 합쳐 약 62초다. 크게 줄어드는 것은 Sweep(약 933초)을 돌려야 하는 무한 모드 작업 자체다. ③ 서킷은 멀티 첫 레이스의 맵이다(`DESIGN.md` §7-5 "우리 코드에 주는 뜻" 2번). 그래서 서킷 싱글을 다듬은 결과가 나중에 멀티로 그대로 간다.
+- **테스트를 그대로 두는 이유**: 멀티는 싱글 시뮬(`RunnerMotor.Step`)을 같은 입력으로 다시 실행한다(`DESIGN.md` §7-5 "우리 코드에 주는 뜻" 1번). 무한 모드는 `Centerline`·`RunnerMotor` 를 서킷과 함께 쓴다. 서킷 작업이 결정성이나 무한 모드를 깨면 그 자리에서 알아야 한다. 테스트를 빼면 다시 돌아왔을 때 몰아서 고친다(`DESIGN.md` §5 의 P1 전제와 같은 위험).
+- **새 순서**: R9(같은 날 승인, 먼저 한다) → R2 → R4 → R5 → R3. R8 은 아무 때나. R3 는 R7 선행을 풀고, 네모 통일 2단계(작업대 러너, 꺼진 둥근 모형)를 함께 맡는다.
+- **버린 대안**: ① 무한 모드 전용 테스트를 카테고리로 묶어 게이트에서 빼기 — 약 62초를 줄이지만 무한 모드가 조용히 깨진다. 병합 조건 변경이라 따로 합의가 필요하기도 하다. ② 싱글을 끝낸 뒤 멀티 — 멀티의 결정성 테스트를 끄면 시뮬 변경마다 결정성 위험이 쌓인다. ③ 무한 집중 — 무한은 싱글로 남는 모드라(`DESIGN.md` §8 질문 1) 멀티로 이어지지 않는다. Sweep·Long 비용도 그대로다.
+
+## 2026-10-15 · 테스트 대기를 틱으로: 몇 틱만 이어지는 상태를 보는 대기 3곳
+
+- **결정 (사용자 승인, 2026-10-15 "R1 시작하자", `docs/NEXT_REQUESTS.md` R1)**: 게임 시간 초(`WaitForSeconds`)로 기다린 뒤 **잠깐만 이어지는 상태**를 단언하는 테스트를 틱 수로 기다리게 바꾼다. 각 클래스에 비공개 보조 `WaitTicks(int)` 를 두고(이 프로젝트는 `LandOnRoad`·`RunTo` 같은 보조를 클래스마다 둔다), 초 값은 `Ticks.FromSeconds(같은 초)` 로 옮겨 정상 프레임에서 돌던 틱 수를 그대로 쓴다. 단언 값은 바꾸지 않았다.
+  - `ChainRushCombatTests.Combat_EachDirection_AttackFiresConnectsAndRetracts`: 공격 뒤 0.07초 → 4틱(그 뒤 0.5초 → 25틱). 비행은 8틱(0.16초)이다.
+  - `ChainRushSteeringTests.Guard_AngledHit_TurnsAlongRailAndRecoversSpeed`: 대기 5개 모두. 조향 0.3초가 길어지면 더 꺾여 "아직 가드에 안 닿음" 확인 전에 가드(5.62 m)에 닿는다.
+  - `ChainRushInputSourceTests.Primary_ScriptedPressOnGround_JumpsOnce`: 점프 뒤 0.15초 → 8틱. 오르막은 0.52초(11.5 m/s, 중력 22)라 여유가 2틱뿐이었다.
+- **이유**: 시뮬은 `FixedUpdate` 한 번에 한 틱이다(`ChainRushGame.cs:191`). 프레임 하나가 길면 코루틴이 깨어나기 전에 여러 틱이 돈다. 한 프레임의 게임 시간은 최대 0.333초다(`TimeManager.asset` Maximum Allowed Timestep). 그래서 `WaitForSeconds(x)` 는 x + 0.333초까지 갈 수 있다. 2026-10-14 `feature/circuit-fall-respawn` 게이트 실패의 하나가 바로 전투 테스트였다(그 브랜치 DECISIONS "실패의 판단").
+- **`WaitTicks` 의 가정**: `WaitForFixedUpdate` 는 고정 스텝마다 깨어난다고 보고, 기다린 뒤 `game.Tick` 이 목표와 **정확히 같다고 단언**한다. 가정이 틀리면 조용히 넘치는 대신 그 자리에서 실패한다. 아래 실행에서 모두 같았다.
+- **바꾸지 않은 대기 (분류 근거)**: 나머지 `WaitForSeconds` 58곳(67곳 중 9곳을 바꿈) 중 게이트에 드는 것은 **기다릴수록 단언이 더 확실해지는 것**(속도 회복, 착지 뒤 상태, 피해 무적 시간 경과 등), **실시간 일시정지 확인**, **표현 계층**(블렌드·애니메이션·LateUpdate — 틱이 아니라 프레임이 필요하다)이다. 위의 상한 0.333초로 따져 본 여유는 점프 뒤 그래플 4곳(체공 약 1.05초, 사거리 32 m), `Combat_GapAndJump`(점프 0.2초 뒤 공중), 조향 감기기 `Tilt_…_TurnsBodyToFaceHeading`(0.2초 → 최대 64° 회전, 단언은 90° 넘게 남음), 코너 스윙 0.3초(최대 시간 2초)다. `Device` 테스트(가상 장치 입력은 `Update` 에서 들어온다)는 게이트 밖이라 두었다. `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 는 R3 에서 지운다.
+- **검증** (`fix/test-frame-timing`, 에디터 6000.3.19f1, Unity 창 포커스 상태는 기록하지 않음): 컴파일 — `AssetDatabase.Refresh` 뒤 Editor.log `*** Tundra build success (7.82 seconds)`(`ProtoHarness.Tests.PlayMode.dll` 포함), Console Error·Warning 0건. 빠른 확인(고친 3개 클래스, `!Device !Sweep`) 3회 연속: `testcasecount="17" result="Passed" passed="17" failed="0"` (04:21:27Z~04:22:27Z, 60.1초) / 같음 (04:23:21Z~04:24:29Z, 68.3초) / 같음 (04:25:19Z~04:26:20Z, 61.4초). EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (04:26:46Z~04:26:59Z). `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (04:27:43Z~04:35:52Z, 489.4초, skipped 3 은 `[Explicit]` 네트워크 레이스).
+- **확인 못 한 것**: **고치기 전 코드가 실패하는 것을 재현하지 않았다.** 긴 프레임이 없으면 옛 대기도 통과하므로, 위 통과는 "고쳐서 바뀐 것이 없다(회귀 없음)" 까지의 증거다. 실패 원인 분석은 위 "이유" 의 계산과 2026-10-14 실패 기록에 기댄다.
+- **버린 대안**: 모든 `WaitForSeconds` 를 틱으로 — 표현 테스트는 프레임이 돌아야 하고, 기다릴수록 확실해지는 대기는 바꿀 이유가 없다. 공용 보조 파일 — 새 파일(§1-1)이 필요하고, 기존 보조 `TestRoad` 는 도로 전용이다. `Time.timeScale = 0` + `StepTick` 직접 호출 — 테스트 구조가 크게 바뀐다.
+
 ## 2026-10-14 · 서킷 낙하 → 트랙 복귀: 떨어져도 런이 끝나지 않고, 마지막 착지 지점 4 m 뒤로 돌아가 1초 선다 (검증 남음, 병합 보류)
 
 - **결정 (사용자 선택 2026-10-14, 구현 승인 "진행")**: HANDOFF 2절의 첫 후보. ① **서킷만** 복귀한다(직선·무한 모드는 지금처럼 낙하 = 종료). ② 복귀 위치는 **마지막으로 서 있던 S**(`RacerState.LastGroundedS`, 착지한 틱마다 기록)에서 `respawnBackoff` 4 m 뒤의 중심선, 출발 슬롯과 같은 높이(1.05 m 위에서 0.3 m 내려 착지), 트랙 방향, 속도 0. ③ 벌칙은 **복귀 후 1초(50틱) 정지**(`respawnHoldTime`, `RacerState.RespawnHoldTicks`): 그동안 입력을 무시하고 움직이지 않지만 틱(기록)은 흐른다. 게이지는 유지하고 그래플·슬링·스윙은 부스트 없이 끝낸다. 두 번째 낙하가 착지 전에 나면 같은 자리로 돌아간다(`LastGroundedS` 를 복귀 때 바꾸지 않는다). ④ **"낙하 = 런 종료" 경로는 서킷에서 완전히 제거**(스위치를 두지 않음). 서킷에는 공격 대상이 없어 이제 서킷 런이 끝나는 길은 결승뿐이다.
@@ -22,6 +88,53 @@
 - **복귀가 드러낸 것**: 서킷 런이 낙하로 끝나지 않으므로 클라가 고장 나 입력이 끊긴 레이서도 서버에서 계속 달린다(`ran 4285`). 레이스 B 의 에디터 런은 예전엔 657틱 낙하로 끝났는데 이제 1000틱 끝까지 가서, 서버가 클라를 앞지르는 고장(HANDOFF 4절, 2026-10-12)에 더 오래 노출된다.
 - **병합 보류**: §9-2 의 "같은 코드에서 연속 2회 통과" 와 네트워크 레이스 통과를 채우지 못했다. 사용자 결정(2026-10-14 "1,2,3 ㄱㄱ")으로 브랜치에 WIP 커밋하고, Unity 창을 앞에 둔 다음 세션에서 게이트 연속 2회 + 네트워크 레이스 A·B·C 를 다시 돌린다.
 - **버린 대안**: 복귀 스위치로 낙하 = 종료를 남기기(사용자 "완전히 제거"), 마지막 체크포인트로 복귀(체크포인트가 적어 벌칙이 크고 들쭉날쭉), 정지 없음·2초 정지(사용자 1초 선택), 검증을 건너뛴 병합.
+
+## 2026-10-14 · 코너 스윙을 봉 스윙으로 대체: S1b·S2 는 하지 않는다 (설계 결정, 구현 전)
+
+- **결정 (사용자, 2026-10-14 "커브 마다 줄을 걸 수 있는 봉을 놓는 것이다(코너마다 한개 뿐) … 웹스윙을 90도 돌린 느낌", 결정 7개는 `docs/PROPOSAL_CORNER_POLE.md` 1절)**: 지금 코너 스윙(드리프트 + 커브 안 Ctrl, 원 중심으로 레일처럼 14 m/s)을 **코너 중앙 봉 + 고정 줄 길이 + 관성 + Ctrl 유지**로 바꾼다. 둘을 공존시키지 않는다. 그래서 `docs/PROPOSAL_CORNER_SWING_LOOK.md` 의 S1b(불꽃·끊어짐·잔상)·S2(스윙 수치)·S3(기둥 진자 판단)은 하지 않는다. S1 의 몸 미끄럼 각·카메라는 남고, 줄 끝은 난간 대신 봉으로 간다(봉 스윙 P2).
+- **이유**: S2 가 고치려던 수치(`swingSpeed`)는 봉 스윙에서 없어진다(가속 없이 관성). S1b 의 난간 불꽃은 줄이 난간을 긁는 그림이 전제라 봉에 걸리면 맞지 않는다. 같은 코너에 비슷한 동작이 둘이면 봉으로 난이도를 조절하려는 계획(P4)이 흐려진다.
+- **구현**: 아직 없다. `docs/NEXT_REQUESTS.md` R4(P1 시뮬)·R5(P2 표현)·R6(P3 절차 코스), 각각 §3-2 합의. R4 는 같은 파일을 바꾸는 R2(서킷 낙하 복귀) 병합 뒤.
+- **버린 대안**: 제안서 8절 — 공존, 봉을 안쪽 난간 꼭짓점에, 쿨다운, 각도 자동 끊김.
+
+## 2026-10-14 · 코너 스윙 S1 연출: 줄은 안쪽 난간에, 몸은 커브 안으로, 카메라는 바깥으로 — 시뮬은 그대로
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ", `docs/PROPOSAL_CORNER_SWING_LOOK.md` S1)**: 표현 계층만 바꾼다. 새 정적 클래스 `Visuals/SwingLook`(계산만), 그것을 부르는 기존 컴포넌트 셋 — `GrappleController`(스윙 중 줄 끝 = 러너 옆 **안쪽 난간 위**, 반폭 `RoadProfile.DeckHalfWidth` 6 m, 높이 `RoadMeshBuilder.GuardRailHeight` 1.1 m), `RunnerTilt`(스윙 중 **몸만** 안쪽으로 25°, 0.15초 블렌드), `FollowCamera`(바깥쪽 0.6 m, 시야각 +4°). 시뮬의 `RunnerMotor.swingAnchor`(원 중심)는 그대로다.
+- **제안서와 달라진 것**: ① 새 컴포넌트 대신 정적 클래스 — 컴포넌트를 붙이면 씬 3개를 고쳐 연결해야 한다(씬 수정 = 별도 합의, 동시 1개). 기존 직렬화 참조만으로 된다. ② 안쪽 방향은 트랙 대신 `motor.SwingAnchor`(원 중심)가 진행 방향의 어느 쪽인지로 정한다 — `RunnerTilt` 는 트랙 참조가 없다. ③ 불꽃·끊어지는 연출·잔상·소리는 머티리얼·파티클 에셋이 새로 필요해 **S1b** 로 나눴다. ④ 아크 끝을 지나 트랙 프레임이 직선인데 아직 스윙 중인 프레임에서는 줄 끝을 원 중심(이전 동작)에 둔다(`RailPoint` 는 직선에서 던진다).
+- **한계**: 반폭을 상수 6 m 로 쓴다. 서킷 정의(`Circuit_Stadium.asset` `roadHalfWidth`)를 바꾸면 줄 끝이 난간과 어긋난다(그림만).
+- **검증** (`feature/corner-swing-look`, 에디터 6000.3.19f1): EditMode `testcasecount="242" result="Passed" passed="242"` (11:32:01Z~11:32:13Z, 새 `SwingLook_*` 5건). 빠른 확인(코너 스윙 클래스 + 지문) `5/5 Passed` (11:32:56Z~11:34:00Z). `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (11:34:32Z~11:41:50Z, 438.1초) — 새 `SwingLook_WhileSwinging_TurnsOnlyTheBodyInsideAndHooksTheInnerRail` 포함. **서킷 지문 `0xF9A914DA3FAA680B` 그대로**(HANDOFF 1절 값) → 연출이 시뮬에 닿지 않았다. 코어 파일(`GrappleController`)이라 "전체" → `Run Long Tests` `4/4 Passed` (11:42:30Z~11:45:48Z, 198.1초), 절차 코스 해시 `0xE81912109A2EB020` 그대로.
+- **확인 못 한 것**: 실제 느낌(사용자가 서킷 커브에서 직접 플레이해야 한다). 무한 모드 `chainVisual` 이 난간을 따라 움직이는 끝점을 자연스럽게 그리는지(테스트는 비무한 `LineRenderer` 만 봤다).
+
+## 2026-10-14 · 맵 정리 2단계: `ChainRushPrototype` → `ChainRushTestBench` (이름만)
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ", `docs/PROPOSAL_SCENE_CLEANUP.md` B안 7절 2단계)**: 구 머리 캐릭터가 있는 맵을 플레이용이 아니라 **테스트 작업대**로 이름 붙인다. `Unity_RunCommand` 로 `AssetDatabase.MoveAsset` — GUID `d6b2b0e31af07d844824abd448970241` 그대로, `.meta` 는 Unity 가 함께 옮겼다. 테스트 8개 파일과 `ChainRushSceneBuilder` 의 경로 문자열, 메뉴 `Create/Open Prototype Scene` → `Create/Open Test Bench Scene`, 문서(ARCHITECTURE·README·HANDOFF)를 바꿨다. 빌드 설정에는 이 씬이 없다.
+- **이유**: 사용자 "플레이어 머리가 구 모양으로 된 씬은 필요 없는 씬이다"(2026-10-14). 그 씬을 불러오는 PlayMode 테스트 8개 파일 대부분은 코드로 시험 도로를 깔고 씬은 그릇으로만 쓴다(제안서 2절). 지우지 않고 이름을 바꿔 플레이 맵은 Procedural·Circuit 둘로 보이게 한다.
+- **하지 않은 것 (3단계, 별도 합의)**: 발판·앵커·결승선·표적 걷어내기, `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 삭제, `Guards_PrototypeDecksAndProceduralRoad_AreGuarded` 축소, 구 머리 캐릭터. 테스트 이름에 남은 `Prototype` 도 그때 정리한다.
+- **검증** (`feature/scene-test-bench`, 에디터 6000.3.19f1): EditMode `237/237 Passed` (11:16:46Z~11:16:58Z). `Run PlayMode Tests` `testcasecount="140" result="Passed" passed="137" failed="0" skipped="3"` (11:17:34Z~11:24:47Z, 433.0초) — 서킷 지문(`Replay_CircuitBotRun_…`) 포함. 씬·Editor 변경이라 "전체" → `Run Long Tests` `4/4 Passed` (11:25:24Z~11:28:42Z, 198.0초). 메뉴: `Open Test Bench Scene` 있음, `Open Prototype Scene` 없음.
+
+## 2026-10-14 · Long 묶음: 다른 곳에서 덮이는 장거리 테스트 4건을 병합 게이트에서 조건부로 뺀다
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "ㄱㄱ")**: `Category("Long")` 4건 — `ChainRushProceduralTests.Course_BotRunsFourteenHundredMetres_GateSeeds(0,1,2)`, `ChainRushReplayTests.Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit`. 메뉴 `Run PlayMode Tests` 는 `Long` 을 빼고, 새 메뉴 `Run Long Tests` 가 이것만 돈다. 병합(②)에서는 `tools/select-tests.ps1 -Range dev...HEAD` 가 "전체"(코어·Editor·씬·설정 변경)로 판정한 브랜치만 `Long` 도 돌린다. 마일스톤(③)은 늘 돈다. 규칙 본문 `CLAUDE.md` §9-2.
+- **이유**: 위 "테스트 3단" 의 측정에서 상위 6건이 게이트의 45% 였다. 그중 ① 게이트 시드 0·1·2 는 `Sweep`(시드 0~19)이 같은 `RunSeed` 로 다시 돈다. 빠지는 단언은 풀 크기(24·10)뿐이다. ② 절차 리플레이는 절차 코스 결정성을 보는 **유일한** 테스트다(롤백은 서킷 전용, 절차 코스에서는 `NotSupportedException`). 그래서 무조건 빼지 않고, 코어를 바꾼 브랜치에서는 돌린다. Net·연출·테스트만 바꾼 브랜치는 절차 시뮬을 바꿀 수 없다.
+- **남긴 것**: 서킷 3랩(55초)과 서킷 지문(38초)은 ② 에 그대로 둔다 — 서킷과 결정성의 핵심이고 다른 곳에서 덮이지 않는다.
+- **검증** (`feature/test-long-tier`, 에디터 6000.3.19f1): EditMode `testcasecount="237" result="Passed" passed="237"` (11:01:23Z~11:01:35Z). `Run PlayMode Tests` `testcasecount="140" result="Passed" passed="137" failed="0" skipped="3"` (11:02:09Z~11:09:17Z, **427.8초**, 이전 651.2초) — `Long` 4건 없음, skipped 3 은 `[Explicit]` 네트워크 레이스. 이 브랜치는 Editor 파일을 바꿔 "전체" 이므로 `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (11:09:54Z~11:13:11Z, 197.9초). 오전 WIP 실행에서 실패한 `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 는 `dev` 코드인 이 실행에서 통과했다 → 그 실패는 `feature/circuit-fall-respawn` WIP 쪽이다.
+- **발견**: 이 머신(19f1)에서는 에디터가 `ProjectSettings/ProjectSettings.asset`·`ProjectVersion.txt`·`packages-lock.json` 을 자동으로 바꿔, `select-tests.ps1` 기본 실행(커밋 안 한 변경 포함)은 늘 "전체" 가 된다. 병합 판정은 `-Range dev...HEAD` 로 돌린다고 §9-2 에 적었다.
+- **버린 대안**: 6건 모두 Long — 서킷 지문을 빼면 코어가 아닌 변경에서도 결정성 경보가 ① 에만 남는다. Long 을 무조건 ② 에서 빼기 — 코어 변경의 절차 코스 결정성 깨짐이 마일스톤까지 숨는다.
+
+## 2026-10-14 · 테스트 3단: 병합은 PlayMode 1회, 2회는 마일스톤으로, 작업 중에는 바꾼 부분만
+
+- **결정 (사용자 승인, 2026-10-14 요청서에 "A+B+C 진행")**: `docs/PROPOSAL_TEST_TIERS.md` 의 3단을 들인다. ① 빠른 확인(작업 중) — `tools/select-tests.ps1` 이 바뀐 파일로 고른 PlayMode 테스트 + EditMode 전체, **병합 근거가 아니다**. ② 병합(`feature → dev`) — PlayMode 전체(`Device`·`Sweep` 제외) **1회**. ③ 마일스톤(`dev → main`·태그 전) — ② + 같은 코드 2회차 + `Sweep` + `Device` + 네트워크 레이스. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.
+- **이유**: ① 사용자 "테스트만 20분 정도로 상당히 오래 걸린다 … 수정한 부분만 QA 를 돌리거나 시뮬레이션 해 보면 될 것 같다"(2026-10-14). 게이트 1회 약 580~660초 × 2회. ② 2회 규칙(2026-10-02)을 만든 간헐 실패는 가상 장치 테스트였고 `Device` 로 이미 게이트에서 빠졌다(2026-10-13 "병합 2회차 축소" 의 "감수한 것"). ③ 2회는 ③ 에 남겨 마일스톤마다 간헐 실패 경보를 울린다.
+- **감수한 것**: 코어 테스트에 새 간헐 실패가 생겨도 `dev` 병합 때는 한 번만 본다. 마일스톤 전까지 늦게 드러날 수 있다. "한 번이라도 실패하면 원문 보고, 원인을 설명 못 하면 병합하지 않는다" 는 그대로다.
+- **제안서와 달라진 것**:
+  - **카테고리 대신 클래스 이름으로 고른다.** 제안서 6절 3단계(`[Category]` 달기)는 `Assets/` 변경이라 게이트를 치러야 한다. `groupNames` 는 한 배열 안에서 OR(`RuntimeTestRunnerFilter.cs:81,85`)이라 클래스 여러 개 + 지문 테스트 1건을 `Filter` 하나로 고를 수 있다. 제안서가 근거로 든 "`Filter` 여러 개 OR" 는 쓰지 않는다.
+  - **매핑을 폴더가 아니라 파일 단위로 나눴다.** 2026-10-14 런타임 타입별 참조 grep 결과, `Track/Centerline`·`TrackFrame`·`TrackCoord` 는 `RunnerMotor`·`GrappleController` 가, `Control/TickInput`·`IInputSource` 는 `RunnerMotor`·`ChainRushGame`·Net 이 쓴다 → 전체. `Track/LapCounter`·`TrackDefinition` 은 서킷 + Net(`RaceOrder`·`SimSnapshotCodec`). `RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests` 는 이미 `[Category("Net")]` 이고 Net 코드를 시험하므로 Net 묶음이다(제안서 표의 `Race` 가 틀렸다).
+  - **지문 테스트는 테스트·Net 밖의 `Assets/` 가 바뀔 때만 넣는다.** `ProtoHarness.Net` 은 시뮬 어셈블리가 참조하지 않아 지문을 바꿀 수 없다(2026-10-13 "병합 2회차 축소" ④).
+  - "Net 만 바꾼 브랜치는 2회차를 `Net` 카테고리만" 조항은 ② 에 2회차가 없어져 지웠다.
+- **도구 시험 실행** (2026-10-14, 이 머신의 Windows PowerShell 5.1, Unity 없이): 커밋 5개의 diff 에 돌렸다. `fb6798d`(`NetworkRaceTests` 만) → PlayMode 없음 + `[Explicit]` 안내. `8073939`(C1c-3, Net + Net 테스트) → Net 5개 클래스, 지문 없음. `246d433`(`ChainRushGame.cs` 포함) → 전체. `75df74d`(`RunnerTilt.cs`) → Presentation·Combat·InputSource 3개 + 지문. `faeb50a`(docs 만) → PlayMode 없음. 표에서 `ChainRushTests` 를 뺀 사본은 경고 2줄을 내고 전체로 떨어졌다.
+- **Unity 실행 확인** (2026-10-14, 에디터 6000.3.19f1, `Assets/` 는 `dev` 와 같음): `75df74d` 출력의 `Filter` 를 그대로 실행 → `testcasecount="18" result="Passed" passed="18" failed="0" skipped="0"` (10:52:42Z~10:54:00Z, 78.4초). Combat 5 + InputSource 9 + Presentation 3 + 지문 1 = 18 로, 고른 것만 돌았다(`ChainRushReplayTests` 의 다른 2건은 돌지 않음).
+- **측정 (제안서 6-1)**: 같은 날 06:22:55Z~06:33:47Z 게이트 XML(144건, 651.2초, 140 통과·1 실패·3 skipped). **`feature/circuit-fall-respawn` 의 커밋 전 WIP 위에서 돈 실행이다**(reflog: 15:22~15:33 KST 에 그 브랜치, WIP 커밋은 15:37). 시간 분포를 보는 데만 쓴다. 클래스별: `ChainRushProceduralTests` 163.7초(게이트 시드 3건이 각 약 49초), `ChainRushReplayTests` 104.6초(절차 코스 55.0 · 서킷 지문 38.3 · 한 틱 바꾸기 11.3), `ChainRushCircuitTests` 77.0초(3랩 54.8), `ChainRushRoadTests` 45.4초, `ChainRushTests` 37.1초, 나머지 코어·코스 클래스 각 4~29초, Net 5개 클래스 합 27.3초. 상위 6건(절차 게이트 시드 3, 절차 리플레이, 서킷 3랩, 서킷 지문)이 약 295초로 게이트의 45% 다. 그 실행의 실패 1건(`ChainRushTests.Course_TimedJumpsAndHeldGrapple_ReachesFinish`, `Course did not finish: position=(0.35, -12.00, 394.14)`)은 WIP 쪽 결과라 이 결정과 무관하다 — 그 브랜치를 검증할 때 다룬다.
+- **확인 못 한 것**: `Long` 묶음 배정(제안서 5절). 측정값으로 후보는 위 상위 6건이지만, 배정은 `[Category]` 를 다는 `Assets/` 변경이라 별도 합의.
+- **버린 대안**: 제안서 7절과 같다. 카테고리 달기 — 지금은 클래스 이름으로 충분하고 `Assets/` 변경이 든다. 필요해지면(예: 한 클래스 안의 일부만 고를 때) 별도 합의.
 
 ## 2026-10-13 · main v0.1: `dev` 를 `main` 에 병합하고 첫 태그를 단다
 
@@ -80,6 +193,7 @@
 
 ## 2026-10-13 · 병합 2회차 축소: Net 쪽만 바꾼 브랜치는 PlayMode 2회차를 `Net` 카테고리만 돌린다
 
+- → 2026-10-14 "테스트 3단" 으로 대체: 병합(②)에서 2회차가 없어져 이 조항도 지웠다. 아래 근거(asmdef 경계, 필터 소스)는 그 결정이 그대로 쓴다.
 - **결정 (사용자 승인, 2026-10-13 요청서에 "ㄱㄱ" — HANDOFF 3절 #1 의 B안을 어셈블리 경계로 좁힌 안)**: 병합 조건의 PlayMode 는 1회차를 지금처럼 전체(`Device`·`Sweep` 제외)로 돌린다. 2회차는 `git diff --name-only dev...HEAD` 의 `Assets/` 파일이 모두 `Runtime/Net/`, `Tests/EditMode/`, `Net`·`NetRace` 카테고리 테스트 클래스 파일일 때만 `Net` 카테고리로 줄이고, 그 밖이 하나라도 있으면 전체다. 규칙 본문은 `CLAUDE.md` §9-2, 실행 방법은 `docs/RULES/VERIFICATION.md` §4-4.
 - **이유**: ① 사용자 질문(2026-10-05 "작업한 부분만 검증하면 안 되나"). 게이트 1회가 이 머신에서 약 584~660초라 병합마다 약 20분이 든다. ② 2026-10-13 14:07 게이트 XML(140건, 584.2초)의 클래스별 시간: `ChainRushProceduralTests` 154초, `ChainRushReplayTests` 99초, `ChainRushCircuitTests` 73초 … `Net` 카테고리 5개 클래스 합계 약 30초. ③ 최근 코드 병합 7건 중 6건(C1c-1 ~ C1c-3)이 `Runtime/Net`·`Tests/PlayMode` 만 바꿨다(C1c-1 은 `DefaultNetworkPrefabs.asset` 도 — 새 규칙에서는 전체 2회차다). ④ asmdef 상 `ProtoHarness.Net` 을 참조하는 것은 PlayMode 테스트 어셈블리뿐이다(`ProtoHarness.Runtime` 은 `Unity.InputSystem` 만, `ProtoHarness.Editor` 는 `ProtoHarness.Runtime`·TestRunner 만 참조). Net 변경은 코어 테스트의 동작을 바꿀 수 없다.
 - **감수한 것**: 2회 실행은 간헐 실패를 잡으려고 넣었다(아래 2026-10-02 "병합 조건 강화"). 그때의 간헐 실패는 지금 게이트에서 빠진 `Device` 테스트였다. Net 만 바꾼 브랜치에서는 코어 테스트를 1회만 보므로, 코어 테스트에 새 간헐 실패가 생겨도 그 브랜치에서는 한 번만 볼 수 있다. 그 코드는 이번 변경이 바꿀 수 없는 코드다.
@@ -662,6 +776,7 @@
 ## 2026-10-02 · 병합 조건 강화: PlayMode 연속 2회 통과, 간헐 실패 기록
 
 - → 2026-10-13 "병합 2회차 축소" 로 일부 대체: Net 쪽만 바꾼 브랜치는 2회차를 `Net` 카테고리만 돌린다. 그 밖은 아래 그대로다.
+- → 2026-10-14 "테스트 3단" 으로 대체: 같은 코드 2회 통과는 마일스톤(`dev → main`) 조건으로 옮겼다. 병합(`feature → dev`)은 1회. 실패 보고 규칙은 그대로다.
 - **결정**: 병합 조건을 "컴파일 0 + EditMode 통과 + **같은 코드에서 PlayMode 연속 2회 통과**"로 바꾼다. 병합 보고에는 각 실행의 결과 XML 값을 모두 적고, 한 번이라도 실패하면 원문과 함께 보고하며 원인을 설명하지 못하면 병합하지 않는다. 규칙 본문은 `CLAUDE.md` §9-2.
 - **이유**: P0(`103270b`), P1-1(`6ed7676`), P1-2(`8520a1c`)를 PlayMode **1회 통과**로 병합했다. 그 뒤 같은 코드(`Assets` 차이 0, `git diff 8520a1c HEAD -- Assets`)에서 1회 실패가 나왔다. 아래 표가 근거다.
 

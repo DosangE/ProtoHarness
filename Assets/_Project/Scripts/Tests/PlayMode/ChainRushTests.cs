@@ -25,7 +25,7 @@ namespace ProtoHarness.Tests.PlayMode
             previousTimeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;
@@ -370,40 +370,6 @@ namespace ProtoHarness.Tests.PlayMode
             game.TogglePause();
             yield return new WaitForSeconds(0.2f);
             Assert.That(player.transform.position.z, Is.GreaterThan(position.z));
-        }
-
-        [UnityTest]
-        [Timeout(90000)]
-        public IEnumerator Course_TimedJumpsAndHeldGrapple_ReachesFinish()
-        {
-            Time.timeScale = 3f;
-            game.StartRun();
-            float deadline = Time.realtimeSinceStartup + 65f;
-            float nextTraceZ = 36f;
-            string trajectory = "";
-            while (game.IsRunning && Time.realtimeSinceStartup < deadline)
-            {
-                float z = player.transform.position.z;
-                if (z >= nextTraceZ)
-                {
-                    trajectory += "\nPosition=" + player.transform.position + ", velocity=" + player.Velocity +
-                        ", ground=" + player.IsGrounded + ", linked=" + grapple.IsAttached + ", length=" + grapple.RopeLength;
-                    nextTraceZ += 2f;
-                }
-                for (int gap = 0; gap < 8; gap++)
-                {
-                    float edge = 48f + gap * 56f;
-                    if (player.IsGrounded && z >= edge - 4.5f && z < edge) player.PrimaryAction();
-                }
-                if (!player.IsGrounded && player.transform.position.y > 2.6f && !grapple.IsAttached)
-                    grapple.TryAttach();
-                game.Attack();
-                yield return null;
-            }
-            Assert.That(game.HasFinished, Is.True,
-                "Course did not finish: position=" + player.transform.position + ", links=" + game.Grapples + ", health=" + game.Health + trajectory);
-            Assert.That(game.Grapples, Is.GreaterThanOrEqualTo(8));
-            Assert.That(game.Elapsed, Is.LessThan(80f));
         }
 
         private void MovePlayer(Vector3 position)

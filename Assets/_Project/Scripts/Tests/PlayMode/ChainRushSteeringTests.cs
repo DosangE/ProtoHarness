@@ -24,7 +24,7 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { }
         }
 
-        private const string PrototypeScene = "Assets/_Project/Scenes/ChainRushPrototype.unity";
+        private const string TestBenchScene = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
         // Deck half width 6 m (ChainRushSceneBuilder) minus the runner's 0.38 m capsule radius.
         private const float InnerEdge = 6f - 0.38f;
@@ -36,7 +36,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            yield return Load(PrototypeScene);
+            yield return Load(TestBenchScene);
         }
 
         [UnityTearDown]
@@ -69,19 +69,21 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Guard_AngledHit_TurnsAlongRailAndRecoversSpeed()
         {
+            // In ticks: a long frame in the steering wait turns the runner further, and it can reach the guard
+            // before the "still clear" check.
             game.StartRun();
-            yield return new WaitForSeconds(0.5f);
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
             source.Steer = -1f;
-            yield return new WaitForSeconds(0.3f);
+            yield return WaitTicks(Ticks.FromSeconds(0.3f));
             source.Steer = 0f;
             // The turn rate eases to zero over 0.1 s at the default turn acceleration; sample after it settles.
-            yield return new WaitForSeconds(0.15f);
+            yield return WaitTicks(Ticks.FromSeconds(0.15f));
             float released = player.Heading;
             Assert.That(released, Is.LessThan(-20f));
-            yield return new WaitForSeconds(0.1f);
+            yield return WaitTicks(Ticks.FromSeconds(0.1f));
             Assert.That(player.transform.position.x, Is.GreaterThan(-InnerEdge + 0.3f), "Still clear of the guard here.");
             Assert.That(player.Heading, Is.EqualTo(released).Within(0.01f), "Free steering keeps the facing when input is released.");
-            yield return new WaitForSeconds(2f);
+            yield return WaitTicks(Ticks.FromSeconds(2f));
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.transform.position.x, Is.LessThan(-InnerEdge + 0.3f), "The runner should be running along the left guard.");
             Assert.That(player.Heading, Is.EqualTo(0f).Within(1f), "The guard must turn the facing along the rail.");
@@ -155,6 +157,17 @@ namespace ProtoHarness.Tests.PlayMode
             source = new ScriptedInputSource();
             game.SetInputSource(source);
             yield return null;
+        }
+
+        // Until the game has run exactly `ticks` more ticks. A wait in game seconds lets one long frame run several
+        // ticks before the coroutine resumes (up to the 0.33 s maximum timestep), so a check of something that lasts
+        // only a few ticks waits in ticks. The final check fails if a resume ever skipped a tick.
+        private IEnumerator WaitTicks(int ticks)
+        {
+            int target = game.Tick + ticks;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (game.Tick < target && Time.realtimeSinceStartup < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Tick, Is.EqualTo(target), $"Waited for {ticks} ticks.");
         }
     }
 }

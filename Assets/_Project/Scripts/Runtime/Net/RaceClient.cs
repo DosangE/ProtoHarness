@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Visuals;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -112,8 +113,10 @@ namespace ProtoHarness.Net
             remote = new RemoteInterpolator();
             if (showRemote)
             {
+                RunnerTilt tilt = game.Player.GetComponent<RunnerTilt>();
+                if (tilt == null) throw new InvalidOperationException("RaceClient: the runner has no RunnerTilt, so there is no model to draw the other racer with.");
                 Ghost = gameObject.AddComponent<RemoteGhost>();
-                Ghost.Initialize(remote);
+                Ghost.Initialize(remote, tilt.Body);
                 StandingsView = gameObject.AddComponent<RaceStandingsView>();
                 StandingsView.Initialize(this);
             }

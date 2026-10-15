@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.Net;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace ProtoHarness.Tests.PlayMode
 {
@@ -89,6 +91,65 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(remote.Count, Is.LessThan(40), "Old positions must be dropped as the clock moves on.");
             Assert.That(remote.TryEvaluate(out Vector3 p), Is.True);
             Assert.That(p.x, Is.EqualTo(498f).Within(1e-3f));
+        }
+
+        [UnityTest]
+        public IEnumerator Ghost_CopiesTheLocalModelWithoutColliders_AndFollowsTheRacer()
+        {
+            var runner = new GameObject("Runner");
+            var host = new GameObject("Ghost host");
+            try
+            {
+                // Like the scenes' Armored Runner: primitives under one model, their colliders already off.
+                Transform model = new GameObject("Armored Runner").transform;
+                model.SetParent(runner.transform, false);
+                model.localPosition = new Vector3(0f, 0.1f, 0f);
+                model.rotation = Quaternion.Euler(0f, 70f, 0f);
+                foreach (string part in new[] { "Helmet", "Boot" })
+                {
+                    GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    cube.name = part;
+                    cube.transform.SetParent(model, false);
+                    cube.GetComponent<Collider>().enabled = false;
+                }
+
+                var remote = new RemoteInterpolator(delayTicks: 1f, maxLagTicks: 25f);
+                var ghost = host.AddComponent<RemoteGhost>();
+                ghost.Initialize(remote, model);
+                Assert.Throws<ArgumentNullException>(() => host.AddComponent<RemoteGhost>().Initialize(remote, null));
+
+                Transform copy = host.transform.Find("Remote racer/Armored Runner");
+                Assert.That(copy, Is.Not.Null, "The copy sits under the root that follows the racer.");
+                Assert.That(copy.Find("Helmet"), Is.Not.Null);
+                Assert.That(copy.Find("Boot"), Is.Not.Null);
+                Assert.That(copy.localPosition, Is.EqualTo(model.localPosition));
+                Assert.That(copy.localRotation, Is.EqualTo(Quaternion.identity), "The local runner's facing is not copied.");
+                MeshFilter[] source = model.GetComponentsInChildren<MeshFilter>();
+                MeshFilter[] copied = copy.GetComponentsInChildren<MeshFilter>();
+                Assert.That(copied.Length, Is.EqualTo(source.Length));
+                for (int i = 0; i < source.Length; i++)
+                {
+                    Assert.That(copied[i].sharedMesh, Is.SameAs(source[i].sharedMesh));
+                    Assert.That(copied[i].GetComponent<MeshRenderer>().sharedMaterial, Is.SameAs(source[i].GetComponent<MeshRenderer>().sharedMaterial));
+                }
+                foreach (Collider collider in copy.GetComponentsInChildren<Collider>(true))
+                    Assert.That(collider.enabled, Is.False, "No collider may be on, even before it is destroyed.");
+
+                remote.Add(1, new Vector3(3f, 0f, 4f));
+                remote.Add(2, new Vector3(3f, 0f, 6f));
+                yield return null;
+                yield return null;
+                Assert.That(copy.GetComponentsInChildren<Collider>(true), Is.Empty, "The copy's colliders are destroyed.");
+                Assert.That(model.GetComponentsInChildren<Collider>(true).Length, Is.EqualTo(2), "The local model is left as it was.");
+                Assert.That(ghost.HasPosition, Is.True);
+                Assert.That(ghost.Position, Is.EqualTo(new Vector3(3f, 0f, 4f)), "One tick behind the newest, waiting there.");
+                Assert.That(ghost.Visible, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(runner);
+                UnityEngine.Object.Destroy(host);
+            }
         }
 
         // ---- the position message ----------------------------------------------------------------

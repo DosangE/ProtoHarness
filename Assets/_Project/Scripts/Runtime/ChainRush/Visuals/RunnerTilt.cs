@@ -14,6 +14,9 @@ namespace ProtoHarness.ChainRush.Visuals
         private float swingBlend;
         private float insideSign = 1f;
 
+        // The runner's visual model (also what a network race copies to draw the other racer, RemoteGhost).
+        public Transform Body => body;
+
         private void Awake()
         {
             if (motor == null || body == null)

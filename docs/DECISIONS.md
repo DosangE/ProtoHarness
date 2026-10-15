@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-10-15 · R9 네모 통일 1단계: 네트워크 상대를 캡슐 대신 내 러너 모형의 복제로 그린다
+
+- **결정 (사용자 승인, 2026-10-15 "셋다 좋다", `docs/NEXT_REQUESTS.md` R9)**: `RemoteGhost.Initialize(interpolator, model)` 가 받은 모형을 복제한다. 위치를 따라가는 빈 루트 `Remote racer` 아래에 원본과 같은 로컬 위치·크기로 놓고, 회전은 루트 정면(identity)으로 둔다. 콜라이더는 끈 뒤 지운다(이전 캡슐과 같다). `RaceClient.Begin` 은 `game.Player` 의 `RunnerTilt.Body` 를 넘긴다. `RunnerTilt` 가 없으면 `InvalidOperationException` 을 던진다. 공개 API 추가: `ChainRushGame.Player`, `RunnerTilt.Body` (읽기 전용).
+- **이유**: 사용자 "네모로 맞춘다". 서킷의 `RunnerTilt.body`·`RunnerAnimation.model` 은 둘 다 `Armored Runner` 다(`ChainRushCircuit.unity:114962,114981`). 씬의 모형을 복제하면 새 에셋도 씬 수정도 없고, 모형 원본이 한 곳으로 남는다. `Armored Runner` 부품 25개에는 BoxCollider 가 붙어 있지만 모두 `m_Enabled: 0` 이다(서킷·절차 씬 grep).
+- **한계**: 복제본은 복제한 순간의 자세 그대로다. `RunnerAnimation` 이 움직이지 않는다. 상대의 몸 기울기·관절 연출은 범위 밖이다.
+- **검증** (`feature/net-boxy-ghost`, 커밋하지 않은 작업 트리, 에디터 6000.3.19f1, 에디터 포커스는 모든 실행에서 `isApplicationActive=False`):
+  - 컴파일: Editor.log `*** Tundra build success (25.75 seconds)`. 리플렉션으로 새 멤버 4개가 올라온 것을 확인했다. Console Error 0, Warning 20 은 모두 `Deleting invalid font reference.` 다.
+  - `tools/select-tests.ps1` 기본 실행: `ChainRushGame.cs → 전체 (코어 시뮬)`. 빠른 확인 `NetRemoteTests` `testcasecount="11" result="Passed" passed="11"` (05:03:30Z, 새 테스트 `Ghost_CopiesTheLocalModelWithoutColliders_AndFollowsTheRacer` 포함).
+  - EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (05:03:47Z~05:03:55Z).
+  - `Run PlayMode Tests` `testcasecount="142" result="Passed" passed="139" failed="0" skipped="3"` (05:04:20Z~05:11:22Z, 421.9초, skipped 3 은 `[Explicit]` 네트워크 레이스).
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (05:12:48Z~05:16:06Z, 198.2초).
+  - 플레이어 빌드: `BuildPipeline.BuildPlayer`(서킷 씬만, `BuildOptions.None`) `result=Succeeded errors=0 warnings=485` (05:17:40Z). 빌드가 바꾼 `Assets/Settings/` 3개와 `ProjectSettings/UnityConnectSettings.asset` 은 `git restore -- <파일>` 로 되돌렸다. `ProjectSettings.asset` 은 빌드 전 사본으로 되돌렸다. git status 와 바이트 비교 모두 빌드 전과 같다.
+  - **네트워크 레이스 A 1회차 실패** (05:18:27Z~05:20:31Z): `Unhandled log message: '[Error] RACE-CLIENT-FAULT the server's state for tick 336 could not be taken (the client at tick 335): InvalidOperationException: ClientPredictor: the server's state is for tick 336 but the client is at tick 335.'`. 같은 실행 요약: 에디터 프레임 최장 613.3 ms(tick 49 뒤), 50 ms 넘는 프레임 6개 `[1731:61 32:201 49:613 53:84 335:80 335:70]`, 서버 기준 늦은 입력 레이서 0 = 316, 레이서 1(플레이어 프로세스) = 394, 플레이어 클라 보정 197회. 고스트는 정상이었다: 상대 위치 335개 비교 중 어긋남 0, 순간 이동 0, 최대 한 걸음 1.096 m.
+  - **네트워크 레이스 A 2회차 통과** (05:21:26Z~05:22:04Z, 같은 코드·같은 빌드): 에디터·플레이어 클라 모두 1001개 비교 보정 0, 상대 위치 1000개 어긋남 0, 늦은 입력 0 / 0, 고스트 2840 프레임 순간 이동 0·최대 한 걸음 0.440 m, 에디터 프레임 최장 44.5 ms.
+- **1회차 실패의 판단 (증명 못 함)**: 고장 형태는 HANDOFF 4절의 "서버가 클라를 앞지름" 과 같다. 늦은 입력이 에디터와 별도 플레이어 프로세스 **양쪽에서** 많았고, 플레이어 빌드 바로 다음 실행이었다. 그래서 기계 부하를 의심한다. 이번 변경은 `Begin` 에서 한 번 복제할 뿐이고, 레이스 도중의 일은 바뀌지 않았다(고스트 `Update` 는 위치·회전만 쓴다). 하지만 613 ms 프레임의 원인은 확인하지 못했다. **같은 코드를 다시 돌려 통과한 것으로 실패를 지우지 않는다(§9-2).** 병합 판단은 사용자에게 맡긴다.
+- **버린 대안**: 첫 프리팹으로 모형을 빼기 — R3(3-2 ①)에서 한다. 이 경로는 그대로 쓴다. 고스트용 네모 모형을 코드로 따로 만들기 — 모형 원본이 둘이 된다.
+
 ## 2026-10-15 · 테스트 대기를 틱으로: 몇 틱만 이어지는 상태를 보는 대기 3곳
 
 - **결정 (사용자 승인, 2026-10-15 "R1 시작하자", `docs/NEXT_REQUESTS.md` R1)**: 게임 시간 초(`WaitForSeconds`)로 기다린 뒤 **잠깐만 이어지는 상태**를 단언하는 테스트를 틱 수로 기다리게 바꾼다. 각 클래스에 비공개 보조 `WaitTicks(int)` 를 두고(이 프로젝트는 `LandOnRoad`·`RunTo` 같은 보조를 클래스마다 둔다), 초 값은 `Ticks.FromSeconds(같은 초)` 로 옮겨 정상 프레임에서 돌던 틱 수를 그대로 쓴다. 단언 값은 바꾸지 않았다.

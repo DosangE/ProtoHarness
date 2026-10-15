@@ -15,11 +15,10 @@
 | ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **보류** (서킷 집중) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
 | ~~R7~~ | ~~공격 판정 방향~~ **보류** (서킷 집중, 서킷에는 표적이 없다) | `fix/attack-facing` | 약 11분 | — | 7-1 (설계) |
 | R8 | 기존 착지 확인 테스트 수정 | `fix/test-landing-check` | 약 11분 | — | — |
-| R9 | 네모 통일 1단계: 네트워크 상대 | `feature/net-boxy-ghost` | 약 11분 + 플레이어 빌드 + 레이스 A | — | — (승인 2026-10-15) |
 
 **2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다.
 
-**권장 순서**: R9(진행 중) → R2 → R4 → R5 → R3. R8 은 아무 때나. **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
+**권장 순서**: R3(진행 중, 2026-10-15 사용자 "네 추천대로" — 테스트 중 보이는 둥근 러너를 먼저 없앤다) → R2 → R4 → R5. R8 은 아무 때나. R9 는 끝났다(DECISIONS 2026-10-15 "R9"). **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
 
 ---
 
@@ -59,7 +58,7 @@
            세 씬의 러너에서 RunnerTilt.body·RunnerAnimation.model 이 네모 모형을 가리키는지 확인.
            지우는 Runner Visual 을 다른 곳이 참조하지 않는지 씬 grep(fileID)
 삭제(승인 필요): 절차·서킷 씬의 꺼진 Runner Visual (ChainRushProcedural·ChainRushCircuit, m_IsActive: 0)
-안 하는 것:  절차·서킷 씬의 다른 구조, 네트워크 상대 모형(R9)
+안 하는 것:  절차·서킷 씬의 다른 구조, 네트워크 상대 모형(R9 에서 끝남)
 ```
 
 - 지금 모형 (2026-10-15 씬 grep): 절차·서킷의 러너는 `Armored Runner`(켜짐, 큐브 헬멧·흉갑·관절)와 `Runner Visual`(꺼짐, 구 헬멧·캡슐 몸통)을 둘 다 갖고 있다. 서킷에서 `RunnerTilt.body`·`RunnerAnimation.model` 은 둘 다 `Armored Runner` 를 가리킨다(`ChainRushCircuit.unity:114962,114981`). 작업대에는 `Runner Visual` 만 있다. `Armored Runner` 는 만드는 코드가 없고 씬 안에만 있다(`git log -S` 첫 커밋 `4e6f12b`).
@@ -77,7 +76,7 @@
 | `Grapple_JumpAtGap…`, `Grapple_NoAnchorInRange…` | 발판·앵커를 남길지, 시험 도로에 틈·앵커를 코드로 깔지 |
 | `Attack_ScriptedPressNearTarget_HitsExactlyOnce` | R7 보류(2026-10-15) — 지금 판정(+z) 그대로 Procedural 로 옮기거나 `ChainRushCombatTests` 와 겹치면 합친다. 본문을 읽고 확정 |
 
-**3-1 사용자 결정**: 그래플 틈 테스트를 위해 작업대에 발판·앵커 한 구간을 남길까(간단), 시험 도로에 틈·앵커를 코드로 만들까(작업대가 완전히 비지만 테스트 보조가 커진다)?
+**3-1 사용자 결정 → 남긴다 (2026-10-15 "네 추천대로 하겠다")**: 그래플 틈 테스트를 위해 작업대에 발판·앵커 한 구간을 남길까(간단), 시험 도로에 틈·앵커를 코드로 만들까(작업대가 완전히 비지만 테스트 보조가 커진다)?
 
 ## R4. 코너 봉 스윙 P1 — 시뮬
 
@@ -144,24 +143,6 @@
 안 하는 것:  단언 값 변경
 ```
 
-## R9. 네모 통일 1단계: 네트워크 상대 (승인 2026-10-15 "셋다 좋다")
-
-```
-목표:      네트워크 레이스의 상대를 캡슐 대신 내 캐릭터와 같은 네모 모형으로 보여 준다
-건드릴 것:  Runtime/Net/RemoteGhost.cs:22-33 (Initialize 가 복제할 모형을 받는다. 콜라이더는 지금처럼 끈 뒤 지운다)
-           Runtime/Net/RaceClient.cs:115-116 (모형을 넘긴다)
-           Runtime/ChainRush/Visuals/RunnerTilt.cs:13 (body 를 읽는 읽기 전용 속성 1개)
-           Runtime/ChainRush/ChainRushGame.cs:16 (player 를 읽는 읽기 전용 속성 1개. 지금은 공개 접근이 없다)
-           → 공개 API 추가
-새로 만들 것: 테스트 1건 — 복제본이 원본과 같은 모양이고 콜라이더가 없는지 본다.
-           넣을 곳은 기존 Tests/PlayMode/NetRemoteTests.cs (구현 전에 끝까지 읽고 형식을 맞춘다)
-검증 방법:  EditMode, 게이트 1회, 플레이어 재빌드 + 네트워크 레이스 A 1회 (NetworkRaceTests.cs:585 의 ghost 단언).
-           레이스 도중에는 캡처를 하지 않는다(HANDOFF 4절). 그래서 실제 모양은 사용자가 플레이해서 확인한다
-안 하는 것:  작업대 러너, 꺼진 둥근 모형 삭제 (R3)
-```
-
-- 씬에 이미 있는 모형(서킷 `RunnerTilt.body` = `Armored Runner`)을 복제하므로 새 에셋이 없고, 모형 원본이 한 곳으로 남는다. R3 에서 3-2 ① 을 고르면 그 원본이 프리팹 인스턴스가 될 뿐이고 이 경로는 그대로다.
-
 ---
 
 ## 요청서를 아직 쓰지 않은 후보 (설계·측정이 먼저)
@@ -170,6 +151,8 @@
 
 - **P3 C1 마무리 측정**: 3인 이상, 100 ms 체감, 패킷 유실, 모바일/IL2CPP 일치.
 - **P3 C2 충돌·추월**: 공유 월드 선행.
+- **상대 레이서 달리기 연출** (2026-10-15 사용자 "달리는 연출은 없긴 했다"): R9 의 고스트는 복제한 순간의 자세로 고정돼 있다. 받은 위치의 속도로 `RunnerAnimation` 같은 자세를 줄지는 멀티를 다시 열 때 정한다.
+- **Play 를 멈춘 뒤의 `RaceClient` NullReferenceException** (2026-10-15 레이스 C 를 손으로 멈췄을 때): `RaceClient.Update` → `DelayedSender.Pump` → `RaceClient.SendInput` (`RaceClient.cs:179`). NetworkManager 가 사라진 뒤 지연 큐가 한 번 더 보낸 것으로 보인다(확인 못 함). 테스트 결과에는 영향이 없었다(그 실행은 이미 중단됨). 멀티를 다시 열 때 고친다.
 - **P2 고스트**: 최고 기록 저장, 겨루기, UI.
 - **T3e 장식, T5 보충 모듈** (헤어핀 전용 짧은 봉은 여기 — `PROPOSAL_CORNER_POLE.md` 8절).
 - **하네스**: SessionStart `resume`, 서브에이전트 안의 훅, C모드 재논의.

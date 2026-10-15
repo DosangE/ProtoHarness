@@ -158,7 +158,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Tilt_ScriptedSteerLeft_LeansBodyFromMotorState()
         {
             Assert.That(player.GetComponent<RunnerTilt>(), Is.Not.Null, "RunnerTilt must sit on the runner.");
-            Transform body = player.transform.Find("Runner Visual");
+            Transform body = player.GetComponent<RunnerTilt>().Body;
             Assert.That(body, Is.Not.Null);
             game.StartRun();
             source.Steer = -1f;
@@ -186,7 +186,7 @@ namespace ProtoHarness.Tests.PlayMode
         // Only the body turns: the root carries the physics capsule, and turning it per frame breaks bit-for-bit replay.
         public IEnumerator Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading()
         {
-            Transform body = player.transform.Find("Runner Visual");
+            Transform body = player.GetComponent<RunnerTilt>().Body;
             Assert.That(body, Is.Not.Null);
             Quaternion rootRotation = player.transform.rotation;
             game.StartRun();

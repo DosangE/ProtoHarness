@@ -131,7 +131,7 @@ namespace ProtoHarness.Tests.PlayMode
             Centerline line = CurveRoad();
             var bot = new TrackFollower(line, player);
             yield return StartOn(line, bot);
-            Transform body = player.transform.Find("Runner Visual");
+            Transform body = player.GetComponent<RunnerTilt>().Body;
             LineRenderer chain = player.transform.Find("Chain Line").GetComponent<LineRenderer>();
             Quaternion root = player.transform.rotation;
             yield return RunTo(line, ArcStart + 1d);

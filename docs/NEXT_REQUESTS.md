@@ -9,7 +9,6 @@
 | # | 작업 | 브랜치 | Unity 검증 | 선행 | 사용자 결정 |
 |---|---|---|---|---|---|
 | R2 | 서킷 낙하 복귀 마무리 (WIP) | `feature/circuit-fall-respawn` | 약 20분 | — | — |
-| R3 | 맵 정리 3단계 (작업대 비우기 + 네모 통일 2단계) | `feature/scene-test-bench-strip` | 약 11분 | — | 3-1 (3-2 는 ① 로 정함) |
 | R4 | 코너 봉 스윙 P1 (시뮬) | `feature/corner-pole-sim` | 약 30분 이상 | **R2** (같은 파일) | — |
 | R5 | 코너 봉 스윙 P2 (표현) | `feature/corner-pole-look` | 약 11분 + 사용자 플레이 | R4 | 5-1 |
 | ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **보류** (서킷 집중) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
@@ -18,7 +17,7 @@
 
 **2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다.
 
-**권장 순서**: R3(진행 중, 2026-10-15 사용자 "네 추천대로" — 테스트 중 보이는 둥근 러너를 먼저 없앤다) → R2 → R4 → R5. R8 은 아무 때나. R9 는 끝났다(DECISIONS 2026-10-15 "R9"). **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
+**권장 순서**: R2 → R4 → R5. R8 은 아무 때나. R9·R3 는 끝났다(DECISIONS 2026-10-15 "R9"·"R3"). **씬을 건드리는 브랜치는 동시에 1개만**(§9-2).
 
 ---
 
@@ -38,45 +37,6 @@
 
 - 알려진 위험: 그 브랜치의 네트워크 레이스는 에디터 프레임이 수백 ms 멈출 때 예측기가 고장 났다(HANDOFF 4절의 "서버가 클라를 앞지름"). 복귀로 런이 길어져 더 자주 드러난다. **다시 실패하면 원문을 보고하고 병합하지 않는다** — 그때 예측기 쪽을 별도 요청서로.
 - R1(테스트 안정화)은 끝났다(DECISIONS 2026-10-15 "테스트 대기를 틱으로"). 전투·조향·점프 테스트의 프레임 시간 의존은 빠졌으므로, 그 테스트들이 다시 실패하면 이 변경을 먼저 의심한다.
-
-## R3. 맵 정리 3단계: 테스트 작업대 비우기 + 네모 통일 2단계
-
-> 2026-10-15 다시 씀: 서킷 집중으로 R7 이 보류돼 R7 선행을 풀었다. 사용자 "네모로 맞춘다" 에 따라 구 머리 캐릭터를 이 항목에서 함께 맡는다. 씬을 한 번만 열기 위해서다.
-
-```
-목표:      ① ChainRushTestBench 에서 직선 코스 전용 구조(결승선·표적 등)를 걷어내고, 그 구조에 기대던 테스트를 지우거나 옮긴다
-           ② 플레이어 모형을 네모(Armored Runner) 하나로 맞춘다 — 작업대의 둥근 러너를 바꾸고,
-              절차·서킷 씬에 꺼진 채 남은 둥근 Runner Visual 을 지운다
-건드릴 것:  씬 ChainRushTestBench·ChainRushProcedural·ChainRushCircuit (에디터에서)
-           Editor/ChainRush/ChainRushSceneBuilder.cs (작업대 생성 내용 — 둥근 모형은 :137-147, 메뉴 Add Deck Guards To Open Scene)
-           Tests/PlayMode/ChainRushTests.cs, ChainRushSteeringTests.cs, ChainRushInputSourceTests.cs (각 테스트 본문을 읽고 아래 표 확정)
-           Tests/PlayMode/ChainRushCornerSwingTests.cs:134, ChainRushInputSourceTests.cs:161,189 — 작업대에서 모형을 "Runner Visual" 이름으로
-             찾는다. 모형 이름이 바뀌면 찾는 경로만 바꾼다(단언은 그대로)
-새로 만들 것: 3-2 ① 이면 첫 프리팹 Assets/_Project/Prefabs/ArmoredRunner.prefab (그때 §1-1 선언, 첫 사례라 형식 합의)
-           그래플 틈 테스트에 필요하면 TestRoad 에 틈·앵커 — 그때 §1-1 선언
-검증 방법:  게이트 1회 + Long, 지문 그대로(모형은 표현이라 해시가 바뀌면 원인을 찾는다), 지우는 테스트마다 이유를 DECISIONS 에.
-           세 씬의 러너에서 RunnerTilt.body·RunnerAnimation.model 이 네모 모형을 가리키는지 확인.
-           지우는 Runner Visual 을 다른 곳이 참조하지 않는지 씬 grep(fileID)
-삭제(승인 필요): 절차·서킷 씬의 꺼진 Runner Visual (ChainRushProcedural·ChainRushCircuit, m_IsActive: 0)
-안 하는 것:  절차·서킷 씬의 다른 구조, 네트워크 상대 모형(R9 에서 끝남)
-```
-
-- 지금 모형 (2026-10-15 씬 grep): 절차·서킷의 러너는 `Armored Runner`(켜짐, 큐브 헬멧·흉갑·관절)와 `Runner Visual`(꺼짐, 구 헬멧·캡슐 몸통)을 둘 다 갖고 있다. 서킷에서 `RunnerTilt.body`·`RunnerAnimation.model` 은 둘 다 `Armored Runner` 를 가리킨다(`ChainRushCircuit.unity:114962,114981`). 작업대에는 `Runner Visual` 만 있다. `Armored Runner` 는 만드는 코드가 없고 씬 안에만 있다(`git log -S` 첫 커밋 `4e6f12b`).
-
-**3-2 사용자 결정 → ① (2026-10-15 "권장안대로 다 허락한다")**: 네모 모형을 ① 첫 프리팹으로 만들어 세 씬이 같은 프리팹을 쓰게 할까(모양 원본 1곳, 빌더도 프리팹을 놓는다 — **권장**) ② 서킷의 `Armored Runner` 를 작업대에 복사만 할까(프리팹 없음, 대신 모양 원본이 씬마다 하나씩 3벌)?
-
-`docs/PROPOSAL_SCENE_CLEANUP.md` 5절 초안(이름 기준):
-
-| 테스트 | 처리 |
-|---|---|
-| `Course_TimedJumpsAndHeldGrapple_ReachesFinish` | 지운다 — 직선 결승은 이 씬에만 있고 완주는 서킷 3랩이 본다. 프레임 시간 의존 간헐 실패의 하나 |
-| `Guards_PrototypeDecksAndProceduralRoad_AreGuarded` | 절차 노면 쪽만 남긴다 |
-| `Restart_AfterAttackAndFall…` | Procedural 로 옮긴다 (낙하 = 종료가 남는 맵) |
-| `Damage_RepeatedContact…` | `ChainRushCombatTests` 와 겹치는지 보고 합치거나 남긴다 |
-| `Grapple_JumpAtGap…`, `Grapple_NoAnchorInRange…` | 발판·앵커를 남길지, 시험 도로에 틈·앵커를 코드로 깔지 |
-| `Attack_ScriptedPressNearTarget_HitsExactlyOnce` | R7 보류(2026-10-15) — 지금 판정(+z) 그대로 Procedural 로 옮기거나 `ChainRushCombatTests` 와 겹치면 합친다. 본문을 읽고 확정 |
-
-**3-1 사용자 결정 → 남긴다 (2026-10-15 "네 추천대로 하겠다")**: 그래플 틈 테스트를 위해 작업대에 발판·앵커 한 구간을 남길까(간단), 시험 도로에 틈·앵커를 코드로 만들까(작업대가 완전히 비지만 테스트 보조가 커진다)?
 
 ## R4. 코너 봉 스윙 P1 — 시뮬
 

@@ -19,7 +19,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 우리 에디터 스크립트 | **2** (`ChainRushSceneBuilder`, `ChainRushCircuitSceneBuilder`) |
 | 우리 테스트 | PlayMode **12 파일 / 46 테스트** (그중 `Device` 카테고리 2개, 공용 헬퍼 `TestRoad.cs`·`TrackFollower.cs` 포함), EditMode **9 파일 / 131 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-07 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushTestBench.unity` (테스트 작업대 — 시험 도로를 코드로 까는 PlayMode 테스트의 그릇. 플레이용이 아니다. 2026-10-14 `ChainRushPrototype` 에서 이름만 바꿈), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제 |
+| 게임 씬 | `Assets/_Project/Scenes/ChainRushTestBench.unity` (테스트 작업대 — 시험 도로를 코드로 까는 PlayMode 테스트의 그릇. 플레이용이 아니다. 2026-10-14 `ChainRushPrototype` 에서 이름만 바꿈, 2026-10-15 R3 에서 첫 구간(발판·앵커·표적 1개씩)만 남김), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제. 세 씬의 러너 모형은 프리팹 `Assets/_Project/Prefabs/ArmoredRunner.prefab` 하나다(2026-10-15 R3) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
 
 참조 게임: https://github.com/DosangE/Chain-Rush · 조사 기준 커밋 `17294d85943dfa9fecd6a70272411e035b1ca6bf`.
@@ -93,7 +93,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 인덱스 재생성 | `tools/reindex.ps1` |
 | 게임 씬 | 플레이: `ChainRushProcedural.unity`(무한), `ChainRushCircuit.unity`(서킷). 테스트 작업대: `ChainRushTestBench.unity` |
 | 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Test Bench Scene` (Ctrl+Shift+G, 작업대), `Create Circuit Scene` (서킷). 기존 게임 씬을 덮어쓰지 않는다. |
-| 열기 | `ProtoHarness > Chain Rush > Open Prototype Scene` |
+| 열기 | `ProtoHarness > Chain Rush > Open Test Bench Scene` |
 | 무한 씬 만들기 | `ProtoHarness > Chain Rush > Create Endless Scene` (Ctrl+Shift+E). 기존 테스트 씬을 복사한 후 별도 경로에만 저장. 재생성으로 덮어쓰지 않음. |
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |

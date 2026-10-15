@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-15 · R3 맵 정리 3단계 + 네모 통일 2단계: 작업대는 첫 구간만, 러너 모형은 프리팹 `ArmoredRunner` 하나
+
+- **결정 (사용자 승인, 2026-10-15 "ㄱㄱ, 네가 저장" / 작업대 단계 재승인 "A로 진행하라", `docs/NEXT_REQUESTS.md` R3, 3-1 "남긴다", 3-2 ①)**:
+  - **첫 프리팹** `Assets/_Project/Prefabs/ArmoredRunner.prefab` (폴더도 새로 만듦): 서킷 씬의 `Armored Runner` 33개 오브젝트를 그대로 담는다. 스크립트는 없고, 꺼진 BoxCollider 25개도 그대로다. 프리팹 형식(이 프로젝트의 첫 사례): 이름은 PascalCase, 모형만 담고 동작 컴포넌트는 씬의 러너 루트에 둔다. 인스턴스 이름은 씬에서 `Armored Runner` 로 둔다.
+  - **서킷**: `SaveAsPrefabAssetAndConnect` 로 프리팹을 만들고 그 자리에서 인스턴스로 연결했다. 꺼진 둥근 `Runner Visual` 은 지웠다.
+  - **절차**: `ConvertToPrefabInstance`(계층 기준 짝 맞춤, 루트 이름 유지)로 같은 프리팹 인스턴스가 됐다. 참조 10개(`GrappleController.ropeOrigin`, `RunnerAnimation` model·관절 6, `RunnerTilt.body`, `ChainVisual.origin` ×2)가 인스턴스를 가리킨다. 덮어쓴 값은 루트 위치·회전·이름뿐이다. 꺼진 `Runner Visual` 은 지웠다. 두 씬의 `Armored Runner` 는 33개 오브젝트의 이름·켜짐·위치·회전·크기·메시·머티리얼이 같았다(씬 grep 비교).
+  - **작업대**: 프리팹 인스턴스를 놓고 `RunnerTilt.body`·`GrappleController.ropeOrigin` 을 다시 연결했다. 둥근 `Runner Visual`, Sector 02~09, 결승 게이트 4개를 지웠다. `GrappleController.anchors` 는 `Link Anchor 1` 하나, `ChainRushGame.targets` 는 (0, 1.1, 18) 하나만 남겼다. 배경 빌딩은 남겼다.
+  - **빌더** `ChainRushSceneBuilder.CreateTestBenchScene`: 구간 1개(`Sections = 1`)만 만들고, 결승 게이트는 만들지 않으며, 모형은 프리팹(`RunnerModelPath`)이다. 쓰지 않게 된 `Visor` 머티리얼 생성 줄은 지웠다.
+  - **테스트**: `Course_TimedJumpsAndHeldGrapple_ReachesFinish` 삭제 — 직선 결승은 작업대에만 있었고, 완주는 서킷 3랩 테스트가 본다. `ChainRushCornerSwingTests:134`·`ChainRushInputSourceTests:161,189` 는 모형을 `Find("Runner Visual")` 대신 `RunnerTilt.Body` 로 찾는다. 찾는 방법만 바꿨고 단언은 그대로다.
+  - 문서: ARCHITECTURE 씬 줄과 열기 메뉴. 열기 메뉴의 `Open Prototype Scene` 은 2026-10-14 이름 변경 때 남은 옛 이름이라 `Open Test Bench Scene` 으로 고쳤다. HANDOFF 씬 줄.
+- **이유**: 사용자 "네모로 맞춘다", "테스트하는 걸 보았을 때 원치 않는 동그란 플레이어가 보였다". 작업대에 남긴 Sector 01(발판 -8~48 m, 앵커 (0, 10, 56), 표적 z 18)은 그래플 틈 2건(z 44, x 50), `Restart_AfterAttackAndFall`·`Attack_ScriptedPressNearTarget`(z 15), `Damage_RepeatedContact`, 가드 테스트(발판 1개 이상)가 쓰는 전부라서 테스트를 옮길 필요가 없었다(`ChainRushSceneBuilder.cs` 구간 루프, 각 테스트 본문).
+- **진행 중 있었던 일**:
+  - 작업대 단계의 첫 `Unity_RunCommand` 는 권한 분류기에 막혔다. 사용자가 다시 승인한 뒤 실행했다.
+  - 다시 실행했을 때는 지우기 전 참조 검사가 13건을 잡아 저장 없이 멈췄다. 13건은 모두 부모 Transform 의 `m_Children` 목록, 곧 계층 자체였다. `m_Children`·`m_Father` 를 검사에서 빼고, 씬을 디스크에서 다시 열어(dirty=False 확인) 처음부터 다시 했다.
+- **검증** (`feature/scene-test-bench-strip`, 에디터 6000.3.19f1):
+  - 컴파일: `Tundra build success (14.96 seconds)`, Console Error 0.
+  - 씬 grep: 세 씬 모두 `Runner Visual`·`Helmet` 이름 0개, 프리팹 GUID 참조가 있다. 작업대의 `Finish` 0개.
+  - EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (05:44:53Z~05:44:59Z).
+  - `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (05:45:18Z~05:51:34Z, 376.2초 — 142 → 141 은 지운 1건, skipped 3 은 `[Explicit]` 네트워크 레이스). 지문 테스트 포함.
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (05:52:28Z~05:55:44Z, 196.2초).
+  - 작업대 `Main Camera` 캡처: 네모 러너, 발판·표적·앵커 각 1개.
+- **확인 못 한 것**: 고친 빌더로 작업대를 새로 만들지는 않았다. 빌더 결과가 지금 씬과 정확히 같은지는 모른다. 네트워크 레이스는 이번 변경 경로(`RunnerTilt.Body` → 고스트 복제)가 같아서 다시 돌리지 않았다. 다만 서킷 씬의 모형이 이제 프리팹 인스턴스라서, 고스트가 복제하는 대상도 인스턴스다.
+
 ## 2026-10-15 · R9 네모 통일 1단계: 네트워크 상대를 캡슐 대신 내 러너 모형의 복제로 그린다
 
 - **결정 (사용자 승인, 2026-10-15 "셋다 좋다", `docs/NEXT_REQUESTS.md` R9)**: `RemoteGhost.Initialize(interpolator, model)` 가 받은 모형을 복제한다. 위치를 따라가는 빈 루트 `Remote racer` 아래에 원본과 같은 로컬 위치·크기로 놓고, 회전은 루트 정면(identity)으로 둔다. 콜라이더는 끈 뒤 지운다(이전 캡슐과 같다). `RaceClient.Begin` 은 `game.Player` 의 `RunnerTilt.Body` 를 넘긴다. `RunnerTilt` 가 없으면 `InvalidOperationException` 을 던진다. 공개 API 추가: `ChainRushGame.Player`, `RunnerTilt.Body` (읽기 전용).

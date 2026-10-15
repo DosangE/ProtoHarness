@@ -17,7 +17,12 @@ namespace ProtoHarness.Editor.ChainRush
     {
         public const string ScenePath = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         public const string RulesPath = "Assets/_Project/Data/RunRules_Default.asset";
+        // The runner's model, shared by every scene (DECISIONS 2026-10-15 "R3").
+        public const string RunnerModelPath = "Assets/_Project/Prefabs/ArmoredRunner.prefab";
         private const string MaterialFolder = "Assets/_Project/Art/Materials";
+        // The bench keeps one deck with its gap, anchor and target: enough for the grapple, attack and restart tests.
+        // Every other movement test lays its own test road (TestRoad).
+        private const int Sections = 1;
 
         static ChainRushSceneBuilder()
         {
@@ -32,6 +37,8 @@ namespace ProtoHarness.Editor.ChainRush
                 throw new InvalidOperationException("ChainRushTestBench already exists. Open it instead of overwriting it.");
             var rules = AssetDatabase.LoadAssetAtPath<RunRules>(RulesPath);
             if (rules == null) throw new InvalidOperationException("Run rules asset is missing: " + RulesPath);
+            var runnerModel = AssetDatabase.LoadAssetAtPath<GameObject>(RunnerModelPath);
+            if (runnerModel == null) throw new InvalidOperationException("Runner model prefab is missing: " + RunnerModelPath);
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EnsureFolder("Assets/_Project/Scenes");
             EnsureFolder(MaterialFolder);
@@ -43,12 +50,11 @@ namespace ProtoHarness.Editor.ChainRush
             Material coral = Material("Hazard", new Color(1f, 0.2f, 0.14f), 0.75f);
             Material suit = Material("Suit", new Color(0.82f, 0.9f, 0.91f), 0f);
             Material city = Material("City", new Color(0.08f, 0.18f, 0.23f), 0f);
-            Material glass = Material("Visor", new Color(0.08f, 0.19f, 0.24f), 0.25f);
 
             var world = new GameObject("Skyline Course").transform;
             var anchors = new List<Transform>();
             var targets = new List<CourseTarget>();
-            for (int section = 0; section < 9; section++)
+            for (int section = 0; section < Sections; section++)
             {
                 float start = section == 0 ? -8f : 8f + section * 56f;
                 float end = 48f + section * 56f;
@@ -112,10 +118,6 @@ namespace ProtoHarness.Editor.ChainRush
                 for (int row = 0; row < 4; row++)
                     Cube("Tower stripe", world, new Vector3(x, -25f + height * row / 5f, z - 4.03f), new Vector3(4f, 0.09f, 0.04f), mint);
             }
-            Cube("Finish left", world, new Vector3(-6f, 4f, 496f), new Vector3(0.55f, 8f, 0.55f), mint);
-            Cube("Finish right", world, new Vector3(6f, 4f, 496f), new Vector3(0.55f, 8f, 0.55f), mint);
-            Cube("Finish top", world, new Vector3(0f, 8f, 496f), new Vector3(12.5f, 0.55f, 0.55f), mint);
-            Sign("Finish label", world, new Vector3(0f, 6.5f, 496f), "FINISH", suit, 1.2f);
 
             var gameObject = new GameObject("Chain Rush");
             var game = gameObject.AddComponent<ChainRushGame>();
@@ -134,21 +136,10 @@ namespace ProtoHarness.Editor.ChainRush
             var motor = playerObject.AddComponent<RunnerMotor>();
             var grapple = playerObject.AddComponent<GrappleController>();
             var tilt = playerObject.AddComponent<RunnerTilt>();
-            var model = new GameObject("Runner Visual").transform;
-            model.SetParent(playerObject.transform, false);
-            Primitive("Torso", PrimitiveType.Capsule, model, new Vector3(0f, -0.05f, 0f), new Vector3(0.62f, 0.52f, 0.48f), suit);
-            Primitive("Helmet", PrimitiveType.Sphere, model, new Vector3(0f, 0.62f, 0f), Vector3.one * 0.59f, suit);
-            Primitive("Visor", PrimitiveType.Cube, model, new Vector3(0f, 0.64f, 0.23f), new Vector3(0.45f, 0.17f, 0.14f), glass);
-            Primitive("Pack", PrimitiveType.Cube, model, new Vector3(0f, 0.05f, -0.28f), new Vector3(0.39f, 0.5f, 0.2f), frame);
-            Primitive("Pack light", PrimitiveType.Cube, model, new Vector3(0f, 0.1f, -0.4f), new Vector3(0.25f, 0.1f, 0.04f), mint);
-            for (int side = -1; side <= 1; side += 2)
-            {
-                Primitive("Boot", PrimitiveType.Cube, model, new Vector3(side * 0.18f, -0.68f, 0.05f), new Vector3(0.24f, 0.43f, 0.35f), frame);
-                Primitive("Arm", PrimitiveType.Capsule, model, new Vector3(side * 0.4f, 0.06f, 0f), new Vector3(0.21f, 0.3f, 0.22f), suit);
-            }
-            var hand = new GameObject("Chain Origin").transform;
-            hand.SetParent(model, false);
-            hand.localPosition = new Vector3(0.45f, 0.3f, 0.25f);
+            var model = ((GameObject)PrefabUtility.InstantiatePrefab(runnerModel, playerObject.transform)).transform;
+            model.name = "Armored Runner";
+            Transform hand = model.Find("Torso Joint/Right Arm Joint/Chain Origin");
+            if (hand == null) throw new InvalidOperationException("Runner model prefab has no Torso Joint/Right Arm Joint/Chain Origin: " + RunnerModelPath);
             var rope = new GameObject("Chain Line").AddComponent<LineRenderer>();
             rope.transform.SetParent(playerObject.transform, false);
             rope.sharedMaterial = mint;
@@ -200,7 +191,7 @@ namespace ProtoHarness.Editor.ChainRush
             if (!EditorSceneManager.SaveScene(scene, ScenePath)) throw new IOException("Could not save ChainRush scene.");
             AssetDatabase.SaveAssets();
             Selection.activeGameObject = gameObject;
-            Debug.Log("ChainRush: prototype scene saved. 9 platforms, 8 anchors, 496m finish. Press Play, then Enter.");
+            Debug.Log("ChainRush: test bench scene saved. 1 platform, 1 anchor, 1 target, no finish.");
         }
 
         [MenuItem("ProtoHarness/Chain Rush/Open Test Bench Scene")]

@@ -59,6 +59,7 @@ namespace ProtoHarness.ChainRush
         public bool IsEndless => endlessMode;
         public bool IsCircuit => circuit != null;
         public CircuitRace Circuit => circuit;
+        public RunnerMotor Player => player;
         public bool HasPresentation => enhancedPresentation;
         public EnemyDirector Enemies => enemies;
         public RacerState Racer => racer;

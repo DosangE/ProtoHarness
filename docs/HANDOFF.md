@@ -28,7 +28,7 @@
 
 ## 2. 다음 작업 (후보, 사용자 승인 대기)
 
-**2026-10-14: 다음 작업은 `docs/NEXT_REQUESTS.md` 에 합의 요청서(R1~R8, R0 문서·저장소 정리는 2026-10-15 끝남)로 정리했다 — 권장 순서·선행·검증 시간·사용자 결정이 거기 있다.** 아래는 그 전의 후보 목록(배경 설명)이다.
+**2026-10-14: 다음 작업은 `docs/NEXT_REQUESTS.md` 에 합의 요청서(R2~R8, R0 문서·저장소 정리와 R1 테스트 안정화는 2026-10-15 끝남)로 정리했다 — 권장 순서·선행·검증 시간·사용자 결정이 거기 있다.** 아래는 그 전의 후보 목록(배경 설명)이다.
 
 C1c-3(진행 중 순위)와 다른 입력의 두 레이서(레이스 C)까지 `dev` 에 병합했다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
 
@@ -54,7 +54,7 @@ C1c-3(진행 중 순위)와 다른 입력의 두 레이서(레이스 C)까지 `d
 | 3 | 헤딩 범위 제한 | 계속 꺾으면 뒤로도 돈다(가드에 닿으면 앞으로 돌려짐). 막을지 미정 | DECISIONS T2a |
 | 4 | 기존 PlayMode 테스트의 착지 확인 | `StartRun` 직후 `IsGrounded` 가 순간이동 전 발판 값을 돌려줘 "착지" 확인이 노면 없이도 통과한다(T3a 에서 발견). 새 테스트만 고정 틱 1회 뒤 확인으로 고쳤다. 기존 테스트(`ChainRushCurveTests` 등 `StartOn`)를 고칠지 **별도 `fix/` 합의 필요** | DECISIONS T3a |
 | 5 | ~~원격 `origin/dev` 와 갈라짐~~ **해결** | `feature/integrate-origin-dev`(`138446a`)로 통합하고 `dev` 를 푸시했다(경위는 DECISIONS 2026-10-09 "코스 T3b (다른 클론…)"). 백업 원격 `backup/dev-2026-10-10` 은 `dev` 에 들어 있음을 확인하고 2026-10-15 사용자 지시로 지웠다. 남은 결정: 앞보기 300m 를 로컬 생성기에 옮길지(별도 합의) | 2026-10-15 |
-| 6 | ~~끝난 브랜치 정리~~ **해결** | 2026-10-15 사용자 지시로 `dev` 에 병합된 것을 지웠다: 로컬 `docs/design-proposals`·`docs/test-tiers`·`feature/test-long-tier`·`feature/scene-test-bench`·`feature/corner-swing-look`, 원격 `docs/design-proposals`·`backup/dev-2026-10-10`. `spike/p3-ngo-prediction`·`feature/p3-ngo-package`·`feature/course-t3c-endless` 는 그때 이미 없었다. 남은 브랜치 중 `dev` 에 병합 안 된 것은 `feature/circuit-fall-respawn`(R2)뿐이다. 병합됐지만 남은 로컬 `docs/corner-pole-proposal`·`docs/main-v0.1`·`feature/p3-c1-same-start` 는 지울지 사용자 결정 | 2026-10-15 |
+| 6 | ~~끝난 브랜치 정리~~ **해결** | 2026-10-15 사용자 지시로 `dev` 에 병합된 것을 지웠다: 로컬 `docs/design-proposals`·`docs/test-tiers`·`feature/test-long-tier`·`feature/scene-test-bench`·`feature/corner-swing-look`, 원격 `docs/design-proposals`·`backup/dev-2026-10-10`. `spike/p3-ngo-prediction`·`feature/p3-ngo-package`·`feature/course-t3c-endless` 는 그때 이미 없었다. 남은 브랜치 중 `dev` 에 병합 안 된 것은 `feature/circuit-fall-respawn`(R2)뿐이다. 병합됐지만 남았던 로컬 `docs/branch-cleanup-record`·`docs/corner-pole-proposal`·`docs/main-v0.1`·`feature/p3-c1-same-start` 도 같은 날 사용자가 지웠다 | 2026-10-15 |
 | 7 | ~~미추적 `Assets/DefaultNetworkPrefabs.asset` (+`.meta`)~~ **해결** | NGO 가 자동 생성한 빈 목록(`IsDefault: 1`). 2026-10-10 사용자 "a" 대로 C1c-1 브랜치(`feature/p3-c1c-run-end`)에서 내용 수정 없이 커밋하고 게이트를 같이 치렀다(DECISIONS 2026-10-11 "P3 C1c-1"). `ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 수정으로 보여도 커밋하지 않는다 | 2026-10-11 |
 | 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). 2026-10-13 `main` 을 P3 C1(2인 네트워크 레이스·같은 시각 출발)까지 올리고 첫 태그 `v0.1` 을 달았다(DECISIONS 2026-10-13 "main v0.1"). 그 전 `main` 은 `7e4a0a8`(P0·P1-1·P1-2). 다음 병합도 사용자가 시킬 때만 | 2026-10-13 |
 | 9 | `.claude/settings.json` (읽기 전용 허용 8개 + 훅 3개) | 허용 목록은 `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다. 훅은 `docs/harness-automation` 에서 추가(DECISIONS 2026-10-10 "하네스 자동화") | 2026-10-10 |

@@ -100,11 +100,12 @@ namespace ProtoHarness.Tests.PlayMode
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-enemy-" + direction + ".png"));
                 yield return null;
                 source.Attack = true;
-                yield return new WaitForSeconds(0.07f);
+                // In ticks: the flight lasts 8 ticks, and one long frame in a 0.07 s wait could run past it.
+                yield return WaitTicks(Ticks.FromSeconds(0.07f));
                 Assert.That(enemies.State, Is.EqualTo(EnemyDirector.EncounterState.Firing));
                 Assert.That(game.Hits, Is.Zero, "Hit must occur after chain flight, not on attack input.");
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-chain-" + direction + ".png"));
-                yield return new WaitForSeconds(0.5f);
+                yield return WaitTicks(Ticks.FromSeconds(0.5f));
                 Assert.That(game.Hits, Is.EqualTo(1));
                 Assert.That(game.Health, Is.EqualTo(3));
                 Assert.That(enemies.HasEncounter, Is.False);
@@ -217,6 +218,17 @@ namespace ProtoHarness.Tests.PlayMode
             float deadline = Time.time + 2f;
             while (!player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.True, "Runner never landed on the procedural road.");
+        }
+
+        // Until the game has run exactly `ticks` more ticks. A wait in game seconds lets one long frame run several
+        // ticks before the coroutine resumes (up to the 0.33 s maximum timestep), so a check of something that lasts
+        // only a few ticks waits in ticks. The final check fails if a resume ever skipped a tick.
+        private IEnumerator WaitTicks(int ticks)
+        {
+            int target = game.Tick + ticks;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (game.Tick < target && Time.realtimeSinceStartup < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Tick, Is.EqualTo(target), $"Waited for {ticks} ticks.");
         }
     }
 }

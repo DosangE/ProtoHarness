@@ -87,6 +87,8 @@ namespace ProtoHarness.Net
             w.Write(s.RopeLength);
             w.Write(s.MissUntilTick);
             w.Write(s.Grounded);
+            w.Write(s.LastGroundedS);
+            w.Write(s.RespawnHoldTicks);
         }
 
         private static RacerState.Snapshot ReadRacer(BinaryReader r) => new RacerState.Snapshot
@@ -112,6 +114,8 @@ namespace ProtoHarness.Net
             RopeLength = r.ReadSingle(),
             MissUntilTick = r.ReadInt32(),
             Grounded = r.ReadBoolean(),
+            LastGroundedS = r.ReadDouble(),
+            RespawnHoldTicks = r.ReadInt32(),
         };
 
         private static void WriteLaps(BinaryWriter w, in LapCounter.Snapshot s)

@@ -13,7 +13,8 @@ using UnityEditor.SceneManagement;
 namespace ProtoHarness.Tests.PlayMode
 {
     // The circuit race scene (COURSE.md T4): a bot runs three laps of the stadium and the lap counter is
-    // exact; going backwards over the line is not a lap, a gap still kills, a restart starts over.
+    // exact; going backwards over the line is not a lap, a fall into a gap puts the runner back before it, a restart
+    // starts over.
     public sealed class ChainRushCircuitTests
     {
         private const string ScenePath = "Assets/_Project/Scenes/ChainRushCircuit.unity";
@@ -118,8 +119,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(circuit.Laps.IsFinished, Is.False);
         }
 
+        // A fall no longer ends a circuit run: the runner comes back on the road before the gap, at rest and facing along
+        // the track, stands still for the hold (1 s = 50 ticks) while the clock runs, then runs on.
         [UnityTest]
-        public IEnumerator Gap_RunningStraightIntoTheGrappleGap_EndsTheRunAsAFallWithoutALap()
+        public IEnumerator Gap_RunningStraightIntoTheGrappleGap_FallsAndComesBackBeforeTheGapAndHoldsForOneSecond()
         {
             circuit.TryGetNextGap(150d, out double startS, out _, out bool hasAnchor);
             Assert.That(hasAnchor, Is.True, "The first gap after S 150 is the grapple gap on straight B.");
@@ -127,10 +130,60 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             Teleport(startS - 12d);
             yield return LandOnRoad();
-            float deadline = Time.time + 8f;
-            while (game.IsRunning && Time.time < deadline) yield return new WaitForFixedUpdate();
-            Assert.That(game.HasFailed, Is.True, "Running into the gap must end the run. " + State());
-            Assert.That(game.Track.Project(player.transform.position).H, Is.LessThan(-11f), State());
+            // Every tick's state, read between ticks, so no tick is skipped however the frames fall.
+            int respawnTick = -1, holdEndTick = -1, firstMoveTick = -1;
+            double lowestH = 0d;
+            Vector3 respawnPosition = default;
+            float respawnSpeed = -1f, respawnHeading = 0f, trackHeading = 0f;
+            bool respawnGrounded = false, movedDuringHold = false;
+            System.Action<int> onTick = tick =>
+            {
+                TrackCoord coord = game.Track.Project(player.transform.position);
+                if (respawnTick < 0)
+                {
+                    lowestH = System.Math.Min(lowestH, coord.H);
+                    if (!player.IsRespawning) return;
+                    respawnTick = tick;
+                    respawnPosition = player.transform.position;
+                    respawnSpeed = player.Velocity.magnitude;
+                    respawnGrounded = player.IsGrounded;
+                    respawnHeading = player.Heading;
+                    Vector3 forward = game.Track.FrameAt(coord.S).Forward;
+                    trackHeading = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+                    return;
+                }
+                if (holdEndTick < 0)
+                {
+                    if (player.transform.position != respawnPosition) movedDuringHold = true;
+                    if (!player.IsRespawning) holdEndTick = tick;
+                    return;
+                }
+                if (firstMoveTick < 0 && player.transform.position != respawnPosition) firstMoveTick = tick;
+            };
+            game.TickCompleted += onTick;
+            try
+            {
+                float deadline = Time.time + 10f;
+                while (game.IsRunning && firstMoveTick < 0 && Time.time < deadline) yield return new WaitForFixedUpdate();
+            }
+            finally
+            {
+                game.TickCompleted -= onTick;
+            }
+            Assert.That(respawnTick, Is.GreaterThan(0), "Running into the gap must put the runner back on the track. " + State());
+            Assert.That(lowestH, Is.LessThan(-11d), "The runner fell into the gap before it came back.");
+            Assert.That(game.HasFailed, Is.False, "A fall must not end a circuit run. " + State());
+            Assert.That(game.IsRunning, Is.True, State());
+            Assert.That(holdEndTick - respawnTick, Is.EqualTo(Ticks.FromSeconds(1f)), "The hold lasts one second of ticks.");
+            Assert.That(movedDuringHold, Is.False, "The runner stands still during the hold.");
+            Assert.That(firstMoveTick, Is.EqualTo(holdEndTick + 1), "The runner runs on the tick after the hold. " + State());
+            TrackCoord back = game.Track.Project(respawnPosition);
+            Assert.That(back.S, Is.LessThan(startS - 3d).And.GreaterThan(startS - 12d), $"The runner comes back about 4 m before the gap (starts at S {startS:F1}).");
+            Assert.That(Mathf.Abs(back.D), Is.LessThan(0.01f), "on the centerline");
+            Assert.That(back.H, Is.InRange(0.5d, 1.1d), "standing on the road");
+            Assert.That(respawnGrounded, Is.True, "standing on the road");
+            Assert.That(respawnSpeed, Is.Zero, "at rest");
+            Assert.That(Mathf.DeltaAngle(respawnHeading, trackHeading), Is.EqualTo(0f).Within(1e-3f), "facing along the track");
             Assert.That(circuit.Laps.CompletedLaps, Is.Zero);
             Assert.That(game.HasFinished, Is.False);
         }

@@ -73,6 +73,29 @@
 - **확인 못 한 것**: **고치기 전 코드가 실패하는 것을 재현하지 않았다.** 긴 프레임이 없으면 옛 대기도 통과하므로, 위 통과는 "고쳐서 바뀐 것이 없다(회귀 없음)" 까지의 증거다. 실패 원인 분석은 위 "이유" 의 계산과 2026-10-14 실패 기록에 기댄다.
 - **버린 대안**: 모든 `WaitForSeconds` 를 틱으로 — 표현 테스트는 프레임이 돌아야 하고, 기다릴수록 확실해지는 대기는 바꿀 이유가 없다. 공용 보조 파일 — 새 파일(§1-1)이 필요하고, 기존 보조 `TestRoad` 는 도로 전용이다. `Time.timeScale = 0` + `StepTick` 직접 호출 — 테스트 구조가 크게 바뀐다.
 
+## 2026-10-14 · 서킷 낙하 → 트랙 복귀: 떨어져도 런이 끝나지 않고, 마지막 착지 지점 4 m 뒤로 돌아가 1초 선다 (검증 남음, 병합 보류)
+
+- **결정 (사용자 선택 2026-10-14, 구현 승인 "진행")**: HANDOFF 2절의 첫 후보. ① **서킷만** 복귀한다(직선·무한 모드는 지금처럼 낙하 = 종료). ② 복귀 위치는 **마지막으로 서 있던 S**(`RacerState.LastGroundedS`, 착지한 틱마다 기록)에서 `respawnBackoff` 4 m 뒤의 중심선, 출발 슬롯과 같은 높이(1.05 m 위에서 0.3 m 내려 착지), 트랙 방향, 속도 0. ③ 벌칙은 **복귀 후 1초(50틱) 정지**(`respawnHoldTime`, `RacerState.RespawnHoldTicks`): 그동안 입력을 무시하고 움직이지 않지만 틱(기록)은 흐른다. 게이지는 유지하고 그래플·슬링·스윙은 부스트 없이 끝낸다. 두 번째 낙하가 착지 전에 나면 같은 자리로 돌아간다(`LastGroundedS` 를 복귀 때 바꾸지 않는다). ④ **"낙하 = 런 종료" 경로는 서킷에서 완전히 제거**(스위치를 두지 않음). 서킷에는 공격 대상이 없어 이제 서킷 런이 끝나는 길은 결승뿐이다.
+- **구현**: `RunnerMotor.Step`(정지 틱 처리, 낙하 판정에서 서킷이면 `RespawnOnTrack`), `RacerState`(필드 2개, `Snapshot`/`Capture`/`Restore`/`Reset`), `SimSnapshotCodec`(두 필드 직렬화 — 와이어 형식이 바뀌어 레이스 플레이어 재빌드 필요). 판정 기준 H < -12 m 는 그대로. `RaceWire.EndReason.Failed`·`RaceStandings.Status.Failed`·패널 "낙하" 는 지우지 않았다(다른 모드의 HP 0 종료 경로로 남음, 서킷에서는 이제 나오지 않는다).
+- **테스트**: `ChainRushCircuitTests` 틈 테스트를 "틈 앞 4 m 로 복귀, 정확히 50틱 정지 후 다음 틱에 다시 달림, 중심선·착지·속도 0·트랙 방향, 랩 없음" 으로 바꿨다(사양 변경). `NetReconcileTests` 의 "서버가 입력을 놓쳐 낙하·종료" 를 "놓친 입력으로 서버 런이 복귀 → 클라 보정 1회 후 복귀·정지까지 비트 단위로 따라감"(지연 5틱과, 보정 재실행이 복귀를 직접 지나는 지연 59틱)으로 바꿨다. "낙하로 끝난 클라가 이전 상태로 되살아남"(`ClientEnd_WhenAnOlderStateBringsAFallenClientBack_CatchesUp`)은 서킷에서 만들 수 없어 **삭제** — C1c-1b 의 같은 경로는 결승 쪽 3건이 계속 다룬다. `ChainRushRollbackTests` 에 낙하 중·정지 중 스냅샷의 되감기 테스트를 추가하고, 롤백 트레이스에 두 필드를 넣었다. 스냅샷 가드(`SnapshotTests`, `Codec_EveryFieldOfTheSnapshotChangesTheBytes`)는 리플렉션이라 고치지 않고 새 필드를 잡았다(34개 필드).
+- **검증 (6000.3.19f1, 이 머신, 커밋 전 작업 트리, UTC)**: 컴파일 에러 0(Console Error 0). EditMode `testcasecount="237" result="Passed" passed="237" failed="0"` (05:45:13~05:45:20). 바뀐 PlayMode 5건 `Passed 5/0` (05:44:40~05:44:55): 복귀 틱 657, 지연 59틱 보정 재실행 비트 일치, 낙하 중(633)·정지 중(677) 스냅샷이 857틱까지 동일. **P2 해시 불변**: 세 게이트 모두 서킷 `0xF9A914DA3FAA680B`, 절차 `0xE81912109A2EB020`.
+  - 게이트 1회차 `testcasecount="144" result="Failed(Child)" passed="140" failed="1" skipped="3"` (05:45:47~05:56:14). `ChainRushCombatTests.Combat_EachDirection_AttackFiresConnectsAndRetracts` — `Expected: Firing / But was: Retracting` (`:104`).
+  - 게이트 2회차 `testcasecount="144" result="Passed" passed="141" failed="0" skipped="3"` (05:58:44~06:10:39).
+  - 게이트 3회차 `testcasecount="144" result="Failed(Child)" passed="140" failed="1" skipped="3"` (06:22:55~06:33:47). `ChainRushTests.Course_TimedJumpsAndHeldGrapple_ReachesFinish` — `Course did not finish: position=(0.35, -12.00, 394.14), links=6, health=3`.
+  - 레이스 플레이어 재빌드 `Succeeded`, 에러 0(경고 485 는 Sentis 셰이더). 빌드가 바꾼 `Assets/Settings/*.asset` 3개·`UnityConnectSettings.asset` 은 파일을 지정해 되돌렸다.
+  - 네트워크 레이스 1차(06:13:30~06:17:47) A·B·C 실패: A 보정 1회(`late 1`, 에디터 프레임 최장 60.3 ms), B·C 는 `the server's state is for tick 909(790) but the client is at tick 908(789)` 로 예측기 고장(에디터 프레임 50 ms 초과 183·241회, 최장 452.7·288.8 ms). 2차(06:19:12~06:22:09) B 통과, A 보정 2회(`late 18`, 50 ms 초과 75회, 최장 274.6 ms), C 같은 고장(틱 577, 50 ms 초과 159회, 최장 388.3 ms).
+- **실패의 판단 (추정, 증명하지 못함)**: 실패 5종이 모두 프레임 시간에 기대는 테스트다 — 전투는 게임 시간 0.07초 대기 중 비행 8틱이 끝남(한 프레임 ≥ 약 0.09초), 직선 코스는 프레임마다 점프를 눌러 3배속에서 긴 프레임이 4.5 m 점프 구간을 건너뜀, 네트워크 레이스는 입력이 제때 닿아야 함. 틱 단위로 직접 돌리는 결정성·롤백·재생 테스트와 P2 해시는 매번 같았고, 전투·직선 코스는 이번 변경이 동작을 바꾸지 않는 모드이며, 레이스 C 의 에디터 런은 오프라인에서 낙하가 없다. 실행 내내 Unity 창이 비활성(`isApplicationActive=False`)이었다. 그래서 원인은 비활성 에디터의 프레임 멈춤으로 본다. `dev` 로 같은 조건을 돌리는 대조 실험은 하지 않았다(사용자 "너무 오래걸린다").
+- **복귀가 드러낸 것**: 서킷 런이 낙하로 끝나지 않으므로 클라가 고장 나 입력이 끊긴 레이서도 서버에서 계속 달린다(`ran 4285`). 레이스 B 의 에디터 런은 예전엔 657틱 낙하로 끝났는데 이제 1000틱 끝까지 가서, 서버가 클라를 앞지르는 고장(HANDOFF 4절, 2026-10-12)에 더 오래 노출된다.
+- **병합 보류**: §9-2 의 "같은 코드에서 연속 2회 통과" 와 네트워크 레이스 통과를 채우지 못했다. 사용자 결정(2026-10-14 "1,2,3 ㄱㄱ")으로 브랜치에 WIP 커밋하고, Unity 창을 앞에 둔 다음 세션에서 게이트 연속 2회 + 네트워크 레이스 A·B·C 를 다시 돌린다.
+- **버린 대안**: 복귀 스위치로 낙하 = 종료를 남기기(사용자 "완전히 제거"), 마지막 체크포인트로 복귀(체크포인트가 적어 벌칙이 크고 들쭉날쭉), 정지 없음·2초 정지(사용자 1초 선택), 검증을 건너뛴 병합.
+- **2026-10-15 검증과 병합 (사용자 "R2 ㄱㄱㄱ", 이어서 로드맵 재설계 승인)**: `dev`(`cf35438`)를 이 브랜치에 병합했다(`a127e3f`). 충돌은 `DECISIONS.md`·`HANDOFF.md` 뿐이었고 양쪽 내용을 모두 살렸다. 병합 조건은 2026-10-14 "테스트 3단" 뒤의 §9-2 ②(게이트 1회 + 코어 변경이라 Long)로 다시 쟀다. 에디터 6000.3.19f1, 포커스 `isApplicationActive=False`.
+  - 컴파일: `Tundra build success (11.32 seconds)`, 리플렉션으로 `RacerState.LastGroundedS`·`RespawnHoldTicks`·`RunnerTilt.Body` 가 올라온 것을 확인, Console Error 0.
+  - EditMode `testcasecount="242" result="Passed" passed="242" failed="0"` (06:02:16Z~06:02:23Z).
+  - `Run PlayMode Tests` `testcasecount="141" result="Passed" passed="138" failed="0" skipped="3"` (06:02:46Z~06:09:11Z, 384.9초, skipped 3 은 `[Explicit]` 네트워크 레이스). 서킷 지문 `0xF9A914DA3FAA680B` 그대로. `Net` 카테고리(`NetReconcileTests` 포함)는 이 게이트 안에서 돌았다.
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (06:09:37Z~06:12:54Z, 196.9초). 절차 지문 `0xE81912109A2EB020` 그대로.
+  - 레이스 플레이어 재빌드 `Succeeded errors=0` (06:14:03Z). 빌드가 바꾼 설정 파일 5개는 되돌렸다.
+  - **네트워크 레이스 A·B·C 는 돌리지 않았다.** 같은 날 로드맵 재설계(DECISIONS 2026-10-15 "플레이 경험 순서 로드맵")에서 실제 네트워크 레이스를 멀티 재개(M5)까지 미루기로 했다. 그래서 이 브랜치의 2026-10-14 레이스 실패(예측기 고장 "서버가 클라를 앞지름", 복귀로 런이 길어져 더 자주 드러남)는 **풀리지 않은 채 M5 의 첫 확인 항목으로 넘긴다.**
+
 ## 2026-10-14 · 코너 스윙을 봉 스윙으로 대체: S1b·S2 는 하지 않는다 (설계 결정, 구현 전)
 
 - **결정 (사용자, 2026-10-14 "커브 마다 줄을 걸 수 있는 봉을 놓는 것이다(코너마다 한개 뿐) … 웹스윙을 90도 돌린 느낌", 결정 7개는 `docs/PROPOSAL_CORNER_POLE.md` 1절)**: 지금 코너 스윙(드리프트 + 커브 안 Ctrl, 원 중심으로 레일처럼 14 m/s)을 **코너 중앙 봉 + 고정 줄 길이 + 관성 + Ctrl 유지**로 바꾼다. 둘을 공존시키지 않는다. 그래서 `docs/PROPOSAL_CORNER_SWING_LOOK.md` 의 S1b(불꽃·끊어짐·잔상)·S2(스윙 수치)·S3(기둥 진자 판단)은 하지 않는다. S1 의 몸 미끄럼 각·카메라는 남고, 줄 끝은 난간 대신 봉으로 간다(봉 스윙 P2).

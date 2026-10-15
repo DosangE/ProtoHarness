@@ -32,6 +32,7 @@
   - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (06:59:33Z~07:02:49Z). 절차 지문 `0xE81912109A2EB020` 그대로. 봇은 체인 액션을 쓰지 않으므로 그대로여야 정상이다(설계서 4절).
   - `Run Device Input Tests` 1회차 `Failed(Child) passed=1 failed=2` (07:03:12Z~07:03:17Z, 에디터 `isApplicationActive=False`): `Input_KeyboardAndMouse_…`(`ChainRushTests.cs:127`)·`Input_ShiftAndCtrl_…`(`:194`) 둘 다 `Expected: True But was: False` — 가상 Enter 뒤 카운트다운이 시작되지 않음. Ctrl 단계 전이고, 메뉴 키 경로는 바꾸지 않았다.
   - 같은 코드로 사용자가 Unity 를 앞에 둔 2회차 `Passed 3/3` (07:04:53Z~07:05:08Z, `isApplicationActive=True`). **판단**: 에디터 포커스가 없으면 가상 키보드 이벤트가 게임에 닿지 않는다(추정. 포커스 유무만 다르고 결과가 갈렸다). 1회차 실패는 지우지 않고 여기 남긴다.
+  - **`Run Course Sweep` 은 아직 끝나지 않았다 — 병합 전 필수.** `Centerline.cs` 를 바꿨으므로 §9-2 가 Sweep 1회를 요구한다(`tools/select-tests.ps1 -Range dev...HEAD` 출력 "참고: ②에서 Run Course Sweep 도 1회"). 07:06:36Z 에 시작했지만, 사용자 "중단하고 나중에 돌리겠다"(2026-10-15)에 따라 07:16:21Z 에 Play 를 멈춰 중단했다. **결과 없음.** 바뀐 것은 읽기 전용 `TryFindPole` 하나라 생성·스트리밍·투영은 그대로일 것으로 보지만, 확인하지 않았다. Sweep 을 1회 통과하기 전에는 `dev` 에 병합하지 않는다.
   - **네트워크 레이스·플레이어 재빌드는 하지 않았다** (2026-10-15 로드맵: M5). 와이어 형식이 바뀌었으므로(`SimSnapshotCodec`, `TickInputCodec`) 임시 폴더의 레이스 플레이어(R2 코드로 빌드)는 낡았다. M5 에서 다시 빌드한다.
 - **확인 못 한 것**: 실제 느낌(관성만으로 도는 R40 180° 가 재미있는지, 75°·+5 m 가 맞는지) — R5 뒤 사용자 플레이. 서킷에서 봉 스윙이 노면 틈 위를 지날 때. 무한 모드 원점 이동 중 스윙(`SwingCenter` 이동)은 테스트로 돌리지 않았다.
 - **버린 대안**: 봉을 트랙 S 로 기억하기 — 루프·절차 코스의 조각 재활용에서 조각 찾기가 더 복잡하다. 스윙 중 조향 허용 — 속력이 새는 것이 테스트로 드러났다. 탭(누름만, 누르고 있음 없음)을 무시하기 — 슬롯만 쓰고 아무 일도 안 일어난다.

@@ -296,7 +296,8 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
   - `Sweep` 카테고리는 시드 20개를 도는 장거리 봇 테스트(약 16분)라 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-08 "코스 T3c"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다. 코스 생성·스트리밍·투영(`CourseGenerator`, `CourseTuning`, `ProceduralCourse`, `Centerline`)을 바꾼 브랜치는 `Run Course Sweep` 를 따로 1회 돌려 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.
   - 병합 보고에는 **각 실행**의 결과 XML 값(`testcasecount`, `result`, `passed`/`failed`, 시각)을 모두 적는다. 통과한 실행만 골라 적지 않는다.
   - 한 번이라도 실패하면 실패한 테스트와 원문 메시지를 보고하고, 원인을 설명하지 못하면 병합하지 않는다. 코드를 바꾸지 않고 다시 돌려 통과한 것만으로 실패를 없던 일로 하지 않는다.
-- **마일스톤 조건** (③, `dev → main` 병합과 태그 전): ② 에 더해 **같은 코드에서 PlayMode 전체 2회차 통과**, `Run Long Tests` 1회, `Run Course Sweep` 1회, `Run Device Input Tests` 1회, 네트워크 레이스(`NetRace`, 플레이어 빌드 뒤 이름으로 골라) 1회. 각 실행의 결과 XML 값을 병합 보고에 붙이고, 실패 규칙은 ② 와 같다.
+- **마일스톤 조건** (③, `dev → main` 병합과 태그 전): ② 에 더해 **같은 코드에서 PlayMode 전체 2회차 통과**, `Run Long Tests` 1회, `Run Course Sweep` 1회, `Run Device Input Tests` 1회, **사용자 플레이 확인** (그 마일스톤의 완료 조건을 사용자가 직접 플레이해 확인한 말을 그대로 적는다, `docs/DESIGN.md` §5). 각 실행의 결과 XML 값을 병합 보고에 붙이고, 실패 규칙은 ② 와 같다.
+  - 네트워크 레이스(`NetRace`, 플레이어 빌드 뒤 이름으로 골라) 1회는 **M5(멀티 재개)부터** 다시 마일스톤 조건이다. 그 전에는 돌리지 않는다 (`docs/DECISIONS.md` 2026-10-15 "플레이 경험 순서 로드맵"). 결정성 테스트(리플레이·롤백·`Net` 카테고리)는 ② 게이트에 그대로 있다.
 - **병합 조건의 적용 범위**: 위 병합 조건은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 중 하나라도 닿을 때 적용한다. 셋 다 닿지 않는 브랜치(Unity 가 읽지 않는 `docs/`, `tools/`, `.claude/`, `.codex/`, 루트 `.md` 만 바꾼 것)는 Unity 검증 대신 **문서 검증**으로 병합한다. 조용히 건너뛰지 않고 아래 증거를 병합 보고에 붙인다.
   - 닿지 않았다는 증거: `git diff --name-only <병합 대상>...HEAD` 출력 전체.
   - 문서 검증: ① 규칙·에이전트 정의·docs 의 `§` 참조가 모두 CLAUDE.md 또는 `docs/RULES/` 의 제목으로 해석된다. ② `.claude/agents/` 를 바꿨으면 `tools/sync-agents.ps1` 로 재생성하고 `git diff -- .codex` 에 의도한 변경만 있다. ③ 내용을 옮겼으면 원본의 줄이 누락·중복 없이 한 곳에 있다(의도한 수정은 줄마다 밝힌다).

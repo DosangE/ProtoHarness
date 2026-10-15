@@ -8,7 +8,6 @@
 
 | # | 작업 | 브랜치 | Unity 검증 | 선행 | 사용자 결정 |
 |---|---|---|---|---|---|
-| R0 | ~~문서 정리~~ 끝남(2026-10-15 커밋) — 남은 것: `dev` 병합·저장소 정리 | `docs/corner-pole-proposal` | 없음 (문서 검증) | — | 병합·푸시·브랜치 삭제 |
 | R1 | 프레임 시간 의존 테스트 안정화 | `fix/test-frame-timing` | 약 11분 | — | — |
 | R2 | 서킷 낙하 복귀 마무리 (WIP) | `feature/circuit-fall-respawn` | 약 20분 | R1 권장 | — |
 | R3 | 맵 정리 3단계 (작업대 비우기) | `feature/scene-test-bench-strip` | 약 11분 | R7 (표적 1건) | 3-1 |
@@ -18,17 +17,9 @@
 | R7 | 공격 판정 방향 | `fix/attack-facing` | 약 11분 | — | **7-1 (설계)** |
 | R8 | 기존 착지 확인 테스트 수정 | `fix/test-landing-check` | 약 11분 | — | — |
 
-**권장 순서**: R0 → R1 → R2 → R4 → R5 → R6. R7 은 설계 결정이 나는 대로, R3 은 R7 뒤(표적 테스트가 걸려 있다), R8 은 아무 때나. **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
+**권장 순서**: R1 → R2 → R4 → R5 → R6. R7 은 설계 결정이 나는 대로, R3 은 R7 뒤(표적 테스트가 걸려 있다), R8 은 아무 때나. **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
 
 ---
-
-## R0. 문서·저장소 정리 (Unity 없음)
-
-문서 부분은 끝났다(2026-10-15, `docs/corner-pole-proposal` 에 커밋 — 제안서 상태 갱신, HANDOFF 2절, DECISIONS 2026-10-14 "코너 스윙을 봉 스윙으로 대체"). 남은 것은 모두 사용자 결정이다 (실행은 승인 후, §0):
-
-- `docs/corner-pole-proposal` → `dev` 병합 (`--no-ff`, 문서 검증으로, §9-2).
-- `origin` 푸시: 로컬 `dev` 가 오늘 병합 5건만큼 앞서 있다. 푸시할까?
-- 지워도 되는 브랜치 (모두 `dev` 에 병합됨): `docs/design-proposals`, `docs/test-tiers`, `feature/test-long-tier`, `feature/scene-test-bench`, `feature/corner-swing-look`. 예전부터 남은 것: `spike/p3-ngo-prediction`, `feature/p3-ngo-package`, 원격 `backup/dev-2026-10-10` (HANDOFF 3절 #5·#6).
 
 ## R1. 프레임 시간 의존 테스트 안정화
 

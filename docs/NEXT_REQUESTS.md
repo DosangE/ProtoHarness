@@ -9,14 +9,17 @@
 | # | 작업 | 브랜치 | Unity 검증 | 선행 | 사용자 결정 |
 |---|---|---|---|---|---|
 | R2 | 서킷 낙하 복귀 마무리 (WIP) | `feature/circuit-fall-respawn` | 약 20분 | — | — |
-| R3 | 맵 정리 3단계 (작업대 비우기) | `feature/scene-test-bench-strip` | 약 11분 | R7 (표적 1건) | 3-1 |
+| R3 | 맵 정리 3단계 (작업대 비우기 + 네모 통일 2단계) | `feature/scene-test-bench-strip` | 약 11분 | — | 3-1 (3-2 는 ① 로 정함) |
 | R4 | 코너 봉 스윙 P1 (시뮬) | `feature/corner-pole-sim` | 약 30분 이상 | **R2** (같은 파일) | — |
 | R5 | 코너 봉 스윙 P2 (표현) | `feature/corner-pole-look` | 약 11분 + 사용자 플레이 | R4 | 5-1 |
-| R6 | 코너 봉 스윙 P3 (절차 코스) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
-| R7 | 공격 판정 방향 | `fix/attack-facing` | 약 11분 | — | **7-1 (설계)** |
+| ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **보류** (서킷 집중) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
+| ~~R7~~ | ~~공격 판정 방향~~ **보류** (서킷 집중, 서킷에는 표적이 없다) | `fix/attack-facing` | 약 11분 | — | 7-1 (설계) |
 | R8 | 기존 착지 확인 테스트 수정 | `fix/test-landing-check` | 약 11분 | — | — |
+| R9 | 네모 통일 1단계: 네트워크 상대 | `feature/net-boxy-ghost` | 약 11분 + 플레이어 빌드 + 레이스 A | — | — (승인 2026-10-15) |
 
-**권장 순서**: R2 → R4 → R5 → R6. R7 은 설계 결정이 나는 대로, R3 은 R7 뒤(표적 테스트가 걸려 있다), R8 은 아무 때나. **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
+**2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다.
+
+**권장 순서**: R9(진행 중) → R2 → R4 → R5 → R3. R8 은 아무 때나. **씬을 건드리는 R3·R5 는 동시에 하지 않는다**(§9-2).
 
 ---
 
@@ -37,16 +40,31 @@
 - 알려진 위험: 그 브랜치의 네트워크 레이스는 에디터 프레임이 수백 ms 멈출 때 예측기가 고장 났다(HANDOFF 4절의 "서버가 클라를 앞지름"). 복귀로 런이 길어져 더 자주 드러난다. **다시 실패하면 원문을 보고하고 병합하지 않는다** — 그때 예측기 쪽을 별도 요청서로.
 - R1(테스트 안정화)은 끝났다(DECISIONS 2026-10-15 "테스트 대기를 틱으로"). 전투·조향·점프 테스트의 프레임 시간 의존은 빠졌으므로, 그 테스트들이 다시 실패하면 이 변경을 먼저 의심한다.
 
-## R3. 맵 정리 3단계: 테스트 작업대 비우기
+## R3. 맵 정리 3단계: 테스트 작업대 비우기 + 네모 통일 2단계
+
+> 2026-10-15 다시 씀: 서킷 집중으로 R7 이 보류돼 R7 선행을 풀었다. 사용자 "네모로 맞춘다" 에 따라 구 머리 캐릭터를 이 항목에서 함께 맡는다. 씬을 한 번만 열기 위해서다.
 
 ```
-목표:      ChainRushTestBench 에서 직선 코스 전용 구조(결승선·표적 등)를 걷어내고, 그 구조에 기대던 테스트를 지우거나 옮긴다
-건드릴 것:  씬 ChainRushTestBench (에디터에서), Editor/ChainRush/ChainRushSceneBuilder.cs (작업대 생성 내용, 메뉴 Add Deck Guards To Open Scene)
+목표:      ① ChainRushTestBench 에서 직선 코스 전용 구조(결승선·표적 등)를 걷어내고, 그 구조에 기대던 테스트를 지우거나 옮긴다
+           ② 플레이어 모형을 네모(Armored Runner) 하나로 맞춘다 — 작업대의 둥근 러너를 바꾸고,
+              절차·서킷 씬에 꺼진 채 남은 둥근 Runner Visual 을 지운다
+건드릴 것:  씬 ChainRushTestBench·ChainRushProcedural·ChainRushCircuit (에디터에서)
+           Editor/ChainRush/ChainRushSceneBuilder.cs (작업대 생성 내용 — 둥근 모형은 :137-147, 메뉴 Add Deck Guards To Open Scene)
            Tests/PlayMode/ChainRushTests.cs, ChainRushSteeringTests.cs, ChainRushInputSourceTests.cs (각 테스트 본문을 읽고 아래 표 확정)
-새로 만들 것: 없음 (그래플 틈 테스트에 필요하면 TestRoad 에 틈·앵커 — 그때 §1-1 선언)
-검증 방법:  게이트 1회 + Long, 지문 그대로, 지우는 테스트마다 이유를 DECISIONS 에
-안 하는 것:  Procedural·Circuit 씬, 구 머리 캐릭터(작업대라 그대로 둔다)
+           Tests/PlayMode/ChainRushCornerSwingTests.cs:134, ChainRushInputSourceTests.cs:161,189 — 작업대에서 모형을 "Runner Visual" 이름으로
+             찾는다. 모형 이름이 바뀌면 찾는 경로만 바꾼다(단언은 그대로)
+새로 만들 것: 3-2 ① 이면 첫 프리팹 Assets/_Project/Prefabs/ArmoredRunner.prefab (그때 §1-1 선언, 첫 사례라 형식 합의)
+           그래플 틈 테스트에 필요하면 TestRoad 에 틈·앵커 — 그때 §1-1 선언
+검증 방법:  게이트 1회 + Long, 지문 그대로(모형은 표현이라 해시가 바뀌면 원인을 찾는다), 지우는 테스트마다 이유를 DECISIONS 에.
+           세 씬의 러너에서 RunnerTilt.body·RunnerAnimation.model 이 네모 모형을 가리키는지 확인.
+           지우는 Runner Visual 을 다른 곳이 참조하지 않는지 씬 grep(fileID)
+삭제(승인 필요): 절차·서킷 씬의 꺼진 Runner Visual (ChainRushProcedural·ChainRushCircuit, m_IsActive: 0)
+안 하는 것:  절차·서킷 씬의 다른 구조, 네트워크 상대 모형(R9)
 ```
+
+- 지금 모형 (2026-10-15 씬 grep): 절차·서킷의 러너는 `Armored Runner`(켜짐, 큐브 헬멧·흉갑·관절)와 `Runner Visual`(꺼짐, 구 헬멧·캡슐 몸통)을 둘 다 갖고 있다. 서킷에서 `RunnerTilt.body`·`RunnerAnimation.model` 은 둘 다 `Armored Runner` 를 가리킨다(`ChainRushCircuit.unity:114962,114981`). 작업대에는 `Runner Visual` 만 있다. `Armored Runner` 는 만드는 코드가 없고 씬 안에만 있다(`git log -S` 첫 커밋 `4e6f12b`).
+
+**3-2 사용자 결정 → ① (2026-10-15 "권장안대로 다 허락한다")**: 네모 모형을 ① 첫 프리팹으로 만들어 세 씬이 같은 프리팹을 쓰게 할까(모양 원본 1곳, 빌더도 프리팹을 놓는다 — **권장**) ② 서킷의 `Armored Runner` 를 작업대에 복사만 할까(프리팹 없음, 대신 모양 원본이 씬마다 하나씩 3벌)?
 
 `docs/PROPOSAL_SCENE_CLEANUP.md` 5절 초안(이름 기준):
 
@@ -57,7 +75,7 @@
 | `Restart_AfterAttackAndFall…` | Procedural 로 옮긴다 (낙하 = 종료가 남는 맵) |
 | `Damage_RepeatedContact…` | `ChainRushCombatTests` 와 겹치는지 보고 합치거나 남긴다 |
 | `Grapple_JumpAtGap…`, `Grapple_NoAnchorInRange…` | 발판·앵커를 남길지, 시험 도로에 틈·앵커를 코드로 깔지 |
-| `Attack_ScriptedPressNearTarget_HitsExactlyOnce` | **R7 결정 뒤** |
+| `Attack_ScriptedPressNearTarget_HitsExactlyOnce` | R7 보류(2026-10-15) — 지금 판정(+z) 그대로 Procedural 로 옮기거나 `ChainRushCombatTests` 와 겹치면 합친다. 본문을 읽고 확정 |
 
 **3-1 사용자 결정**: 그래플 틈 테스트를 위해 작업대에 발판·앵커 한 구간을 남길까(간단), 시험 도로에 틈·앵커를 코드로 만들까(작업대가 완전히 비지만 테스트 보조가 커진다)?
 
@@ -90,7 +108,7 @@
 
 **5-1 사용자 결정**: 봉을 ① 씬 빌더로 씬에 굽기(씬 수정 브랜치, 코스마다 다시 굽기) ② 실행 중에 `Centerline` 의 원호에서 만들기(씬 수정 없음, 절차 코스와 같은 경로 — **권장**)?
 
-## R6. 코너 봉 스윙 P3 — 절차 코스
+## R6. 코너 봉 스윙 P3 — 절차 코스 (보류, 2026-10-15 서킷 집중)
 
 ```
 목표:      절차 코스의 커브에도 봉이 보이고 스트리밍·원점 이동을 따라간다
@@ -102,7 +120,7 @@
 
 **6-1 사용자 결정**: 완만한 커브(R 60~120)에도 봉을 둘까? 줄이 60~120 m 가 된다.
 
-## R7. 공격 판정 방향 (설계 결정 필요)
+## R7. 공격 판정 방향 (보류, 2026-10-15 서킷 집중 — 서킷에는 표적이 없다)
 
 ```
 목표:      공격 판정이 월드 +z 를 보는 문제(HANDOFF 2절)를 고쳐, 자유 조향·커브에서 보는 쪽과 맞는 쪽을 같게 한다
@@ -126,9 +144,29 @@
 안 하는 것:  단언 값 변경
 ```
 
+## R9. 네모 통일 1단계: 네트워크 상대 (승인 2026-10-15 "셋다 좋다")
+
+```
+목표:      네트워크 레이스의 상대를 캡슐 대신 내 캐릭터와 같은 네모 모형으로 보여 준다
+건드릴 것:  Runtime/Net/RemoteGhost.cs:22-33 (Initialize 가 복제할 모형을 받는다. 콜라이더는 지금처럼 끈 뒤 지운다)
+           Runtime/Net/RaceClient.cs:115-116 (모형을 넘긴다)
+           Runtime/ChainRush/Visuals/RunnerTilt.cs:13 (body 를 읽는 읽기 전용 속성 1개)
+           Runtime/ChainRush/ChainRushGame.cs:16 (player 를 읽는 읽기 전용 속성 1개. 지금은 공개 접근이 없다)
+           → 공개 API 추가
+새로 만들 것: 테스트 1건 — 복제본이 원본과 같은 모양이고 콜라이더가 없는지 본다.
+           넣을 곳은 기존 Tests/PlayMode/NetRemoteTests.cs (구현 전에 끝까지 읽고 형식을 맞춘다)
+검증 방법:  EditMode, 게이트 1회, 플레이어 재빌드 + 네트워크 레이스 A 1회 (NetworkRaceTests.cs:585 의 ghost 단언).
+           레이스 도중에는 캡처를 하지 않는다(HANDOFF 4절). 그래서 실제 모양은 사용자가 플레이해서 확인한다
+안 하는 것:  작업대 러너, 꺼진 둥근 모형 삭제 (R3)
+```
+
+- 씬에 이미 있는 모형(서킷 `RunnerTilt.body` = `Armored Runner`)을 복제하므로 새 에셋이 없고, 모형 원본이 한 곳으로 남는다. R3 에서 3-2 ① 을 고르면 그 원본이 프리팹 인스턴스가 될 뿐이고 이 경로는 그대로다.
+
 ---
 
 ## 요청서를 아직 쓰지 않은 후보 (설계·측정이 먼저)
+
+> 2026-10-15 서킷 집중: 아래 P3 C1 마무리 측정·C2 는 서킷 싱글을 다듬은 뒤 다시 연다.
 
 - **P3 C1 마무리 측정**: 3인 이상, 100 ms 체감, 패킷 유실, 모바일/IL2CPP 일치.
 - **P3 C2 충돌·추월**: 공유 월드 선행.

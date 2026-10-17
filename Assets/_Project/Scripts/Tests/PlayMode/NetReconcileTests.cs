@@ -1343,7 +1343,7 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 TickInput x = log[t - 1];
                 copy.Add(t >= firstTick && t < firstTick + count
-                    ? new TickInput(x.Steer, x.PrimaryPressed, x.ReleasePressed, x.AttackPressed, !x.Drift, x.ChainActionPressed)
+                    ? new TickInput(x.Steer, x.PrimaryPressed, x.ReleasePressed, x.AttackPressed, !x.Drift, x.ChainActionPressed, x.ChainActionHeld)
                     : x);
             }
             return copy;

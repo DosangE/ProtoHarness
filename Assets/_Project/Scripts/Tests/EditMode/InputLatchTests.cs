@@ -59,6 +59,23 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Consume_ChainHeldLevel_KeepsLatestAndClearResetsIt()
+        {
+            latch.Record(0f, false, false, false, false, true, true);
+            TickInput pressed = latch.Consume();
+            Assert.That(pressed.ChainActionPressed, Is.True);
+            Assert.That(pressed.ChainActionHeld, Is.True);
+            TickInput still = latch.Consume();
+            Assert.That(still.ChainActionPressed, Is.False, "The press is an edge.");
+            Assert.That(still.ChainActionHeld, Is.True, "Holding the key is a level, kept until a new record says otherwise.");
+            latch.Record(0f, false, false, false, false, false, false);
+            Assert.That(latch.Consume().ChainActionHeld, Is.False);
+            latch.Record(0f, false, false, false, false, false, true);
+            latch.Clear();
+            Assert.That(latch.Consume().ChainActionHeld, Is.False);
+        }
+
+        [Test]
         public void Consume_EdgeThenQuietFrame_KeepsEdgeUntilConsumed()
         {
             latch.Record(0f, false, true, false);

@@ -46,13 +46,14 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float slingCarrySpeed = 16f;
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
-        // Corner swing (chain action while drifting into a curve): the chain hooks the arc's center and the
-        // runner circles it at its current line, speeding toward swingSpeed. Releasing drift, leaving the
-        // arc or running out of time throws the runner along the tangent at swingExitSpeed or more, then
-        // the slingshot's carry speed holds for swingExitCarryTime.
-        [SerializeField] private float swingSpeed = 14f;
-        [SerializeField] private float swingAcceleration = 20f;
-        [SerializeField] private float swingMaxTime = 2f;
+        // Corner pole swing (PROPOSAL_CORNER_POLE.md 2): every arc has a pole at its center. The chain action hooks the
+        // nearest pole within poleMaxAngle either side of the facing and no farther than its arc's radius plus poleReach;
+        // the rope keeps the length it hooked at and the runner circles the pole on its own momentum (no running force,
+        // no time limit) for as long as the chain key is held. Letting go throws the runner along the tangent at
+        // swingExitSpeed or more, then the slingshot's carry speed holds for swingExitCarryTime. Touching a guard, or a
+        // grapple taking hold, ends the swing; a guard ends it without the throw.
+        [SerializeField] private float poleMaxAngle = 75f;
+        [SerializeField] private float poleReach = 5f;
         [SerializeField] private float swingExitSpeed = 17f;
         [SerializeField] private float swingExitCarryTime = 0.6f;
         // Falling in a circuit race (KartRider style): the runner comes back on the centerline respawnBackoff metres
@@ -113,8 +114,8 @@ namespace ProtoHarness.ChainRush
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
                 Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
-            if (swingSpeed <= runSpeed || swingAcceleration <= 0f || swingMaxTime <= 0f || swingExitSpeed < swingSpeed || swingExitCarryTime < 0f)
-                Debug.LogError("RunnerMotor: swing speed must beat run speed, acceleration and time must be positive, exit speed at least the swing speed.", this);
+            if (!(poleMaxAngle > 0f && poleMaxAngle < 90f) || poleReach < 0f || swingExitSpeed <= runSpeed || swingExitCarryTime < 0f)
+                Debug.LogError("RunnerMotor: the pole angle must be within (0, 90) degrees, the pole reach and exit carry time not negative, the swing exit speed above run speed.", this);
             if (respawnBackoff < 0f || respawnHoldTime < 0f)
                 Debug.LogError("RunnerMotor: respawn backoff and hold time cannot be negative.", this);
         }
@@ -167,10 +168,11 @@ namespace ProtoHarness.ChainRush
             TrackFrame frame = game.Track.Frame(transform.position);
             ref int slingTicks = ref racer.SlingTicks;
             ref int swingTicks = ref racer.SwingTicks;
-            if (input.ChainActionPressed) ChainAction(frame);
-            // A swing lasts while drift is held on the same arc it hooked.
-            if (swingTicks > 0 && (!input.Drift || grapple.IsAttached || frame.Curvature * racer.SwingRadius <= 0f))
-                EndSwing(ref velocity, heading);
+            if (input.ChainActionPressed) ChainAction();
+            // A swing lasts while the chain key is held. A press counts as held for its own tick, so a tap that comes and
+            // goes between two ticks still swings for one tick and throws, instead of spending a slot on nothing.
+            bool chainHeld = input.ChainActionHeld || input.ChainActionPressed;
+            if (swingTicks > 0 && (!chainHeld || grapple.IsAttached)) EndSwing(ref velocity, heading);
             bool swinging = swingTicks > 0;
             int carryTicks = Ticks.FromSeconds(slingCarryTime);
             bool pulling = slingTicks > carryTicks;
@@ -179,7 +181,9 @@ namespace ProtoHarness.ChainRush
             // only supplies the grade here; it no longer decides which way is ahead.
             ref float turnRate = ref racer.TurnRate;
             float turnScale = grounded ? (drifting ? driftTurnScale : 1f) : airTurnScale;
-            turnRate = Mathf.MoveTowards(turnRate, steer * maxTurnRate * turnScale, turnAcceleration * dt);
+            // A swing ignores steering: the rope sets the facing (SwingStep), and turning the facing first would split the
+            // velocity across it and let the side grip eat the swing's speed.
+            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steer * maxTurnRate * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             if (pulling)
             {
@@ -202,30 +206,31 @@ namespace ProtoHarness.ChainRush
             if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
             if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
             float acceleration = pulling ? slingPullAcceleration : grounded ? 30f : 5f;
-            if (swinging)
-            {
-                // The swing owns the speed: no drift slow-down pulling against it.
-                runTarget = swingSpeed;
-                acceleration = swingAcceleration;
-            }
+            // The swing runs on momentum: no running force and no drift slow-down act on its speed.
+            if (swinging) acceleration = 0f;
             float forwardSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, facing), grapple.IsAttached ? 16f : runTarget,
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
-            if (swinging) SwingStep(frame, ref velocity, ref heading, ref displacement, dt);
+            if (swinging) SwingStep(ref velocity, ref heading, ref displacement, dt);
             hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
             SyncGrounded();
             if ((flags & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
-            if (hitGuard) GlanceOffGuard(ref velocity, ref heading, frame.Forward);
+            if (hitGuard)
+            {
+                // A swing that carries the runner into a guard snaps there, without the exit throw.
+                swingTicks = 0;
+                GlanceOffGuard(ref velocity, ref heading, frame.Forward);
+            }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
             if (slingTicks > 0) slingTicks--;
-            if (swingTicks > 0 && --swingTicks == 0) EndSwing(ref velocity, heading);
+            if (swingTicks > 0) swingTicks++;
             // Falling is measured from the track surface, so a long downhill is not a fall. A circuit race puts the runner
             // back on the track; the other courses end the run.
             TrackCoord here = game.Track.Project(transform.position);
@@ -264,10 +269,10 @@ namespace ProtoHarness.ChainRush
         }
 
         // One gauge slot buys the chain action that fits the moment, in this order: while grappling it
-        // empowers the grapple; while drifting into a curve it hooks the curve for a corner swing; otherwise
-        // it fires the slingshot. Without a whole slot, or with that action already running, nothing happens
-        // and nothing is spent.
-        private void ChainAction(TrackFrame frame)
+        // empowers the grapple; with a corner pole in reach it hooks the pole for a swing; otherwise it fires
+        // the slingshot. Without a whole slot, or with that action already running, nothing happens and
+        // nothing is spent.
+        private void ChainAction()
         {
             RacerState racer = game.Racer;
             if (grapple.IsAttached)
@@ -278,14 +283,14 @@ namespace ProtoHarness.ChainRush
                 return;
             }
             if (racer.SwingTicks > 0) return;
-            bool intoCurve = frame.Curvature != 0f && racer.Steer * frame.Curvature > 0f;
-            if (drifting && intoCurve)
+            if (TryFindPole(out Vector3 pole))
             {
                 if (!racer.TrySpendGaugeSlot()) return;
-                Vector3 radial = transform.position - frame.CurveCenter;
+                Vector3 radial = transform.position - pole;
                 radial.y = 0f;
-                racer.SwingRadius = Mathf.Sign(frame.Curvature) * radial.magnitude;
-                racer.SwingTicks = Ticks.FromSeconds(swingMaxTime);
+                racer.SwingCenter = pole;
+                racer.SwingRadius = radial.magnitude;
+                racer.SwingTicks = 1;
                 game.PlayCue(1);
                 return;
             }
@@ -294,22 +299,25 @@ namespace ProtoHarness.ChainRush
             game.PlayCue(1);
         }
 
-        // Circles the hooked arc's center at the swing radius: heading and velocity turn onto the tangent in
-        // the track's direction (the speed itself was already eased toward swingSpeed this tick), and the
-        // step is pulled back onto the circle.
-        private void SwingStep(TrackFrame frame, ref Vector3 velocity, ref float heading, ref Vector3 displacement, float dt)
+        // The corner pole a chain action would hook from here and now, if any (see poleMaxAngle and poleReach). The
+        // simulation asks it on a chain action; presentation and bots may ask it any time, since it only reads.
+        public bool TryFindPole(out Vector3 pole) =>
+            game.Track.TryFindPole(transform.position, game.Racer.Heading, poleMaxAngle, poleReach, out pole);
+
+        // Circles the pole at the rope length: heading and velocity turn onto the tangent on the side the runner already
+        // faces (steering cannot change that), the speed along it stays, and the step is pulled back onto the circle.
+        private void SwingStep(ref Vector3 velocity, ref float heading, ref Vector3 displacement, float dt)
         {
-            Vector3 center = frame.CurveCenter;
+            RacerState racer = game.Racer;
+            Vector3 center = racer.SwingCenter;
             center.y = transform.position.y;
             swingAnchor = center + Vector3.up * 0.5f;
             Vector3 outward = transform.position - center;
             float distance = outward.magnitude;
             if (distance < 0.01f) return;
             outward /= distance;
-            Vector3 tangent = frame.Forward - outward * Vector3.Dot(frame.Forward, outward);
-            tangent.y = 0f;
-            if (tangent.sqrMagnitude < 1e-6f) return;
-            tangent.Normalize();
+            Vector3 tangent = Vector3.Cross(Vector3.up, outward);
+            if (Vector3.Dot(tangent, FacingOf(heading)) < 0f) tangent = -tangent;
             heading = Mathf.Atan2(tangent.x, tangent.z) * Mathf.Rad2Deg;
             float speed = Mathf.Max(0f, Vector3.Dot(velocity, tangent));
             velocity = tangent * speed + Vector3.up * velocity.y;
@@ -317,7 +325,7 @@ namespace ProtoHarness.ChainRush
             Vector3 next = transform.position + displacement - center;
             next.y = 0f;
             float reach = next.magnitude;
-            if (reach > 0.01f) displacement += next / reach * (Mathf.Abs(game.Racer.SwingRadius) - reach);
+            if (reach > 0.01f) displacement += next / reach * (racer.SwingRadius - reach);
         }
 
         // Ends the swing and throws the runner along its facing at swingExitSpeed or more, with the
@@ -435,6 +443,8 @@ namespace ProtoHarness.ChainRush
             transform.position += offset;
             controller.enabled = true;
             SyncGrounded();
+            // A swing's pole is a world position like the track it came from (Centerline.ShiftOrigin moves that).
+            if (game.Racer.SwingTicks > 0) game.Racer.SwingCenter += offset;
             grapple.ShiftOrigin(offset);
         }
 

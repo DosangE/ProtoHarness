@@ -4,7 +4,7 @@ namespace ProtoHarness.ChainRush.Control
 {
     // Desktop mapping: A/D or arrows steer, left click is the primary action (jump or grapple),
     // releasing left or pressing right releases the chain, Space attacks. KartRider-style: left Shift
-    // held drifts, left Ctrl fires the chain action.
+    // held drifts, left Ctrl fires the chain action (and holding it keeps a corner pole swing).
     public sealed class KeyboardMouseInputSource : IInputSource
     {
         private readonly InputLatch latch = new InputLatch();
@@ -17,6 +17,7 @@ namespace ProtoHarness.ChainRush.Control
             bool attack = false;
             bool drift = false;
             bool chainAction = false;
+            bool chainHeld = false;
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null)
             {
@@ -25,6 +26,7 @@ namespace ProtoHarness.ChainRush.Control
                 attack = keyboard.spaceKey.wasPressedThisFrame;
                 drift = keyboard.leftShiftKey.isPressed;
                 chainAction = keyboard.leftCtrlKey.wasPressedThisFrame;
+                chainHeld = keyboard.leftCtrlKey.isPressed;
             }
             Mouse mouse = Mouse.current;
             if (mouse != null)
@@ -32,7 +34,7 @@ namespace ProtoHarness.ChainRush.Control
                 primary = mouse.leftButton.wasPressedThisFrame;
                 release = mouse.leftButton.wasReleasedThisFrame || mouse.rightButton.wasPressedThisFrame;
             }
-            latch.Record(steer, primary, release, attack, drift, chainAction);
+            latch.Record(steer, primary, release, attack, drift, chainAction, chainHeld);
         }
 
         public TickInput Consume() => latch.Consume();

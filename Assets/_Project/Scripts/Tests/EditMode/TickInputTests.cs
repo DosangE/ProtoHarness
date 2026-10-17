@@ -39,9 +39,11 @@ namespace ProtoHarness.Tests.EditMode
             var plain = new TickInput(0f, false, false, false);
             Assert.That(plain.Drift, Is.False);
             Assert.That(plain.ChainActionPressed, Is.False);
-            var full = new TickInput(0.5f, false, false, false, true, true);
+            Assert.That(plain.ChainActionHeld, Is.False);
+            var full = new TickInput(0.5f, false, false, false, true, true, true);
             Assert.That(full.Drift, Is.True);
             Assert.That(full.ChainActionPressed, Is.True);
+            Assert.That(full.ChainActionHeld, Is.True);
         }
 
         [Test]

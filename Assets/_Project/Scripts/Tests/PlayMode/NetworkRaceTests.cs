@@ -858,7 +858,7 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 TickInput input = inner.Consume();
                 bool drift = input.Drift || (game.Tick >= from && game.Tick < to);
-                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, drift, input.ChainActionPressed);
+                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, drift, input.ChainActionPressed, input.ChainActionHeld);
             }
         }
     }

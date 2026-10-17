@@ -17,6 +17,7 @@ namespace ProtoHarness.ChainRush
         private int slingTicks;
         private int swingTicks;
         private float swingRadius;
+        private Vector3 swingCenter;
         private bool grappleEmpowered;
         private int health;
         private int hits;
@@ -45,6 +46,7 @@ namespace ProtoHarness.ChainRush
             public int SlingTicks;
             public int SwingTicks;
             public float SwingRadius;
+            public Vector3 SwingCenter;
             public bool GrappleEmpowered;
             public int Health;
             public int Hits;
@@ -107,10 +109,12 @@ namespace ProtoHarness.ChainRush
         public float Gauge => gauge;
         // Ticks left in the current chain slingshot (pull, then carry); zero when none is running.
         public ref int SlingTicks => ref slingTicks;
-        // Ticks left in the current corner swing (zero when none) and its rope length, signed by the turn:
-        // positive swings around a right-hand curve's center, negative a left-hand one.
+        // Ticks the current corner pole swing has lasted so far (zero when none; it has no time limit), its rope length
+        // (the level distance to the pole when it hooked, kept for the whole swing) and the pole (an arc's center,
+        // PROPOSAL_CORNER_POLE.md 2-1), moved with the world on an origin shift.
         public ref int SwingTicks => ref swingTicks;
         public ref float SwingRadius => ref swingRadius;
+        public ref Vector3 SwingCenter => ref swingCenter;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
 
@@ -151,6 +155,7 @@ namespace ProtoHarness.ChainRush
             slingTicks = 0;
             swingTicks = 0;
             swingRadius = 0f;
+            swingCenter = Vector3.zero;
             grappleEmpowered = false;
             jumpQueued = false;
             coyoteTime = 0f;
@@ -167,6 +172,7 @@ namespace ProtoHarness.ChainRush
             SlingTicks = slingTicks,
             SwingTicks = swingTicks,
             SwingRadius = swingRadius,
+            SwingCenter = swingCenter,
             GrappleEmpowered = grappleEmpowered,
             Health = health,
             Hits = hits,
@@ -194,6 +200,7 @@ namespace ProtoHarness.ChainRush
             slingTicks = snapshot.SlingTicks;
             swingTicks = snapshot.SwingTicks;
             swingRadius = snapshot.SwingRadius;
+            swingCenter = snapshot.SwingCenter;
             grappleEmpowered = snapshot.GrappleEmpowered;
             health = snapshot.Health;
             hits = snapshot.Hits;

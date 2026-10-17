@@ -63,6 +63,8 @@ namespace ProtoHarness.Tests.PlayMode
             private readonly CircuitBot driver;
             private int ticks;
             private bool slung;
+            private bool swung;
+            private bool sawArc;
 
             // The circuit bot does the steering and the jumps and grapples over the gaps; this adds drift and chain actions.
             public DriftBot(ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit)
@@ -83,9 +85,16 @@ namespace ProtoHarness.Tests.PlayMode
                 float curvature = game.Track.Frame(player.transform.position).Curvature;
                 bool intoCurve = curvature != 0f && steer * curvature > 0f;
                 if (game.Racer.SlingTicks > 0) slung = true;
-                // Straight: try the slingshot every few ticks until it has fired. Curve: hook it once the sling is done.
-                bool chain = curvature == 0f ? !slung && ticks % 10 == 0 : slung && intoCurve;
-                return new TickInput(steer, driven.PrimaryPressed, false, false, intoCurve, chain);
+                bool swinging = player.IsSwinging;
+                if (swinging) swung = true;
+                if (swinging && curvature != 0f) sawArc = true;
+                // First the slingshot: on a straight with no corner pole in reach, every few ticks until it fires. Then the
+                // pole swing: press as soon as a pole is in reach, hold through its arc and let go back on the straight.
+                bool press = !slung
+                    ? curvature == 0f && ticks % 10 == 0 && !player.TryFindPole(out _)
+                    : !swung && player.TryFindPole(out _);
+                bool hold = swinging ? !(sawArc && curvature == 0f) : press;
+                return new TickInput(steer, driven.PrimaryPressed, false, false, intoCurve, press, hold);
             }
         }
 

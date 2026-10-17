@@ -8,7 +8,6 @@
 
 | # | 작업 | 브랜치 | Unity 검증 | 선행 | 사용자 결정 |
 |---|---|---|---|---|---|
-| R4 | **M1** 코너 봉 스윙 P1 (시뮬) | `feature/corner-pole-sim` | 약 20분 (게이트 + Long + Device) | — (R2 끝남) | — |
 | R5 | **M1** 코너 봉 스윙 P2 (표현) | `feature/corner-pole-look` | 약 11분 + 사용자 플레이 | R4 | 5-1 |
 | ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **보류** (서킷 집중) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
 | ~~R7~~ | ~~공격 판정 방향~~ **보류** (서킷 집중, 서킷에는 표적이 없다) | `fix/attack-facing` | 약 11분 | — | 7-1 (설계) |
@@ -19,26 +18,11 @@
 
 **2026-10-15 플레이 경험 순서 로드맵** (`docs/DESIGN.md` §5-1, DECISIONS 같은 날): 지금 마일스톤은 **M1 (한 판이 끝까지 돈다)** — R4 → R5 → 체감 튜닝 → 사용자 플레이 확인 → `dev → main` v0.2. 실제 네트워크 레이스(플레이어 빌드 + 레이스 A·B·C)는 M5 까지 돌리지 않는다.
 
-**권장 순서**: R4 → R5 → M1-T. R8 은 아무 때나. R9·R3·R2 는 끝났다(DECISIONS 2026-10-15 "R9"·"R3", 2026-10-14 "서킷 낙하 → 트랙 복귀"). **씬을 건드리는 브랜치는 동시에 1개만**(§9-2).
+**R4 병합 대기**: `feature/corner-pole-sim` (`1a9aa5a`) 는 게이트·Long·Device·`Run Course Sweep`(2026-10-17) 을 통과했다(DECISIONS "R4"). `dev` 병합 → R5.
+
+**권장 순서**: (R4 Sweep·병합) → R5 → M1-T. R8 은 아무 때나. R9·R3·R2 는 끝났다(DECISIONS 2026-10-15 "R9"·"R3", 2026-10-14 "서킷 낙하 → 트랙 복귀"). **씬을 건드리는 브랜치는 동시에 1개만**(§9-2).
 
 ---
-
-## R4. 코너 봉 스윙 P1 — 시뮬
-
-```
-목표:      docs/PROPOSAL_CORNER_POLE.md 2절 규칙으로 지금 코너 스윙을 대체한다 (표현 제외)
-건드릴 것:  제안서 3절 표 — RunnerMotor, Centerline(봉 조회), RacerState, TickInput·TickInputCodec(Ctrl 유지 비트),
-           InputLogFile(버전 2), KeyboardMouseInputSource·InputLatch, SimSnapshotCodec, ChainRushHud(문구), docs/COURSE.md 4-5
-           테스트: ChainRushCornerSwingTests 다시 쓰기, ChainRushRollbackTests 스윙 테스트, TickInput·InputLog EditMode
-새로 만들 것: 없음 예상 (봉 조회·범위 판정 순수 함수는 Centerline·RunnerMotor 안. 따로 빼야 하면 그때 §1-1)
-검증 방법:  EditMode, 게이트 1회 + Long (Net 카테고리는 게이트 안), Device (장치 입력 경로),
-           SimSnapshotCodec 와이어 형식이 바뀌어도 플레이어 재빌드·네트워크 레이스는 M5 로 미룬다 (2026-10-15 로드맵),
-           **지문 해시 그대로**(봇은 체인 액션을 안 쓴다 — 바뀌면 원인을 찾을 때까지 병합하지 않는다)
-안 하는 것:  봉 모델·줄 끝 표현(R5), 절차 코스 봉 표시(R6), 난이도 조절(P4)
-```
-
-- 선행: R2 는 끝났다(2026-10-15 병합). 둘 다 `RunnerMotor`·`RacerState`·`SimSnapshotCodec` 을 바꾸므로 R2 위에서 시작한다.
-- 입력 로그 버전 1 파일을 계속 읽을지: 저장된 `.phil` 파일이 있는지 구현 때 찾아 보고 정한다.
 
 ## R5. 코너 봉 스윙 P2 — 표현
 

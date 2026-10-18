@@ -3,13 +3,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using Debug = UnityEngine.Debug;
 
 namespace ProtoHarness.ChainRush.Race
 {
     // A hand-built circuit race for one runner (COURSE.md T4): builds the closed centerline from a
     // TrackDefinition, lays the road once with RoadPieces (gaps stay empty), hangs the grapple anchors over
-    // the gaps, marks the start line and the checkpoints, and counts laps from the runner's S every tick.
+    // the gaps, marks the start line and the checkpoints, stands a corner pole at every arc's center, and
+    // counts laps from the runner's S every tick.
     // ChainRushGame takes the centerline from BuildTrack, calls PrepareTick before a tick's input is read
     // (the track then looks for the runner near where it was) and Step after the runner moved. The race
     // starts on tick 0 with the runner on the start line (S 0); lap 1 ends the next time it crosses the line.
@@ -27,6 +29,7 @@ namespace ProtoHarness.ChainRush.Race
 
         private readonly List<RoadPiece> pieces = new List<RoadPiece>(16);
         private readonly List<GameObject> markers = new List<GameObject>(8);
+        private readonly List<GameObject> poles = new List<GameObject>(8);
         private readonly Stopwatch stepWatch = new Stopwatch();
         private Centerline track;
         private LapCounter counter;
@@ -51,6 +54,7 @@ namespace ProtoHarness.ChainRush.Race
         // The runner's S (folded into one lap) at the last Step.
         public double LastS => lastS;
         public int PieceCount => pieces.Count;
+        public int PoleCount => poles.Count;
         public int AnchorPoolSize => anchors == null ? 0 : anchors.Length;
         public double MaxStepMilliseconds { get; private set; }
 
@@ -190,6 +194,7 @@ namespace ProtoHarness.ChainRush.Race
             LayRoad();
             PlaceAnchors();
             PlaceMarkers(checkpoints);
+            PlacePoles();
             Physics.SyncTransforms();
             initialized = true;
             ResetRace();
@@ -263,6 +268,45 @@ namespace ProtoHarness.ChainRush.Race
             marker.transform.SetPositionAndRotation(frame.Position + Vector3.up * 0.04f, Quaternion.LookRotation(frame.Forward));
             marker.transform.localScale = new Vector3(definition.RoadHalfWidth * 2f, 0.06f, length);
             markers.Add(marker);
+        }
+
+        // A corner pole on every arc's center, where the swing hooks (Centerline.TryFindPole): a glowing post from
+        // SwingLook.PoleDepth below to PoleHeight above it with a cap on top, and a dark band at BiteHeight where the chain
+        // bites. Visual only, like the markers.
+        private void PlacePoles()
+        {
+            var points = new List<Vector3>(8);
+            track.GetPoles(points);
+            float length = SwingLook.PoleHeight + SwingLook.PoleDepth;
+            for (int i = 0; i < points.Count; i++)
+            {
+                var pole = new GameObject("Corner pole " + i);
+                pole.transform.SetParent(transform, false);
+                pole.transform.position = points[i];
+                // The default cylinder is 2 m tall and 1 m across, centred on its origin.
+                VisualPart(PrimitiveType.Cylinder, "Post", pole.transform, lightMaterial,
+                    Vector3.up * ((SwingLook.PoleHeight - SwingLook.PoleDepth) * 0.5f),
+                    new Vector3(SwingLook.PoleThickness, length * 0.5f, SwingLook.PoleThickness));
+                VisualPart(PrimitiveType.Sphere, "Cap", pole.transform, lightMaterial,
+                    Vector3.up * SwingLook.PoleHeight, Vector3.one * (SwingLook.PoleThickness * 2f));
+                VisualPart(PrimitiveType.Cylinder, "Bite band", pole.transform, railMaterial,
+                    Vector3.up * SwingLook.BiteHeight, new Vector3(SwingLook.PoleThickness * 1.6f, 0.25f, SwingLook.PoleThickness * 1.6f));
+                poles.Add(pole);
+            }
+        }
+
+        private static void VisualPart(PrimitiveType shape, string name, Transform parent, Material material, Vector3 localPosition, Vector3 localScale)
+        {
+            GameObject part = GameObject.CreatePrimitive(shape);
+            part.name = name;
+            // Visual only: it must never collide, even in the frame before the collider is destroyed.
+            Collider collider = part.GetComponent<Collider>();
+            collider.enabled = false;
+            Destroy(collider);
+            part.GetComponent<Renderer>().sharedMaterial = material;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = localScale;
         }
     }
 }

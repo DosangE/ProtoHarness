@@ -3,6 +3,7 @@ using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -224,6 +225,49 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.IsEndless, Is.False);
             Assert.That(game.Enemies, Is.Null);
             yield return null;
+        }
+
+        // R5: a pole model stands on every arc's center (the simulation's pole), tall and thick enough to see, its band
+        // where the chain bites, with no collider; on the straight before an arc the HUD is offered that pole, and on the
+        // start line none.
+        [UnityTest]
+        public IEnumerator Scene_CornerPoles_StandOnEveryArcCenter_AndTheOneInReachIsOffered()
+        {
+            var feet = new System.Collections.Generic.List<Vector3>();
+            game.Track.GetPoles(feet);
+            int arcs = 0;
+            foreach (TrackDefinition.Segment segment in circuit.Definition.Segments) if (segment.IsArc) arcs++;
+            Assert.That(feet.Count, Is.EqualTo(arcs), "One pole per arc.");
+            Assert.That(circuit.PoleCount, Is.EqualTo(arcs));
+            yield return null;
+            for (int i = 0; i < feet.Count; i++)
+            {
+                Transform pole = circuit.transform.Find("Corner pole " + i);
+                Assert.That(pole, Is.Not.Null, $"Corner pole {i}");
+                Assert.That(Vector3.Distance(pole.position, feet[i]), Is.LessThan(1e-3f), $"Pole {i} stands on its arc's center.");
+                Assert.That(Vector3.Distance(pole.Find("Cap").position, SwingLook.PoleTop(feet[i])), Is.LessThan(1e-3f), $"Pole {i}'s cap is on its top.");
+                Assert.That(Vector3.Distance(pole.Find("Bite band").position, SwingLook.PoleBite(feet[i])), Is.LessThan(1e-3f), $"Pole {i}'s band is where the chain bites.");
+                // Big enough to see from down the straight: the first 8 m x 0.7 m post went unseen in play (2026-10-18).
+                Bounds post = pole.Find("Post").GetComponent<Renderer>().bounds;
+                Assert.That(post.size.y, Is.EqualTo(SwingLook.PoleHeight + SwingLook.PoleDepth).Within(1e-3f), $"Pole {i} runs from below the road to its top.");
+                Assert.That(post.size.x, Is.GreaterThanOrEqualTo(1.5f), $"Pole {i} is thick enough to see.");
+                Assert.That(post.max.y - feet[i].y, Is.EqualTo(SwingLook.PoleHeight).Within(1e-3f));
+                Assert.That(pole.GetComponentsInChildren<Collider>(true), Is.Empty, $"Pole {i} is visual only.");
+            }
+
+            game.SetInputSource(new TrackFollower(game.Track, player));
+            game.StartRun();
+            yield return LandOnRoad();
+            yield return null;
+            Assert.That(grapple.HasPoleCandidate, Is.False, "On the start line both poles are out of reach. " + State());
+
+            // The first arc (R40) starts at S 140, after the jump gap (S 119 to 125). From S 127, 13 m before the arc, the
+            // pole is 72 degrees aside and 42.1 m away: in reach (75 degrees, 40 + 5 m) while the runner gathers speed.
+            Teleport(127d);
+            yield return LandOnRoad();
+            yield return null;
+            Assert.That(grapple.HasPoleCandidate, Is.True, "Before the first arc its pole must be offered. " + State());
+            Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[0]), Is.LessThan(1e-3f));
         }
 
         // ---- helpers ------------------------------------------------------------------------------------

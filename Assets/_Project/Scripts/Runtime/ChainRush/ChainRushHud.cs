@@ -1,4 +1,5 @@
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 
 namespace ProtoHarness.ChainRush
@@ -196,6 +197,7 @@ namespace ProtoHarness.ChainRush
                     GUI.Label(new Rect(x + 34, y - 10, 170, 25), "LINK / " + Vector3.Distance(player.transform.position, anchor.position).ToString("0") + "m", small);
                 }
             }
+            if (grapple.HasPoleCandidate) DrawPoleCandidate(scale);
             if (game.DamageFlash)
             {
                 Color flash = Coral;
@@ -203,6 +205,23 @@ namespace ProtoHarness.ChainRush
                 Block(new Rect(0, 0, 9, height), flash);
                 Block(new Rect(width - 9, 0, 9, height), flash);
             }
+        }
+
+        // The corner pole Ctrl would hook now, bracketed at the band the chain bites, like an anchor: mint with a gauge
+        // slot to spend, muted without one (the press would do nothing).
+        private void DrawPoleCandidate(float scale)
+        {
+            Vector3 top = SwingLook.PoleBite(grapple.PoleCandidate);
+            Vector3 screen = viewCamera.WorldToScreenPoint(top);
+            if (screen.z <= 0f) return;
+            float x = screen.x / scale;
+            float y = (Screen.height - screen.y) / scale;
+            Color color = player.Gauge >= 1f ? Mint : Muted;
+            Block(new Rect(x - 26, y - 26, 15, 3), color);
+            Block(new Rect(x - 26, y - 26, 3, 15), color);
+            Block(new Rect(x + 11, y + 23, 15, 3), color);
+            Block(new Rect(x + 23, y + 11, 3, 15), color);
+            GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / CTRL  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
         }
 
         // Chain gauge under the speed box: one bar per slot, filled by drifting, spent by Ctrl.

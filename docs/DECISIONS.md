@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-18 · R5 코너 봉 스윙 P2 (표현): 봉 모델은 실행 중에 원호에서 만들고, 줄은 봉 꼭대기를 문다
+
+- **결정 (사용자, 2026-10-18 "진행하자. 권장대로 하겠다"(5-1 ②), 구체 계획에 "진행해라", `docs/NEXT_REQUESTS.md` R5)**:
+  - **봉 위치**: `Centerline.GetPoles(List<Vector3>)` — 원호 조각마다 중심(시뮬의 봉 `TryFindPole` 과 같은 점)을 조각 순서로 붙인다. 읽기만 한다.
+  - **봉 모델**: `CircuitRace.Initialize` 의 `PlacePoles` 가 원호마다 `Corner pole i` 를 둔다 — 난간 재질의 기둥(높이 `SwingLook.PoleHeight` 8 m, 두께 `PoleThickness` 0.7 m) + 조명 재질의 머리. 출발선 표지(`AddMarker`)처럼 기본 도형으로 만들고 **충돌체를 끄고 지운다** — 시뮬은 그대로다. 씬·프리팹·새 파일 없음.
+  - **줄 끝**: 봉 스윙 중 줄(`LineRenderer`)은 `SwingLook.PoleTop(RacerState.SwingCenter)`(봉 꼭대기)를 문다. **무한 모드는 그대로** 안쪽 난간을 문다(`SwingLook.RailPoint`) — 무한 모드에는 봉 모델이 없고(R6, 동결), 긴 줄을 `ChainVisual` 이 어떻게 그리는지 확인하지 않았다.
+  - **걸 수 있는 봉 표시**: `GrappleController.LateUpdate` 가 달리는 중·그래플 아님·스윙 아님·무한 모드 아님일 때 `motor.TryFindPole` 로 `PoleCandidate` 를 남기고, `ChainRushHud` 가 앵커 표시와 같은 꺾쇠 + `POLE / CTRL  43m` 를 봉 꼭대기에 그린다. 게이지 1칸이 있으면 민트, 없으면 흐린 색(눌러도 아무 일 없음).
+  - **테스트**: `ChainRushCornerSwingTests.SwingLook_WhileSwinging_…HooksTheInnerRail` → `…HooksThePoleTop` — 줄 끝이 난간이라는 단언을 봉 꼭대기로 바꿨다(**사양 변경**, 통과시키려고 고친 것이 아니다). 새로 `ChainRushCircuitTests.Scene_CornerPoles_StandOnEveryArcCenter_AndTheOneInReachIsOffered`(원호 수 = 봉 수, 위치·머리 위치, 충돌체 0, 출발선에서는 후보 없음, S 127 에서는 첫 봉이 후보), EditMode `CenterlineTests.GetPoles_EveryArcInOrder_StraightsHaveNone`.
+- **이유**: 5-1 ② 는 씬 수정이 없고, 트랙을 늘려도(사용자 2026-10-18 "트랙도 최소 3가지") 원호만 있으면 봉이 따라온다. 봉 점이 시뮬과 같은 `Centerline` 에서 나오므로 그려진 봉과 걸리는 봉이 어긋날 수 없다.
+- **진행 중 있었던 일**: 새 서킷 테스트 1회차 실패 `Before the first arc its pole must be offered. S 527.34, D 0.00, H 0.94, … velocity (0.00, 0.00, 0.00)` — 테스트가 러너를 S 124 로 옮겼는데 그 자리는 점프 틈(S 119~125) 위라 떨어져 복귀했다. 틈 뒤 S 127(원호 13 m 전, 72°, 42.1 m)로 고쳤다. 코드 결함이 아니라 테스트 위치 잘못이다.
+- **검증** (`feature/corner-pole-look`, 커밋 전 작업 트리, 에디터 6000.3.19f1, `isApplicationActive=False`):
+  - 컴파일: Editor.log `*** Tundra build success (23.14 seconds)`, 리플렉션으로 새 멤버 4개(`GetPoles`·`PoleTop`·`HasPoleCandidate`·`PoleCount`) 확인, Console Error 0.
+  - EditMode `testcasecount="256" result="Passed" passed="256" failed="0"` (04:26:39Z~04:26:45Z).
+  - 빠른 확인(병합 근거 아님): 서킷·코너 스윙 두 클래스 `testcasecount="12" Failed(Child) passed=11 failed=1`(위 실패, 04:27:09Z~04:28:57Z) → 고친 뒤 서킷 클래스 `testcasecount="6" result="Passed"` (04:30:21Z~04:31:35Z).
+  - `tools/select-tests.ps1`(커밋 전 작업 트리 포함): `GrappleController.cs`·`Centerline.cs` → 전체, "②에서 Run Course Sweep 도 1회".
+  - `Run PlayMode Tests` `testcasecount="144" result="Passed" passed="141" failed="0" skipped="3"` (04:32:00Z~04:38:26Z, 386.0초, skipped 3 은 `[Explicit]` 네트워크 레이스). 서킷 지문 `0xF9A914DA3FAA680B` 그대로(리플레이, 격리 월드 두 벌).
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (04:38:54Z~04:42:10Z). 절차 지문 `0xE81912109A2EB020` 그대로.
+  - `Run Course Sweep` `testcasecount="1" result="Passed" passed="1" failed="0"` (04:42:39Z~04:58:13Z, 934.0초). 20 시드 모두 1400 m·health 3·escapes 0, 가장 느린 스텝 8.08 ms(시드 15). R4 때는 2.95 ms 였다. 이번 변경은 무한 모드의 틱 경로에 닿지 않는다(봉 모델은 서킷만, 후보 조회는 무한 모드에서 건너뜀). 그래서 에디터 쪽 흔들림으로 보지만 **원인은 확인하지 못했다**.
+  - Device 는 돌리지 않았다 — 입력 장치 경로(`KeyboardMouseInputSource`, 메뉴 키)를 바꾸지 않았다(§9-2).
+- **2단계 — 봉이 보이지 않았다** (사용자 플레이 2026-10-18 "애초에 서킷에 봉이 보이지 않았었다"):
+  - 원인: Play 중 조회로 봉 2개가 맞는 자리에 켜져 있음을 확인했다(`Corner pole 0` 중심 (40, 4, 140)). 하지만 기둥 재질 `M_Frame` 이 RGBA(0.035, 0.090, 0.120) — 배경과 같은 검정 — 이고 0.7 m × 8 m 라, 카메라 캡처에서 출발선에서는 머리카락 굵기, 코너 앞에서는 허공에 뜬 어두운 기둥이었다. 테스트는 오브젝트의 존재·위치만 봤다.
+  - 고침: 기둥을 조명 재질(민트 발광)로, 두께 `PoleThickness` 1.6 m, 봉 점 아래 `PoleDepth` 20 m 부터 위 `PoleHeight` 20 m 까지(인필드가 빈 공간이라 떠 보이지 않게), 머리 구 3.2 m. 줄은 꼭대기 대신 `BiteHeight` 3 m 의 어두운 띠(`SwingLook.PoleBite`)를 문다 — 줄이 거의 수평이라 반지름이 보인다. HUD `POLE` 표시도 그 띠에. 사용자에게 실행 중에만 바꾼 미리보기 캡처를 먼저 보였다.
+  - 테스트: 서킷 봉 테스트에 크기 단언(기둥 높이 = 20 + 20 m, 두께 ≥ 1.5 m, 꼭대기 = `PoleTop`)과 띠 위치(`PoleBite`)를 더했다. 코너 스윙 테스트의 줄 끝 높이는 `BiteHeight`.
+  - 검증 (같은 브랜치, 커밋 전): 컴파일 `Tundra build success (19.42 seconds)`. Play 캡처로 두 지점(출발선, 첫 원호 25 m 전)에서 빛나는 기둥과 띠가 보임. 서킷·코너 스윙 두 클래스 `testcasecount="12" result="Passed"` (06:12:20Z~06:14:11Z). `Run PlayMode Tests` `testcasecount="144" result="Passed" passed="141" failed="0" skipped="3"` (06:14:43Z~06:21:52Z, 429.5초), 서킷 지문 `0xF9A914DA3FAA680B` 그대로. `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (06:22:20Z~06:25:38Z), 절차 지문 `0xE81912109A2EB020` 그대로. Sweep 은 다시 돌리지 않았다 — 2단계는 `Centerline` 을 건드리지 않았고, 1단계의 Sweep(04:42Z) 이 같은 `Centerline` 코드로 통과했다.
+- **확인 못 한 것**: 2단계 모양이 플레이에 맞는지 — **사용자 서킷 플레이**. 무한 모드의 봉(R6).
+- **같은 날 이어진 설계 (구현은 R4b)**: 플레이 피드백 6건(속도, 그래플 거리·반복, A/D 과함, 드리프트 무의미, 부스터 짧음, 봉 원운동이 안 느껴짐)을 조사하다 봉 스윙 규칙을 다시 설계했다 — `docs/NEXT_REQUESTS.md` R4b.
+- **버린 대안**: 봉을 씬에 굽기(5-1 ①) — 씬 수정 브랜치가 되고 트랙마다 다시 굽는다. 봉 모델을 새 컴포넌트·프리팹으로 — 첫 사례 형식이 늘고, 출발선 표지와 같은 방식으로 충분하다. 봉에 충돌체 — 인필드 안이라 닿을 일은 없지만 시뮬과 지문이 바뀔 수 있다. 무한 모드도 줄을 봉으로 — 봉이 보이지 않는 곳으로 줄이 60~120 m 뻗는다(R6 에서 함께).
+
 ## 2026-10-15 · R4 코너 봉 스윙 P1 (시뮬): 원호 중심의 봉에 걸고, 줄 길이 고정·관성·Ctrl 유지 동안 돈다
 
 - **결정 (사용자 승인, 2026-10-15 "ㄱㄱ", `docs/NEXT_REQUESTS.md` R4, 규칙은 `docs/PROPOSAL_CORNER_POLE.md` 2절 — 2026-10-14 사용자 결정 7개)**: 지금 코너 스윙(T2d: 드리프트 중 원호 중심에 걸고 14 m/s 로 2초)을 **봉 스윙으로 대체**한다. 표현(봉 모델, 줄 끝을 봉으로, 걸 수 있는 봉 표시)은 R5.

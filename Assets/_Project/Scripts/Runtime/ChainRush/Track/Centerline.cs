@@ -256,6 +256,15 @@ namespace ProtoHarness.ChainRush.Track
             return FrameOn(piece, (float)(s - piece.StartS));
         }
 
+        // Appends the pole of every arc piece (its center, at the arc's start height), in piece order: the same points
+        // TryFindPole chooses from, for presentation to stand a pole model on (R5).
+        public void GetPoles(List<Vector3> poles)
+        {
+            if (poles == null) throw new ArgumentNullException(nameof(poles));
+            for (int i = 0; i < pieces.Count; i++)
+                if (pieces[i].Curvature != 0f) poles.Add(pieces[i].Center);
+        }
+
         // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1). Of the poles
         // within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading) and no farther than their
         // arc's radius plus extraReach, the nearest, measured level; ties go to the earlier piece. False when there is none.

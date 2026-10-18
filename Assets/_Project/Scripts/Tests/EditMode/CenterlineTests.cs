@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
@@ -431,6 +432,27 @@ namespace ProtoHarness.Tests.EditMode
         public void TryFindPole_StraightTrack_FindsNone()
         {
             Assert.That(StraightAlongZ(200f).TryFindPole(new Vector3(0f, 0f, 50f), 0f, 180f, 1000f, out _), Is.False);
+        }
+
+        [Test]
+        public void GetPoles_EveryArcInOrder_StraightsHaveNone()
+        {
+            // Same track as TwoPolesInReach: poles (20, 0, 10) and (20, 0, 50), then a straight with none.
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(10f);
+            line.AppendArc(20f, 90f);
+            line.AppendArc(20f, -90f);
+            line.AppendStraight(30f);
+            var poles = new List<Vector3> { Vector3.one };
+            line.GetPoles(poles);
+            Assert.That(poles.Count, Is.EqualTo(3), "It appends, keeping what the list held.");
+            Assert.That(poles[0], Is.EqualTo(Vector3.one));
+            Assert.That(Vector3.Distance(poles[1], new Vector3(20f, 0f, 10f)), Is.LessThan(1e-3f));
+            Assert.That(Vector3.Distance(poles[2], new Vector3(20f, 0f, 50f)), Is.LessThan(1e-3f));
+            var none = new List<Vector3>();
+            StraightAlongZ(200f).GetPoles(none);
+            Assert.That(none, Is.Empty);
+            Assert.Throws<ArgumentNullException>(() => line.GetPoles(null));
         }
 
         [TestCase(-1f, 5f)]

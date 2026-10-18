@@ -175,9 +175,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.ForwardSpeed, Is.LessThan(hookSpeed + 0.1f), "A guard ends the swing without the 17 m/s throw.");
         }
 
-        // Presentation only (SwingLook): the body slews into the curve, the chain bites the inside rail, the root never turns.
+        // Presentation only (SwingLook): the body slews into the curve, the chain bites the pole's band, the root never turns.
+        // Until R5 (2026-10-18) the chain bit the inside rail beside the runner; R5 moved it to the pole by design.
         [UnityTest]
-        public IEnumerator SwingLook_WhileSwinging_TurnsOnlyTheBodyInsideAndHooksTheInnerRail()
+        public IEnumerator SwingLook_WhileSwinging_TurnsOnlyTheBodyInsideAndHooksThePoleTop()
         {
             Centerline line = CurveRoad();
             var bot = new TrackFollower(line, player);
@@ -188,7 +189,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return RunTo(line, HookS);
             game.Racer.AddGauge(1f);
             yield return Hook(bot);
-            // Into the arc (the rail is drawn there) and past the pose's blend time.
+            // Into the arc and past the pose's blend time.
             yield return RunTo(line, ArcStart + 3d);
             yield return new WaitForSeconds(SwingLook.BlendTime + 0.05f);
             Assert.That(player.IsSwinging, Is.True);
@@ -203,9 +204,8 @@ namespace ProtoHarness.Tests.PlayMode
 
             Assert.That(chain.enabled, Is.True);
             Vector3 bite = chain.GetPosition(1);
-            TrackCoord coord = line.Project(bite);
-            Assert.That(coord.D, Is.EqualTo(HalfWidth).Within(0.3f), "The chain must bite the inside (right) rail, not the arc center.");
-            Assert.That(coord.H, Is.EqualTo(RoadMeshBuilder.GuardRailHeight).Within(0.3f));
+            Assert.That(new Vector2(bite.x, bite.z), Is.EqualTo(new Vector2(Pole.x, Pole.z)).Using(Vector2EqualityComparer(1e-3f)), "The chain must bite the pole at the arc's center.");
+            Assert.That(bite.y - game.Racer.SwingCenter.y, Is.EqualTo(SwingLook.BiteHeight).Within(1e-3f), "It bites the pole's band near hand height.");
 
             bot.ChainHold = false;
             yield return new WaitForSeconds(SwingLook.BlendTime + 0.25f);

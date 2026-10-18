@@ -119,7 +119,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             // Same log with the steering of one tick forced to full right.
             TickInput original = log[changed];
-            InputLog tampered = log.CopyWith(changed, new TickInput(1f, original.PrimaryPressed, original.ReleasePressed, original.AttackPressed, original.Drift, original.ChainActionPressed, original.ChainActionHeld));
+            InputLog tampered = log.CopyWith(changed, new TickInput(1f, original.PrimaryPressed, original.ReleasePressed, original.AttackPressed, original.SwingHeld, original.ChainActionPressed, original.SwingPressed));
             Assert.That(original.Steer, Is.LessThan(1f), "The bot must not already steer full right on that tick.");
             StateTrace diverged = CircuitTrace(new InputReplay(tampered));
             yield return Run(diverged, ticks, 6f, null);

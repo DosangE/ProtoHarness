@@ -18,6 +18,9 @@ namespace ProtoHarness.ChainRush
         private int swingTicks;
         private float swingRadius;
         private Vector3 swingCenter;
+        private float swingHookSpeed;
+        private float swingHookRadius;
+        private float swingCarrySpeed;
         private bool grappleEmpowered;
         private int health;
         private int hits;
@@ -47,6 +50,9 @@ namespace ProtoHarness.ChainRush
             public int SwingTicks;
             public float SwingRadius;
             public Vector3 SwingCenter;
+            public float SwingHookSpeed;
+            public float SwingHookRadius;
+            public float SwingCarrySpeed;
             public bool GrappleEmpowered;
             public int Health;
             public int Hits;
@@ -110,11 +116,16 @@ namespace ProtoHarness.ChainRush
         // Ticks left in the current chain slingshot (pull, then carry); zero when none is running.
         public ref int SlingTicks => ref slingTicks;
         // Ticks the current corner pole swing has lasted so far (zero when none; it has no time limit), its rope length
-        // (the level distance to the pole when it hooked, kept for the whole swing) and the pole (an arc's center,
-        // PROPOSAL_CORNER_POLE.md 2-1), moved with the world on an origin shift.
+        // now (the level distance to the pole when it hooked, then shortened or let out by steering, NEXT_REQUESTS.md R4b)
+        // and the pole (an arc's center, PROPOSAL_CORNER_POLE.md 2-1), moved with the world on an origin shift.
         public ref int SwingTicks => ref swingTicks;
         public ref float SwingRadius => ref swingRadius;
         public ref Vector3 SwingCenter => ref swingCenter;
+        // The speed and rope length at the moment the swing hooked; the swing's speed is worked out from them.
+        public ref float SwingHookSpeed => ref swingHookSpeed;
+        public ref float SwingHookRadius => ref swingHookRadius;
+        // After a swing lets go, the speed it carried above running speed, falling off over time; zero when none.
+        public ref float SwingCarrySpeed => ref swingCarrySpeed;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
 
@@ -156,6 +167,9 @@ namespace ProtoHarness.ChainRush
             swingTicks = 0;
             swingRadius = 0f;
             swingCenter = Vector3.zero;
+            swingHookSpeed = 0f;
+            swingHookRadius = 0f;
+            swingCarrySpeed = 0f;
             grappleEmpowered = false;
             jumpQueued = false;
             coyoteTime = 0f;
@@ -173,6 +187,9 @@ namespace ProtoHarness.ChainRush
             SwingTicks = swingTicks,
             SwingRadius = swingRadius,
             SwingCenter = swingCenter,
+            SwingHookSpeed = swingHookSpeed,
+            SwingHookRadius = swingHookRadius,
+            SwingCarrySpeed = swingCarrySpeed,
             GrappleEmpowered = grappleEmpowered,
             Health = health,
             Hits = hits,
@@ -201,6 +218,9 @@ namespace ProtoHarness.ChainRush
             swingTicks = snapshot.SwingTicks;
             swingRadius = snapshot.SwingRadius;
             swingCenter = snapshot.SwingCenter;
+            swingHookSpeed = snapshot.SwingHookSpeed;
+            swingHookRadius = snapshot.SwingHookRadius;
+            swingCarrySpeed = snapshot.SwingCarrySpeed;
             grappleEmpowered = snapshot.GrappleEmpowered;
             health = snapshot.Health;
             hits = snapshot.Hits;

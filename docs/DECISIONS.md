@@ -7,6 +7,30 @@
 
 ---
 
+## 2026-10-18 · R4b 봉 스윙 v2: Shift 스윙이 곧 드리프트, A/D 로 줄 길이, 줄이 짧을수록 빠르고, 스윙 거리만큼 게이지
+
+- **결정 (사용자 승인, 2026-10-18 "진행해보아라", 규칙은 `docs/NEXT_REQUESTS.md` R4b; 범위 밖 테스트 4개는 같은 날 "A ㄱㄱ", 출발선 봉 단언은 "규칙 그대로, 테스트 갱신")**:
+  - **입력**: `TickInput.Drift` → `SwingHeld`(왼쪽 Shift 누르고 있음), `ChainActionHeld` → `SwingPressed`(Shift 누른 틱, 래치에서 엣지). Ctrl 은 `ChainActionPressed` 만. 비트 자리는 그대로(8 = 스윙 유지, 32 = 스윙 누름)라 뜻이 바뀌었으므로 `InputLogFile` 형식 버전 2 → 3(옛 파일은 거부).
+  - **시뮬 (`RunnerMotor`)**: 드리프트 필드·분기를 지웠다(`driftGrip`·`driftTurnScale`·`driftSpeedScale`·`slideMetersPerSlot`·`IsDrifting`). 봉 스윙은 Shift 누름으로만 건다(`TryHookPole`, 게이지 비용 없음, 그래플 중·스윙 중에는 무시). 범위 좌우 `poleMaxAngle` 95°, 거리 ≤ 반지름 + `poleReach` 6 m. 누르는 동안 유지(누른 틱은 유지로 친다). 스윙 중 조향은 헤딩 대신 줄: 봉 쪽 키는 짧게, 반대는 길게, `ropeRate` 6 m/s, `minRopeLength` 2 m(요청서에 없던 하한 — 0 나눗셈 방지). 속력 = 건 순간 수평 속력 × (건 순간 줄 / 지금 줄), `minSwingSpeedScale` 0.8 ~ `maxSwingSpeedScale` 1.5. 스윙한 거리 `swingMetersPerSlot` 35 m 당 게이지 1칸. 놓으면 그 방향·그 속력으로 직진하고, 달리기 목표를 넘친 부분(`RacerState.SwingCarrySpeed`)은 `swingCarryFalloff` 3 m/s² 로 줄어 목표 아래가 되면 사라진다. 가드는 넘친 속력 없이 끊는다. 옛 출구 던지기(`swingExitSpeed` 17, `swingExitCarryTime` 0.6)는 지웠다. Ctrl 체인 액션은 그래플 강화 → 슬링샷만.
+  - **상태**: `RacerState` 에 `SwingHookSpeed`·`SwingHookRadius`·`SwingCarrySpeed`(스냅샷·`SimSnapshotCodec` 에도 — 네트워크 형식 변경). `StateTrace` 에는 넣지 않았다(지문 필드 목록 고정).
+  - **HUD**: DRIFT 안내 제거, SWING 안내는 "안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진", 봉 표시 `POLE / SHIFT`(걸기에 비용이 없어 늘 민트), 게이지 설명 "filled by swinging".
+  - **테스트**: `ChainRushCornerSwingTests` 를 새 규칙으로 다시 썼다(줄·속력 유지와 스윙 거리 게이지, 안쪽/바깥 키와 0.8·1.5 한계, 원호 안 걸기, 범위 밖 누름은 아무 일 없음, 누른 채 범위에 들어오면 안 걸림, 놓으면 직진·초당 3 감속, 가드 끊김, 표현). `ChainRushDriftTests` 는 **지우지 않고 드리프트 테스트 1개만 뺐다** — 나머지 3개(슬링샷 2·그래플 강화 1)가 살아 있는 기능이라서(요청서는 파일 삭제였다. 범위를 좁힌 변경). 롤백 봇은 `DriftBot` → `SwingBot`(슬링·스윙·줄·놓은 뒤 4지점). Device `Input_ShiftAndCtrl_…` 은 R30 테스트 도로에서 Shift 걸기·Shift+D 줄 줄이기·뗌·Ctrl. 네트워크 레이스 C 는 드리프트 구간 → 조향 흔들기 구간(`WeaveWindow`, `[Explicit]` 이라 **돌리지 않았다**, M5).
+  - **`NetReconcileTests` 끝 보정 4개의 지레**: 드리프트(한 틱 약 0.012 m)를 대신할 직선의 한 틱 지레가 없어(조향은 0.3 mm 이하) 부스터(슬링샷)로 바꿨다. 게이지는 런 안에서 채운다 — `PoleSwingBot`(서킷 봇 + 원호마다 스윙, 원호 끝 `LongRelease` 40 m 또는 `ShortRelease` 4 m 전에 놓음). 결승선이 마지막 원호 출구라 결승은 달리는 중에 넘는다. 결승 지점의 미세 조정은 마지막 스윙 중 두 틱 봉 쪽 조향(줄 0.24 m 짧게 → 한 틱 약 1.2 mm 더 감)을 놓는 자리로 한다. ① 서버만 결승: P 에 부스터, F-1 에 다시 누름(P 의 부스터가 아직 돌아 무효), 서버는 F 에 그 누름을 반복해 두 번째 부스터로 F 에 결승. ② 클라만 결승: F 에 누름, 서버는 F-1(안 누름) 반복. ③ 교정 재실행이 F 에 끝남: 클라가 D-1 에 봉 쪽, D 에 반대쪽(줄은 그대로), 서버는 D 를 놓쳐 줄이 0.24 m 짧고 빠르다. 지연은 `MissLead + 3` 틱(예측기 창 512 안).
+  - **서킷 봉 표시 단언**(`ChainRushCircuitTests.Scene_CornerPoles_…`): 95°·+6 m 에서는 원호 출구 뒤 약 3.5 m 동안 방금 지난 봉이 범위 안이고, 출발선이 마지막 원호 출구라 출발선에서 마지막 봉이 후보다. 사용자 결정으로 규칙을 두고 단언을 바꿨다(**사양 변경**): 출발선 = 마지막 원호의 봉, 직선 한가운데 S 60 = 없음, S 127 = 첫 봉. 출구 직후 Shift 가 지난 봉에 걸리는 것이 플레이에 괜찮은지는 M1-T 에서 본다.
+- **이유**: 사용자 설계(요청서 R4b 경위) — 스윙이 이 게임의 드리프트이고, 길게 돌아 게이지를 많이 채울지 짧게 넘길지가 경쟁 포인트. 시뮬 봇들은 드리프트·스윙을 쓰지 않아 지문 두 개가 그대로여야 하고, 그대로였다.
+- **검증** (`feature/pole-swing-v2`, 커밋 전 작업 트리, 에디터 6000.3.19f1):
+  - 컴파일: Editor.log `*** Tundra build success (34.61 seconds)`, `error CS` 없음. 서킷 테스트 수정 뒤 `*** Tundra build success (51.19 seconds)`.
+  - EditMode `testcasecount="256" result="Passed" passed="256" failed="0"` (07:11:43Z~07:11:50Z).
+  - 빠른 확인(병합 근거 아님): 코너 스윙·체인·롤백·NetReconcile 4 클래스 `testcasecount="43" result="Passed" passed="43"` (07:12:17Z~07:14:00Z). 찾기 결과: ① "rope tweak on ticks 7706-7707, chain presses on ticks 7819 and 7878: on tick 7879 the server's repeated press fires a second slingshot and finishes 0.00073 m past the line, the client's own controls leave it 0.03057 m short (search 1.9 s)" ② "rope tweak on ticks 7666-7667, chain press on tick 7922: … 0.01613 m short … 0.00194 m past (search 0.8 s)" ③ "the server missed tick 7890 … chain press on tick 7924 … own run stays 0.05850 m short …, the server's repeated controls 0.01608 m short, … corrected … 0.00200 m past (search 0.2 s)", 지연 37 틱. 코너 스윙 "rope 33.09 m, hook speed 10.00 m/s, speed 10.00..10.00 m/s, rope error 0.000 m, … swung 63.8 m, gauge +1.823". 롤백 "sling@10, swing@673, rope@682, carry@1233 replay identically".
+  - `tools/select-tests.ps1`(커밋 전 작업 트리 포함): 전체 + "이 브랜치는 Long 도", "병합에 Run Device Input Tests 를 1회".
+  - `Run PlayMode Tests` 1회차 `testcasecount="145" result="Failed(Child)" passed="141" failed="1" skipped="3"` (07:14:58Z~07:21:29Z): `Scene_CornerPoles_StandOnEveryArcCenter_AndTheOneInReachIsOffered` — "On the start line both poles are out of reach. S 0.01, D 0.00, … Expected: False But was: True" (`ChainRushCircuitTests.cs:262`). 원인은 위 서킷 봉 표시 단언(95° 규칙의 결과), 사용자 결정 뒤 단언을 바꿨다.
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4" failed="0"` (07:22:23Z~07:25:39Z), 절차 지문 `0xE81912109A2EB020` 그대로. 1회차 게이트와 서킷 테스트 수정 사이에 돌렸다 — 그 뒤 바뀐 것은 `ChainRushCircuitTests.cs` 뿐(Long 묶음 아님, 런타임 아님).
+  - `Run PlayMode Tests` 2회차 `testcasecount="145" result="Passed" passed="142" failed="0" skipped="3"` (07:31:45Z~07:38:27Z, 402.4초, skipped 3 은 `[Explicit]` 네트워크 레이스). 서킷 지문 `0xF9A914DA3FAA680B` 그대로.
+  - `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3" failed="0"` (07:51:38Z~07:51:53Z, `isApplicationActive=True`, 사용자가 에디터를 앞에 둠).
+- **사용자 서킷 플레이** (2026-10-18): "확인했다. 속도가 여전히 많이 느리다. 또한 a/d로 조향되는 범위가 너무 많다", 이어서 "스윙하는 시간이 너무 길다". 스윙 규칙은 그대로 두고 속력·회전 수치를 M1-T 에서 앞당겨 다룬다(사용자 "추천대로 ㄱㄱ", `feature/tuning-m1`).
+- **확인 못 한 것**: 네트워크 레이스 C 의 `WeaveWindow` 가 순위 역전을 만드는지(M5). 무한 모드도 드리프트가 없어지고 Shift 스윙이 됐다(동결, 게이트의 무한 모드 테스트는 통과).
+- **버린 대안**: 끝 보정 4개를 `[Ignore]` 로 미루기 — 끝 보정이 게이트에서 빠진 채 병합된다. 조향을 지레로 — 한 틱 효과가 0.3 mm 이하라 찾을 수 없다. 테스트 전용 감속 입력 — 게임에 없는 기능을 테스트 때문에 넣는 것. 봉 범위를 89° 로 — 원호 안에서 걸 수 없게 된다. 지난 봉 제외 규칙 — 범위가 커진다(사용자는 규칙 그대로를 골랐다).
+
 ## 2026-10-18 · R5 코너 봉 스윙 P2 (표현): 봉 모델은 실행 중에 원호에서 만들고, 줄은 봉 꼭대기를 문다
 
 - **결정 (사용자, 2026-10-18 "진행하자. 권장대로 하겠다"(5-1 ②), 구체 계획에 "진행해라", `docs/NEXT_REQUESTS.md` R5)**:

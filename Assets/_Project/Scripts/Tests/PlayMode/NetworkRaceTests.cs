@@ -314,7 +314,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(o.BOrderRefused, Is.False, "The player client refused an order message. " + o.ClientB);
         }
 
-        // Two different runs: the same bot, but the player client's racer drifts (slower on the ground) early and the editor
+        // Two different runs: the same bot, but the player client's racer weaves (a longer, slower line) early and the editor
         // client's racer later and for longer, so the editor's racer leads first and the other passes it. Both runs are first
         // played offline here; the order the server must reach is what RaceOrder makes of those two runs tick by tick. Then
         // over 100 ms round trip with no jitter (nothing late): both clients are never corrected, the other racer's positions
@@ -323,14 +323,14 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator TwoClients_DifferentRuns_TheOrderSwapsAsTheRunsSay_AndEveryoneAgrees()
         {
             const int ticks = 1000;
-            const int playerDriftFrom = 100, playerDriftTo = 300, editorDriftFrom = 400, editorDriftTo = 800;
+            const int playerWeaveFrom = 100, playerWeaveTo = 300, editorWeaveFrom = 400, editorWeaveTo = 800;
             Outcome o = default;
             List<SimSnapshot> editorRun = null, playerRun = null;
             List<(int Tick, string Places)> expected = null;
             yield return Scenario(7795, ticks, 3, 50, 0, r => o = r, () =>
             {
-                InputLog editorLog = RecordBot(BotTicks, editorDriftFrom, editorDriftTo);
-                InputLog playerLog = RecordBot(BotTicks, playerDriftFrom, playerDriftTo);
+                InputLog editorLog = RecordBot(BotTicks, editorWeaveFrom, editorWeaveTo);
+                InputLog playerLog = RecordBot(BotTicks, playerWeaveFrom, playerWeaveTo);
                 editorRun = Play(editorLog, ticks);
                 playerRun = Play(playerLog, ticks);
                 // Offline the editor's racer is 0. The premise: it leads, then the other passes it.
@@ -817,12 +817,13 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
-        // driftFrom..driftTo: ticks of the run (from inclusive) on which the bot also holds drift; none by default.
-        private InputLog RecordBot(int ticks, int driftFrom = 0, int driftTo = 0)
+        // weaveFrom..weaveTo: ticks of the run (from inclusive) on which the bot's steering is overridden by a weave; none
+        // by default.
+        private InputLog RecordBot(int ticks, int weaveFrom = 0, int weaveTo = 0)
         {
             var log = new InputLog();
             IInputSource bot = new CircuitBot(game, player, grapple, circuit);
-            if (driftTo > driftFrom) bot = new DriftWindow(bot, game, driftFrom, driftTo);
+            if (weaveTo > weaveFrom) bot = new WeaveWindow(bot, game, weaveFrom, weaveTo);
             var recorder = new InputRecorder(bot, log);
             Time.timeScale = 0f;
             game.SetInputSource(recorder);
@@ -832,18 +833,20 @@ namespace ProtoHarness.Tests.PlayMode
             return log;
         }
 
-        // Another source's input with drift held on ticks from..to (from inclusive) of the run. Drift slows a grounded
-        // runner (RunnerMotor driftSpeedScale), so two runs that drift on different ticks gain and lose ground on each other.
-        private sealed class DriftWindow : IInputSource
+        // Another source's input with the steering replaced by a weave (full right, then full left, WeavePeriod ticks each)
+        // on ticks from..to (from inclusive) of the run. Weaving runs a longer line than the bot's, so two runs that weave on
+        // different ticks gain and lose ground on each other. (Until R4b this held drift, which no longer exists.)
+        private sealed class WeaveWindow : IInputSource
         {
+            private const int WeavePeriod = 10;
             private readonly IInputSource inner;
             private readonly ChainRushGame game;
             private readonly int from;
             private readonly int to;
 
-            public DriftWindow(IInputSource inner, ChainRushGame game, int from, int to)
+            public WeaveWindow(IInputSource inner, ChainRushGame game, int from, int to)
             {
-                if (from < 0 || to <= from) throw new ArgumentOutOfRangeException(nameof(to), to, $"DriftWindow: ticks {from}..{to} is not a window.");
+                if (from < 0 || to <= from) throw new ArgumentOutOfRangeException(nameof(to), to, $"WeaveWindow: ticks {from}..{to} is not a window.");
                 this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
                 this.game = game ?? throw new ArgumentNullException(nameof(game));
                 this.from = from;
@@ -857,8 +860,10 @@ namespace ProtoHarness.Tests.PlayMode
             public TickInput Consume()
             {
                 TickInput input = inner.Consume();
-                bool drift = input.Drift || (game.Tick >= from && game.Tick < to);
-                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, drift, input.ChainActionPressed, input.ChainActionHeld);
+                int tick = game.Tick;
+                if (tick < from || tick >= to) return input;
+                float steer = (tick - from) / WeavePeriod % 2 == 0 ? 1f : -1f;
+                return new TickInput(steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, input.SwingHeld, input.ChainActionPressed, input.SwingPressed);
             }
         }
     }

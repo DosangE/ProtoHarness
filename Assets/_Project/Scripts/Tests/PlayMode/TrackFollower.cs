@@ -6,7 +6,7 @@ using UnityEngine;
 namespace ProtoHarness.Tests.PlayMode
 {
     // A test bot that steers toward a centerline: feed-forward for the curve, plus heading and offset
-    // correction. Steering off sends Override instead. Drift and ChainHold are held as set; ChainAction fires once.
+    // correction. Steering off sends Override instead. SwingHold is held as set; SwingPress and ChainAction fire once.
     internal sealed class TrackFollower : IInputSource
     {
         // RunnerMotor defaults (T2a): the feed-forward converts the needed turn rate into input.
@@ -15,10 +15,10 @@ namespace ProtoHarness.Tests.PlayMode
         private readonly RunnerMotor runner;
         public bool Steering = true;
         public float Override;
-        public bool Drift;
         public bool ChainAction;
-        // The chain key held down (a corner pole swing lasts while it is).
-        public bool ChainHold;
+        // The swing key: a press hooks a corner pole in reach, and the swing lasts while it is held.
+        public bool SwingPress;
+        public bool SwingHold;
 
         public TrackFollower(Centerline line, RunnerMotor runner)
         {
@@ -33,7 +33,9 @@ namespace ProtoHarness.Tests.PlayMode
         {
             bool chainAction = ChainAction;
             ChainAction = false;
-            if (!Steering) return new TickInput(Override, false, false, false, Drift, chainAction, ChainHold);
+            bool swingPress = SwingPress;
+            SwingPress = false;
+            if (!Steering) return new TickInput(Override, false, false, false, SwingHold, chainAction, swingPress);
             Vector3 position = runner.transform.position;
             TrackFrame frame = line.Frame(position);
             float offset = line.Project(position).D;
@@ -41,7 +43,7 @@ namespace ProtoHarness.Tests.PlayMode
             float wanted = trackYaw - Mathf.Clamp(offset * 4f, -20f, 20f);
             float feedForward = runner.ForwardSpeed * frame.Curvature * Mathf.Rad2Deg / MaxTurnRate;
             float steer = feedForward + Mathf.DeltaAngle(runner.Heading, wanted) / 20f;
-            return new TickInput(Mathf.Clamp(steer, -1f, 1f), false, false, false, Drift, chainAction, ChainHold);
+            return new TickInput(Mathf.Clamp(steer, -1f, 1f), false, false, false, SwingHold, chainAction, swingPress);
         }
     }
 }

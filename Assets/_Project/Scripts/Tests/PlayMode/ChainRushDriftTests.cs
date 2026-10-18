@@ -13,22 +13,21 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // Drift, the chain gauge and the chain actions (COURSE.md T2c), driven through IInputSource only.
+    // The chain gauge and the chain actions (COURSE.md T2c), driven through IInputSource only. Drift lived here too until
+    // R4b took it out (the swing is the drift now, ChainRushCornerSwingTests); the file kept its name.
     // Open-road checks use a wide visible test road beside the prototype course; the grapple check uses
     // the prototype course's first gap like ChainRushTests.
     public sealed class ChainRushDriftTests
     {
         private sealed class ScriptedInputSource : IInputSource
         {
-            public float Steer;
-            public bool Drift;
             public bool ChainAction;
 
             public void Poll() { }
 
             public TickInput Consume()
             {
-                var input = new TickInput(Steer, false, false, false, Drift, ChainAction);
+                var input = new TickInput(0f, false, false, false, false, ChainAction);
                 ChainAction = false;
                 return input;
             }
@@ -76,34 +75,6 @@ namespace ProtoHarness.Tests.PlayMode
             built.Clear();
             yield return null;
             LogAssert.NoUnexpectedReceived();
-        }
-
-        [UnityTest]
-        public IEnumerator Drift_FullSteer_SlidesFillsGaugeAndRegainsGrip()
-        {
-            Centerline line = OpenRoad();
-            yield return StartOn(line);
-            yield return RunTo(line, 15d);
-            source.Drift = true;
-            source.Steer = 1f;
-            float peakSlip = 0f;
-            float until = Time.time + 1f;
-            while (Time.time < until)
-            {
-                yield return new WaitForFixedUpdate();
-                Assert.That(player.IsDrifting, Is.True);
-                var flat = new Vector3(player.Velocity.x, 0f, player.Velocity.z);
-                if (flat.sqrMagnitude > 1f) peakSlip = Mathf.Max(peakSlip, Vector3.Angle(flat, player.Facing));
-            }
-            float gauge = game.Racer.Gauge;
-            Debug.Log("ChainRush drift: 1 s full steer, peak slip " + peakSlip.ToString("0.0") + " deg, gauge " + gauge.ToString("0.00") + " slots.");
-            Assert.That(peakSlip, Is.GreaterThan(10f), "Drifting at full steer must slide.");
-            Assert.That(gauge, Is.GreaterThan(0.2f), "Sliding must fill the gauge.");
-            source.Drift = false;
-            source.Steer = 0f;
-            yield return new WaitForSeconds(0.3f);
-            Assert.That(Mathf.Abs(player.SideSpeed), Is.LessThan(0.5f), "Releasing drift must restore grip.");
-            Assert.That(game.Racer.Gauge, Is.EqualTo(gauge).Within(1e-4f), "Only drifting fills the gauge.");
         }
 
         [UnityTest]
@@ -169,7 +140,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.ForwardSpeed, Is.GreaterThanOrEqualTo(18f - 1e-3f), "Empowered release throws at 18 m/s or more.");
         }
 
-        // A wide straight road (no guards) so slides and pulls never touch an edge.
+        // A wide straight road (no guards) so pulls never touch an edge.
         private Centerline OpenRoad()
         {
             var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);

@@ -1,6 +1,8 @@
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -177,28 +179,45 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        // Device: left Shift held drifts and fills the gauge; left Ctrl spends a slot (T2c, KartRider keys).
+        // Device: left Shift pressed with a corner pole in reach hooks it, D held with it shortens the rope of a right-hand
+        // corner, letting go of Shift ends the swing; left Ctrl spends a slot (NEXT_REQUESTS.md R4b). On an R30 test road
+        // beside the bench course (as ChainRushCornerSwingTests): straight 30 m, then the arc, its pole in reach from s = 10.1.
         [UnityTest]
         [Category("Device")]
-        public IEnumerator Input_ShiftAndCtrl_DriftsAndFiresChainAction()
+        public IEnumerator Input_ShiftAndCtrl_SwingsOnThePoleAndFiresChainAction()
         {
             Keyboard originalKeyboard = Keyboard.current;
             Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            var built = new List<Object>();
             try
             {
+                var line = new Centerline(new Vector3(300f, 0f, 0f), 0f);
+                line.AppendStraight(30f);
+                line.AppendArc(30f, 90f);
+                line.AppendStraight(40f);
+                TestRoad.Build(line, -5d, line.EndS, 6f, true, built);
+                game.SetTrack(line);
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
                 yield return new WaitForSeconds(0.15f);
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return WaitOutCountdown();
-                yield return new WaitForSeconds(0.35f);
                 Assert.That(game.IsRunning, Is.True);
+                player.ShiftOrigin(line.FrameAt(5d).TransformPoint(new Vector3(0f, 1.2f, 0f)) - player.transform.position);
+                Physics.SyncTransforms();
+                float deadline = Time.time + 4f;
+                while (game.IsRunning && line.Project(player.transform.position).S < 16d && Time.time < deadline) yield return new WaitForFixedUpdate();
+                Assert.That(line.Project(player.transform.position).S, Is.GreaterThanOrEqualTo(16d), "The runner never reached the hook point on the test road.");
+                Assert.That(player.TryFindPole(out _), Is.True, "precondition: the pole is in reach here.");
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift));
+                yield return new WaitForSeconds(0.1f);
+                Assert.That(player.IsSwinging, Is.True, "Pressing left Shift with a pole in reach must hook it.");
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.D));
-                yield return new WaitForSeconds(0.4f);
-                Assert.That(player.IsDrifting, Is.True, "Holding left Shift on the ground must drift.");
-                Assert.That(game.Racer.Gauge, Is.GreaterThan(0f), "Drifting must fill the chain gauge.");
+                yield return new WaitForSeconds(0.2f);
+                Assert.That(player.IsSwinging, Is.True, "The swing lasts while left Shift is held.");
+                Assert.That(game.Racer.SwingRadius, Is.LessThan(game.Racer.SwingHookRadius - 0.5f), "D is the key toward the pole of a right-hand corner: it shortens the rope.");
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return new WaitForSeconds(0.1f);
-                Assert.That(player.IsDrifting, Is.False);
+                Assert.That(player.IsSwinging, Is.False, "Letting go of left Shift ends the swing.");
                 game.Racer.AddGauge(1f);
                 float before = game.Racer.Gauge;
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftCtrl));
@@ -210,6 +229,7 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 InputSystem.RemoveDevice(keyboard);
                 if (originalKeyboard != null) originalKeyboard.MakeCurrent();
+                for (int i = 0; i < built.Count; i++) if (built[i] != null) Object.Destroy(built[i]);
             }
         }
 

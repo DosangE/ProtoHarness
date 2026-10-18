@@ -10,10 +10,10 @@ namespace ProtoHarness.ChainRush.Control
         private const byte Primary = 1;
         private const byte Release = 2;
         private const byte Attack = 4;
-        private const byte Drift = 8;
+        private const byte SwingHeld = 8;
         private const byte ChainAction = 16;
-        private const byte ChainHeld = 32;
-        private const byte Known = Primary | Release | Attack | Drift | ChainAction | ChainHeld;
+        private const byte SwingPressed = 32;
+        private const byte Known = Primary | Release | Attack | SwingHeld | ChainAction | SwingPressed;
 
         public static byte ToFlags(in TickInput input)
         {
@@ -21,9 +21,9 @@ namespace ProtoHarness.ChainRush.Control
             if (input.PrimaryPressed) flags |= Primary;
             if (input.ReleasePressed) flags |= Release;
             if (input.AttackPressed) flags |= Attack;
-            if (input.Drift) flags |= Drift;
+            if (input.SwingHeld) flags |= SwingHeld;
             if (input.ChainActionPressed) flags |= ChainAction;
-            if (input.ChainActionHeld) flags |= ChainHeld;
+            if (input.SwingPressed) flags |= SwingPressed;
             return flags;
         }
 
@@ -31,8 +31,8 @@ namespace ProtoHarness.ChainRush.Control
         public static TickInput FromFlags(float steer, byte flags)
         {
             if ((flags & ~Known) != 0) throw new InvalidDataException($"TickInputCodec: unknown input flags 0x{flags:X2}.");
-            return new TickInput(steer, (flags & Primary) != 0, (flags & Release) != 0, (flags & Attack) != 0, (flags & Drift) != 0,
-                (flags & ChainAction) != 0, (flags & ChainHeld) != 0);
+            return new TickInput(steer, (flags & Primary) != 0, (flags & Release) != 0, (flags & Attack) != 0, (flags & SwingHeld) != 0,
+                (flags & ChainAction) != 0, (flags & SwingPressed) != 0);
         }
     }
 }

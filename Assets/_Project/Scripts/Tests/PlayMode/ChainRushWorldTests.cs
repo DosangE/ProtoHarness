@@ -98,7 +98,8 @@ namespace ProtoHarness.Tests.PlayMode
             StateTrace a = Trace(first, new InputReplay(log));
             Vector3 stand = RunWithAStander(a, BotTicks);
 
-            Assert.That(first.Game.Track.Project(first.Player.transform.position).S, Is.GreaterThan(200d), "The bot must have run past the spot where the other runner stands.");
+            // Race progress, not track S: at 20 m/s (M1-T, 2026-10-18) 1700 ticks are more than a lap and S starts over.
+            Assert.That(first.Game.Circuit.Laps.Progress, Is.GreaterThan(200d), "The bot must have run past the spot where the other runner stands.");
             Assert.That(Vector3.Distance(second.Player.transform.position, stand), Is.LessThan(0.01f), "The other runner was not stepped and must still be where it was put.");
             Assert.That(StateTrace.Compare(solo, a, BotTicks), Is.Null, "A runner standing in another world changed this run: " + StateTrace.Compare(solo, a, BotTicks));
         }

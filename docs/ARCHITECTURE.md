@@ -52,7 +52,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
 | 입력 기록·재생 (P2, 2026-10-08): `InputLog` 가 한 런의 틱별 `TickInput` 을 담고(항목 i = 틱 i + 1 의 입력), `InputRecorder`(`IInputSource` 데코레이터)가 `Consume()` 때 쌓고, `InputReplay` 가 틱마다 하나씩 돌려준다(끝나면 빈 입력, `Finished`). `Clear()` = 새 런(기록은 비우고 재생은 되감는다)이라 `SetInputSource(replay)` + `StartRun()` 이면 처음부터 재생된다. 직렬화·파일 저장은 없다 | `Runtime/ChainRush/Control/InputLog.cs`, `InputRecorder.cs`, `InputReplay.cs` | `TickInput`, `IInputSource` |
 | 롤백 안전성 (P3 준비, 2026-10-08): 서킷 한정 한 틱 스냅샷·복원. `ChainRushGame.CaptureSnapshot()` / `RestoreSnapshot(in SimSnapshot)` 가 틱·`RacerState.Snapshot`(접지 `Grounded` 포함)·러너 위치·`CircuitRace.Snapshot`(`LapCounter.Snapshot`)을 값으로 담고 되돌린다. 무한 모드는 `NotSupportedException`. 한 틱 진입점은 `StepTick(IInputSource)`(`FixedUpdate` 가 부른다). `RunnerMotor` 는 접지를 `Move` 직후 `RacerState.Grounded` 에 복사하고, 매 틱 시작에 컨트롤러를 껐다 켜서(`NormalizeController`) 컨트롤러 내부 위치를 float 위치와 같게 한다 | `Runtime/ChainRush/SimSnapshot.cs`, `RacerState.cs`, `Track/LapCounter.cs`, `Race/CircuitRace.cs`, `ChainRushGame.cs`, `RunnerMotor.cs` | `RacerState`, `LapCounter`, `CircuitRace`, `CharacterController` |
-| 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격, 왼쪽 Shift 봉 스윙(누름 + 유지), 왼쪽 Ctrl 체인 액션(누름)) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
+| 키보드 매핑 (카트라이더식, 마우스 없음 — 2026-10-18: ←/→ 조향, ↑ 주동작, ↑ 뗌·↓ 해제, Space 공격, 왼쪽 Shift 봉 스윙(누름 + 유지), 왼쪽 Ctrl 체인 액션(누름)) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
 | 전방 앵커 선택·줄 길이 제약·해제 부스트. 체인 액션으로 강화되면 빨리 감고 세게 던진다. 슬링샷 당김·봉 스윙 동안 체인 시각물 표시(봉 스윙은 봉의 띠, 무한 모드는 R6 까지 안쪽 난간). 매 프레임 지금 걸 수 있는 봉(`PoleCandidate`, 무한 모드 제외)을 HUD 에 내준다 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
 | 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |
 | 트랙 좌표계: 직선 조각과 수평 원호(`AppendArc`, 곡률 `TrackFrame.Curvature`, 원호 중심 `CurveCenter`)를 이은 중심선, 조각마다 종단 곡선(경사 연속, 높이 포물선). 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축·높이·경사(`TrackFrame`). `ChainRushGame.SetTrack` 으로 교체 가능(유한 모드만). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
@@ -97,14 +97,14 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 무한 씬 만들기 | `ProtoHarness > Chain Rush > Create Endless Scene` (Ctrl+Shift+E). 기존 테스트 씬을 복사한 후 별도 경로에만 저장. 재생성으로 덮어쓰지 않음. |
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |
-| 조작 | A/D 또는 방향키로 진행 방향 틀기(자유 조향, 2026-10-05), 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, 왼쪽 Shift 코너 봉 스윙(유지 동안, 스윙 중 A/D 는 줄 길이, 게이지 충전 — R4b 부터 드리프트 대신), 왼쪽 Ctrl 체인 액션(슬링샷 / 그래플 중 강화), R 재시작, Esc 일시정지 |
-| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device`·`Sweep`·`Long` 카테고리 제외) / `Run Long Tests` / `Run Device Input Tests` (가상 키보드·마우스 테스트만) / `Run Course Sweep` |
+| 조작 | ←/→ 로 진행 방향 틀기(자유 조향, 2026-10-05; 2026-10-18 부터 방향키만), ↑ 지상 점프 / 공중에서 다시 ↑ 그래플, ↑ 유지 스윙 / ↑ 뗌·↓ 해제, Space 공격, 왼쪽 Shift 코너 봉 스윙(유지 동안, 스윙 중 ←/→ 는 줄 길이, 게이지 충전 — R4b 부터 드리프트 대신), 왼쪽 Ctrl 체인 액션(슬링샷 / 그래플 중 강화), R 재시작, Esc 일시정지 |
+| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device`·`Sweep`·`Long` 카테고리 제외) / `Run Long Tests` / `Run Device Input Tests` (가상 키보드 테스트만) / `Run Course Sweep` |
 | 테스트 결과 | Unity 프로세스의 `Path.GetTempPath()` 아래 `ChainRush-PlayMode-results.xml` (EditMode 결과도 같은 파일에 덮어쓴다). 경로는 머신마다 다르므로 실행할 때 `Unity_RunCommand` 로 `Path.GetTempPath()` 를 읽어 확인한다 |
 
 코스: 9개 플랫폼, 8개 낭떠러지와 앵커, 결승 z=496. 노란 점프선은 각 가장자리 4m 앞이다.
 첫 점프는 z=44, 첫 앵커는 (0, 10, 56), 첫 착지 플랫폼은 z=64에서 시작한다.
 첫 공격 표적은 (0, 1.1, 18)에 있으며 이후 표적·위험물은 좌우로 배치된다.
-PlayMode 테스트는 장면 로드, 전진, 점프/연결/제약/해제, 사거리 실패, 피격 무적, 낙하 후 재시작과 표적 복구, 일시정지, 자동 조작으로 전체 코스 완주를 검증한다. 가상 Keyboard/Mouse의 Input System 이벤트로 Enter·A/D·좌클릭·놓기·R·Space도 검증하고 장치를 복구한다.
+PlayMode 테스트는 장면 로드, 전진, 점프/연결/제약/해제, 사거리 실패, 피격 무적, 낙하 후 재시작과 표적 복구, 일시정지, 자동 조작으로 전체 코스 완주를 검증한다. 가상 Keyboard 의 Input System 이벤트로 Enter·←/→·↑·↑ 뗌·R·Space·Shift·Ctrl 도 검증하고 장치를 복구한다.
 시각 검증 캡처는 Unity 프로세스의 임시 폴더에 `ChainRush-ready.png`, `ChainRush-running.png`, `ChainRush-grapple.png`로 저장한다.
 HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 내 합성 AudioClip을 사용한다. 정식 아트·음원과 빌드/배포는 포함하지 않는다.
 

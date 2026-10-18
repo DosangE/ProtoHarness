@@ -111348,36 +111348,39 @@ MonoBehaviour:
   controller: {fileID: 1925527728}
   game: {fileID: 2105445612}
   grapple: {fileID: 1925527726}
-  runSpeed: 10
+  runSpeed: 20
   jumpSpeed: 11.5
   gravity: 22
   maxTurnRate: 120
   turnAcceleration: 1200
   airTurnScale: 0.5
+  minTurnRadius: 20
   sideGrip: 60
   airSideGrip: 18
   guardSpeedLoss: 0.15
   slopeSpeedFactor: 1.5
   minSlopeSpeedScale: 0.7
   maxSlopeSpeedScale: 1.3
+  overspeedFalloff: 8
   groundSnapDistance: 0.3
-  driftGrip: 12
-  driftTurnScale: 1.3
-  driftSpeedScale: 0.9
-  slideMetersPerSlot: 6
   slingLead: 18
   slingPullTime: 0.4
   slingPullAcceleration: 45
-  slingTopSpeed: 20
+  slingTopSpeed: 28
   slingTurnRate: 90
-  slingCarryTime: 0.8
-  slingCarrySpeed: 16
-  empoweredReleaseSpeed: 18
-  swingSpeed: 14
-  swingAcceleration: 20
-  swingMaxTime: 2
-  swingExitSpeed: 17
-  swingExitCarryTime: 0.6
+  slingCarryTime: 2
+  slingCarrySpeed: 26
+  empoweredReleaseSpeed: 26
+  poleMaxAngle: 95
+  poleReach: 6
+  ropeRate: 6
+  minRopeLength: 2
+  minSwingSpeedScale: 0.8
+  maxSwingSpeedScale: 1.5
+  swingMetersPerSlot: 35
+  swingCarryFalloff: 3
+  respawnBackoff: 4
+  respawnHoldTime: 1
 --- !u!143 &1925527728
 CharacterController:
   m_ObjectHideFlags: 0

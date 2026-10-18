@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-18 · M1-T 앞당김 1: 서킷 속력 20 m/s, 최소 회전 반지름 20 m, 부스터는 카트라이더 비율, 방향키 조작
+
+- **결정 (사용자, 2026-10-18 R4b 플레이 "속도가 여전히 많이 느리다. 또한 a/d로 조향되는 범위가 너무 많다 … 실제 카트라이더를 참고해봐", 제안에 "추천대로 ㄱㄱ, 씬은 RunCommand로 바꿔라")**:
+  - **카트라이더 참고** (공식 물리 상수는 공개되지 않아 팬 위키 수치): 순간 부스터 169→232 km/h(×1.37), 부스터 최고 약 294 km/h, 드리프트 기술로 210~220 → 310~330 km/h(약 ×1.5). 급커브는 드리프트로 돌고 A/D 만으로는 고속에서 크게 돈다(원칙, 수치 확인 못 함). 그래서 부스터는 기본의 약 1.4배, 회전은 속력에 비례해 둔해지게.
+  - **`RunnerMotor`** (새 필드의 코드 기본값은 지금 동작 그대로라 다른 씬·절차 지문은 안 바뀐다):
+    - `minTurnRadius`(기본 0 = 끔): 회전율 상한 = min(`maxTurnRate`, 수평 속력 / 반지름). 20 m/s 에서 57°/s.
+    - `overspeedFalloff`(기본 30): 지상에서 달리기 목표보다 빠를 때만 쓰는 감속(이전에는 가속과 같은 30).
+    - 그래플 중 속력 16 고정 → `Max(16, runSpeed)`(달리기보다 느려지지 않게).
+  - **`ChainRushCircuit.unity` 의 Runner** (`Unity_RunCommand` + `SerializedObject` + `SaveScene`, 사용자 승인): `runSpeed` 10 → 20, `minTurnRadius` 20, `overspeedFalloff` 8, `slingTopSpeed` 20 → 28, `slingCarrySpeed` 16 → 26, `slingCarryTime` 0.8 → 2, `empoweredReleaseSpeed` 18 → 26. 저장하면서 R4·R4b 때 지운 필드 줄(`driftGrip` 등)이 빠지고 R4b 새 필드 줄이 기본값으로 들어갔다. 씬 diff 는 Runner 블록뿐. 테스트 실행 중 에디터가 저장 여부를 물어 사용자가 "저장 안 함"을 눌렀다(파일은 그대로 확인).
+  - **`FollowCamera`**: 화각이 넓어지는 속력 상한 20 → 30 m/s(부스터 때도 넓어지게).
+  - **조작을 카트라이더식으로, 마우스 없이** (사용자 플레이 "속도감 좋다 다만 우선 wasd에서 방향키로 옮기고", 키 배치 질문에 "카트라이더식, 마우스 없이"): `KeyboardMouseInputSource` — ←/→ 조향(A/D 제거), ↑ 주동작(점프·그래플, 이전 좌클릭), ↑ 뗌·↓ 해제(이전 좌클릭 뗌·우클릭), Space·Shift·Ctrl 그대로. 클래스 이름은 그대로 뒀다(파일 이름을 바꾸면 `.meta` 이동이 따른다). HUD 안내 4줄, Device 테스트 2개(`Input_KeyboardAndMouse_…` → `Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts`, Shift + D → Shift + →)를 같이 바꿨다.
+  - **테스트 사양 변경** (10 m/s 를 전제한 단언, 계획서의 "바뀌는 것마다 보고"):
+    - `ChainRushCircuitTests.Race_BotRunsThreeLaps_…`: 랩 시간 기대 `LapLength / 10` → `/ 20`(실측 27.26·26.92·26.94 초).
+    - `ChainRushReplayTests.Replay_CircuitBotRun_…`: "1700틱은 한 랩이 안 된다(체크포인트 ≥ 2, 완주 0)" → "1700틱은 한 랩과 다음 랩 시작(완주 1)". 틱 수는 다른 1700틱 테스트와 같은 지문이 되도록 그대로 뒀다.
+    - `ChainRushWorldTests.IsolatedWorlds_ARunnerStandingOnThePath_…`: "S > 200" → 랩 진행도 > 200(한 랩을 넘겨 S 가 다시 0부터 — 134.3 이 나왔다).
+    - `NetReconcileTests` 끝 보정 지레(`FindFinishReplayCase`): 부스터 길이 상수 `SlingTicks` 60 → 120(0.4 + 2 초). 결승 원호에서 놓은 뒤 쏜 첫 부스터는 120틱이 차기 전에 결승선에 닿아(원호 안쪽을 끊는다, `ends<F` 만 나옴) 찾을 수 없었다. 그래서 첫 부스터를 **마지막 스윙 중에** 누른다(스윙 중에는 부스터가 속력을 바꾸지 않고 틱만 줄어든다). 봇은 `ShortRelease`, P 창은 `F - SlingTicks - 12 .. + 2`, 줄 조정은 걸린 틱까지로 제한. 찾은 사례 "rope tweak on ticks 3938-3939, chain presses on ticks 3884 and 4003 … 0.00056 m past … 0.02084 m short (search 2.6 s)".
+- **검증** (`feature/pole-swing-v2` 위 커밋 전 작업 트리, 에디터 6000.3.19f1, UTC):
+  - 컴파일 `*** Tundra build success (3.98 seconds)`, 테스트 수정마다 `success`(1.91·1.49·1.47 초), `error CS` 없음.
+  - 빠른 확인(병합 근거 아님) 서킷·리플레이·롤백·NetReconcile 4 클래스: 1회 `testcasecount="41" result="Failed(Child)" passed="38" failed="3"` (11:19:09Z~11:22:05Z) — 위 랩 시간·리플레이·끝 보정. 2회 `passed="40" failed="1"` (11:27:27Z~11:30:48Z) — 끝 보정 "No case fits … ends<F". NetReconcile 만 `testcasecount="23" result="Passed"` (11:33:59Z~11:34:23Z).
+  - EditMode `testcasecount="256" result="Passed" passed="256"` (11:34:41Z~11:34:47Z).
+  - `Run PlayMode Tests` 1회차 `testcasecount="145" result="Failed(Child)" passed="141" failed="1" skipped="3"` (11:35:07Z~11:40:55Z): `ChainRushWorldTests.IsolatedWorlds_ARunnerStandingOnThePath_DoesNotChangeTheOtherRun` — "The bot must have run past the spot where the other runner stands. Expected: greater than 200.0d But was: 134.34889221191406d". 원인 위(S 가 랩을 넘김).
+  - `Run PlayMode Tests` 2회차 `testcasecount="145" result="Passed" passed="142" failed="0" skipped="3"` (11:42:18Z~11:48:09Z, 350.1초). **서킷 지문 `0xF9A914DA3FAA680B` → `0x12DE39829FD6B3DB`**(사양 변경, 새 기준).
+  - `Run Long Tests` `testcasecount="4" result="Passed" passed="4"` (11:48:37Z~11:51:52Z), 절차 지문 `0xE81912109A2EB020` 그대로.
+  - 방향키 변경 뒤: 컴파일 `*** Tundra build success (4.08 seconds)`. `Run PlayMode Tests` 3회차 `testcasecount="145" result="Passed" passed="142" failed="0" skipped="3"` (12:19:12Z~12:25:02Z, 349.7초), 서킷 지문 `0x12DE39829FD6B3DB` 그대로. `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3" failed="0"` (12:26:17Z~12:26:32Z, `isApplicationActive=True`). Long 은 다시 돌리지 않았다 — 방향키 변경은 입력 장치 경로와 HUD 뿐이고 Long 묶음(리플레이·롤백·절차) 은 장치 입력을 쓰지 않는다.
+- **사용자 플레이** (2026-10-18): "속도감 좋다". 같은 때 "qa돌리는 일부 테스트용 맵에서 속도는 10.3으로 낮게 나온다" — 이번 값은 서킷 씬에만 넣었고 다른 씬(테스트 벤치·절차 코스)은 코드 기본값 10 m/s 그대로다(10.3 은 경사 보정으로 보인다, 확인 못 함). 후속은 `docs/NEXT_REQUESTS.md` "M1-T 에 넘긴 플레이 피드백".
+- **확인 못 한 것**: 사용자 서킷 플레이(속력·회전·부스터 체감). **스윙 시간이 길다**(사용자 같은 날): 지금 코너는 R40 반원이라 20 m/s 로 다 돌면 약 6.3초(10 m/s 때 12.6초)이고, 도로 반폭 6 m 라 줄은 34~46 m 안에서만 바꿀 수 있어(더 감으면 안쪽 가드) 줄로 빨라지는 것도 약 1.18배까지다. R4c(R22 90°)면 약 1.7초. 규칙(스윙 시간 상한 등)은 바꾸지 않았다.
+- **버린 대안**: 코드 기본값을 바꾸기 — 무한 모드(동결)·테스트 벤치·절차 지문까지 바뀐다. 카트라이더 km/h 를 그대로 m/s 로(약 55 m/s) — 531 m 랩이 10초가 된다. 리플레이 테스트 틱을 1100 으로 줄여 "한 랩 미만" 유지 — 다른 1700틱 테스트와 같은 지문이라는 연결이 끊긴다.
+
 ## 2026-10-18 · R4b 봉 스윙 v2: Shift 스윙이 곧 드리프트, A/D 로 줄 길이, 줄이 짧을수록 빠르고, 스윙 거리만큼 게이지
 
 - **결정 (사용자 승인, 2026-10-18 "진행해보아라", 규칙은 `docs/NEXT_REQUESTS.md` R4b; 범위 밖 테스트 4개는 같은 날 "A ㄱㄱ", 출발선 봉 단언은 "규칙 그대로, 테스트 갱신")**:

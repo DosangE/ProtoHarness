@@ -56,7 +56,7 @@ namespace ProtoHarness.ChainRush
             Vector3 lookPoint = targetPosition + turn * LookAhead;
             transform.rotation = Quaternion.Slerp(transform.rotation,
                 Quaternion.LookRotation(lookPoint - transform.position), 8f * Time.deltaTime);
-            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 20f) * 0.5f + SwingLook.CameraFieldOfView * swingBlend, Time.deltaTime * 3f);
+            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 30f) * 0.5f + SwingLook.CameraFieldOfView * swingBlend, Time.deltaTime * 3f);
         }
 
         public void ShiftOrigin(Vector3 offset) => transform.position += offset;

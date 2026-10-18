@@ -21,7 +21,7 @@ namespace ProtoHarness.Tests.PlayMode
     public sealed class ChainRushRollbackTests
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
-        private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
+        private const string TestBenchScene = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         private const int BotTicks = 1700;
 
         private ChainRushGame game;
@@ -368,7 +368,8 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load(CircuitScene);
             Assert.Throws<InvalidOperationException>(() => game.CaptureSnapshot(), "A snapshot before the run starts has no tick to hold.");
-            yield return Load(ProceduralScene);
+            // Outside a circuit race: the test bench (the endless course is on hold, 2026-10-18).
+            yield return Load(TestBenchScene);
             Time.timeScale = 0f;
             game.StartRun();
             Assert.Throws<NotSupportedException>(() => game.CaptureSnapshot());

@@ -257,9 +257,11 @@ namespace ProtoHarness.Editor.ChainRush
             return created;
         }
 
-        // Merge gate run (CLAUDE.md §9-2): everything except the Device, Sweep and Long categories.
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device, Sweep, Long, Enemy and Endless categories. Enemy
+        // (enemies, attacks, targets) waits for the item race, Endless (the procedural course) for the endless mode to
+        // reopen (docs/DECISIONS.md 2026-10-18).
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests() => RunPlayMode("!Device", "!Sweep", "!Long");
+        public static void RunTests() => RunPlayMode("!Device", "!Sweep", "!Long", "!Enemy", "!Endless");
 
         // Long tests covered elsewhere. The merge gate adds them when the branch changes core code.
         [MenuItem("ProtoHarness/Chain Rush/Run Long Tests")]

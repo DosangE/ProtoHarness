@@ -143,7 +143,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.Velocity.y, Is.GreaterThan(0f), "The jump impulse must have been applied exactly by this press.");
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Attack_ScriptedPressNearTarget_HitsExactlyOnce()
         {
             game.StartRun();

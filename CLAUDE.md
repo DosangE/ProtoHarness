@@ -287,12 +287,14 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
 
 - **`main`, `dev` 에 직접 커밋하지 않는다.** 작업을 시작할 때 현재 브랜치를 확인하고, `main`/`dev` 이면 멈추고 브랜치부터 만든다. (브랜치 생성은 합의 대상이 아니다.)
 - **병합은 `--no-ff`** 로 기능 단위가 보이게 묶는다. `feature → dev`, `dev → main` 모두 같다.
-- **테스트는 3단이다** (`docs/DECISIONS.md` 2026-10-14 "테스트 3단"). ① 작업 중 빠른 확인은 `tools/select-tests.ps1` 이 바뀐 파일로 고른 테스트를 돌린다. **병합 근거가 아니다.** ② `feature → dev` 는 아래 병합 조건. ③ `dev → main`·태그 전은 아래 마일스톤 조건. 실행 방법은 §4-4.
-- **병합 조건** (②): 컴파일 에러 0 + EditMode 통과 + **PlayMode(`Device`·`Sweep`·`Long` 카테고리 제외) 전체 1회 통과** (§4). CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
+- **테스트는 3단이다** (`docs/DECISIONS.md` 2026-10-14 "테스트 3단", 2026-10-18 "병합은 바뀐 부분만"). ① 작업 중 빠른 확인은 `tools/select-tests.ps1`(기본 범위: 커밋하지 않은 변경까지)이 바뀐 파일로 고른 테스트를 돌린다. ② `feature → dev` 는 아래 병합 조건 — 같은 도구를 **커밋한 범위**로 돌려 고른 테스트다. ③ `dev → main`·태그 전은 아래 마일스톤 조건(게이트 전체). 실행 방법은 §4-4.
+- **병합 조건** (②): 컴파일 에러 0 + EditMode 통과(`Enemy`·`Endless` 제외) + **`tools/select-tests.ps1 -Range dev...HEAD` 가 고른 PlayMode 테스트 1회 통과** (§4). 도구가 **"전체"** 로 판정하면(코어 시뮬·씬·표에 없는 경로 등) 메뉴 `Run PlayMode Tests`(`Device`·`Sweep`·`Long`·`Enemy`·`Endless` 카테고리 제외) 전체 1회다. 병합 보고에는 도구 출력 전체를 붙인다. CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
   - 같은 코드 2회 통과는 마일스톤 조건(③)으로 옮겼다. 2회를 둔 이유였던 간헐 실패(`docs/DECISIONS.md` 2026-10-02 "병합 조건 강화")는 지금 게이트에서 빠진 `Device` 테스트였다.
   - `Long` 카테고리는 다른 곳에서 덮이거나 코어 변경에서만 깨질 장거리 테스트다(`docs/DECISIONS.md` 2026-10-14 "Long 묶음"). `tools/select-tests.ps1 -Range dev...HEAD`(커밋한 것만 본다. 기본 실행은 Unity 가 자동으로 바꾼 커밋 안 한 파일까지 본다)가 **"전체"** 로 판정하면 `Run Long Tests` 도 1회 돌려 결과 XML 값을 병합 보고에 붙이고, 도구 출력 전체도 붙인다. "전체" 가 아니면 도구 출력 전체를 붙이고 `Long` 은 돌리지 않는다.
   - `Device` 카테고리는 가상 키보드·마우스 장치 이벤트에 기대는 테스트다. 전달이 흔들려 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-04 "장치 입력 테스트 분리"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다.
   - 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update` 의 메뉴 키)를 바꾼 브랜치는 `Run Device Input Tests` 를 돌린 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.
+  - `Enemy` 카테고리는 적·공격·표적 테스트다. 적과 아이템은 아이템전을 구상할 때 넣기로 해 보류하고, 병합 조건과 EditMode 실행에서 뺐다 (`docs/DECISIONS.md` 2026-10-18 "적·아이템·무한 모드 테스트 보류"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다. 다시 열 때 이 줄을 지운다.
+  - `Endless` 카테고리는 무한 모드(절차 코스) 테스트다. 서킷 집중(`docs/DECISIONS.md` 2026-10-15 "서킷 집중")으로 무한 모드를 다시 열 때까지 병합 조건과 EditMode 실행에서 뺐다 (같은 2026-10-18 항목). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다. 지금 `Long`·`Sweep` 테스트는 모두 무한 모드라, 이 보류 동안 `Run Long Tests`·`Run Course Sweep` 는 병합·마일스톤 조건에서 돌리지 않는다(도구가 "전체" 로 판정해도). 다시 열 때 이 줄을 지운다.
   - `Sweep` 카테고리는 시드 20개를 도는 장거리 봇 테스트(약 16분)라 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-08 "코스 T3c"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다. 코스 생성·스트리밍·투영(`CourseGenerator`, `CourseTuning`, `ProceduralCourse`, `Centerline`)을 바꾼 브랜치는 `Run Course Sweep` 를 따로 1회 돌려 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.
   - 병합 보고에는 **각 실행**의 결과 XML 값(`testcasecount`, `result`, `passed`/`failed`, 시각)을 모두 적는다. 통과한 실행만 골라 적지 않는다.
   - 한 번이라도 실패하면 실패한 테스트와 원문 메시지를 보고하고, 원인을 설명하지 못하면 병합하지 않는다. 코드를 바꾸지 않고 다시 돌려 통과한 것만으로 실패를 없던 일로 하지 않는다.

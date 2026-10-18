@@ -91,9 +91,16 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Guards_PrototypeDecksAndProceduralRoad_AreGuarded()
+        public IEnumerator Guards_PrototypeDecks_AreGuarded()
         {
             AssertDecksGuarded();
+            yield return null;
+        }
+
+        // The endless mode is on hold while the circuit comes first (2026-10-18).
+        [UnityTest, Category("Endless")]
+        public IEnumerator Guards_ProceduralRoad_AreGuarded()
+        {
             yield return Load(ProceduralScene);
             AssertRoadGuarded();
         }

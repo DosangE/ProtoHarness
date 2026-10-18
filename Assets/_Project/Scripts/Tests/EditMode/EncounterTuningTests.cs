@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace ProtoHarness.Tests.EditMode
 {
+    // Enemy encounters are on hold until the item race is designed (2026-10-18); outside the regular runs.
+    [Category("Enemy")]
     public sealed class EncounterTuningTests
     {
         private EncounterTuning tuning;

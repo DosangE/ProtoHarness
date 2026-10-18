@@ -3,7 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
-using ProtoHarness.ChainRush.Endless;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
@@ -15,19 +15,20 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
+    // On the circuit scene (2026-10-18): the endless mode is on hold, and these check presentation the circuit shares.
     public sealed class ChainRushPresentationTests
     {
         private ChainRushGame game;
         private ChainRushAudio sound;
         private RunnerAnimation animation;
         private RunnerMotor player;
-        private ProceduralCourse course;
+        private CircuitRace circuit;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
 #if UNITY_EDITOR
-            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushProcedural.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushCircuit.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("Presentation tests require the Unity Editor.");
             yield break;
@@ -36,7 +37,7 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 if (root.TryGetComponent(out ChainRushGame g)) { game = g; sound = root.GetComponent<ChainRushAudio>(); }
                 if (root.TryGetComponent(out RunnerMotor p)) { player = p; animation = root.GetComponent<RunnerAnimation>(); }
-                if (root.TryGetComponent(out ProceduralCourse c)) course = c;
+                if (root.TryGetComponent(out CircuitRace c)) circuit = c;
             }
             Assert.That(game.HasPresentation, Is.True);
             Assert.That(sound, Is.Not.Null);
@@ -79,7 +80,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             // Four metres before the edge of a grapple gap, as the old deck test stood: jump, then grab the anchor.
             double gapStart = FindGrappleGap();
-            Assert.That(gapStart, Is.GreaterThan(0d), "No seed below 100 lays a grapple gap in its first 300 m.");
+            Assert.That(gapStart, Is.GreaterThan(0d), "The circuit has no grapple gap with an anchor.");
             TrackFrame frame = game.Track.FrameAt(gapStart - 4d);
             player.ShiftOrigin(frame.TransformPoint(new Vector3(0f, 1.05f, 0f)) - player.transform.position);
             player.FaceTrack();
@@ -87,7 +88,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForFixedUpdate();
             float landed = Time.time + 2f;
             while (!player.IsGrounded && Time.time < landed) yield return new WaitForFixedUpdate();
-            Assert.That(player.IsGrounded, Is.True, "Runner never landed on the procedural road.");
+            Assert.That(player.IsGrounded, Is.True, "Runner never landed on the circuit road.");
             player.PrimaryAction();
             yield return new WaitForSeconds(0.25f);
             Assert.That(player.GetComponent<GrappleController>().TryAttach(), Is.True);
@@ -116,16 +117,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
-        // Seeds 0..99 until a grapple gap shows up in the first 300 m, past S 40; returns its start S. The run is started.
+        // The circuit's grapple gap: the first gap after S 150 (the one before it, on the first straight, is a jump gap with
+        // no anchor; ChainRushCircuitTests does the same). Returns its start S, or 0 without an anchor. The run is started.
         private double FindGrappleGap()
         {
-            for (ulong seed = 0; seed < 100; seed++)
-            {
-                course.SetSeed(seed);
-                game.StartRun();
-                if (course.TryGetNextGap(out double startS, out _, out bool hasAnchor) && hasAnchor && startS > 40d) return startS;
-            }
-            return 0d;
+            game.StartRun();
+            return circuit.TryGetNextGap(150d, out double startS, out _, out bool hasAnchor) && hasAnchor ? startS : 0d;
         }
 
         private static void WritePreview(AudioClip clip, string path)

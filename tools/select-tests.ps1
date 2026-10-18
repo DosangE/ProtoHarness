@@ -1,5 +1,5 @@
 ﻿<#
-  ① 빠른 확인용 PlayMode 테스트 선택기 — ProtoHarness
+  ① 빠른 확인·② 병합용 PlayMode 테스트 선택기 — ProtoHarness
 
   실행:  powershell -ExecutionPolicy Bypass -File tools/select-tests.ps1
          powershell -ExecutionPolicy Bypass -File tools/select-tests.ps1 -Range 75b998d^..75b998d
@@ -8,7 +8,8 @@
   바뀐 파일마다 아래 표의 위에서부터 처음 맞는 줄을 쓰고, 고른 테스트 클래스의 합집합을
   Unity_RunCommand 에 넣을 TestRunnerApi 호출 한 줄로 출력한다. 하나라도 "전체" 면 전체다.
 
-  ① 전용이다. 병합 근거가 아니다 (CLAUDE.md §9-2, docs/RULES/VERIFICATION.md §4-4).
+  ① 은 기본 범위로, ② 병합은 -Range dev...HEAD(커밋한 것만)로 돌린다 (CLAUDE.md §9-2, docs/RULES/VERIFICATION.md §4-4,
+  docs/DECISIONS.md 2026-10-18 "병합은 바뀐 부분만").
   읽기만 하며 아무 파일도 쓰지 않는다. Assets/ 바깥에 있어야 한다(안으로 옮기면 Unity 가 컴파일한다).
 
   표는 2026-10-14 런타임 타입별 참조 grep 으로 정했다(docs/DECISIONS.md 2026-10-14 "테스트 3단").
@@ -53,10 +54,10 @@ $rules = @(
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(\w+)\.cs$';      Own = $true;  Why = '테스트 클래스 파일' }
     @{ Pattern = '^' + $scripts + 'Runtime/Net/';                   Classes = $net; Why = 'ProtoHarness.Net (다른 런타임·에디터 어셈블리가 참조하지 않는다)' }
     @{ Pattern = '^' + $runtime + '(RunnerMotor|GrappleController|ChainRushGame|RacerState|Ticks|SimSnapshot|RunRules|CourseTarget)\.cs$'; All = $true; Why = '코어 시뮬' }
-    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true;  Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계'; Note = '②에서 Run Course Sweep 도 1회 (§9-2)' }
+    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true;  Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Track/(TrackFrame|TrackCoord)\.cs$'; All = $true; Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
     @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
-    @{ Pattern = '^' + $runtime + '(Track/(CourseGenerator|CourseTuning)|Endless/ProceduralCourse)\.cs$'; Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '코스 생성·스트리밍'; Note = '②에서 Run Course Sweep 도 1회 (§9-2)' }
+    @{ Pattern = '^' + $runtime + '(Track/(CourseGenerator|CourseTuning)|Endless/ProceduralCourse)\.cs$'; Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '코스 생성·스트리밍'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
     @{ Pattern = '^' + $runtime + '(Track|Endless)/';               Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '절차 노면·무한 코스' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests') + $net; Why = '서킷 레이스·격리 월드' }
     @{ Pattern = '^' + $runtime + 'Combat/';                        Classes = @('ChainRushCombatTests', 'ChainRushProceduralTests', 'ChainRushReplayTests'); Why = '적 조우' }
@@ -138,12 +139,12 @@ foreach ($n in ($notes | Sort-Object -Unique)) { Write-Output "참고: $n" }
 
 # 4. 결과
 Write-Output ''
-Write-Output '① 빠른 확인 (병합 근거가 아니다):'
-Write-Output '  EditMode: 전체'
+Write-Output '고른 테스트 (① 빠른 확인 / ② 병합은 -Range dev...HEAD 로):'
+Write-Output '  EditMode: 전체 (Enemy·Endless 카테고리 제외: categoryNames = { "!Enemy", "!Endless" })'
 
 if ($all) {
     Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests + Run Long Tests'
-    Write-Output '② 병합: 이 브랜치는 Long 도 돈다 (Run Long Tests, CLAUDE.md §9-2)'
+    Write-Output '② 병합: 이 브랜치는 Long 도 돈다 (Run Long Tests, CLAUDE.md §9-2). 단 무한 모드 보류 중에는 Long 이 모두 Endless 라 돌리지 않는다'
     exit 0
 }
 if (-not $touchesAssets) {
@@ -163,4 +164,4 @@ $quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
 $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (테스트·Net 만 바뀌어 지문 없음)' }
 Write-Output "  PlayMode: 클래스 $($classes.Count)개$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
-Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep" } }));')
+Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless" } }));')

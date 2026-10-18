@@ -81,7 +81,7 @@ namespace ProtoHarness.Tests.PlayMode
         // ---- procedural course ---------------------------------------------------------------------
 
         // Long (CLAUDE.md §9-2): out of the merge gate unless the branch changes core code.
-        [UnityTest, Category("Long"), Timeout(300000)]
+        [UnityTest, Category("Long"), Category("Endless"), Timeout(300000)]
         public IEnumerator Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit()
         {
             yield return Load(ProceduralScene);

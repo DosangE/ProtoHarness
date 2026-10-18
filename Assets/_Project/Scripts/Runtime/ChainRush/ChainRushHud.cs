@@ -176,8 +176,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
             DrawGauge(height);
             string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  좌클릭으로 앵커 잡기";
-            if (player.IsDrifting) status = "DRIFT  /  미끄러지며 체인 게이지 충전";
-            if (player.IsSwinging) status = "SWING  /  CTRL 을 떼면 튀어 나간다";
+            if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
             Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);
             GUI.Label(new Rect(width / 2f - 220, height - 145, 450, 28), status, body);
@@ -207,8 +206,8 @@ namespace ProtoHarness.ChainRush
             }
         }
 
-        // The corner pole Ctrl would hook now, bracketed at the band the chain bites, like an anchor: mint with a gauge
-        // slot to spend, muted without one (the press would do nothing).
+        // The corner pole Shift would hook now, bracketed at the band the chain bites, like an anchor. A hook costs nothing,
+        // so it is always mint.
         private void DrawPoleCandidate(float scale)
         {
             Vector3 top = SwingLook.PoleBite(grapple.PoleCandidate);
@@ -216,15 +215,15 @@ namespace ProtoHarness.ChainRush
             if (screen.z <= 0f) return;
             float x = screen.x / scale;
             float y = (Screen.height - screen.y) / scale;
-            Color color = player.Gauge >= 1f ? Mint : Muted;
+            Color color = Mint;
             Block(new Rect(x - 26, y - 26, 15, 3), color);
             Block(new Rect(x - 26, y - 26, 3, 15), color);
             Block(new Rect(x + 11, y + 23, 15, 3), color);
             Block(new Rect(x + 23, y + 11, 3, 15), color);
-            GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / CTRL  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
+            GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / SHIFT  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
         }
 
-        // Chain gauge under the speed box: one bar per slot, filled by drifting, spent by Ctrl.
+        // Chain gauge under the speed box: one bar per slot, filled by swinging, spent by Ctrl.
         private void DrawGauge(float height)
         {
             Block(new Rect(32, height - 108, 168, 46), Ink);

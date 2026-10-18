@@ -228,8 +228,8 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // R5: a pole model stands on every arc's center (the simulation's pole), tall and thick enough to see, its band
-        // where the chain bites, with no collider; on the straight before an arc the HUD is offered that pole, and on the
-        // start line none.
+        // where the chain bites, with no collider; on the straight before an arc the HUD is offered that pole, mid-straight
+        // none, and on the start line (the last arc's end) the last arc's.
         [UnityTest]
         public IEnumerator Scene_CornerPoles_StandOnEveryArcCenter_AndTheOneInReachIsOffered()
         {
@@ -259,10 +259,20 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             yield return LandOnRoad();
             yield return null;
-            Assert.That(grapple.HasPoleCandidate, Is.False, "On the start line both poles are out of reach. " + State());
+            // The start line is the last arc's end: its pole is 90 degrees aside and 40 m away, in reach since R4b (95 degrees,
+            // 40 + 6 m; until R4b, 75 degrees, it was not). It stays in reach for about 3.5 m past the arc (R4b, 2026-10-18:
+            // kept, to be judged in play at M1-T).
+            Assert.That(grapple.HasPoleCandidate, Is.True, "On the start line the last arc's pole is still in reach. " + State());
+            Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[feet.Count - 1]), Is.LessThan(1e-3f), "The candidate is the pole of the arc just left.");
+
+            // Mid-straight both poles are out of reach: the last arc's 72 m behind-aside, the first arc's 80 m ahead.
+            Teleport(60d);
+            yield return LandOnRoad();
+            yield return null;
+            Assert.That(grapple.HasPoleCandidate, Is.False, "Mid-straight both poles are out of reach. " + State());
 
             // The first arc (R40) starts at S 140, after the jump gap (S 119 to 125). From S 127, 13 m before the arc, the
-            // pole is 72 degrees aside and 42.1 m away: in reach (75 degrees, 40 + 5 m) while the runner gathers speed.
+            // pole is 72 degrees aside and 42.1 m away: in reach (95 degrees, 40 + 6 m) while the runner gathers speed.
             Teleport(127d);
             yield return LandOnRoad();
             yield return null;

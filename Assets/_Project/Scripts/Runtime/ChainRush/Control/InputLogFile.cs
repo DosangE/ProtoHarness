@@ -10,8 +10,9 @@ namespace ProtoHarness.ChainRush.Control
     public static class InputLogFile
     {
         private static readonly byte[] Magic = { (byte)'P', (byte)'H', (byte)'I', (byte)'L' };
-        // 2: the buttons byte gained the held chain key (TickInputCodec). Version 1 files are refused, not guessed at.
-        private const int Version = 2;
+        // 2: the buttons byte gained the held chain key (TickInputCodec). 3: drift became the held swing key and the held
+        // chain key the swing press (R4b). Older files are refused, not guessed at.
+        private const int Version = 3;
         private const int HeaderBytes = 12;
         private const int TickBytes = 5;
 

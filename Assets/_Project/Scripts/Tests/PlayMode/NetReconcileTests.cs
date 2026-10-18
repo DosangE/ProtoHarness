@@ -1056,8 +1056,9 @@ namespace ProtoHarness.Tests.PlayMode
         // clock, so its outcome does not depend on the machine; the test's Timeout guards the wall clock.
 
         // How far before each arc's end PoleSwingBot lets go: far enough for a slingshot pressed shortly before the finish
-        // line to find the runner off the pole, for the searches that fire one there.
-        private const float LongRelease = 40f;
+        // line to find the runner off the pole, for the searches that fire one there. Less than an arc (R4c 2026-10-18:
+        // R22 quarter turns, 34.6 m), or the bot never hooks a pole.
+        private const float LongRelease = 12f;
         // Just before the end: a swing that lasts until shortly before the finish line, for the searches that need the server's
         // run to differ from the client's within a few hundred ticks of it, or a slingshot to run on through the swing.
         private const float ShortRelease = 4f;
@@ -1202,15 +1203,40 @@ namespace ProtoHarness.Tests.PlayMode
             return racer.SlingTicks == 0 && racer.Gauge >= 1f && (swingAllowed || racer.SwingTicks == 0);
         }
 
+        // The client's controls for FindFinishReplayCase: `tuned` up to P - 1, then PoleSwingBot (ShortRelease) run on from
+        // `state` (the state before P) so that it hooks the last pole wherever the slingshot has taken the runner, with the
+        // chain pressed on P and on F - 1 and, while swinging, the rope tweak (toward the pole) on tweak - 1 and tweak
+        // (0: none); recorded until 64 ticks past F. beforeF is the state F starts from, or null when the run ended first.
+        private InputLog SwingBotFrom(byte[] state, InputLog tuned, int p, int f, int tweak, out byte[] beforeF)
+        {
+            var client = new InputLog();
+            for (int t = 1; t < p; t++) client.Add(tuned[t - 1]);
+            var bot = new PoleSwingBot(game, player, grapple, circuit, ShortRelease);
+            game.RestoreSnapshot(SimSnapshotCodec.Decode(state));
+            beforeF = null;
+            while (game.IsRunning && game.Tick < f + 64)
+            {
+                int t = game.Tick + 1;
+                if (t == f) beforeF = SimSnapshotCodec.Encode(game.CaptureSnapshot());
+                TickInput x = bot.Consume();
+                if (tweak > 0 && (t == tweak - 1 || t == tweak) && game.Racer.SwingTicks > 0)
+                    x = WithSteer(x, PoleSide(SimSnapshotCodec.Encode(game.CaptureSnapshot())));
+                if (t == p || t == f - 1) x = WithChainPress(x);
+                client.Add(x);
+                StepOn(x);
+            }
+            return client;
+        }
+
         // A finish the client has to be corrected to: the server finishes on tick F on the controls of the tick before (it
         // missed F's), the client's own controls for F keep its run going. The lever: the client pressed the chain action on
         // P = F - SlingTicks, which fired a slingshot ending on F - 1, and again on F - 1, which did nothing (the slingshot was
-        // still running); the server repeats that press on F, where it fires a second slingshot. P falls in the last swing
-        // (ShortRelease: it lasts until shortly before the finish), where the first slingshot only runs its ticks down: a
-        // slingshot fired off the pole would carry the runner to the line in fewer than SlingTicks ticks. With the rope
-        // tweaked on Q - 1 and Q of the last swing (none first, then Q = R - 1, R - 2, .. back to the hook, for R the
-        // release), and P tried from early to late, the client's own F must keep its run going while the server's
-        // repeated press finishes it on F.
+        // still running); the server repeats that press on F, where it fires a second slingshot. A slingshot (SlingTicks)
+        // lasts longer than the last swing (an R22 quarter turn), so P comes before the last corner and the slingshot moves
+        // where the runner gets there: from P on, the client's controls are PoleSwingBot's run on from that state
+        // (SwingBotFrom), which hooks the pole wherever the runner is. With the rope tweaked on Q - 1 and Q of the last
+        // swing (none first, then Q = R - 1, R - 2, .. back to the hook, for R the release), and P tried from early to
+        // late, the client's own F must keep its run going while the server's repeated press finishes it on F.
         // Deterministic: Q, then P in order; the first fit is taken. Returns the client's log; F and a description come out.
         // Fails with every case tried when none fits.
         private InputLog FindFinishReplayCase(InputLog log, int recordedFinish, out int endTick, out string found)
@@ -1238,9 +1264,9 @@ namespace ProtoHarness.Tests.PlayMode
                     continue;
                 }
                 tried.Append($" Q{tweak}:fin@{tunedFinish}[");
-                // The first slingshot carries the runner only for the few ticks between the release and F, so F lands within a
-                // few ticks of the finish without it.
-                int firstP = tunedFinish - SlingTicks - 12, lastP = tunedFinish - SlingTicks + 2;
+                // The first slingshot gains the runner up to some 60 ticks when it fires before the last corner, nothing when it
+                // runs out inside the last swing.
+                int firstP = tunedFinish - SlingTicks - 60, lastP = tunedFinish - SlingTicks + 2;
                 // The tuned run's state before each P in turn, one tick on from the last. Before the tweak it is the recording's.
                 byte[] beforeP = firstP - 1 <= startTick ? states[firstP - 1] : StateAfter(tunedStart, tuned, firstP - 1);
                 for (int p = firstP; p <= lastP && beforeP != null; p++)
@@ -1256,8 +1282,7 @@ namespace ProtoHarness.Tests.PlayMode
                         tried.Append($" P{p}:not-ready");
                         continue;
                     }
-                    InputLog client = Edited(tuned, length, (t, x) => t == press || t == f - 1 ? WithChainPress(x) : x);
-                    byte[] beforeF = StateAfter(here, client, f - 1);
+                    InputLog client = SwingBotFrom(here, tuned, press, f, q == 0 ? 0 : tweak, out byte[] beforeF);
                     if (beforeF == null)
                     {
                         tried.Append($" P{p}:ends<{f}");

@@ -85,7 +85,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Twins on the same spot cannot touch each other, so the test above shows the worlds run together, not that they
-        // are apart. This one stands the second runner on the first one's path, 150 m down the track: the bot runs into it.
+        // are apart. This one stands the second runner on the first one's path, 100 m down the track: the bot runs into it.
         // In an isolated copy the first run must still be its solo run.
         [UnityTest, Timeout(180000)]
         public IEnumerator IsolatedWorlds_ARunnerStandingOnThePath_DoesNotChangeTheOtherRun()
@@ -260,7 +260,7 @@ namespace ProtoHarness.Tests.PlayMode
             return trace;
         }
 
-        // Runs the first world on `a` while the second world's runner is put on the track 150 m from the start and not
+        // Runs the first world on `a` while the second world's runner is put on the track 100 m from the start and not
         // stepped, so it stays there (a runner given idle controls would run on by itself). Returns where it was put.
         private Vector3 RunWithAStander(StateTrace a, int ticks)
         {
@@ -268,7 +268,9 @@ namespace ProtoHarness.Tests.PlayMode
             first.Game.SetInputSource(a);
             first.Game.StartRun();
             second.Game.StartRun();
-            Vector3 stand = second.Game.Track.FrameAt(150d).Position + Vector3.up * 0.5f;
+            // On straight A, flat, past the hill and before the jump gap (R4c 2026-10-18: S 150 is now in the first corner,
+            // where the bot cuts inside the centerline and runs past).
+            Vector3 stand = second.Game.Track.FrameAt(100d).Position + Vector3.up * 0.5f;
             second.Player.SetPosition(stand);
             for (int t = 0; t < ticks; t++) first.Game.StepTick(a);
             return stand;

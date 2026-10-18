@@ -54,8 +54,18 @@ MonoBehaviour:
     endGrade: 0
     gap: 0
   - length: 0
-    radius: 40
-    degrees: 180
+    radius: 22
+    degrees: 90
+    endGrade: 0
+    gap: 0
+  - length: 60
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    gap: 0
+  - length: 0
+    radius: 22
+    degrees: 90
     endGrade: 0
     gap: 0
   - length: 30
@@ -84,12 +94,22 @@ MonoBehaviour:
     endGrade: 0
     gap: 0
   - length: 0
-    radius: 40
-    degrees: 180
+    radius: 22
+    degrees: 90
+    endGrade: 0
+    gap: 0
+  - length: 60
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    gap: 0
+  - length: 0
+    radius: 22
+    degrees: 90
     endGrade: 0
     gap: 0
   anchors:
-  - s: 318.66
+  - s: 322.12
     offset: 0
     height: 10
   checkpointFractions:

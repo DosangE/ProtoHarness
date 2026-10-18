@@ -352,7 +352,7 @@ namespace ProtoHarness.Tests.PlayMode
             while (game.IsCountingDown && Time.realtimeSinceStartup < deadline) yield return null;
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Restart_AfterAttackAndFall_ResetsCourseAndState()
         {
             game.StartRun();

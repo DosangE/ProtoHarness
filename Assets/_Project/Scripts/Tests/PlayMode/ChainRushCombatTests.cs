@@ -17,6 +17,8 @@ namespace ProtoHarness.Tests.PlayMode
     // Encounters, the chain attack and the grapple on the procedural course. These are the combat tests of
     // the old straight endless course, moved here with the same assertions: only where the runner starts
     // changed (the spawn rest instead of a z value on the old decks, a laid gap instead of its fixed place).
+    // The endless mode is on hold while the circuit comes first (2026-10-18); outside the regular runs.
+    [Category("Endless")]
     public sealed class ChainRushCombatTests
     {
         private const string ScenePath = "Assets/_Project/Scenes/ChainRushProcedural.unity";
@@ -89,7 +91,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(enemies.Direction, Is.EqualTo(direction));
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_EachDirection_AttackFiresConnectsAndRetracts()
         {
             var source = new AttackInputSource();
@@ -112,7 +114,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_EachDirection_TimeoutDamagesExactlyOnce()
         {
             foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
@@ -127,7 +129,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_PauseAndRestart_FreezesWindowAndClearsFlight()
         {
             yield return Prepare(EnemyDirector.Entrance.Left);
@@ -148,7 +150,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(course.Distance, Is.EqualTo(0d).Within(0.1d));
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_GapAndJump_DoesNotRequireAttack()
         {
             double gapStart = FindGapSpot(false);

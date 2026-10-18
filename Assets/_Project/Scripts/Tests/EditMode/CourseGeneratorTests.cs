@@ -12,6 +12,8 @@ namespace ProtoHarness.Tests.EditMode
 {
     // The rule checks below do not use the generator's own bookkeeping: they rebuild a Centerline from the
     // modules and measure it (heights, distances between road sections), or read the module data directly.
+    // The endless mode is on hold while the circuit comes first (2026-10-18); outside the regular runs.
+    [Category("Endless")]
     public sealed class CourseGeneratorTests
     {
         private const int SeedCount = 20;

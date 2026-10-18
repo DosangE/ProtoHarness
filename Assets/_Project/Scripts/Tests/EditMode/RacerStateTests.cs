@@ -69,7 +69,7 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(racer.IsDown, Is.True);
         }
 
-        [Test]
+        [Test, Category("Enemy")]
         public void BeginAttackCooldown_Started_BlocksAttackUntilCooldownEnds()
         {
             racer.BeginAttackCooldown(5);
@@ -77,14 +77,14 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(racer.CanAttack(5 + rules.AttackCooldownTicks), Is.True);
         }
 
-        [Test]
+        [Test, Category("Enemy")]
         public void BeginAttackCooldown_Alone_DoesNotShowAttack()
         {
             racer.BeginAttackCooldown(5);
             Assert.That(racer.IsAttackShown(5), Is.False);
         }
 
-        [Test]
+        [Test, Category("Enemy")]
         public void ShowAttack_Shown_CountsDownToZero()
         {
             racer.ShowAttack(20);

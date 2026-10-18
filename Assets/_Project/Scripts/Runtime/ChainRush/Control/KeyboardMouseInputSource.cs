@@ -2,8 +2,9 @@ using UnityEngine.InputSystem;
 
 namespace ProtoHarness.ChainRush.Control
 {
-    // Desktop mapping, KartRider style with no mouse (2026-10-18): left/right arrows steer, up arrow is the primary
-    // action (jump or grapple), letting go of up or pressing down releases the chain, Space attacks. Left Shift pressed
+    // Desktop mapping, KartRider style with no mouse (2026-10-18): left/right arrows steer, left Alt is the primary
+    // action (jump or grapple), letting go of left Alt or pressing down releases the chain, Space attacks. (Right Alt is
+    // the Korean/English key on Korean keyboards, so it is not used.) Left Shift pressed
     // near a corner pole hooks it and held keeps the swing (the drift of this game, NEXT_REQUESTS.md R4b); left Ctrl
     // fires the chain action.
     public sealed class KeyboardMouseInputSource : IInputSource
@@ -24,8 +25,8 @@ namespace ProtoHarness.ChainRush.Control
             {
                 if (keyboard.leftArrowKey.isPressed) steer -= 1f;
                 if (keyboard.rightArrowKey.isPressed) steer += 1f;
-                primary = keyboard.upArrowKey.wasPressedThisFrame;
-                release = keyboard.upArrowKey.wasReleasedThisFrame || keyboard.downArrowKey.wasPressedThisFrame;
+                primary = keyboard.leftAltKey.wasPressedThisFrame;
+                release = keyboard.leftAltKey.wasReleasedThisFrame || keyboard.downArrowKey.wasPressedThisFrame;
                 attack = keyboard.spaceKey.wasPressedThisFrame;
                 swingHeld = keyboard.leftShiftKey.isPressed;
                 swingPressed = keyboard.leftShiftKey.wasPressedThisFrame;

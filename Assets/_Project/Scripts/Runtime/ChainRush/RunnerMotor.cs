@@ -21,11 +21,18 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float turnAcceleration = 1200f;
         [SerializeField] private float airTurnScale = 0.5f;
         [SerializeField] private float minTurnRadius = 0f;
+        // Turning costs speed on the ground (KartRider style): the run target drops by turnSpeedLoss times how hard the
+        // runner turns (its turn rate over the turn limit). 0 turns it off.
+        [SerializeField] private float turnSpeedLoss = 0f;
+        // How fast a grounded runner below its run target speeds up to it, in m/s a second.
+        [SerializeField] private float runAcceleration = 30f;
         // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
         [SerializeField] private float sideGrip = 60f;
         [SerializeField] private float airSideGrip = 18f;
-        // Share of speed lost in a head-on guard hit; glancing hits lose proportionally less.
+        // Share of speed lost in a head-on guard hit; glancing hits lose proportionally less. Every tick in contact with a
+        // guard also scrapes off guardScrapeDecel (m/s a second) of speed; 0 turns that off.
         [SerializeField] private float guardSpeedLoss = 0.15f;
+        [SerializeField] private float guardScrapeDecel = 0f;
         // Grounded run speed scales by 1 - factor * grade, clamped: uphill slows, downhill speeds up.
         [SerializeField] private float slopeSpeedFactor = 1.5f;
         [SerializeField] private float minSlopeSpeedScale = 0.7f;
@@ -107,8 +114,10 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
             if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f || minTurnRadius < 0f)
                 Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1], the turn radius not negative.", this);
-            if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f)
-                Debug.LogError("RunnerMotor: grips cannot be negative, guard speed loss within [0, 1].", this);
+            if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f)
+                Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive.", this);
+            if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f || guardScrapeDecel < 0f)
+                Debug.LogError("RunnerMotor: grips and the guard scrape cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
             if (groundSnapDistance < 0f || overspeedFalloff <= 0f)
@@ -208,6 +217,8 @@ namespace ProtoHarness.ChainRush
             float runTarget = grounded
                 ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
                 : runSpeed;
+            if (turnSpeedLoss > 0f && grounded && !swinging && turnLimit > 0f)
+                runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(turnRate) / turnLimit);
             // The speed a swing let go with falls off slowly; once it is down to the running speed it is gone.
             ref float swingCarry = ref racer.SwingCarrySpeed;
             if (swingCarry > 0f)
@@ -221,7 +232,7 @@ namespace ProtoHarness.ChainRush
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = pulling ? slingPullAcceleration
                 : !grounded ? 5f
-                : currentForward > runTarget ? overspeedFalloff : 30f;
+                : currentForward > runTarget ? overspeedFalloff : runAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
             // A grapple reels at 16 m/s, or at running speed when that is faster.
@@ -241,6 +252,7 @@ namespace ProtoHarness.ChainRush
                 // A swing that carries the runner into a guard snaps there, without the carry.
                 swingTicks = 0;
                 GlanceOffGuard(ref velocity, ref heading, frame.Forward);
+                if (guardScrapeDecel > 0f) ScrapeAlongGuard(ref velocity, dt);
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
@@ -448,6 +460,16 @@ namespace ProtoHarness.ChainRush
             Vector3 along = Vector3.Cross(Vector3.up, guardNormal);
             if (Vector3.Dot(along, trackForward) < 0f) along = -along;
             heading = Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg;
+        }
+
+        // Rubbing along a guard: the level speed drops by guardScrapeDecel for this tick of contact.
+        private void ScrapeAlongGuard(ref Vector3 velocity, float dt)
+        {
+            var flat = new Vector3(velocity.x, 0f, velocity.z);
+            float speed = flat.magnitude;
+            if (speed <= 0f) return;
+            flat *= Mathf.Max(0f, speed - guardScrapeDecel * dt) / speed;
+            velocity = new Vector3(flat.x, velocity.y, flat.z);
         }
 
         private static Vector3 FacingOf(float heading)

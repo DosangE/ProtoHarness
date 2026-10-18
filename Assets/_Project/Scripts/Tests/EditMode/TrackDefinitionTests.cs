@@ -9,7 +9,8 @@ namespace ProtoHarness.Tests.EditMode
 {
     public sealed class TrackDefinitionTests
     {
-        private static readonly double StadiumLap = 2d * 140d + 2d * Math.PI * 40d;
+        // R4c (2026-10-18): a square circuit, straights 140 / 60 / 140 / 60 m and four R22 quarter turns.
+        private static readonly double StadiumLap = 2d * 140d + 2d * 60d + 2d * Math.PI * 22d;
 
         private TrackDefinition definition;
 
@@ -35,10 +36,12 @@ namespace ProtoHarness.Tests.EditMode
                 TrackDefinition.Segment.Straight(15f), TrackDefinition.Segment.Straight(20f, 0.1f), TrackDefinition.Segment.Straight(40f, -0.1f),
                 TrackDefinition.Segment.Straight(20f, 0f), TrackDefinition.Segment.Straight(9f), TrackDefinition.Segment.Straight(15f),
                 TrackDefinition.Segment.Gap(6f), TrackDefinition.Segment.Straight(15f),
-                TrackDefinition.Segment.Arc(40f, 180f),
+                TrackDefinition.Segment.Arc(22f, 90f),
+                TrackDefinition.Segment.Straight(60f), TrackDefinition.Segment.Arc(22f, 90f),
                 TrackDefinition.Segment.Straight(30f), TrackDefinition.Segment.Straight(15f), TrackDefinition.Segment.Gap(16f),
                 TrackDefinition.Segment.Straight(15f), TrackDefinition.Segment.Straight(secondStraightRest),
-                TrackDefinition.Segment.Arc(40f, 180f),
+                TrackDefinition.Segment.Arc(22f, 90f),
+                TrackDefinition.Segment.Straight(60f), TrackDefinition.Segment.Arc(22f, 90f),
             };
         }
 
@@ -67,14 +70,14 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void Gaps_Stadium_AreTheJumpGapOnAAndTheGrappleGapOnB()
+        public void Gaps_Stadium_AreTheJumpGapOnAAndTheGrappleGapOnC()
         {
             List<(double Start, double End)> gaps = definition.Gaps();
             Assert.That(gaps.Count, Is.EqualTo(2));
             Assert.That(gaps[0].Start, Is.EqualTo(119d).Within(1e-3));
             Assert.That(gaps[0].End, Is.EqualTo(125d).Within(1e-3));
-            double straightBStart = 140d + Math.PI * 40d;
-            Assert.That(gaps[1].Start, Is.EqualTo(straightBStart + 45d).Within(1e-2));
+            double straightCStart = 140d + 60d + Math.PI * 22d;
+            Assert.That(gaps[1].Start, Is.EqualTo(straightCStart + 45d).Within(1e-2));
             Assert.That(gaps[1].End - gaps[1].Start, Is.EqualTo(16d).Within(1e-3));
             Assert.That(definition.Anchors[0].S, Is.EqualTo(gaps[1].Start + 8d).Within(0.02), "The anchor hangs over the middle of the grapple gap.");
         }
@@ -111,10 +114,10 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void TryValidate_ArcTighterThanThirtyMetres_IsRejected()
+        public void TryValidate_ArcTighterThanTwentyMetres_IsRejected()
         {
             var segments = Stadium();
-            segments[8] = TrackDefinition.Segment.Arc(25f, 180f);
+            segments[8] = TrackDefinition.Segment.Arc(15f, 90f);
             SetSegments(segments);
             Assert.That(Error(), Does.Contain("segment 8").And.Contain("radius"));
         }
@@ -132,12 +135,12 @@ namespace ProtoHarness.Tests.EditMode
         public void TryValidate_GapWithShortRunway_IsRejected()
         {
             var segments = Stadium();
-            // Straight B: 10 m of runway before the grapple gap instead of 45 m.
-            segments[9] = TrackDefinition.Segment.Straight(0.1f);
-            segments[10] = TrackDefinition.Segment.Straight(10f);
-            segments[13] = TrackDefinition.Segment.Straight(84.9f);
+            // Straight C: 10 m of runway before the grapple gap instead of 45 m.
+            segments[11] = TrackDefinition.Segment.Straight(0.1f);
+            segments[12] = TrackDefinition.Segment.Straight(10f);
+            segments[15] = TrackDefinition.Segment.Straight(84.9f);
             SetSegments(segments);
-            Assert.That(Error(), Does.Contain("segment 11").And.Contain("flat straight before"));
+            Assert.That(Error(), Does.Contain("segment 13").And.Contain("flat straight before"));
         }
 
         [Test]
@@ -150,9 +153,9 @@ namespace ProtoHarness.Tests.EditMode
         [Test]
         public void TryValidate_AnchorTooLowOrOffTheRoad_IsRejected()
         {
-            SetField("anchors", new List<TrackDefinition.Anchor> { new TrackDefinition.Anchor(318.66f, 0f, 0.5f) });
+            SetField("anchors", new List<TrackDefinition.Anchor> { new TrackDefinition.Anchor(322.12f, 0f, 0.5f) });
             Assert.That(Error(), Does.Contain("anchor 0"));
-            SetField("anchors", new List<TrackDefinition.Anchor> { new TrackDefinition.Anchor(318.66f, 9f, 10f) });
+            SetField("anchors", new List<TrackDefinition.Anchor> { new TrackDefinition.Anchor(322.12f, 9f, 10f) });
             Assert.That(Error(), Does.Contain("anchor 0"));
         }
 
@@ -197,7 +200,7 @@ namespace ProtoHarness.Tests.EditMode
         public void TryValidate_ArcOver180Degrees_IsRejected()
         {
             var segments = Stadium();
-            segments[8] = TrackDefinition.Segment.Arc(40f, 190f);
+            segments[8] = TrackDefinition.Segment.Arc(22f, 190f);
             SetSegments(segments);
             Assert.That(Error(), Does.Contain("segment 8"));
         }

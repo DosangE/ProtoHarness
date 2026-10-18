@@ -113,7 +113,7 @@ namespace ProtoHarness.Tests.PlayMode
 
         // Device: depends on virtual keyboard event delivery, which failed repeatedly in the editor
         // (docs/DECISIONS.md 2026-10-04). Excluded from the merge gate run; run it with the Device menu.
-        // KartRider-style keys with no mouse (2026-10-18): arrows steer, up jumps and grapples, letting go of up releases.
+        // KartRider-style keys with no mouse (2026-10-18): arrows steer, left Alt jumps and grapples, letting go of it releases.
         [UnityTest]
         [Category("Device")]
         public IEnumerator Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts()
@@ -141,12 +141,12 @@ namespace ProtoHarness.Tests.PlayMode
                 MovePlayer(new Vector3(0f, 1f, 44f));
                 player.FaceTrack();
                 yield return new WaitForFixedUpdate();
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftAlt));
                 yield return new WaitForSeconds(0.15f);
                 Assert.That(player.IsGrounded, Is.False);
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return new WaitForSeconds(0.05f);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftAlt));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(grapple.IsAttached, Is.True);
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-grapple.png"));

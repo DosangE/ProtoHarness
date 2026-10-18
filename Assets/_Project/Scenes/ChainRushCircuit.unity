@@ -111352,12 +111352,15 @@ MonoBehaviour:
   jumpSpeed: 11.5
   gravity: 22
   maxTurnRate: 120
-  turnAcceleration: 1200
+  turnAcceleration: 200
   airTurnScale: 0.5
-  minTurnRadius: 20
+  minTurnRadius: 22
+  turnSpeedLoss: 0.1
+  runAcceleration: 8
   sideGrip: 60
   airSideGrip: 18
-  guardSpeedLoss: 0.15
+  guardSpeedLoss: 0.4
+  guardScrapeDecel: 25
   slopeSpeedFactor: 1.5
   minSlopeSpeedScale: 0.7
   maxSlopeSpeedScale: 1.3

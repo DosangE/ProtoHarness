@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-18 · R4c 사각 서킷(R22 90° 코너 4개) + 카트라이더식 조향·감속
+
+- **결정 (사용자, 2026-10-18 "R4c 진행하면서 방향키로 움직이는 조향?감과 감속 조건들 넣어봐 카트라이더 보면 좌우로 움직이거나 벽에 부딫히면 감속이 된다", 계획에 "사각 서킷 + 계획대로")**:
+  - **트랙** (`Circuit_Stadium.asset` 은 `Unity_RunCommand` + `SerializedObject` 로 고치고 `AssetDatabase.SaveAssets`, 사용자 승인): 직선 A 140 m(언덕 + 점프 틈 6 m) → R22 90° → 직선 B 60 m → R22 90° → 직선 C 140 m(그래플 틈 16 m) → R22 90° → 직선 D 60 m → R22 90°. 한 바퀴 538.2 m(이전 531.4), 앵커 S 322.12(이전 318.66), 코너 하나 34.6 m. `TrackDefinition.MinRadius` 30 → 20(무한 모드의 `CourseTuning.MinRadius` 30 은 그대로), 코드 기본 구간 목록도 같은 모양.
+  - **`RunnerMotor` 새 수치** (코드 기본값은 이전 동작 그대로, 0 이면 그 분기를 아예 건너뛴다): `runAcceleration`(기본 30 — 박혀 있던 지상 가속), `turnSpeedLoss`(기본 0 — 지금 회전율 / 회전 상한 만큼 달리기 목표를 깎는다, 지상·스윙 밖), `guardScrapeDecel`(기본 0 — 가드에 닿은 틱마다 수평 속력을 이만큼 m/s² 로 깎는다, `ScrapeAlongGuard`).
+  - **서킷 씬 Runner** (`Unity_RunCommand`, 승인): `runAcceleration` 8(0 → 20 m/s 2.5초 — 이전 0.7초라 무엇에 부딪혀도 곧 되찾았다), `turnSpeedLoss` 0.1, `guardScrapeDecel` 25, `guardSpeedLoss` 0.15 → 0.4, `turnAcceleration` 1200 → 400. 씬 diff 는 Runner 블록 7줄뿐. 테스트 중 에디터가 저장 여부를 물어 사용자가 "Don't Save" — 파일은 그대로 확인.
+  - **테스트 사양 변경** (트랙 모양·수치를 전제한 것):
+    - EditMode `TrackDefinitionTests`: 한 바퀴 `2·140 + 2·60 + 2π·22`, `Stadium()` 도우미를 사각으로, 반지름 하한 테스트 30 → 20(`Arc(15, 90)` 거부), 짧은 도움닫기 테스트의 구간 번호(9·10·13 → 11·12·15, 오류는 segment 13), 앵커 318.66 → 322.12, 그래플 틈은 직선 C.
+    - `ChainRushWorldTests` 의 공유 물리 대조: 서 있는 러너 자리 S 150 → 100. 150 은 이제 첫 코너 안이고 봇이 중심선 안쪽을 끊어 지나가 대조가 아무 차이도 못 냈다("changed nothing").
+    - `NetReconcileTests`: 봇이 놓는 여유 `LongRelease` 40 → 12 m(코너 34.6 m 보다 길면 봉을 한 번도 걸지 않아 "The swings must have filled the gauge. Expected: 2.0f But was: 0.0f"). 끝 보정 탐색(`FindFinishReplayCase`): 부스터(120틱)가 마지막 스윙(약 95틱)보다 길어 P 가 마지막 코너 앞으로 오고, 고정 입력 기록을 재생하면 봉을 거는 자리가 어긋나 일찍 끝났다(`ends<F` 만). 그래서 P 부터의 클라 입력을 **스윙 봇을 그 상태에서 이어 돌려** 만든다(`SwingBotFrom` — 체인 누름 P·F-1 과 줄 조정은 덧입힘). P 창은 `F - SlingTicks - 60 .. + 2`. 중간에 시도한 "줄을 3 m 늘여 스윙을 길게"는 95틱에 그쳐 되돌렸다.
+- **검증** (`feature/circuit-r22`, 커밋 전, 에디터 6000.3.19f1, UTC):
+  - 컴파일 `*** Tundra build success (4.42 seconds)`, 테스트 수정마다 `success`. 에셋 수정 뒤 `TryValidate` 통과(실패면 저장하지 않게 했다).
+  - EditMode(`!Enemy`, `!Endless`) `testcasecount="228" result="Passed" passed="228"` (13:09:32Z~13:09:33Z).
+  - `Run PlayMode Tests` 1회차 `testcasecount="132" result="Failed(Child)" passed="125" failed="4" skipped="3"` (13:10:04Z~13:15:26Z): 위 월드 대조 1, NetReconcile 게이지 2(`ClientEnd_CatchingUpAfterTheClientsOwnFinish_…`, `ClientEnd_WhenOnlyTheClientsRunFinished_…`), 끝 보정 1("No case fits … ends<F"). 봇 랩 29.38·28.16·28.16 초.
+  - 빠른 확인: NetReconcile + World `testcasecount="28" passed="27" failed="1"` (13:18:27Z~13:19:00Z, 끝 보정만 — 줄 늘이기 시도), NetReconcile `testcasecount="23" result="Passed"` (13:21:33Z~13:22:03Z): "rope tweak on ticks 4071-4072, chain presses on ticks 3959 and 4078 … 0.00221 m past … 0.01947 m short (search 10.7 s)".
+  - `Run PlayMode Tests` 2회차 `testcasecount="132" result="Passed" passed="129" failed="0" skipped="3"` (13:22:40Z~13:28:02Z, 322.4초). **서킷 지문 `0x12DE39829FD6B3DB` → `0x2C858BEFE45E2460`**(트랙·수치 변경, 새 기준). 봇 랩 29.38·28.16·28.16 초(이전 27.26·26.92·26.94 — 출발 가속 2.5초와 꺾을 때 감속). Long·Sweep 은 무한 모드 보류로 돌리지 않는다(`CLAUDE.md` §9-2), Device 는 입력 장치 경로를 바꾸지 않아 돌리지 않았다.
+- **사용자 플레이** (2026-10-18): "다 좋은데 좌우 방향키로 방향 꺾이는 정도를 좀 더 줄였으면 좋겠다. 또한 점프 키를 alt로 하자 이후 커밋 병합 푸쉬".
+  - **조향 더 줄임** (서킷 씬, `Unity_RunCommand`): `turnAcceleration` 400 → 200(최대 회전까지 약 0.26초 — 짧게 누르면 덜 돈다), `minTurnRadius` 20 → 22(20 m/s 에서 최대 57 → 52°/s). 22 m 보다 크게는 하지 않았다 — 코너가 R22 라 봉 없이는 코너를 못 돌게 된다.
+  - **점프·그래플 키 = 왼쪽 Alt** (`KeyboardMouseInputSource`): 누름 = 주동작, 뗌 또는 ↓ = 해제(↑ 는 이제 쓰지 않는다). 오른쪽 Alt 는 한국어 자판의 한/영 키라 넣지 않았다. HUD 안내 4줄, Device 테스트의 ↑ → LeftAlt.
+  - 검증: 컴파일 `*** Tundra build success (3.75 seconds)`. `Run PlayMode Tests` 3회차 `testcasecount="132" result="Passed" passed="129" failed="0" skipped="3"` (13:35:24Z~13:41:03Z, 338.5초), **서킷 지문 → `0x150CA0904EFFEBDE`**(최종 새 기준), 봇 랩 29.62·28.44·28.44 초, 끝 보정 "rope tweak on ticks 4056-4057, chain presses on ticks 3962 and 4081 … (search 18.0 s)". `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3"` (13:41:37Z~13:41:52Z, `isApplicationActive=True`).
+- **확인 못 한 것**: 바꾼 조향과 Alt 키의 사용자 플레이. 수치는 카트라이더 공개 상수가 없어 시작값이다.
+- **버린 대안**: 지금 모양에 반지름만 R22(4-1 ②) — 코너 하나 69 m 로 스윙이 여전히 길다. 감속만 넣고 가속은 그대로 — 30 m/s² 로 0.7초면 되찾아 감속이 느껴지지 않는다. 끝 보정 테스트를 `[Ignore]` — 끝 보정이 게이트에서 빠진다.
+
 ## 2026-10-18 · 적·아이템·무한 모드 테스트 보류: `Enemy`·`Endless` 카테고리를 게이트와 EditMode 실행에서 뺀다
 
 - **결정 (사용자, 2026-10-18)**: "적 등장에 관련한 것은 제외해도 좋을것 같다. 적과 아이템은 추후에 아이템전 구상하면 넣겠다. 이것 기록해놓고 테스트 요소에서 제외해줘"(계획에 "추천대로 ㄱㄱ"), 이어서 Long 실행 중 적이 보이자 "우리가 무한모드를 계속해서 작업할게 아니고 서킷에 집중하기로 했다. 무한모드를 테스트 돌릴 이유가 없다는것. 당연히 서킷에서도 나오면 안된다", 표현 테스트는 "만약 포함해야한다면 무한모드 테스트가아닌 서킷에서 하자".

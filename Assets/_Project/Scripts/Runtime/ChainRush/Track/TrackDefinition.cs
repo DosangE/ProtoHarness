@@ -12,7 +12,7 @@ namespace ProtoHarness.ChainRush.Track
     [CreateAssetMenu(menuName = "ProtoHarness/ChainRush/Track Definition")]
     public sealed class TrackDefinition : ScriptableObject
     {
-        public const float MinRadius = 30f;
+        public const float MinRadius = 20f;
         public const float MinGapRunway = 15f;
         public const float MaxGrade = 0.2f;
 
@@ -82,14 +82,18 @@ namespace ProtoHarness.ChainRush.Track
             // Straight A (140 m): a hill (0 -> +10% -> -10% -> 0, 2 m high) and a jump gap of 6 m.
             Segment.Straight(15f), Segment.Straight(20f, 0.1f), Segment.Straight(40f, -0.1f), Segment.Straight(20f, 0f),
             Segment.Straight(9f), Segment.Straight(15f), Segment.Gap(6f), Segment.Straight(15f),
-            Segment.Arc(40f, 180f),
-            // Straight B (140 m): a grapple gap of 16 m with its runways.
+            Segment.Arc(22f, 90f),
+            // Straight B (60 m), then the second corner (R4c 2026-10-18: four R22 quarter turns, a square circuit).
+            Segment.Straight(60f), Segment.Arc(22f, 90f),
+            // Straight C (140 m): a grapple gap of 16 m with its runways.
             Segment.Straight(30f), Segment.Straight(15f), Segment.Gap(16f), Segment.Straight(15f), Segment.Straight(64f),
-            Segment.Arc(40f, 180f),
+            Segment.Arc(22f, 90f),
+            // Straight D (60 m), then the last corner to the start line.
+            Segment.Straight(60f), Segment.Arc(22f, 90f),
         };
 
-        // The anchor hangs over the middle of the grapple gap: 140 + pi x 40 + 30 + 15 + 8.
-        [SerializeField] private List<Anchor> anchors = new List<Anchor> { new Anchor(318.66f, 0f, 10f) };
+        // The anchor hangs over the middle of the grapple gap: 140 + 60 + pi x 22 + 30 + 15 + 8.
+        [SerializeField] private List<Anchor> anchors = new List<Anchor> { new Anchor(322.12f, 0f, 10f) };
         [Tooltip("Checkpoints as fractions of a lap, ascending, strictly between 0 and 1.")]
         [SerializeField] private float[] checkpointFractions = { 0.25f, 0.5f, 0.75f };
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]

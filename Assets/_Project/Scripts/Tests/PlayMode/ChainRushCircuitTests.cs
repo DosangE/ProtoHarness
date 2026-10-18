@@ -81,7 +81,8 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(laps.IsFinished, Is.True, "Timed out after " + (Time.realtimeSinceStartup - started).ToString("F0") + " s. " + State());
             Assert.That(game.HasFinished, Is.True, State());
             Assert.That(laps.CompletedLaps, Is.EqualTo(3));
-            double lapSeconds = circuit.Definition.LapLength / 10d;
+            // ChainRushCircuit.unity's runner runs at 20 m/s (M1-T, 2026-10-18).
+            double lapSeconds = circuit.Definition.LapLength / 20d;
             int sum = 0;
             for (int lap = 1; lap <= 3; lap++)
             {

@@ -460,7 +460,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator ClientEnd_WhenTheServerMissedTheInputOfItsLastTick_ReplaysThatTickOnTheServersControlsAndEndsTheSame()
         {
             yield return Load();
-            InputLog log = RecordSwingBotToFinish(RaceTicksLimit, LongRelease);
+            InputLog log = RecordSwingBotToFinish(RaceTicksLimit, ShortRelease);
             InputLog clientLog = FindFinishReplayCase(log, game.Tick, out int endTick, out string found);
             RaceWire.EndReason reason = RaceWire.EndReason.Finished;
             TickInput typed = clientLog[endTick - 1];
@@ -1055,17 +1055,18 @@ namespace ProtoHarness.Tests.PlayMode
         // than the lever, over more than one tick's travel. The search is bounded by this fixed set of tries, not by the
         // clock, so its outcome does not depend on the machine; the test's Timeout guards the wall clock.
 
-        // How far before each arc's end PoleSwingBot lets go: far enough for a slingshot to run its whole pull and carry
-        // (about 20 m) before the finish line, for the searches that fire one there.
+        // How far before each arc's end PoleSwingBot lets go: far enough for a slingshot pressed shortly before the finish
+        // line to find the runner off the pole, for the searches that fire one there.
         private const float LongRelease = 40f;
-        // Just before the end: a swing that lasts until shortly before the finish line, for the search that needs the server's
-        // run to differ from the client's within a few hundred ticks of it.
+        // Just before the end: a swing that lasts until shortly before the finish line, for the searches that need the server's
+        // run to differ from the client's within a few hundred ticks of it, or a slingshot to run on through the swing.
         private const float ShortRelease = 4f;
         // The rope tweak's places: its second tick on each of the last TuneTicks swing ticks before the release.
         private const int TuneTicks = 240;
-        // RunnerMotor: slingPullTime 0.4 s + slingCarryTime 0.8 s. A press while a slingshot runs does nothing, so a press on
-        // the slingshot's last tick does nothing and the same press one tick later fires a new one.
-        private const int SlingTicks = 60;
+        // ChainRushCircuit.unity's runner (M1-T, 2026-10-18): slingPullTime 0.4 s + slingCarryTime 2 s. A press while a
+        // slingshot runs does nothing, so a press on the slingshot's last tick does nothing and the same press one tick later
+        // fires a new one.
+        private const int SlingTicks = 120;
         // The farthest a missed tick may be before the finish in FindClientOnlyFinish(missFirst): the client's predictor keeps
         // ClientPredictor.Window ticks, and the test delivers the state for the missed tick after the client has run past
         // the finish (a latency a little over this).
@@ -1193,20 +1194,23 @@ namespace ProtoHarness.Tests.PlayMode
             return game.IsRunning && game.Tick == tick ? SimSnapshotCodec.Encode(game.CaptureSnapshot()) : null;
         }
 
-        // Whether a chain press in `state` fires the slingshot: a whole slot, no slingshot running, not swinging (a swing
-        // ignores the slingshot's speed).
-        private static bool SlingReady(byte[] state)
+        // Whether a chain press in `state` fires the slingshot: a whole slot, no slingshot running, and, unless swinging is
+        // allowed, not swinging (a swing ignores the slingshot's speed; the slingshot's ticks still run down).
+        private static bool SlingReady(byte[] state, bool swingAllowed = false)
         {
             RacerState.Snapshot racer = SimSnapshotCodec.Decode(state).Racer;
-            return racer.SlingTicks == 0 && racer.Gauge >= 1f && racer.SwingTicks == 0;
+            return racer.SlingTicks == 0 && racer.Gauge >= 1f && (swingAllowed || racer.SwingTicks == 0);
         }
 
         // A finish the client has to be corrected to: the server finishes on tick F on the controls of the tick before (it
         // missed F's), the client's own controls for F keep its run going. The lever: the client pressed the chain action on
         // P = F - SlingTicks, which fired a slingshot ending on F - 1, and again on F - 1, which did nothing (the slingshot was
-        // still running); the server repeats that press on F, where it fires a second slingshot. With the rope tweaked on
-        // Q - 1 and Q of the last swing (none first, then Q = R - 1, R - 2, .. for R the release), and P tried from early to
-        // late, the client's own F must keep its run going while the server's repeated press finishes it on F.
+        // still running); the server repeats that press on F, where it fires a second slingshot. P falls in the last swing
+        // (ShortRelease: it lasts until shortly before the finish), where the first slingshot only runs its ticks down: a
+        // slingshot fired off the pole would carry the runner to the line in fewer than SlingTicks ticks. With the rope
+        // tweaked on Q - 1 and Q of the last swing (none first, then Q = R - 1, R - 2, .. back to the hook, for R the
+        // release), and P tried from early to late, the client's own F must keep its run going while the server's
+        // repeated press finishes it on F.
         // Deterministic: Q, then P in order; the first fit is taken. Returns the client's log; F and a description come out.
         // Fails with every case tried when none fits.
         private InputLog FindFinishReplayCase(InputLog log, int recordedFinish, out int endTick, out string found)
@@ -1218,11 +1222,14 @@ namespace ProtoHarness.Tests.PlayMode
             int from = recordedFinish - TuneTicks - 600;
             byte[][] states = StatesBefore(log, recordedFinish, from);
             int release = LastSwingTick(states, from, recordedFinish);
+            int hooked = release;
+            while (hooked > from && SimSnapshotCodec.Decode(states[hooked - 1]).Racer.SwingTicks > 0) hooked--;
             int length = recordedFinish + 64;
-            for (int q = 0; q <= TuneTicks; q++)
+            for (int q = 0; q <= TuneTicks && (q == 0 || release - q - 2 >= hooked); q++)
             {
                 int tweak = q == 0 ? 0 : release - q;
-                byte[] tunedStart = states[q == 0 ? release : tweak - 2];
+                int startTick = q == 0 ? release : tweak - 2;
+                byte[] tunedStart = states[startTick];
                 InputLog tuned = q == 0 ? log : Tweaked(log, length, tweak, PoleSide(tunedStart), false);
                 int tunedFinish = FinishFrom(tunedStart, tuned, RaceTicksLimit);
                 if (tunedFinish < 0)
@@ -1231,10 +1238,11 @@ namespace ProtoHarness.Tests.PlayMode
                     continue;
                 }
                 tried.Append($" Q{tweak}:fin@{tunedFinish}[");
-                // The slingshot gains about 6 m, some 30 ticks, so a press about 90 ticks before the finish lands F one tick short.
-                int firstP = tunedFinish - 115, lastP = tunedFinish - 70;
-                // The tuned run's state before each P in turn, one tick on from the last.
-                byte[] beforeP = StateAfter(tunedStart, tuned, firstP - 1);
+                // The first slingshot carries the runner only for the few ticks between the release and F, so F lands within a
+                // few ticks of the finish without it.
+                int firstP = tunedFinish - SlingTicks - 12, lastP = tunedFinish - SlingTicks + 2;
+                // The tuned run's state before each P in turn, one tick on from the last. Before the tweak it is the recording's.
+                byte[] beforeP = firstP - 1 <= startTick ? states[firstP - 1] : StateAfter(tunedStart, tuned, firstP - 1);
                 for (int p = firstP; p <= lastP && beforeP != null; p++)
                 {
                     int f = p + SlingTicks;
@@ -1243,7 +1251,7 @@ namespace ProtoHarness.Tests.PlayMode
                     game.RestoreSnapshot(SimSnapshotCodec.Decode(here));
                     StepOn(tuned[p - 1]);
                     beforeP = game.IsRunning ? SimSnapshotCodec.Encode(game.CaptureSnapshot()) : null;
-                    if (!SlingReady(here))
+                    if (!SlingReady(here, true))
                     {
                         tried.Append($" P{p}:not-ready");
                         continue;
@@ -1275,7 +1283,7 @@ namespace ProtoHarness.Tests.PlayMode
                 }
                 tried.Append(" ]");
             }
-            Assert.Fail($"No case fits: with the rope tweak on none of the last {TuneTicks} swing ticks before the release on tick {release}, and the chain presses tried, does the server's repeated press finish the race on a tick the client's own controls do not (recorded finish {recordedFinish}).\n" +
+            Assert.Fail($"No case fits: with the rope tweak on none of the swing ticks from the hook on tick {hooked} to the release on tick {release}, and the chain presses tried, does the server's repeated press finish the race on a tick the client's own controls do not (recorded finish {recordedFinish}).\n" +
                         $"Cases (Q tick:finish[P tick: C/A = the client's own / the server's repeated controls on F, +/- metres past the line]; search {watch.Elapsed.TotalSeconds:F1} s):{tried}");
             endTick = -1;
             found = null;

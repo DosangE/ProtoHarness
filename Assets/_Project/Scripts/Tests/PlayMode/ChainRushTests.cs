@@ -111,16 +111,15 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Health, Is.EqualTo(1));
         }
 
-        // Device: depends on virtual Keyboard/Mouse event delivery, which failed repeatedly in the editor
+        // Device: depends on virtual keyboard event delivery, which failed repeatedly in the editor
         // (docs/DECISIONS.md 2026-10-04). Excluded from the merge gate run; run it with the Device menu.
+        // KartRider-style keys with no mouse (2026-10-18): arrows steer, up jumps and grapples, letting go of up releases.
         [UnityTest]
         [Category("Device")]
-        public IEnumerator Input_KeyboardAndMouse_StartsSteersJumpsGrapplesAndRestarts()
+        public IEnumerator Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts()
         {
             Keyboard originalKeyboard = Keyboard.current;
-            Mouse originalMouse = Mouse.current;
             Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
-            Mouse mouse = InputSystem.AddDevice<Mouse>();
             try
             {
                 // Enter counts down 3, 2, 1, then the run starts.
@@ -130,29 +129,29 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return WaitOutCountdown();
                 Assert.That(game.IsRunning, Is.True);
-                // Free steering (2026-10-05, T2a): A/D turn the facing.
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.A));
+                // Free steering (2026-10-05, T2a): the left and right arrows turn the facing.
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftArrow));
                 yield return new WaitForSeconds(0.3f);
                 float leftHeading = player.Heading;
                 Assert.That(leftHeading, Is.LessThan(-10f));
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.D));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
                 yield return new WaitForSeconds(0.4f);
                 Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 MovePlayer(new Vector3(0f, 1f, 44f));
                 player.FaceTrack();
                 yield return new WaitForFixedUpdate();
-                InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.15f);
                 Assert.That(player.IsGrounded, Is.False);
-                InputSystem.QueueStateEvent(mouse, new MouseState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return new WaitForSeconds(0.05f);
-                InputSystem.QueueStateEvent(mouse, new MouseState().WithButton(MouseButton.Left));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(grapple.IsAttached, Is.True);
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-grapple.png"));
                 yield return new WaitForSeconds(0.05f);
-                InputSystem.QueueStateEvent(mouse, new MouseState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return new WaitForSeconds(0.05f);
                 Assert.That(grapple.IsAttached, Is.False);
                 // R puts the runner back on the start line at once and counts down again.
@@ -173,13 +172,11 @@ namespace ProtoHarness.Tests.PlayMode
             finally
             {
                 InputSystem.RemoveDevice(keyboard);
-                InputSystem.RemoveDevice(mouse);
                 if (originalKeyboard != null) originalKeyboard.MakeCurrent();
-                if (originalMouse != null) originalMouse.MakeCurrent();
             }
         }
 
-        // Device: left Shift pressed with a corner pole in reach hooks it, D held with it shortens the rope of a right-hand
+        // Device: left Shift pressed with a corner pole in reach hooks it, the right arrow held with it shortens the rope of a right-hand
         // corner, letting go of Shift ends the swing; left Ctrl spends a slot (NEXT_REQUESTS.md R4b). On an R30 test road
         // beside the bench course (as ChainRushCornerSwingTests): straight 30 m, then the arc, its pole in reach from s = 10.1.
         [UnityTest]
@@ -211,10 +208,10 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(player.IsSwinging, Is.True, "Pressing left Shift with a pole in reach must hook it.");
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.D));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.RightArrow));
                 yield return new WaitForSeconds(0.2f);
                 Assert.That(player.IsSwinging, Is.True, "The swing lasts while left Shift is held.");
-                Assert.That(game.Racer.SwingRadius, Is.LessThan(game.Racer.SwingHookRadius - 0.5f), "D is the key toward the pole of a right-hand corner: it shortens the rope.");
+                Assert.That(game.Racer.SwingRadius, Is.LessThan(game.Racer.SwingHookRadius - 0.5f), "The right arrow is the key toward the pole of a right-hand corner: it shortens the rope.");
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(player.IsSwinging, Is.False, "Letting go of left Shift ends the swing.");

@@ -62,8 +62,7 @@ namespace ProtoHarness.Tests.PlayMode
             StateTrace recorded = CircuitTrace(new InputRecorder(new CircuitBot(game, player, grapple, circuit), log));
             yield return Run(recorded, CircuitTicks, 3f, null);
             Assert.That(log.Count, Is.GreaterThanOrEqualTo(CircuitTicks));
-            Assert.That(circuit.Laps.CheckpointsPassed, Is.GreaterThanOrEqualTo(2), "The recorded run should get past two checkpoints.");
-            Assert.That(circuit.Laps.CompletedLaps, Is.Zero, "1700 ticks are short of a lap: the grapple gap is still ahead of the finish.");
+            Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "At 20 m/s (M1-T, 2026-10-18) 1700 ticks are one whole lap, with its checkpoints and grapple gap, and the start of the next.");
 
             // The same session, six times as fast: ticks per frame differ, ticks do not.
             StateTrace sameSession = CircuitTrace(new InputReplay(log));

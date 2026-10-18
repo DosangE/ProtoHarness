@@ -125,9 +125,9 @@ namespace ProtoHarness.ChainRush
         private void DrawControls(float width, float height)
         {
             Block(new Rect(32, height - 92, width - 64, 60), Ink);
-            GUI.Label(new Rect(55, height - 75, 145, 30), "A / D   이동", body);
-            GUI.Label(new Rect(232, height - 75, 390, 30), "좌클릭   점프 → 공중에서 다시 잡기", body);
-            GUI.Label(new Rect(650, height - 75, 270, 30), "유지  스윙 / 놓기  해제", body);
+            GUI.Label(new Rect(55, height - 75, 145, 30), "← / →   이동", body);
+            GUI.Label(new Rect(232, height - 75, 390, 30), "↑   점프 → 공중에서 다시 잡기", body);
+            GUI.Label(new Rect(650, height - 75, 270, 30), "↑ 유지  스윙 / ↓  해제", body);
             GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);
             string restart = game.ManualStart ? "R  재시작   " : "";
             GUI.Label(new Rect(width - 405, height - 75, 390, 30), restart + (game.HasPresentation ? "ESC  정지   M  음소거" : "  ESC  일시정지"), body);
@@ -142,7 +142,7 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(70, 470, 65, 4), Mint);
             GUI.Label(new Rect(70, 500, 640, 37), "달리고, 걸고, 도약하세요.", heading);
             GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
-            GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 점프 → 공중에서 다시 클릭하고 유지", body);
+            GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 ↑ 점프 → 공중에서 다시 ↑ 누르고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
             if (game.ManualStart)
             {
@@ -175,7 +175,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
             GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
             DrawGauge(height);
-            string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  좌클릭으로 앵커 잡기";
+            string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  ↑ 로 앵커 잡기";
             if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
             Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);

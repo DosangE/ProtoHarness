@@ -14,10 +14,13 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float jumpSpeed = 11.5f;
         [SerializeField] private float gravity = 22f;
         // Steering turns the runner (free steering, COURSE.md 4-3): input sets a target turn rate, the rate
-        // follows it by turnAcceleration, and running follows the facing. Air control is scaled down.
+        // follows it by turnAcceleration, and running follows the facing. Air control is scaled down. With a
+        // minTurnRadius above 0 the turn rate is also kept to speed / minTurnRadius, so at speed steering alone turns wide
+        // (KartRider style: tight corners are for the pole swing); 0 leaves only maxTurnRate.
         [SerializeField] private float maxTurnRate = 120f;
         [SerializeField] private float turnAcceleration = 1200f;
         [SerializeField] private float airTurnScale = 0.5f;
+        [SerializeField] private float minTurnRadius = 0f;
         // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
         [SerializeField] private float sideGrip = 60f;
         [SerializeField] private float airSideGrip = 18f;
@@ -27,6 +30,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float slopeSpeedFactor = 1.5f;
         [SerializeField] private float minSlopeSpeedScale = 0.7f;
         [SerializeField] private float maxSlopeSpeedScale = 1.3f;
+        // How fast speed above the grounded run target (a slingshot or swing let go) falls back to it, in m/s a second.
+        [SerializeField] private float overspeedFalloff = 30f;
         // How far below the capsule a downhill road may drop in one tick and still be followed.
         [SerializeField] private float groundSnapDistance = 0.3f;
         // Chain slingshot (chain action when not grappling): the chain hooks a point slingLead ahead on the
@@ -100,14 +105,14 @@ namespace ProtoHarness.ChainRush
         {
             if (runSpeed <= 0f || jumpSpeed <= 0f || gravity <= 0f)
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
-            if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f)
-                Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1].", this);
+            if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f || minTurnRadius < 0f)
+                Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1], the turn radius not negative.", this);
             if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f)
                 Debug.LogError("RunnerMotor: grips cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
-            if (groundSnapDistance < 0f)
-                Debug.LogError("RunnerMotor: ground snap distance cannot be negative.", this);
+            if (groundSnapDistance < 0f || overspeedFalloff <= 0f)
+                Debug.LogError("RunnerMotor: ground snap distance cannot be negative, the overspeed falloff must be positive.", this);
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
                 Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
@@ -182,7 +187,10 @@ namespace ProtoHarness.ChainRush
             // A swing ignores steering for the facing (steering works the rope there): the rope sets the facing
             // (SwingStep), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
-            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steer * maxTurnRate * turnScale, turnAcceleration * dt);
+            float turnLimit = maxTurnRate;
+            if (minTurnRadius > 0f)
+                turnLimit = Mathf.Min(turnLimit, new Vector2(velocity.x, velocity.z).magnitude / minTurnRadius * Mathf.Rad2Deg);
+            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steer * turnLimit * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             if (pulling)
             {
@@ -210,10 +218,14 @@ namespace ProtoHarness.ChainRush
             }
             if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
             if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
-            float acceleration = pulling ? slingPullAcceleration : grounded ? 30f : 5f;
+            float currentForward = Vector3.Dot(velocity, facing);
+            float acceleration = pulling ? slingPullAcceleration
+                : !grounded ? 5f
+                : currentForward > runTarget ? overspeedFalloff : 30f;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
-            float forwardSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, facing), grapple.IsAttached ? 16f : runTarget,
+            // A grapple reels at 16 m/s, or at running speed when that is faster.
+            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, runSpeed) : runTarget,
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);

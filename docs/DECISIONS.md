@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-10-19 · 부스터: 속도 비례 가속(정지에서 30, 목표에 가까울수록 약하게)·3초, HUD 속력은 수평만
+
+- **결정 (사용자, 2026-10-19 "속도가 아주 낮을때에 부스터 누르면 거의 바로 26으로 올라가버리는데 이는 내 의도사항이 아니다. 부스터를 썻을때 적당히 가속받으며 올라가야해. 또한 속도가 없는데도 2.4로 나온다 확인해줘", "부스터 가속을 조금 더 올려줘", "낮은 속도에서는 가속이 더 잘붙고 최대속도에 다가올수록 천천히 올라가도록", "부스터 3초로 하는건 어떤가", 각 단계 "ㅇㅇ"·"ㄱㄱ")**:
+  - **부스터 가속**: 슬링샷은 당김(0.4초, 목표 28) → 유지(목표 26). 이전에는 당김 `slingPullAcceleration` 45 m/s² 일정(5 m/s 에서 0.8초에 26), 유지는 지상 가속 8. 거쳐 간 값: 씬 값 45 → 12 → 15(일정 가속, 둘 다 게이트 통과·플레이). 최종: `RunnerMotor.BoostAcceleration` — 당김 중, 그리고 땅에서 유지 중 목표보다 느리면 `slingPullAcceleration × (1 − 속력 / 목표)`, 목표보다 빠르면 `overspeedFalloff`. 씬 3개 `slingPullAcceleration` 30. 공중 유지는 그대로(공중 가속).
+  - **부스터 3초**: 씬 3개 `slingCarryTime` 2 → 2.6(당김 0.4 + 유지 2.6). 2026-10-18 "M1-T 앞당김 1" 의 유지 2초를 바꾼다.
+  - 계산값(0.02초 적분, 실측 안 함): 0 에서 1초 18.0·끝 25.2, 5 에서 끝 25.4, 20 에서 1초 24.4·끝 25.8. 목표에 점근해 26 에 딱 닿지는 않는다. 달리는 중(20)에 쓰면 이전(0.4초에 26)보다 늦게 오른다 — 사용자에게 알렸다.
+  - **2.4**: HUD 는 `player.Speed`(속도 벡터 전체 크기)를 보였다. 땅에 서 있으면 `RunnerMotor.cs:170` 이 아래로 −2 m/s 를 넣고 중력 한 틱(22 × 0.02 = 0.44)이 더해져 저장되는 수직 속도가 −2.44 다 — 멈춰도 2.4(계산으로 확인, 정지 상태 값을 찍어 보지는 않았다). `RunnerMotor.HorizontalSpeed`(읽기 전용, 수평 크기)를 추가하고 HUD 만 그것으로. 카메라 시야각·소리·절차 코스의 `Speed` 는 그대로.
+  - 씬 저장은 매번 `Unity_RunCommand` + `SerializedObject` + `SaveScene`(코드 전문 보이고 승인). HEAD 대비 최종 diff 는 씬마다 `slingPullAcceleration: 45 → 30`, `slingCarryTime: 2 → 2.6` 두 줄.
+- **테스트 사양 변경**:
+  - `ChainRushDriftTests.Sling_WithSlot_PullsWellPastRunSpeedThenSettles`: 최고 속력(> 달리기 + 5)을 재는 시간 0.5 → 3초(부스터 전체), 끝난 뒤 기다림 3 → 1초. 단언 값은 그대로.
+  - `NetReconcileTests.SlingTicks` 120 → 150(부스터 길이 상수). 1회차 원문: `ClientEnd_WhenTheServerMissedTheInputOfItsLastTick_…` `No case fits: with the rope tweak on none of the swing ticks from the hook on tick 4050 to the release on tick 4126, … (recorded finish 4136)` — 시도 목록의 `P4018:ends<4138` 처럼 F = P + 120 으로 셌다.
+- **검증** (`feature/tuning-boost-accel`, 커밋 전, 에디터 6000.3.19f1, UTC): `tools/select-tests.ps1` 판정 EditMode 전체·PlayMode 전체(씬·코어 시뮬), Long 은 무한 모드 보류로, Device 는 입력 장치 경로를 안 바꿔 안 돌림.
+  - 값 12(일정): EditMode `testcasecount="230" result="Passed"` (06:13:36Z~06:13:40Z), PlayMode `testcasecount="139" result="Passed" passed="136" failed="0" skipped="3"` (06:14:03Z~06:19:49Z). 값 15(일정): PlayMode 같은 결과 (06:24:58Z~06:30:13Z).
+  - 비례 30·3초: 컴파일 `*** Tundra build success (4.13 seconds)`. EditMode `testcasecount="230" result="Passed" passed="230" failed="0"` (06:44:01Z~06:44:05Z). `Run PlayMode Tests` 1회차 `testcasecount="139" result="Failed(Child)" passed="135" failed="1" skipped="3"` (06:44:26Z~06:50:05Z) — 위 NetReconcile 1건.
+  - `SlingTicks` 150 뒤 컴파일 `*** Tundra build success (3.38 seconds)`, `NetReconcileTests` 만 `testcasecount="23" result="Passed" passed="23"` (06:51:27Z~06:52:22Z).
+  - `Run PlayMode Tests` 2회차(최종 코드) `testcasecount="139" result="Passed" passed="136" failed="0" skipped="3"` (06:52:43Z~06:58:23Z, 340.1초). 서킷 지문 `0xE3744A27006C0BB2` 그대로(리플레이 봇은 슬링샷을 쓰지 않는다), 봇 랩 31.12·30.10·30.10 초.
+- **사용자 플레이** (2026-10-19): "좋다".
+
 ## 2026-10-19 · 조향 2차: 최소 회전 반지름 25 m, 꺾을 때 감속 0.2 (+ 테스트 봇이 실제 회전 상한으로)
 
 - **결정 (사용자, 2026-10-19 "꺾임이 아직 조금 세다. 꺾임을 조금 줄이고 최대로 꺾었을때 속도도 조금 감속시켜줘", "비례로가 맞고 일단 진행하자", 씬 저장 "ㄱㄱ", 봇 수정 "1"(A안), 창 넓히기 "해보아라")**:

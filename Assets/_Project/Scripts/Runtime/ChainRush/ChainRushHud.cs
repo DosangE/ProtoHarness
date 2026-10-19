@@ -173,7 +173,7 @@ namespace ProtoHarness.ChainRush
             if (game.IsEndless) DrawEncounter(width, scale);
             Block(new Rect(32, height - 220, 168, 105), Ink);
             GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
-            GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
+            GUI.Label(new Rect(52, height - 180, 140, 50), player.HorizontalSpeed.ToString("00.0"), number);
             DrawBoost(width, height);
             string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  ALT 로 앵커 잡기";
             if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";

@@ -1064,10 +1064,10 @@ namespace ProtoHarness.Tests.PlayMode
         private const float ShortRelease = 4f;
         // The rope tweak's places: its second tick on each of the last TuneTicks swing ticks before the release.
         private const int TuneTicks = 240;
-        // ChainRushCircuit.unity's runner (M1-T, 2026-10-18): slingPullTime 0.4 s + slingCarryTime 2 s. A press while a
+        // ChainRushCircuit.unity's runner (2026-10-19): slingPullTime 0.4 s + slingCarryTime 2.6 s. A press while a
         // slingshot runs does nothing, so a press on the slingshot's last tick does nothing and the same press one tick later
         // fires a new one.
-        private const int SlingTicks = 120;
+        private const int SlingTicks = 150;
         // The farthest a missed tick may be before the finish in FindClientOnlyFinish(missFirst): the client's predictor keeps
         // ClientPredictor.Window ticks, and the test delivers the state for the missed tick after the client has run past
         // the finish (a latency a little over this).

@@ -195,6 +195,58 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.IsCountingDown, Is.False);
         }
 
+        // ---- best records (user 2026-10-19) ----------------------------------------------------------------
+
+        [UnityTest]
+        public IEnumerator Lobby_TrackPage_ShowsTheBestRecordOrNone()
+        {
+            var store = TestRecords();
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Records = store;
+            Assert.That(menu.TrackRecordText(0), Is.EqualTo("기록 없음"));
+            store.Submit(Stadium().name, SpeedClass.Fast, 3970, "BETA");
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+            Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록  01:19.4  ·  BETA"), "Read again as the track page opens.");
+            store.Clear(Stadium().name, SpeedClass.Fast);
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecord()
+        {
+            var store = TestRecords();
+            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
+                Time.timeScale = 6f;
+                game.StartRun();
+                float deadline = Time.realtimeSinceStartup + 90f;
+                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
+                Time.timeScale = scale;
+                Assert.That(game.HasFinished, Is.True, "The bot did not finish three laps.");
+                yield return null;
+                Assert.That(assembler.LastFinishWasBest, Is.True);
+                Assert.That(store.TryGet(Stadium().name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
+                Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
+                Assert.That(best.Runner, Is.EqualTo(runner.DisplayName));
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(Stadium().name, SpeedClass.Fast);
+            }
+        }
+
         // ---- the whole loop, by scene name ---------------------------------------------------------------
 
         // Needs the four scenes in the build's scene list (M2-a2); until then it is reported as ignored, not passed.
@@ -235,6 +287,14 @@ namespace ProtoHarness.Tests.PlayMode
 #endif
             found(SceneManager.GetActiveScene());
             yield return null;
+        }
+
+        // Records under a test prefix, empty for the stadium at Fast, so the player's records are never touched.
+        private BestRecords TestRecords()
+        {
+            var store = new BestRecords("ChainRush.Test.FlowTests.");
+            store.Clear(Stadium().name, SpeedClass.Fast);
+            return store;
         }
 
         private static T Find<T>(Scene scene) where T : Component

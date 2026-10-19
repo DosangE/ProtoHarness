@@ -335,7 +335,8 @@ namespace ProtoHarness.ChainRush
             return text.ToString();
         }
 
-        private static string FormatTime(float seconds)
+        // "01:23.4". The lobby shows best records the same way.
+        internal static string FormatTime(float seconds)
         {
             int minutes = Mathf.FloorToInt(seconds / 60f);
             return minutes.ToString("00") + ":" + (seconds - minutes * 60f).ToString("00.0");

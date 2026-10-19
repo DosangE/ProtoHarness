@@ -184,7 +184,7 @@ namespace ProtoHarness.ChainRush
             TrackFrame frame = game.Track.Frame(transform.position);
             ref int slingTicks = ref racer.SlingTicks;
             ref int swingTicks = ref racer.SwingTicks;
-            if (input.ChainActionPressed) ChainAction();
+            if (input.ChainActionPressed) ChainAction(input.Coasting);
             if (input.SwingPressed) TryHookPole();
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
@@ -316,7 +316,9 @@ namespace ProtoHarness.ChainRush
         // One gauge slot buys the chain action that fits the moment: while grappling it empowers the grapple;
         // otherwise it fires the slingshot. Without a whole slot, or with that action already running, nothing
         // happens and nothing is spent. Corner pole swings are the swing key's, not the chain action's.
-        private void ChainAction()
+        // On a grapple the chain action empowers it; otherwise it fires the slingshot booster, which needs the throttle
+        // (KartRider style, 2026-10-19): without it the press does nothing and the slot is kept.
+        private void ChainAction(bool coasting)
         {
             RacerState racer = game.Racer;
             if (grapple.IsAttached)
@@ -326,7 +328,7 @@ namespace ProtoHarness.ChainRush
                 game.PlayCue(1);
                 return;
             }
-            if (racer.SlingTicks > 0 || !racer.TrySpendGaugeSlot()) return;
+            if (coasting || racer.SlingTicks > 0 || !racer.TrySpendGaugeSlot()) return;
             racer.SlingTicks = Ticks.FromSeconds(slingPullTime) + Ticks.FromSeconds(slingCarryTime);
             game.PlayCue(1);
         }

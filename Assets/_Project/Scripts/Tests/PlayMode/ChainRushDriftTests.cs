@@ -126,6 +126,23 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.ForwardSpeed, Is.LessThan(cut - 2f), "After the cut the runner coasts down.");
         }
 
+        // The slingshot is a booster, and a booster needs the throttle (2026-10-19): without it the chain action keeps the slot.
+        [UnityTest]
+        public IEnumerator Sling_WithoutThrottle_DoesNotFireAndKeepsTheSlot()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            source.Coasting = true;
+            source.ChainAction = true;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(source.ChainAction, Is.False, "precondition: the press was consumed.");
+            Assert.That(game.Racer.SlingTicks, Is.Zero, "No slingshot without the throttle.");
+            Assert.That(game.Racer.Gauge, Is.EqualTo(1f).Within(1e-4f), "The slot is kept.");
+        }
+
         [UnityTest]
         public IEnumerator Sling_WithoutWholeSlot_DoesNothing()
         {

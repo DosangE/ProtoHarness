@@ -185,20 +185,21 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- the input codec and the input log file -------------------------------------------
 
-        // Six buttons since the held chain key (2026-10-15, corner pole swing).
+        // Six buttons since the held chain key (2026-10-15, corner pole swing), seven with coasting (2026-10-19, throttle).
         [Test]
-        public void InputCodec_EveryCombinationOfTheSixButtonsRoundTrips_AndAnUnknownBitThrows()
+        public void InputCodec_EveryCombinationOfTheSevenButtonsRoundTrips_AndAnUnknownBitThrows()
         {
-            for (int bits = 0; bits < 64; bits++)
+            for (int bits = 0; bits < 128; bits++)
             {
-                var input = new TickInput(-0.5f, (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0, (bits & 32) != 0);
+                var input = new TickInput(-0.5f, (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0, (bits & 32) != 0,
+                    (bits & 64) != 0);
                 byte flags = TickInputCodec.ToFlags(input);
                 Assert.That(flags, Is.EqualTo((byte)bits));
                 TickInput back = TickInputCodec.FromFlags(-0.5f, flags);
                 Assert.That(TickInputCodec.ToFlags(back), Is.EqualTo(flags));
                 Assert.That(back.Steer, Is.EqualTo(-0.5f));
             }
-            Assert.Throws<InvalidDataException>(() => TickInputCodec.FromFlags(0f, 64));
+            Assert.That(TickInputCodec.FromFlags(0f, 0).Coasting, Is.False, "Bytes from before coasting existed read as full throttle.");
             Assert.Throws<InvalidDataException>(() => TickInputCodec.FromFlags(0f, 0x80));
             Assert.Throws<ArgumentOutOfRangeException>(() => TickInputCodec.FromFlags(1.5f, 0), "A steer outside [-1, 1] is refused.");
             Assert.Throws<ArgumentOutOfRangeException>(() => TickInputCodec.FromFlags(float.NaN, 0));
@@ -209,7 +210,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             var log = new InputLog();
             for (int i = 0; i < 300; i++)
-                log.Add(new TickInput(Mathf.Sin(i * 0.1f), i % 7 == 0, i % 11 == 0, i % 13 == 0, i % 3 == 0, i % 5 == 0, i % 2 == 0));
+                log.Add(new TickInput(Mathf.Sin(i * 0.1f), i % 7 == 0, i % 11 == 0, i % 13 == 0, i % 3 == 0, i % 5 == 0, i % 2 == 0, i % 4 == 1));
             byte[] bytes = InputLogFile.Encode(log);
             Assert.That(bytes.Length, Is.EqualTo(12 + 300 * 5));
             InputLog back = InputLogFile.Decode(bytes);
@@ -235,7 +236,7 @@ namespace ProtoHarness.Tests.PlayMode
             Array.Copy(bytes, padded, bytes.Length);
             Assert.Throws<InvalidDataException>(() => InputLogFile.Decode(padded));
             byte[] badButton = (byte[])bytes.Clone();
-            badButton[12 + 4] = 0x40;
+            badButton[12 + 4] = 0x80;
             Assert.Throws<InvalidDataException>(() => InputLogFile.Decode(badButton));
             byte[] nanSteer = (byte[])bytes.Clone();
             BitConverter.GetBytes(float.NaN).CopyTo(nanSteer, 12);

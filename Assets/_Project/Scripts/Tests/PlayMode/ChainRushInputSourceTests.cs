@@ -22,6 +22,7 @@ namespace ProtoHarness.Tests.PlayMode
             public bool Primary;
             public bool Release;
             public bool Attack;
+            public bool Coasting;
             public int PollCount;
             public int ClearCount;
 
@@ -29,7 +30,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             public TickInput Consume()
             {
-                var input = new TickInput(Steer, Primary, Release, Attack);
+                var input = new TickInput(Steer, Primary, Release, Attack, coasting: Coasting);
                 Primary = false;
                 Release = false;
                 Attack = false;
@@ -132,6 +133,29 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForSeconds(0.4f);
             Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f), "Steering right must turn the facing back right.");
         }
+
+        [UnityTest]
+        // Throttle (2026-10-19, KartRider style): running needs it; let go, a grounded runner slows by the coast
+        // deceleration (6 m/s a second, the code default the bench keeps) toward a stop.
+        public IEnumerator Coasting_ScriptedLetGoThenThrottle_StaysThenRunsThenRollsDown()
+        {
+            source.Coasting = true;
+            game.StartRun();
+            float startZ = player.transform.position.z;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            Assert.That(HorizontalSpeed(), Is.LessThan(0.1f), "Without the throttle a runner at rest stays at rest.");
+            Assert.That(player.transform.position.z - startZ, Is.LessThan(0.1f));
+            source.Coasting = false;
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            float running = HorizontalSpeed();
+            Assert.That(running, Is.EqualTo(20f).Within(0.5f), "With the throttle the bench runner reaches its run speed (20) in 0.67 s.");
+            source.Coasting = true;
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            Assert.That(HorizontalSpeed(), Is.EqualTo(running - 6f).Within(0.5f), "Coasting for 1 s takes off the coast deceleration, 6 m/s.");
+            Assert.That(game.IsRunning, Is.True);
+        }
+
+        private float HorizontalSpeed() => new Vector2(player.Velocity.x, player.Velocity.z).magnitude;
 
         [UnityTest]
         public IEnumerator Primary_ScriptedPressOnGround_JumpsOnce()

@@ -75,6 +75,20 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Consume_CoastingLevel_KeepsLatestAndClearResetsIt()
+        {
+            Assert.That(latch.Consume().Coasting, Is.False, "Nothing recorded reads as full throttle, like every older source.");
+            latch.Record(0f, false, false, false, coasting: true);
+            Assert.That(latch.Consume().Coasting, Is.True);
+            Assert.That(latch.Consume().Coasting, Is.True, "Letting go of the throttle is a level, not an edge.");
+            latch.Record(0f, false, false, false, coasting: false);
+            Assert.That(latch.Consume().Coasting, Is.False);
+            latch.Record(0f, false, false, false, coasting: true);
+            latch.Clear();
+            Assert.That(latch.Consume().Coasting, Is.False);
+        }
+
+        [Test]
         public void Consume_EdgeThenQuietFrame_KeepsEdgeUntilConsumed()
         {
             latch.Record(0f, false, true, false);

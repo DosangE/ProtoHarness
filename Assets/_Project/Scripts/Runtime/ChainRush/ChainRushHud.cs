@@ -125,7 +125,7 @@ namespace ProtoHarness.ChainRush
         private void DrawControls(float width, float height)
         {
             Block(new Rect(32, height - 92, width - 64, 60), Ink);
-            GUI.Label(new Rect(55, height - 75, 145, 30), "← / →   이동", body);
+            GUI.Label(new Rect(55, height - 75, 175, 30), "↑ 가속   ← / → 이동", body);
             GUI.Label(new Rect(232, height - 75, 390, 30), "ALT   점프 → 공중에서 다시 잡기", body);
             GUI.Label(new Rect(650, height - 75, 270, 30), "ALT 유지  스윙 / ↓  해제", body);
             GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);

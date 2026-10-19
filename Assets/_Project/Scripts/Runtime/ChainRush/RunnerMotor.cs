@@ -26,6 +26,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float turnSpeedLoss = 0f;
         // How fast a grounded runner below its run target speeds up to it, in m/s a second.
         [SerializeField] private float runAcceleration = 30f;
+        // How fast a grounded runner with the throttle let go slows toward a stop, in m/s a second (2026-10-19).
+        [SerializeField] private float coastDeceleration = 6f;
         // How fast an airborne runner (not on a grapple) moves toward the flat run target, in m/s a second either way.
         // 0 keeps the takeoff speed through the jump, so jumping neither gains nor loses speed.
         [SerializeField] private float airAcceleration = 5f;
@@ -123,8 +125,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: grips and the guard scrape cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
-            if (groundSnapDistance < 0f || overspeedFalloff <= 0f)
-                Debug.LogError("RunnerMotor: ground snap distance cannot be negative, the overspeed falloff must be positive.", this);
+            if (groundSnapDistance < 0f || overspeedFalloff <= 0f || coastDeceleration <= 0f)
+                Debug.LogError("RunnerMotor: ground snap distance cannot be negative, the overspeed falloff and coast deceleration must be positive.", this);
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
                 Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
@@ -188,6 +190,14 @@ namespace ProtoHarness.ChainRush
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
             if (swingTicks > 0 && (!swingHeld || grapple.IsAttached)) EndSwing(velocity, heading);
+            // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
+            // speed a swing let go with. The speed already gained then falls off like any coasting.
+            bool coasting = input.Coasting;
+            if (coasting)
+            {
+                slingTicks = 0;
+                racer.SwingCarrySpeed = 0f;
+            }
             bool swinging = swingTicks > 0;
             int carryTicks = Ticks.FromSeconds(slingCarryTime);
             bool pulling = slingTicks > carryTicks;
@@ -222,6 +232,8 @@ namespace ProtoHarness.ChainRush
                 : runSpeed;
             if (turnSpeedLoss > 0f && grounded && !swinging && turnLimit > 0f)
                 runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(turnRate) / turnLimit);
+            // Without the throttle a grounded runner rolls to a stop; in the air the jump keeps what it took off with.
+            if (coasting && grounded) runTarget = 0f;
             // The speed a swing let go with falls off slowly; once it is down to the running speed it is gone.
             ref float swingCarry = ref racer.SwingCarrySpeed;
             if (swingCarry > 0f)
@@ -235,7 +247,7 @@ namespace ProtoHarness.ChainRush
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = pulling ? slingPullAcceleration
                 : !grounded ? (grapple.IsAttached ? 5f : airAcceleration)
-                : currentForward > runTarget ? overspeedFalloff : runAcceleration;
+                : currentForward > runTarget ? (coasting ? coastDeceleration : overspeedFalloff) : runAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
             // A grapple reels at 16 m/s, or at running speed when that is faster.

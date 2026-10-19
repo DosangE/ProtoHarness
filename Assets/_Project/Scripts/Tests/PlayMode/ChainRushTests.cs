@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -16,6 +17,15 @@ namespace ProtoHarness.Tests.PlayMode
 {
     public sealed class ChainRushTests
     {
+        // Holds the throttle and nothing else, for the tests that need a running runner but not the keys: running needs
+        // the throttle since 2026-10-19, and the default keyboard source reads it as let go when no key is down.
+        private sealed class FullThrottleInputSource : IInputSource
+        {
+            public void Poll() { }
+            public TickInput Consume() => new TickInput(0f, false, false, false);
+            public void Clear() { }
+        }
+
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
@@ -58,6 +68,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.IsReady, Is.True);
             ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-ready.png"));
             yield return new WaitForSeconds(0.15f);
+            game.SetInputSource(new FullThrottleInputSource());
             game.StartRun();
             float initialZ = player.transform.position.z;
             yield return new WaitForSeconds(0.5f);
@@ -140,6 +151,7 @@ namespace ProtoHarness.Tests.PlayMode
         // Device: depends on virtual keyboard event delivery, which failed repeatedly in the editor
         // (docs/DECISIONS.md 2026-10-04). Excluded from the merge gate run; run it with the Device menu.
         // KartRider-style keys with no mouse (2026-10-18): arrows steer, left Alt jumps and grapples, letting go of it releases.
+        // The up arrow is the throttle (2026-10-19): held through every step that needs the runner moving.
         [UnityTest]
         [Category("Device")]
         public IEnumerator Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts()
@@ -155,29 +167,37 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return WaitOutCountdown();
                 Assert.That(game.IsRunning, Is.True);
+                float startZ = player.transform.position.z;
+                yield return new WaitForSeconds(0.3f);
+                Assert.That(player.transform.position.z - startZ, Is.LessThan(0.1f), "Without the up arrow the runner stays on the start line.");
+                // The bench runs circuit physics (2026-10-19): the turn rate is held to speed / 22 m, so a runner at rest
+                // barely turns. Get up to speed on the up arrow first.
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
+                yield return new WaitForSeconds(0.7f);
+                Assert.That(player.transform.position.z - startZ, Is.GreaterThan(2f), "The up arrow is the throttle.");
                 // Free steering (2026-10-05, T2a): the left and right arrows turn the facing.
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftArrow));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftArrow));
                 yield return new WaitForSeconds(0.3f);
                 float leftHeading = player.Heading;
                 Assert.That(leftHeading, Is.LessThan(-10f));
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.RightArrow));
                 yield return new WaitForSeconds(0.4f);
                 Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f));
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 MovePlayer(new Vector3(0f, 1f, 44f));
                 player.FaceTrack();
                 yield return new WaitForFixedUpdate();
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftAlt));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftAlt));
                 yield return new WaitForSeconds(0.15f);
                 Assert.That(player.IsGrounded, Is.False);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.05f);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftAlt));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftAlt));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(grapple.IsAttached, Is.True);
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-grapple.png"));
                 yield return new WaitForSeconds(0.05f);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.05f);
                 Assert.That(grapple.IsAttached, Is.False);
                 // R puts the runner back on the start line at once and counts down again.
@@ -225,25 +245,27 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
                 yield return WaitOutCountdown();
                 Assert.That(game.IsRunning, Is.True);
+                // The up arrow is the throttle (2026-10-19): held while the runner has to get to the pole.
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 player.ShiftOrigin(line.FrameAt(5d).TransformPoint(new Vector3(0f, 1.2f, 0f)) - player.transform.position);
                 Physics.SyncTransforms();
                 float deadline = Time.time + 4f;
                 while (game.IsRunning && line.Project(player.transform.position).S < 16d && Time.time < deadline) yield return new WaitForFixedUpdate();
                 Assert.That(line.Project(player.transform.position).S, Is.GreaterThanOrEqualTo(16d), "The runner never reached the hook point on the test road.");
                 Assert.That(player.TryFindPole(out _), Is.True, "precondition: the pole is in reach here.");
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftShift));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(player.IsSwinging, Is.True, "Pressing left Shift with a pole in reach must hook it.");
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftShift, Key.RightArrow));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftShift, Key.RightArrow));
                 yield return new WaitForSeconds(0.2f);
                 Assert.That(player.IsSwinging, Is.True, "The swing lasts while left Shift is held.");
                 Assert.That(game.Racer.SwingRadius, Is.LessThan(game.Racer.SwingHookRadius - 0.5f), "The right arrow is the key toward the pole of a right-hand corner: it shortens the rope.");
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(player.IsSwinging, Is.False, "Letting go of left Shift ends the swing.");
                 game.Racer.AddGauge(1f);
                 float before = game.Racer.Gauge;
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftCtrl));
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftCtrl));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(game.Racer.Gauge, Is.EqualTo(before - 1f).Within(0.05f), "Left Ctrl must spend one slot.");
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState());
@@ -402,6 +424,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Pause_Running_FreezesMotionAndTimer()
         {
+            game.SetInputSource(new FullThrottleInputSource());
             game.StartRun();
             yield return new WaitForSeconds(0.2f);
             game.TogglePause();

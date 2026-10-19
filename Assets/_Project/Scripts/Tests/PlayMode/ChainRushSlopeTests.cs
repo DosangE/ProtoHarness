@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -16,6 +17,14 @@ namespace ProtoHarness.Tests.PlayMode
     // centerline handed to the game with SetTrack. The scene itself has no slopes yet.
     public sealed class ChainRushSlopeTests
     {
+        // Holds the throttle and nothing else: running needs it since 2026-10-19, and these tests read the run, not the keys.
+        private sealed class FullThrottleInputSource : IInputSource
+        {
+            public void Poll() { }
+            public TickInput Consume() => new TickInput(0f, false, false, false);
+            public void Clear() { }
+        }
+
         private const float RoadX = 300f;
         private const float RoadHalfWidth = 4f;
         // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 20 (circuit physics since 2026-10-19, was 10);
@@ -45,6 +54,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
             Assert.That(game, Is.Not.Null);
             Assert.That(player, Is.Not.Null);
+            game.SetInputSource(new FullThrottleInputSource());
             yield return null;
         }
 

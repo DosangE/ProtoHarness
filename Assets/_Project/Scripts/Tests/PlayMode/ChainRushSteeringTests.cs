@@ -74,7 +74,9 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             yield return WaitTicks(Ticks.FromSeconds(0.5f));
             source.Steer = -1f;
-            yield return WaitTicks(Ticks.FromSeconds(0.3f));
+            // The bench runs circuit physics (2026-10-19): the 22 m turn radius turns about 45 degrees a second here,
+            // so 0.6 s of full steer (0.3 s before) is what passes -20 degrees.
+            yield return WaitTicks(Ticks.FromSeconds(0.6f));
             source.Steer = 0f;
             // The turn rate eases to zero over 0.1 s at the default turn acceleration; sample after it settles.
             yield return WaitTicks(Ticks.FromSeconds(0.15f));
@@ -87,7 +89,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.transform.position.x, Is.LessThan(-InnerEdge + 0.3f), "The runner should be running along the left guard.");
             Assert.That(player.Heading, Is.EqualTo(0f).Within(1f), "The guard must turn the facing along the rail.");
-            Assert.That(player.ForwardSpeed, Is.GreaterThan(9.5f), "Speed must recover after the hit.");
+            Debug.Log("ChainRush angled guard hit: heading " + released.ToString("0.00") + " deg, speed 2 s later "
+                + player.ForwardSpeed.ToString("0.00") + " m/s.");
+            // Run speed 20 less 0.5 (9.5 when the bench ran at 10).
+            Assert.That(player.ForwardSpeed, Is.GreaterThan(19.5f), "Speed must recover after the hit.");
         }
 
         [UnityTest]

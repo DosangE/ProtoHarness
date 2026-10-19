@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-19 · 다른 씬도 서킷 물리값: 테스트 벤치·절차 코스 Runner 를 서킷 기준으로 (테스트용 빠른 값은 남김)
+
+- **결정 (사용자, 2026-10-19 "더 빠른 테스트 진행을 위해 다른 씬 속력도 20으로 해줘", "서킷기준으로 다 바꿔버리면 안되나? 물리값 기준이 서킷일텐데", "테스트에서 빨리 확인하기위한 치트적인 요소들은 놔둬라", 표와 요청서에 "추천대로 ㄱㄱ")**:
+  - 세 씬의 차이는 `RunnerMotor` 뿐이었다(그래플 `maxRange` 32·`retractSpeed` 3·`empoweredRetractSpeed` 12, 카메라 `offset`·`maxYawSpeed` 는 세 씬이 같다 — 씬 grep).
+  - **`ChainRushTestBench.unity` Runner**: 서킷 값 11개 — `runSpeed` 10 → 20, `minTurnRadius` 0 → 22, `turnSpeedLoss` 0 → 0.1, `overspeedFalloff` 30 → 8, `airAcceleration` 5 → 0, `guardSpeedLoss` 0.15 → 0.4, `guardScrapeDecel` 0 → 25, `slingTopSpeed` 20 → 28, `slingCarrySpeed` 16 → 26, `slingCarryTime` 0.8 → 2, `empoweredReleaseSpeed` 18 → 26. **남긴 테스트용 값**: `runAcceleration` 30(서킷 8 — 출발 0.67초, 서킷은 2.5초), `turnAcceleration` 1200(서킷 200 — 봇이 곡선을 따라가는 반응).
+  - **`ChainRushProcedural.unity` Runner**: 위 11개 + `runAcceleration` 8·`turnAcceleration` 200 — 서킷과 같다(무한 모드 보류로 게이트 테스트가 돌지 않아 테스트용 값을 남길 이유가 없다). 절차 지문 `0xE81912109A2EB020` 은 바뀌었을 것이나 보류 중이라 확인하지 않았다.
+  - `Unity_RunCommand` + `SerializedObject` + `SaveScene`(코드 전문을 보이고 사용자 승인). 실행 로그의 "바꾸기 전" 값이 이미 목표와 같았다(`runSpeed 20 -> 20`) — 원인은 확인 못 했다(그 전 시도 2번은 권한 검사에 막혔고 1번은 사용자가 거절). 최종 diff 는 두 씬 모두 Runner 블록뿐이고, 지운 필드 줄(`driftGrip`·`swingSpeed` 등 9줄)이 빠지고 기본값 줄(`poleMaxAngle` 등)이 들어갔다.
+  - **권한**: `Unity_RunCommand` 의 씬 저장·테스트 실행이 자동 모드 검사기에 여러 번 막혔다(`[Irreversible Local Destruction]`, `[Modify Shared Resources]` — 같은 종류 호출도 통과하거나 막혀 판단이 일정하지 않다). 사용자 결정으로 개인 설정 `.claude/settings.local.json`(git 무시)에 이 도구의 `ask` 를 넣었다가, 확인 창이 너무 많아 사용자가 "자동화" 를 요청했다(같은 날, `allow` 만 남기는 쪽).
+- **테스트 사양 변경** (벤치 10 m/s·옛 물리값을 전제한 단언, 1회차 실패 원문은 아래 검증, 사용자 "ㄱㄱ"):
+  - `ChainRushSlopeTests`: `RunSpeed` 10 → 20(경사 ±0.2, 오르막 점프 2개), 내리막 표본 하한 100 → 50(26 m/s 로 36 m 는 약 69틱).
+  - `ChainRushDriftTests`: `RunSpeed` 10 → 20. `Sling_WithSlot_PullsPastFifteenThenSettles` → `Sling_WithSlot_PullsWellPastRunSpeedThenSettles`(최고 > 달리기 + 5, 기다림 1.5 → 3초: 당김 0.4 + 유지 2 + 26 → 20 을 초당 8).
+  - `ChainRushInputSourceTests` 조향 2개: 최소 회전 반지름 22 m 라 정지 상태에서는 거의 돌지 않는다 — 0.7초 달린 뒤 꺾는다. `Tilt_…TurnsBodyToFaceHeading` 의 경계 넘기 시작 각 −170 → −177(뒤돌아 느려지며 0.2초에 약 8° 돈다, 실측 −177.99).
+  - `ChainRushSteeringTests.Guard_AngledHit_…`: 꺾는 시간 0.3 → 0.6초, 회복 속력 > 9.5 → > 19.5(실측 "heading -27.81 deg, speed 2 s later 20.00 m/s").
+  - `ChainRushCornerSwingTests.Swing_PressedInTheAir_…`: 20 m/s 점프(약 21 m)가 R30 도로의 원호 전 걸기 구간(약 20 m)보다 길어 원호 안에 착지하고 봉이 95° 밖으로 빠졌다. 이 테스트만 R60 도로(직선 40 + R60 90°, 원호 전 약 27.5 m)로, 원래 시나리오 그대로. 같은 테스트 3번 실패 뒤 멈추고 보고해 사용자가 골랐다(§4-5).
+- **검증** (`feature/scenes-circuit-physics`, 커밋 전, 에디터 6000.3.19f1, UTC):
+  - EditMode(`!Enemy`, `!Endless`) `testcasecount="228" result="Passed" passed="228" failed="0"` (03:27:26Z~03:27:29Z).
+  - `Run PlayMode Tests` 1회차(씬만 바꿈) `testcasecount="135" result="Failed(Child)" passed="121" failed="11" skipped="3"` (03:28:14Z~03:34:35Z): `Slope_ConstantGrade_ScalesRunSpeed(-0.2f)` "Grade -0.2: ds/dt 26.00002 Expected: 13.0f +/- 0.5f", `(0.2f)` "ds/dt 13.99994 Expected: 7.0f", `Jump_OffAnUphill_…(0, 5)` "precondition: the uphill run target. Expected: 7.0f +/- 0.5f But was: 14.0f", `Downhill_TwentyPercent_StaysGrounded` "Too few samples on the slope. Expected: greater than 100 But was: 69", `Sling_WithoutWholeSlot_DoesNothing` "Expected: less than 10.5f But was: 20.0f", `Sling_WithSlot_PullsPastFifteenThenSettles` "Speed returns to the run speed after the carry. Expected: 10.0f +/- 0.5f But was: 26.0f", `Steer_ScriptedLeftThenRight_…`·`Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading` "Expected: less than -10.0f But was: -3.75010681f", `Guard_AngledHit_…` "Expected: less than -20.0f But was: -13.7498627f", `Swing_PressedInTheAir_…` "precondition: landed before the arc. Expected: less than 30.0d But was: 32.32334303855896d".
+  - 빠른 확인(병합 근거 아님): 5 클래스 `testcasecount="29" passed="27" failed="2"` (03:38:29Z~03:40:07Z — 공중 스윙 "A press on the ground hooks. Expected: True But was: False", 경계 넘기 "Expected: greater than 90.0f But was: -177.994217f"), 5 클래스 `passed="28" failed="1"` (03:50:07Z~03:51:42Z — 공중 스윙 "precondition: following the arc, the pole stays in reach"), 코너 스윙 `testcasecount="9" result="Passed"` (03:59:24Z~03:59:59Z, R60 도로).
+  - 컴파일 테스트 수정마다 `*** Tundra build success` (8.97·2.59·3.50 초).
+  - `Run PlayMode Tests` 2회차 `testcasecount="135" result="Passed" passed="132" failed="0" skipped="3"` (04:00:31Z~04:05:44Z, 313.5초). 서킷 지문 `0x1BB2D21DADD3F85F` 그대로(서킷 씬은 안 바꿈), 봇 랩 29.62·28.44·28.44 초.
+- **확인 못 한 것**: 사용자 플레이(테스트 벤치·절차 코스 20 m/s) — 사용자가 플레이 확인 없이 "커밋·병합·푸시" 를 골랐다(2026-10-19). 절차 지문(보류).
+- **버린 대안**: 코드 기본값을 서킷 값으로 — 씬은 값을 따로 저장하므로 씬이 안 바뀌고, 코드로 Runner 를 만드는 곳만 바뀐다. 벤치까지 서킷 값 전부(출발 가속 8·조향 200) — 사용자 "테스트에서 빨리 확인하기위한 … 놔둬라". 공중 스윙 테스트를 둘로 나누기(발판 끝 낙하) — 시험용 도로가 하나 더 든다.
+
 ## 2026-10-19 · M1-T 점프·스윙: 공중에서는 스윙이 걸리지 않고, 서킷의 점프는 이륙 속력을 유지한다
 
 - **결정 (사용자, 2026-10-19 "점프와 그래플이 alt로 정상작동하는 것 확인했다. 3번에 추가적으로 조절해야할 요소로 점프 중에 스윙(shift)가 걸리는 것이 있다. 점프에 대해서 속도가 어떻게 변하는지 파악하고 조절해야할 필요가 있어보인다", 선택지에 "공중에선 안 걸림"·"이륙 속력 유지", 계획에 "A부터 진행하라")**:

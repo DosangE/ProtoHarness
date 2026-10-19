@@ -18,8 +18,9 @@ namespace ProtoHarness.Tests.PlayMode
     {
         private const float RoadX = 300f;
         private const float RoadHalfWidth = 4f;
-        // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 10; slope factor 1.5, scale 0.7..1.3.
-        private const float RunSpeed = 10f;
+        // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 20 (circuit physics since 2026-10-19, was 10);
+        // slope factor 1.5, scale 0.7..1.3.
+        private const float RunSpeed = 20f;
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -73,7 +74,8 @@ namespace ProtoHarness.Tests.PlayMode
                 if (!player.IsGrounded) airborne++;
             }
             Assert.That(game.IsRunning, Is.True, "Run ended on the downhill at s=" + S(line));
-            Assert.That(ticks, Is.GreaterThan(100), "Too few samples on the slope.");
+            // 36 m at the downhill's 26 m/s is about 69 ticks.
+            Assert.That(ticks, Is.GreaterThan(50), "Too few samples on the slope.");
             Assert.That(airborne, Is.Zero, "Lost ground on " + airborne + " of " + ticks + " ticks.");
         }
 
@@ -133,8 +135,8 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Off a 20% uphill the grounded run target is 0.7 times run speed, but in the air it is the flat run speed: the
-        // airborne speed moves toward it by airAcceleration a second. The bench keeps the old 5; the circuit uses 0, so a
-        // jump keeps its takeoff speed (2026-10-19, M1-T play: jumping must not be a way to gain speed uphill).
+        // airborne speed moves toward it by airAcceleration a second. The code default is the old 5; the circuit and the bench
+        // use 0, so a jump keeps its takeoff speed (2026-10-19, M1-T play: jumping must not be a way to gain speed uphill).
         [UnityTest]
         public IEnumerator Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration([Values(0f, 5f)] float airAcceleration)
         {

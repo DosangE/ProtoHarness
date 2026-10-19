@@ -120,6 +120,9 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Steer_ScriptedLeftThenRight_TurnsFacingWithoutDevices()
         {
             game.StartRun();
+            // The bench runs circuit physics (2026-10-19): the turn rate is held to speed / 22 m, so a runner at rest
+            // barely turns. Get up to speed first.
+            yield return new WaitForSeconds(0.7f);
             source.Steer = -1f;
             yield return new WaitForSeconds(0.3f);
             float leftHeading = player.Heading;
@@ -190,17 +193,20 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(body, Is.Not.Null);
             Quaternion rootRotation = player.transform.rotation;
             game.StartRun();
+            // Up to speed first: at rest the 22 m turn radius barely turns the runner (see the steering test above).
+            yield return new WaitForSeconds(0.7f);
             source.Steer = -1f;
             yield return new WaitForSeconds(0.3f);
             yield return new WaitForEndOfFrame();
             Assert.That(player.Heading, Is.LessThan(-10f), "The runner must have turned for this check to mean anything.");
             Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer)),
                 Is.LessThan(0.5f), "The body must face its heading after turning.");
-            // Heading wraps from -180 to 180; the body must follow across the seam.
-            game.Racer.Heading = -170f;
+            // Heading wraps from -180 to 180; the body must follow across the seam. Turned round against its velocity the
+            // runner slows, and the 22 m turn radius turns it only about 8 degrees in 0.2 s (2026-10-19), so start at -177.
+            game.Racer.Heading = -177f;
             yield return new WaitForSeconds(0.2f);
             yield return new WaitForEndOfFrame();
-            Assert.That(player.Heading, Is.GreaterThan(90f), "Steering left from -170 must have wrapped past -180.");
+            Assert.That(player.Heading, Is.GreaterThan(90f), "Steering left from -177 must have wrapped past -180.");
             Assert.That(Quaternion.Angle(body.rotation, Quaternion.LookRotation(player.Facing) * RunnerTilt.Evaluate(player.Velocity, player.Steer)),
                 Is.LessThan(0.5f), "The body must face its heading after it wraps.");
             Assert.That(player.transform.rotation, Is.EqualTo(rootRotation), "The root must not turn.");

@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-10-19 · M2-b 러너 프로필: ALPHA·BETA·THETA·DELTA·OMEGA, 씬 값에 곱하는 배율
+
+- **결정 (사용자, 2026-10-19 "이름 알파 베타 세타 델타 오메가로 5명 스탯 조금씩 다르게", "속도 배율 밸런스는 1.0(빠름으로 해놓은것) 만 되어있으니 나머지 보통과 매우빠름은 후순위", 추천 배율표에 "네 추천안대로 일단 그렇게 해보자")**:
+  - **`RunnerProfile`**(SO, `Data/RunnerProfile_*.asset`): 이름 + 배율 4개. 씬의 `RunnerMotor` 값에 곱한다 — 최고 속도는 `runSpeed`·부스터(`slingTopSpeed` 28·`slingCarrySpeed` 26·`empoweredReleaseSpeed` 26), 가속은 `runAcceleration`, 게이지 충전은 `swingMetersPerSlot` 를 나눈다. 무게는 저장만(몸싸움 M7 C2 까지 효과 없음). 그래플 최저 16·놓을 때 13 같은 고정값과 점프·중력·조향은 그대로.
+  - **값** (최고 속도 / 가속 / 게이지 충전 / 무게): ALPHA 1/1/1/1(지금 값), BETA 0.97/1.20/1.00/0.90, THETA 1.03/0.85/1.00/1.10, DELTA 0.98/1.00/1.20/0.95, OMEGA 1.02/1.05/0.85/1.20.
+  - **적용**: `RunnerMotor.Configure(RunnerProfile)` — 런 밖에서만(달리는 중·일시정지면 예외), 잘못된 프로필도 예외. 로비 → `RaceSetup.Runner`(이름 → `RunnerProfile`) → `RaceAssembler` 가 출발 전에 부른다. 씬을 바로 연 경우는 프로필 없이 씬 값 그대로.
+  - 로비 러너 페이지에 고른 러너의 능력치 막대 4개(0.7~1.3 범위, 배율 숫자).
+  - 속도 단계 보통·매우빠름은 계속 잠금(후순위).
+- **이유**: 배율이면 ALPHA(모두 1)가 곱해도 비트 단위로 같은 값이라 세 씬의 지문이 그대로이고, 값의 원본이 씬 하나로 남는다. 절대값 프로필은 씬마다 다른 물리값(DECISIONS "다른 씬 서킷 물리값")과 원본이 둘이 된다.
+- **버린 대안**: 부스터 속도를 최고 속도와 따로 두기 — 부스터가 달리기보다 빨라야 한다는 규칙(`RunnerMotor.OnValidate`)이 러너마다 깨질 수 있다.
+- **하지 않은 것**: 네트워크에 프로필 싣기(M7 — 멀티는 잠금이라 지금은 기본값만 돈다), 입력 기록 파일에 프로필 기록(M4 고스트 때), 러너별 모형·색(M6).
+- **씬·에셋 작업**: 프로필 에셋 5개 생성과 씬 편집은 승인받은 `Unity_RunCommand` 로 했다. 첫 실행에서 로비 씬을 연 순간 방금 만든 프로필 객체가 내려가 로비 `runners` 가 빈 연결 5개로 저장됐다(`ChainRushCircuitSceneBuilder` 의 주석과 같은 현상) — 씬을 연 뒤 디스크에서 다시 읽어 넣는 두 번째 실행(승인)으로 고쳤고, 저장된 GUID 5개가 에셋 `.meta` 와 같음을 확인했다.
+- **검증** (에디터 6000.3.25f1, `feature/m2-runner-profile` 커밋 전):
+  - 컴파일: 성공, 새 타입 로드 확인, Console Error 0건(프로필·씬 편집 전). 씬 편집 중 `LobbyMenu.OnValidate` 의 "runner N is missing" 5줄씩 2번은 위 빈 연결과, 두 번째 실행에서 옛 빈 목록이 열릴 때 난 것이다.
+  - `ChainRushProfileTests` 6건: 첫 실행에서 `Configure_NullInvalidOrDuringARun_Throws` 1건 실패 — 테스트가 일부러 넣은 잘못된 값에 `RunnerProfile.OnValidate` 가 `LogError` 를 내고(의도한 동작) 테스트가 그 로그를 예상하지 않았다. 테스트에 `LogAssert.Expect` 를 넣고 다시: `testcasecount="6" result="Passed" passed="6" failed="0"` (11:43:11Z~11:43:39Z). 출발 75틱 거리 BETA 10.94 m > ALPHA 9.12 m > THETA 7.75 m, 700틱 해시 BETA `0xA9251CA0D8EBD1BE`·THETA `0x6761C9D9B6C0C3F0`(각각 두 번 같음, ALPHA 와 다름), ALPHA 는 프로필 없는 씬 값과 비트 단위로 같다.
+  - `ChainRushFlowTests` 9/9 (11:42:02Z~, 같은 실행의 Profile 실패 1건 외).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="230" result="Passed" passed="230" failed="0"` (11:43:45Z~11:43:46Z).
+  - PlayMode 게이트 `Run PlayMode Tests` 1회: `testcasecount="154" result="Passed" passed="151" failed="0" skipped="3"` (11:43:59Z~11:49:52Z, 352.8초). 건너뜀 3 = `[Explicit]` `NetworkRaceTests`. 서킷 지문 `0xE3744A27006C0BB2` 그대로.
+  - `Run Device Input Tests`: `testcasecount="3" result="Passed" passed="3" failed="0"` (11:50:10Z~11:50:26Z, 시작 때 `isApplicationActive=False` 였으나 통과).
+  - **검증 안 됨**: 로비 러너 페이지·능력치 막대의 화면 모양, 사용자 플레이(러너마다 차이가 느껴지는지), 3랩 랩타임 차이(재지 않았다).
+
+## 2026-10-19 · M2-a2 빌드 씬 목록 (`feature/build-scene-list`, `22dd4aa` → `dev` `0432115`)
+
+- **결정 (사용자, 2026-10-19 "씬 목록 정리했다", "커밋 병합 ㄱㄱ")**: 사용자가 에디터 Build Profiles 에서 `ChainRushTitle`(0번)·`ChainRushLobby`·`ChainRushCircuit`·`ChainRushTrackStadium` 을 넣고 템플릿 `SampleScene` 을 껐다. `ProjectSettings/EditorBuildSettings.asset` 만 바뀐 브랜치(§9-2)이고, GUID 4개가 씬 `.meta` 와 같다. 기록은 그 브랜치에 파일 하나만 두려고 이 항목(M2-b 브랜치)에 남긴다.
+- **검증**: `select-tests -Range dev...HEAD` 1개 파일 → "전체". `ChainRushFlowTests` 9/9(`Loop_ByName_…` 첫 실행 통과, 11:24:21Z), 게이트 `testcasecount="148" result="Passed" passed="145" failed="0" skipped="3"` (11:24:49Z~11:30:15Z, 326.5초, 지문 `0xE3744A27006C0BB2`), EditMode 230/230 (11:33:06Z). 게이트는 디스크 저장 전, 에디터에 반영된 목록으로 돌았다(끝난 뒤 같은 내용이 저장돼 있었다).
+
 ## 2026-10-19 · M2 씬 구성: 타이틀 → 로비 → 달리는 씬 + 서킷 장식 씬(Additive), 시뮬은 데이터로 (M2-a1)
 
 - **결정 (사용자, 2026-10-19 "addictive 씬 구성으로 하자. 타이틀 입장씬과 로비씬이 따로 있고 실제 달리는 씬을 둔 다음 서킷이나 조건(싱글or멀티, 속도(카트라이더의 보통,빠름,매우빠름 같은)) 불러오며 조립하는 식으로", 트랙 쪽 구성 "A", "M2-a1 ㄱㄱ", 기준 속도 단계 "빠름")**:

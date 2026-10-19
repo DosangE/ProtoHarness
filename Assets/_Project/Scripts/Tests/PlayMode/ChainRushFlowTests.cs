@@ -27,16 +27,25 @@ namespace ProtoHarness.Tests.PlayMode
         private const string EnvironmentScene = "ChainRushTrackStadium";
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
 
+        private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
+
         private TrackDefinition made;
+        // A runner of all 1s: races exactly as the scene's values.
+        private RunnerProfile runner;
 
         [SetUp]
-        public void SetUp() => RaceLaunch.Clear();
+        public void SetUp()
+        {
+            RaceLaunch.Clear();
+            runner = ScriptableObject.CreateInstance<RunnerProfile>();
+        }
 
         [UnityTearDown]
         public IEnumerator TearDown()
         {
             RaceLaunch.Clear();
             if (made != null) UnityEngine.Object.Destroy(made);
+            if (runner != null) UnityEngine.Object.Destroy(runner);
             yield return null;
             LogAssert.NoUnexpectedReceived();
         }
@@ -47,18 +56,18 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTrackOrRunner_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
-            Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, "", RaceMode.Single, SpeedClass.Fast, "R"));
-            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, null, RaceMode.Single, SpeedClass.Fast, "R"));
-            Assert.Throws<ArgumentException>(() => new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, ""));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", (RaceMode)7, SpeedClass.Fast, "R"));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", RaceMode.Single, (SpeedClass)7, "R"));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, "", RaceMode.Single, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, null, RaceMode.Single, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", (RaceMode)7, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", RaceMode.Single, (SpeedClass)7, runner));
         }
 
         [Test]
         public void RaceLaunch_SecondRequestBeforeTaking_ThrowsAndTakingEmptiesIt()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
-            var setup = new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, "R");
+            var setup = new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner);
             RaceLaunch.Request(setup);
             Assert.Throws<InvalidOperationException>(() => RaceLaunch.Request(setup));
             Assert.That(RaceLaunch.TryTake(out RaceSetup taken), Is.True);
@@ -88,7 +97,9 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(setup.EnvironmentScene, Is.EqualTo(EnvironmentScene));
             Assert.That(setup.Mode, Is.EqualTo(RaceMode.Single));
             Assert.That(setup.Speed, Is.EqualTo(SpeedClass.Fast));
-            Assert.That(setup.Runner, Is.EqualTo(LobbyMenu.DefaultRunner));
+#if UNITY_EDITOR
+            Assert.That(setup.Runner, Is.SameAs(AssetDatabase.LoadAssetAtPath<RunnerProfile>(AlphaPath)), "The runner page opens on the first runner, ALPHA.");
+#endif
             Assert.That(RaceLaunch.HasPending, Is.False, "Nothing is requested before the runner is confirmed.");
         }
 
@@ -142,7 +153,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
             Assert.That(made.TryValidate(out string error), Is.True, error);
-            RaceLaunch.Request(new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, LobbyMenu.DefaultRunner));
+            RaceLaunch.Request(new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
@@ -150,6 +161,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(RaceLaunch.HasPending, Is.False, "The race scene took the request.");
             Assert.That(assembler.IsLaunched, Is.True);
             Assert.That(circuit.Definition, Is.SameAs(made), "The circuit is built from the lobby's definition, not the saved one.");
+            Assert.That(Find<RunnerMotor>(assembler.gameObject.scene).Profile, Is.SameAs(runner), "The runner races the lobby's profile.");
             Assert.That(assembler.IsAssembling, Is.False, "No environment scene: it counts in at once.");
             Assert.That(game.IsCountingDown, Is.True);
         }
@@ -173,7 +185,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Race_LockedSpeedClass_IsRefusedLoudlyAndDoesNotRun()
         {
-            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.VeryFast, LobbyMenu.DefaultRunner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.VeryFast, runner));
             LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("cannot be raced yet"));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -192,7 +204,7 @@ namespace ProtoHarness.Tests.PlayMode
             foreach (string path in new[] { TitlePath, LobbyPath, RacePath, EnvironmentPath })
                 if (SceneUtility.GetBuildIndexByScenePath(path) < 0)
                     Assert.Ignore("Not in the build's scene list yet (M2-a2): " + path);
-            RaceLaunch.Request(new RaceSetup(Stadium(), EnvironmentScene, RaceMode.Single, SpeedClass.Fast, LobbyMenu.DefaultRunner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), EnvironmentScene, RaceMode.Single, SpeedClass.Fast, runner));
             SceneManager.LoadScene(RaceLaunch.RaceScene);
             yield return null;
             RaceAssembler assembler = Find<RaceAssembler>(SceneManager.GetActiveScene());

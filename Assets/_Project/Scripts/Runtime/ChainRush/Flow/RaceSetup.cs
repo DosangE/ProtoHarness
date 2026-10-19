@@ -14,16 +14,15 @@ namespace ProtoHarness.ChainRush.Flow
         public string EnvironmentScene { get; }
         public RaceMode Mode { get; }
         public SpeedClass Speed { get; }
-        // Display name only until runner profiles exist (M2-b).
-        public string Runner { get; }
+        public RunnerProfile Runner { get; }
 
-        public RaceSetup(TrackDefinition track, string environmentScene, RaceMode mode, SpeedClass speed, string runner)
+        public RaceSetup(TrackDefinition track, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
             if (environmentScene == null) throw new ArgumentNullException(nameof(environmentScene), "Pass an empty string for no environment scene.");
             if (!Enum.IsDefined(typeof(RaceMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown race mode.");
             if (!Enum.IsDefined(typeof(SpeedClass), speed)) throw new ArgumentOutOfRangeException(nameof(speed), speed, "Unknown speed class.");
-            if (string.IsNullOrEmpty(runner)) throw new ArgumentException("A runner is required.", nameof(runner));
+            if (runner == null) throw new ArgumentNullException(nameof(runner));
             Track = track;
             EnvironmentScene = environmentScene;
             Mode = mode;

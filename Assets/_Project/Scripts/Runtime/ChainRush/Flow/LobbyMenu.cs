@@ -27,16 +27,15 @@ namespace ProtoHarness.ChainRush.Flow
             public string EnvironmentScene => environmentScene;
         }
 
-        // Until runner profiles exist (M2-b) there is one runner, the scene's.
-        public const string DefaultRunner = "ARMORED RUNNER";
         private const int MainSingle = 0, MainMulti = 1, MainSettings = 2;
         private static readonly string[] MainOptions = { "싱글 레이스", "멀티 레이스", "설정" };
         private static readonly bool[] MainLocked = { false, true, false };
         private static readonly SpeedClass[] Speeds = { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast };
         private static readonly string[] SpeedOptions = { "보통", "빠름", "매우빠름" };
         private static readonly bool[] SpeedLocked = { true, false, true };
-        private static readonly string[] RunnerOptions = { DefaultRunner };
-        private static readonly bool[] RunnerLocked = { false };
+        private static readonly string[] StatNames = { "최고 속도", "가속", "게이지 충전", "무게" };
+        // A stat bar is full at this scale; the runners differ by a few percent, so the bars start from StatBarFloor.
+        private const float StatBarFloor = 0.7f, StatBarCeiling = 1.3f;
         private static readonly string[] NoOptions = new string[0];
         private static readonly bool[] NoLocks = new bool[0];
         private static readonly string[] PageTitles = { "MAIN MENU", "SETTINGS", "TRACK", "SPEED", "RUNNER" };
@@ -57,8 +56,14 @@ namespace ProtoHarness.ChainRush.Flow
         private static readonly Color Slate = new Color(0.2f, 0.3f, 0.33f);
 
         [SerializeField] private TrackChoice[] tracks;
+        [SerializeField] private RunnerProfile[] runners;
         private string[] trackOptions;
         private bool[] trackLocked;
+        private string[] runnerOptions;
+        private bool[] runnerLocked;
+        // Per runner: the four stats (StatNames order) and their "x1.03" labels, made once.
+        private float[,] runnerStats;
+        private string[,] runnerStatText;
         private Page page;
         private int cursor;
         private int track;
@@ -99,14 +104,43 @@ namespace ProtoHarness.ChainRush.Flow
                 }
                 trackOptions[i] = tracks[i].Title;
             }
+            if (runners == null || runners.Length == 0)
+            {
+                Debug.LogError("LobbyMenu: at least one runner is required.", this);
+                enabled = false;
+                return;
+            }
+            runnerOptions = new string[runners.Length];
+            runnerLocked = new bool[runners.Length];
+            runnerStats = new float[runners.Length, StatNames.Length];
+            runnerStatText = new string[runners.Length, StatNames.Length];
+            for (int i = 0; i < runners.Length; i++)
+            {
+                if (runners[i] == null || !runners[i].TryValidate(out string error))
+                {
+                    Debug.LogError($"LobbyMenu: runner {i} is missing or invalid.", this);
+                    enabled = false;
+                    return;
+                }
+                runnerOptions[i] = runners[i].DisplayName;
+                float[] stats = { runners[i].TopSpeedScale, runners[i].AccelerationScale, runners[i].GaugeChargeScale, runners[i].Weight };
+                for (int s = 0; s < stats.Length; s++)
+                {
+                    runnerStats[i, s] = stats[s];
+                    runnerStatText[i, s] = "×" + stats[s].ToString("0.00");
+                }
+            }
         }
 
         private void OnValidate()
         {
-            if (tracks == null) return;
-            for (int i = 0; i < tracks.Length; i++)
-                if (tracks[i].Definition == null || string.IsNullOrEmpty(tracks[i].Title))
-                    Debug.LogError($"LobbyMenu: track {i} needs a title and a definition.", this);
+            if (tracks != null)
+                for (int i = 0; i < tracks.Length; i++)
+                    if (tracks[i].Definition == null || string.IsNullOrEmpty(tracks[i].Title))
+                        Debug.LogError($"LobbyMenu: track {i} needs a title and a definition.", this);
+            if (runners != null)
+                for (int i = 0; i < runners.Length; i++)
+                    if (runners[i] == null) Debug.LogError($"LobbyMenu: runner {i} is missing.", this);
         }
 
         private void Update()
@@ -182,7 +216,7 @@ namespace ProtoHarness.ChainRush.Flow
 
         // The race the current choices make (track, speed class and runner as last confirmed).
         public RaceSetup BuildSetup() =>
-            new RaceSetup(tracks[track].Definition, tracks[track].EnvironmentScene, RaceMode.Single, Speeds[speed], RunnerOptions[runner]);
+            new RaceSetup(tracks[track].Definition, tracks[track].EnvironmentScene, RaceMode.Single, Speeds[speed], runners[runner]);
 
         private void Launch()
         {
@@ -198,10 +232,10 @@ namespace ProtoHarness.ChainRush.Flow
         }
 
         private string[] Options(Page of) =>
-            of == Page.Main ? MainOptions : of == Page.Track ? trackOptions : of == Page.Speed ? SpeedOptions : of == Page.Runner ? RunnerOptions : NoOptions;
+            of == Page.Main ? MainOptions : of == Page.Track ? trackOptions : of == Page.Speed ? SpeedOptions : of == Page.Runner ? runnerOptions : NoOptions;
 
         private bool[] Locked(Page of) =>
-            of == Page.Main ? MainLocked : of == Page.Track ? trackLocked : of == Page.Speed ? SpeedLocked : of == Page.Runner ? RunnerLocked : NoLocks;
+            of == Page.Main ? MainLocked : of == Page.Track ? trackLocked : of == Page.Speed ? SpeedLocked : of == Page.Runner ? runnerLocked : NoLocks;
 
         private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal)
         {
@@ -265,9 +299,27 @@ namespace ProtoHarness.ChainRush.Flow
             GUI.Label(new Rect(width - 420, 152, 360, 24), "RACE SETUP", small);
             GUI.Label(new Rect(width - 420, 196, 360, 30), "트랙     " + trackOptions[track], body);
             GUI.Label(new Rect(width - 420, 240, 360, 30), "속도     " + SpeedOptions[speed], body);
-            GUI.Label(new Rect(width - 420, 284, 360, 30), "러너     " + RunnerOptions[runner], body);
+            GUI.Label(new Rect(width - 420, 284, 360, 30), "러너     " + runnerOptions[runner], body);
             GUI.Label(new Rect(width - 420, 328, 360, 24), "모드     싱글", small);
+            if (page == Page.Runner) DrawRunnerStats(width, cursor);
             GUI.matrix = previous;
+        }
+
+        // The highlighted runner's stats as bars between StatBarFloor and StatBarCeiling, with their scales.
+        private void DrawRunnerStats(float width, int shown)
+        {
+            Block(new Rect(width - 452, 398, 420, 260), Ink);
+            GUI.Label(new Rect(width - 420, 420, 360, 30), runnerOptions[shown], heading);
+            for (int s = 0; s < StatNames.Length; s++)
+            {
+                float y = 476 + s * 44;
+                GUI.Label(new Rect(width - 420, y, 120, 24), StatNames[s], small);
+                var bar = new Rect(width - 300, y + 6, 180, 8);
+                Block(bar, Slate);
+                bar.width *= Mathf.InverseLerp(StatBarFloor, StatBarCeiling, runnerStats[shown, s]);
+                Block(bar, Mint);
+                GUI.Label(new Rect(width - 106, y, 70, 24), runnerStatText[shown, s], small);
+            }
         }
 
         private void DrawList()

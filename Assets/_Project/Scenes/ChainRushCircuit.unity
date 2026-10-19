@@ -111357,6 +111357,7 @@ MonoBehaviour:
   minTurnRadius: 22
   turnSpeedLoss: 0.1
   runAcceleration: 8
+  airAcceleration: 0
   sideGrip: 60
   airSideGrip: 18
   guardSpeedLoss: 0.4

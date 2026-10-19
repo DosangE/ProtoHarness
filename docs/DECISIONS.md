@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-10-19 · M1-T 점프·스윙: 공중에서는 스윙이 걸리지 않고, 서킷의 점프는 이륙 속력을 유지한다
+
+- **결정 (사용자, 2026-10-19 "점프와 그래플이 alt로 정상작동하는 것 확인했다. 3번에 추가적으로 조절해야할 요소로 점프 중에 스윙(shift)가 걸리는 것이 있다. 점프에 대해서 속도가 어떻게 변하는지 파악하고 조절해야할 필요가 있어보인다", 선택지에 "공중에선 안 걸림"·"이륙 속력 유지", 계획에 "A부터 진행하라")**:
+  - **파악한 것** (코드 기준, 플레이 측정 아님): 점프는 `jumpSpeed` 11.5·`gravity` 22 로 평지 체공 약 1.05초·최고 약 3.0 m(20 m/s 면 약 21 m). 공중의 수평 목표는 경사·회전 감속 없이 늘 `runSpeed` 이고, 가속·감속이 **박혀 있던 5 m/s²** 였다. 그래서 서킷에서 오르막(땅 목표 최저 14)이나 꺾는 중(최대 −10%)에 뛰면 공중에서 20 쪽으로 빨라졌고(한 번에 최대 약 +5 m/s), 넘친 속력은 땅(8)보다 천천히(5) 줄었다. 스윙 걸기(`TryHookPole`)는 땅 여부를 보지 않았고 봉 찾기는 수평 거리·각도만 봐서(`Centerline.TryFindPole`) 공중에서도 걸려, 위 속도를 유지한 채 떨어지며 돌았다.
+  - **`RunnerMotor`**: `TryHookPole` 은 `CoyoteTime > 0`(땅, 또는 발판을 걸어 나간 뒤 0.1초 안)일 때만 건다. 점프하는 틱은 점프가 코요테를 0 으로 만든 뒤 불리므로 그 틱의 누름도 걸리지 않는다. 공중에서 누른 채 착지해도 걸리지 않는다(누름만 건다는 기존 규칙). 새 필드 `airAcceleration`(기본 5 = 이전 동작): 그래플이 아닌 공중의 수평 가감속. 그래플 중은 5 그대로.
+  - **서킷 씬 Runner**: `airAcceleration` 0 — 사용자가 에디터 인스펙터에서 바꾸고 저장했다(`Unity_RunCommand` 저장은 자동 모드 권한 검사에 막혔다). 씬 diff 는 `airAcceleration: 0` 한 줄. 테스트 벤치·절차 코스는 기본 5 그대로.
+  - **테스트 추가**: `ChainRushCornerSwingTests.Swing_PressedInTheAir_DoesNotHook_NorWhenHeldIntoTheLanding`, `ChainRushSlopeTests.Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration`(0 과 5, 플레이 인스턴스에서만 값 변경).
+- **검증** (`feature/tuning-jump-swing`, 커밋 전, 에디터 6000.3.19f1, UTC):
+  - 컴파일 `*** Tundra build success (31.86 seconds), 14 items updated, 1618 evaluated`.
+  - 빠른 확인(병합 근거 아님) 코너 스윙·경사 2 클래스 `testcasecount="15" result="Passed" passed="15" failed="0"` (02:24:13Z~02:25:36Z): "ChainRush uphill jump (air acceleration 0): takeoff 7.000 m/s, after 20 air ticks 7.000 m/s.", "(air acceleration 5): takeoff 7.000 m/s, after 20 air ticks 9.000 m/s."
+  - EditMode(`!Enemy`, `!Endless`) `testcasecount="228" result="Passed" passed="228" failed="0"` (02:30:47Z~02:30:50Z).
+  - `Run PlayMode Tests` (서킷 씬 값 저장 뒤) `testcasecount="135" result="Passed" passed="132" failed="0" skipped="3"` (02:31:12Z~02:37:22Z, 369.3초, skipped 3 은 `[Explicit]` 네트워크 레이스). **서킷 지문 `0x150CA0904EFFEBDE` → `0x1BB2D21DADD3F85F`** — 리플레이 봇이 점프 틈을 뛰고 그래플을 1회 쓴다(공중 속력 변경, 새 기준). 봇 랩 29.62·28.44·28.44 초(이전과 소수 둘째 자리까지 같다). Long·Sweep 은 무한 모드 보류로, Device 는 입력 장치 경로를 바꾸지 않아 돌리지 않았다.
+  - 공중 스윙 테스트가 고치기 전 코드에서 실패하는지는 돌려 보지 않았다(규칙 변경이라 버그 수정 절차가 아니다).
+- **사용자 플레이** (2026-10-19): "확인했다. ㄱㄱ"(커밋·병합 지시).
+- **버린 대안**: 공중에도 땅 규칙(경사·회전 감속·가속 8) — 공중의 경사 기준이 애매하고 바뀌는 코드가 크다. 착지 순간 누르고 있으면 걸기 — "누름만 건다" 규칙에 예외가 생긴다. 코드 기본값을 0 으로 — 테스트 벤치·절차 지문까지 바뀐다(사용자: 테스트에서 빨리 확인하기 위한 값은 그대로 둔다).
+
 ## 2026-10-18 · R4c 사각 서킷(R22 90° 코너 4개) + 카트라이더식 조향·감속
 
 - **결정 (사용자, 2026-10-18 "R4c 진행하면서 방향키로 움직이는 조향?감과 감속 조건들 넣어봐 카트라이더 보면 좌우로 움직이거나 벽에 부딫히면 감속이 된다", 계획에 "사각 서킷 + 계획대로")**:

@@ -132,6 +132,46 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(flatReach, Is.GreaterThanOrEqualTo(8f), table.ToString());
         }
 
+        // Off a 20% uphill the grounded run target is 0.7 times run speed, but in the air it is the flat run speed: the
+        // airborne speed moves toward it by airAcceleration a second. The bench keeps the old 5; the circuit uses 0, so a
+        // jump keeps its takeoff speed (2026-10-19, M1-T play: jumping must not be a way to gain speed uphill).
+        [UnityTest]
+        public IEnumerator Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration([Values(0f, 5f)] float airAcceleration)
+        {
+            SetMotorFloat("airAcceleration", airAcceleration);
+            Centerline line = SlopeRoad(0.2f);
+            yield return StartOn(line, 110d);
+            yield return RunTo(line, 42d);
+            Assert.That(player.IsGrounded, Is.True);
+            player.PrimaryAction();
+            float deadline = Time.time + 1f;
+            while (game.IsRunning && player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.False, "precondition: the jump took off.");
+            float takeoff = player.ForwardSpeed;
+            const int AirTicks = 20;
+            for (int i = 0; i < AirTicks; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.False, "precondition: still in the air.");
+            float expected = Mathf.Min(takeoff + airAcceleration * AirTicks * Ticks.Seconds, RunSpeed);
+            Debug.Log("ChainRush uphill jump (air acceleration " + airAcceleration + "): takeoff " + takeoff.ToString("0.000")
+                + " m/s, after " + AirTicks + " air ticks " + player.ForwardSpeed.ToString("0.000") + " m/s.");
+            Assert.That(takeoff, Is.EqualTo(RunSpeed * 0.7f).Within(0.5f), "precondition: the uphill run target.");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f));
+        }
+
+        // Changes a runner setting on this play-mode instance only; the scene asset is not touched.
+        private void SetMotorFloat(string name, float value)
+        {
+#if UNITY_EDITOR
+            var motor = new UnityEditor.SerializedObject(player);
+            UnityEditor.SerializedProperty property = motor.FindProperty(name);
+            Assert.That(property, Is.Not.Null, "RunnerMotor." + name + " is missing.");
+            property.floatValue = value;
+            motor.ApplyModifiedPropertiesWithoutUndo();
+#else
+            Assert.Fail("Changing a runner setting needs the Unity Editor.");
+#endif
+        }
+
         // Horizontal distance where the falling branch of the arc first crosses height dh.
         private static float ReachAt(List<Vector2> samples, float dh)
         {

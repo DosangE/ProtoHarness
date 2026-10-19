@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-10-19 · 조향 2차: 최소 회전 반지름 25 m, 꺾을 때 감속 0.2 (+ 테스트 봇이 실제 회전 상한으로)
+
+- **결정 (사용자, 2026-10-19 "꺾임이 아직 조금 세다. 꺾임을 조금 줄이고 최대로 꺾었을때 속도도 조금 감속시켜줘", "비례로가 맞고 일단 진행하자", 씬 저장 "ㄱㄱ", 봇 수정 "1"(A안), 창 넓히기 "해보아라")**:
+  - 씬 3개(서킷·벤치·절차) Runner `minTurnRadius` 22 → 25(20 m/s 에서 최대 52 → 46°/s), `turnSpeedLoss` 0.1 → 0.2(회전율이 그 순간 상한에 닿으면 목표 20 → 16 m/s, 그 전에는 비례 — 사용자 확인 "비례로가 맞다"). `Unity_RunCommand` + `SerializedObject` + `SaveScene`(코드 전문 보이고 승인), 로그 `minTurnRadius [22] -> [25], turnSpeedLoss [0.1] -> [0.2]` 3줄. diff 는 씬마다 그 두 줄 + Unity 가 처음 기록한 `coastDeceleration: 6`(코드 기본값과 같다).
+  - 감속(↑ 뗌) 6 m/s² 는 사용자 "감속은 괜찮다" — 그대로.
+  - **`RunnerMotor.TurnLimit`** (읽기 전용 공개 속성 추가): 지금 속력에서의 지상 회전 상한, `Step` 과 같은 `TurnLimitAt` 을 쓴다(계산 순서는 그대로 — 지문 변화는 수치 변경 때문).
+  - 서킷 R22 코너는 반지름 25 로는 방향키만으로 다 못 돈다(봉 스윙 설계, R4b).
+- **테스트 사양 변경**:
+  - `TrackFollower`(테스트 봇): 앞먹임을 상수 120°/s 대신 `runner.TurnLimit` 으로 나눈다. 1회차 실패 원문: `ChainRushCircuitTests.Race_BotRunsThreeLaps_…` `The bot touched a guard. Expected: less than 5.5999999f But was: 5.61933517f`, `ChainRushCurveTests.Curve_BotSteersR30_…` `The runner should leave the curve facing +x. Expected: 0.0f +/- 5.0f But was: -6.34463501f`. 봇이 회전 상한을 120 으로 알아 46°/s 에서 필요한 양의 38% 만 앞먹임했다. 버린 대안: 곡선 테스트만 R40 도로로(봇 모델이 틀린 채 남는다), 반지름을 24 로(테스트에 맞춰 조향감을 정하는 셈). 사용자 질문 "감속을 더 넣으면 넘길 수 있지 않을까" — 느려지면 상한(속력/반지름)도 줄어 비율이 더 나빠진다(16 m/s 31%, 14 m/s 27%) — 실험하지 않았다.
+  - `NetReconcileTests` 4건(`:322,345,386,846`)의 입력 하나 빼기 창 700~800 → 600~1000. 봇 수정 뒤 원문 `The bot never changes its steer between ticks 700 and 800. ... Expected: greater than 0 But was: -1` — 그 구간(두 번째 R22 코너 근처, 거리로 추정)에서 앞먹임이 25/22 ≈ 1.14 로 1 에 고정됐다. 단언은 그대로.
+- **검증** (`feature/tuning-steer-2`, 커밋 전, 에디터 6000.3.19f1, UTC): `tools/select-tests.ps1`(커밋 전) 판정 EditMode 전체·PlayMode 전체(씬·코어 시뮬), Long 은 무한 모드 보류로 안 돌림, Device 는 입력 장치 경로를 안 바꿔 안 돌림.
+  - EditMode 1회차(씬만 바꾼 뒤) `testcasecount="230" result="Passed" passed="230"` (05:36:57Z~05:37:00Z).
+  - `Run PlayMode Tests` 1회차(씬만) `testcasecount="139" result="Failed(Child)" passed="134" failed="2" skipped="3"` (05:37:22Z~05:42:58Z) — 위 2건, 지문 `0xC6A91FA9924183E7`, 봇 랩 31.32·30.26·30.26 초.
+  - 컴파일 `*** Tundra build success (5.31 seconds)`(`TurnLimit`·봇). 2건만 `testcasecount="2" result="Passed"` (05:47:16Z~05:47:54Z).
+  - `Run PlayMode Tests` 2회차 `testcasecount="139" result="Failed(Child)" passed="132" failed="4" skipped="3"` (05:48:17Z~05:53:36Z) — 위 NetReconcile 4건.
+  - 컴파일 `*** Tundra build success (2.00 seconds)`(창). 4건만 `testcasecount="4" result="Passed"` (05:56:08Z~05:56:14Z).
+  - `Run PlayMode Tests` 3회차(최종 코드) `testcasecount="139" result="Passed" passed="136" failed="0" skipped="3"` (05:56:38Z~06:01:59Z, 321.3초). **서킷 지문 `0x1BB2D21DADD3F85F` → `0xE3744A27006C0BB2`** (새 기준), 봇 랩 29.62·28.44·28.44 → 31.12·30.10·30.10 초.
+  - EditMode 2회차(최종 코드) `testcasecount="230" result="Passed" passed="230" failed="0"` (06:02:26Z~06:02:29Z).
+- **사용자 플레이** (2026-10-19): "좋다".
+
 ## 2026-10-19 · ↑ 없이 Ctrl 이면 슬링샷 부스터를 쓰지 않는다 (게이지 유지)
 
 - **결정 (사용자, 2026-10-19 "앞 방향키 없이 ctrl눌렀을때 그냥 부스터가 안쓰여야한다")**: 아래 "위 방향키가 가속" 의 "Ctrl 을 ↑ 없이 누르면 게이지 1칸을 쓰고 같은 틱에 끊긴다(막지 않았다)" 를 바꾼다. `RunnerMotor.ChainAction(coasting)`: 매달려 있지 않고 `Coasting` 이면 아무것도 하지 않는다(게이지·`SlingTicks` 그대로). **그래플 강화**(매달린 채 Ctrl)는 부스터가 아니라 ↑ 와 무관하게 그대로.

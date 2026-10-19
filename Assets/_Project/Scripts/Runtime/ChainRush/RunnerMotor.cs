@@ -259,6 +259,7 @@ namespace ProtoHarness.ChainRush
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
+            if (racer.Grounded) racer.ClearAirGrapple();
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
             if (slingTicks > 0) slingTicks--;

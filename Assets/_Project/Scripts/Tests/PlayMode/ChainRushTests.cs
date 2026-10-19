@@ -100,6 +100,32 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Grapple_SecondPressInTheSameAir_IsRefusedWithoutAMissUntilLanding()
+        {
+            game.StartRun();
+            MovePlayer(new Vector3(0f, 1f, 44f));
+            yield return new WaitForFixedUpdate();
+            player.PrimaryAction();
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(grapple.TryAttach(), Is.True);
+            grapple.Release(false);
+            Assert.That(player.IsGrounded, Is.False);
+            Assert.That(grapple.TryAttach(), Is.False, "The anchor is still in range, but this time in the air already had its grapple.");
+            Assert.That(grapple.JustMissed, Is.False);
+            Assert.That(game.Grapples, Is.EqualTo(1));
+            yield return null;
+            Assert.That(grapple.Candidate, Is.Null);
+            // Put the runner back over solid road at rest, so the jump's leftover climb does not keep it in the air.
+            MovePlayer(new Vector3(0f, 1f, 10f));
+            game.Racer.Velocity = Vector3.zero;
+            float deadline = Time.time + 1f;
+            while (!player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.True,
+                $"Never landed: position {player.transform.position}, velocity {game.Racer.Velocity}.");
+            Assert.That(game.Racer.AirGrappleUsed, Is.False);
+        }
+
+        [UnityTest]
         public IEnumerator Damage_RepeatedContact_RespectsInvulnerability()
         {
             game.StartRun();

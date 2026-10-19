@@ -149013,7 +149013,7 @@ MonoBehaviour:
   - {fileID: 1818077374}
   - {fileID: 1016988121}
   - {fileID: 1842763220}
-  maxRange: 32
+  maxRange: 20
   retractSpeed: 3
   empoweredRetractSpeed: 12
   chainVisual: {fileID: 1332659873}

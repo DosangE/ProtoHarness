@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-19 · 그래플 사거리 20 m·한 체공에 한 번 (M1-T 피드백 #4)
+
+- **결정 (사용자, 2026-10-18 M1-T 피드백 "그래플이 32 m 에서 걸리고 공중에서 반복해 떠 있을 수 있다(→ 20 m, 공중 한 번)", 2026-10-19 요청서에 "진행하라", 씬 저장 코드에 "ㄱㄱ")**:
+  - `GrappleController.maxRange` 기본값 32 → 20, 씬 3개(서킷·벤치·절차)의 값도 32 → 20(`Unity_RunCommand` + `SerializedObject` + `SaveScene`, 코드 전문을 보이고 승인. 로그 `maxRange [32] -> [20]` 3줄, diff 는 씬마다 그 한 줄뿐).
+  - **한 체공에 한 번**: `RacerState.airGrappleUsed` — `Attach` 가 켜고, `RunnerMotor.Step` 에서 착지(`racer.Grounded`)하면 `ClearAirGrapple` 로 끈다(리스폰도 착지로 끈다). `Reset` 은 끈다. 켜져 있으면 `TryAttach` 는 거절하고 **빗나감(miss) 표시는 하지 않는다**(miss 는 "사거리 안에 앵커 없음" 뜻으로 남김). HUD 후보도 비운다. 스냅샷·`SimSnapshotCodec` 에 필드 추가.
+- **테스트 추가**: `RacerStateTests.AirGrapple_AttachThenDetach_StaysUsedUntilClearedOrReset`, `ChainRushTests.Grapple_SecondPressInTheSameAir_IsRefusedWithoutAMissUntilLanding`. 뒤의 것은 1회차에 착지 단언(`ChainRushTests.cs:120`, `Expected: True But was: False`)이 실패했다 — 거절 단언은 통과했고, 점프 직후 (0,1,10) 으로 옮긴 뒤 0.1초 안에 착지하지 않았다. 테스트가 남은 속도를 지우고 1초까지 착지를 기다리도록 고쳤다(시뮬 코드는 안 바꿈). 원래 실패가 남은 상승 속도 때문이었는지는 메시지에 상태를 남기기 전이라 **확인 못 했다**.
+- **검증** (`feature/tuning-grapple`, 커밋 전, 에디터 6000.3.19f1, UTC): 컴파일 `*** Tundra build success (11.01 seconds)`, 테스트 수정 뒤 `*** Tundra build success (3.61 seconds)`. `tools/select-tests.ps1`(커밋 전) 판정 EditMode 전체·PlayMode 전체(코어 시뮬), Long 은 무한 모드 보류로 안 돌림.
+  - EditMode(`!Enemy`·`!Endless`) `testcasecount="229" result="Passed" passed="229" failed="0"` (04:28:09Z~04:28:12Z).
+  - `Run PlayMode Tests` 1회차 `testcasecount="136" result="Failed(Child)" passed="132" failed="1" skipped="3"` (04:35:02Z~04:40:18Z) — 실패는 위 새 테스트 1건.
+  - 새 테스트 단독 `testcasecount="1" result="Passed"` (04:41:46Z~04:41:48Z).
+  - `Run PlayMode Tests` 2회차(최종 코드) `testcasecount="136" result="Passed" passed="133" failed="0" skipped="3"` (04:42:13Z~04:47:43Z, 330.1초). **서킷 지문 `0x1BB2D21DADD3F85F` 그대로**, 봇 랩 29.62·28.44·28.44 초 — 리플레이 봇의 그래플은 20 m 안에서 걸리고 한 체공에 두 번 걸지 않는다.
+  - Device 는 입력 장치 경로를 바꾸지 않아 돌리지 않았다. 절차 코스 그래플 틈(`CourseTuning` 14~18 m)에서 20 m 로 닿는지는 무한 모드 보류로 **확인 안 함**(Sweep 안 돌림).
+- **사용자 플레이** (2026-10-19): "괜찮다".
+- **버린 대안**: 두 번째 누름을 빗나감으로 표시 — 앵커가 사거리 안에 있는데 "빗나감" 이 뜨면 이유를 오해한다.
+
 ## 2026-10-19 · 부스터 게이지 화면: 중앙 하단 막대 + 아이템 칸 2개 (카트라이더식, 표시만)
 
 - **결정 (사용자, 2026-10-18 "카트라이더처럼 화면 중앙 하단 게이지 + 찬 부스터를 아이템 칸처럼 따로", 2026-10-19 요청서에 "ㄱㄱ")**: `ChainRushHud.DrawGauge`(왼쪽 아래 속력 상자 밑 `CHAIN / CTRL` 막대 2개)를 지우고 `DrawBoost` 로 바꿨다 — 상태 줄 바로 위 중앙에 `BOOST / CTRL` 막대(다음 부스터까지 = `RacerState.Gauge` 의 소수 부분, %; 두 칸이 다 차면 MAX)와 그 오른쪽 아이템 칸 `MaxGauge`(2)개(정수 부분만큼 민트 `▶▶`). 게이지 규칙(스윙 35 m 당 1칸, 최대 2, Ctrl 로 1칸)·시뮬·네트워크는 그대로.

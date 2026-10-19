@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-10-19 · ↑ 없이 Ctrl 이면 슬링샷 부스터를 쓰지 않는다 (게이지 유지)
+
+- **결정 (사용자, 2026-10-19 "앞 방향키 없이 ctrl눌렀을때 그냥 부스터가 안쓰여야한다")**: 아래 "위 방향키가 가속" 의 "Ctrl 을 ↑ 없이 누르면 게이지 1칸을 쓰고 같은 틱에 끊긴다(막지 않았다)" 를 바꾼다. `RunnerMotor.ChainAction(coasting)`: 매달려 있지 않고 `Coasting` 이면 아무것도 하지 않는다(게이지·`SlingTicks` 그대로). **그래플 강화**(매달린 채 Ctrl)는 부스터가 아니라 ↑ 와 무관하게 그대로.
+- **테스트 추가**: `ChainRushDriftTests.Sling_WithoutThrottle_DoesNotFireAndKeepsTheSlot`.
+- **검증** (`feature/control-throttle-boost`, 커밋 전, 에디터 6000.3.19f1, UTC): 컴파일 `*** Tundra build success (2.18 seconds)`. `tools/select-tests.ps1`(커밋 전) 판정 EditMode 전체·PlayMode 전체(코어 시뮬), Long 은 무한 모드 보류로 안 돌림. Device 는 입력 장치 경로를 바꾸지 않아 안 돌림.
+  - EditMode(`!Enemy`·`!Endless`) `testcasecount="230" result="Passed" passed="230" failed="0"` (05:22:22Z~05:22:25Z).
+  - `Run PlayMode Tests` `testcasecount="139" result="Passed" passed="136" failed="0" skipped="3"` (05:22:45Z~05:28:08Z, 323.2초). 서킷 지문 `0x1BB2D21DADD3F85F` 그대로, 봇 랩 29.62·28.44·28.44 초.
+- **사용자 플레이** (2026-10-19): "됐다".
+
 ## 2026-10-19 · 위 방향키가 가속 (자동 달리기 끝), 떼면 부스터가 끊긴다 — 카트라이더식
 
 - **결정 (사용자, 2026-10-19 "자동진행이 아니라 방향키 윗키를 눌러야 가속하도록 해줘 이럴려고 점프키를 뺀거였다", "카트라이더 부스터 중에도 앞키를 빼면 끊긴다", 극성 "B안", 계획 "부스터 변경 계획도 진행", 테스트 입력 "ㄱㄱ")**:

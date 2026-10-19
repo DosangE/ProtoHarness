@@ -7,6 +7,28 @@
 
 ---
 
+## 2026-10-19 · M2 씬 구성: 타이틀 → 로비 → 달리는 씬 + 서킷 장식 씬(Additive), 시뮬은 데이터로 (M2-a1)
+
+- **결정 (사용자, 2026-10-19 "addictive 씬 구성으로 하자. 타이틀 입장씬과 로비씬이 따로 있고 실제 달리는 씬을 둔 다음 서킷이나 조건(싱글or멀티, 속도(카트라이더의 보통,빠름,매우빠름 같은)) 불러오며 조립하는 식으로", 트랙 쪽 구성 "A", "M2-a1 ㄱㄱ", 기준 속도 단계 "빠름")**:
+  - **씬**: `ChainRushTitle`(Enter → 로비) → `ChainRushLobby`(싱글 / 멀티 잠금 / 설정 → 트랙 → 속도 단계 → 러너) → 달리는 씬 `ChainRushCircuit`(Single 로드) + 트랙의 장식 씬 `ChainRushTrackStadium`(Additive) → 결과에서 ESC·"로비로" 버튼 → 로비. 결과 화면의 R 다시 달리기는 그대로.
+  - **A안 — 시뮬은 데이터, 장식 씬은 보이는 것만**: 노면·충돌체·앵커·봉은 달리는 씬의 `CircuitRace` 가 `TrackDefinition` 으로 만든다(전과 같다). 로비가 고른 정의는 `RaceAssembler`(실행 순서 -100)가 `CircuitRace.UseDefinition` 으로 회로를 만들기 전에 바꿔 끼운다(만든 뒤에는 `InvalidOperationException`). 장식 씬은 충돌체가 없어야 한다(만들 때 0개 확인). 그래서 `RaceWorld.FromScene`(게임·러너·서킷이 한 씬 루트)과 서버의 `IsolatedLoad` 복사본, 서킷 씬을 통째로 여는 테스트 약 10개 파일이 그대로다.
+  - **조건 전달**: `RaceSetup`(readonly struct: 정의·장식 씬 이름·`RaceMode`·`SpeedClass`·러너 이름)을 로비가 `RaceLaunch`(static, 요청 1개, 받으면 비움, 두 번 요청하면 예외, Play 진입 때 비움)에 두고 달리는 씬을 연다. 요청 없이 연 달리는 씬(테스트·에디터)은 저장된 대로 돌고 `Debug.Log` 한 줄을 남긴다.
+  - **잠금**: 멀티(M7), 속도 단계 보통·매우빠름(M2-b). 로비는 보이되 고르면 안내만 하고 머문다. `RaceAssembler` 는 싱글·빠름이 아닌 요청을 `LogError` 하고 게임을 끈다. **지금 서킷 값 = 빠름**(사용자). 러너는 하나(`ARMORED RUNNER`, 이름만 — M2-b 에서 프로필).
+  - **설정**: 키 안내만(저장 없음, M2-c).
+  - **서킷 씬 정리**: 꺼진 루트 `Skyline Course`(옛 직선 코스 Sector 01~09·타워·결승 게이트, 충돌체 포함) 를 지웠다. 지우기 전에 그 안을 가리키는 바깥 참조가 없음을 확인했다. `ChainRushGame.targets` 는 이미 0개였다(그 안의 표적은 판정에 들어간 적이 없다).
+  - UI 는 기존처럼 OnGUI(`ChainRushHud` 와 같은 1600×900 비율·글꼴). 새 네임스페이스 `ProtoHarness.ChainRush.Flow`.
+- **이유**: 사용자가 씬을 나눠 조립하는 구조를 골랐고, 트랙의 시뮬 부분까지 다른 씬으로 빼면(B안) Additive 씬마다 물리 씬이 따로라 격리 월드·테스트를 고쳐야 하고 멀티가 보류된 지금 네트워크 코드를 건드리게 된다. M3 의 새 트랙은 `TrackDefinition` 1개 + 장식 씬 1개로 늘어난다.
+- **버린 대안**: 씬 하나에 메뉴를 겹쳐 그리기(첫 제안) — 사용자가 Additive 구성을 골랐다. B안(서킷 씬에 `CircuitRace`·노면까지) — 위 이유. 정적 전달 대신 `DontDestroyOnLoad` 세션 오브젝트 — 씬 사이 참조를 직렬화할 수 없어 결국 찾아야 하고(`Find*` 금지), 요청 하나를 넘기는 데는 static 이 짧다.
+- **빌드 씬 목록**: 지금 목록에는 템플릿 `SampleScene` 하나뿐이라 이름으로 씬을 부르는 흐름(타이틀 → 로비 → 레이스, 장식 씬)은 Play 에서 아직 안 된다. `ProjectSettings` 변경이라 따로 브랜치(M2-a2, §9-2)이고, `Unity_RunCommand` 로 바꾸지 않으므로(§0) 사용자가 에디터에서 넣는다. 그 전까지 `ChainRushFlowTests.Loop_ByName_…` 은 무시(Ignored)로 보고된다.
+- **검증** (에디터 6000.3.25f1, `feature/m2-scene-flow` 커밋 전):
+  - 컴파일: `Unity_RunCommand` 컴파일 성공, 새 타입 7개 로드 확인, Console Error 0건(테스트 전·후).
+  - `tools/select-tests.ps1`(커밋 전 기본 범위): 씬·`Flow.meta`(표에 없는 경로) 때문에 **"전체"**. 새 클래스 `ChainRushFlowTests` 를 표에 넣었다(`Flow/`, `Race/`, `ChainRushHud.cs` 줄). Long·Sweep 은 모두 무한 모드라 보류 동안 돌리지 않는다(§9-2).
+  - `ChainRushFlowTests` 단독: `testcasecount="9" result="Skipped:Ignored" passed="8" failed="0" skipped="1"` (10:34:45Z~10:34:49Z). 무시 1건은 `Loop_ByName_…`(빌드 씬 목록 없음, a2 뒤 실행).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="230" result="Passed" passed="230" failed="0" skipped="0"` (10:35:11Z~10:35:12Z).
+  - PlayMode 게이트 `Run PlayMode Tests` 1회: `testcasecount="148" result="Skipped:Ignored" passed="144" failed="0" skipped="4"` (10:35:26Z~10:40:47Z, 320.7초). 건너뜀 4 = `[Explicit]` `NetworkRaceTests` 3건 + `Loop_ByName_…` 1건. 서킷 지문 `0xE3744A27006C0BB2` — v0.2 기준과 같다(옛 직선 코스 제거·조립기 추가가 시뮬을 바꾸지 않았다).
+  - `Run Device Input Tests`: `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"` (10:41:10Z~10:41:26Z, `isApplicationActive=True`).
+  - **검증 안 됨**: 타이틀·로비·로딩·결과 버튼의 화면 모양(OnGUI, 캡처하지 않았다), 이름으로 씬을 부르는 흐름 전체(a2 뒤), 사용자 플레이.
+
 ## 2026-10-19 · main v0.2: M1 "한 판이 끝까지 돈다" — `dev` 를 `main` 에 병합하고 태그 `v0.2`
 
 - **결정 (사용자, 2026-10-19)**: 완료 조건 플레이 확인 "3랩 완주했다, 막히는 곳 없음". 이어서 추천(마일스톤 조건을 돌리고 통과하면 `dev → main` + 태그 `v0.2`)에 "좋다 네 추천대로 진행하겠다". 이 문서 브랜치(로드맵 재배치 + 이 기록, `docs/` 와 `CLAUDE.md` 만)를 `dev` 에 병합한 뒤 `dev` 를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.2` 를 단다.

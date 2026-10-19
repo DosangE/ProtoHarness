@@ -59,12 +59,13 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
     @{ Pattern = '^' + $runtime + '(Track/(CourseGenerator|CourseTuning)|Endless/ProceduralCourse)\.cs$'; Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '코스 생성·스트리밍'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
     @{ Pattern = '^' + $runtime + '(Track|Endless)/';               Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '절차 노면·무한 코스' }
-    @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests') + $net; Why = '서킷 레이스·격리 월드' }
+    @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
+    @{ Pattern = '^' + $runtime + 'Flow/';                          Classes = @('ChainRushFlowTests'); Why = '타이틀·로비·레이스 조립 (DECISIONS 2026-10-19 "M2 씬 구성")' }
     @{ Pattern = '^' + $runtime + 'Combat/';                        Classes = @('ChainRushCombatTests', 'ChainRushProceduralTests', 'ChainRushReplayTests'); Why = '적 조우' }
     @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
     @{ Pattern = '^' + $runtime + 'Control/(InputLog|InputLogFile|InputRecorder|InputReplay|TickInputCodec)\.cs$'; Classes = @('ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushWorldTests') + $net; Why = '입력 기록·재생' }
     @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushCombatTests', 'ChainRushInputSourceTests'); Why = '표현 (ChainVisual·RunnerTilt 를 쓰는 테스트 포함)' }
-    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests') + $net; Why = 'HUD (RaceStandingsView 가 쓴다)' }
+    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests', 'ChainRushFlowTests') + $net; Why = 'HUD (RaceStandingsView·RaceAssembler 가 쓴다)' }
     @{ Pattern = '^' + $runtime + '(Audio/|FollowCamera\.cs$)';     Classes = @('ChainRushPresentationTests'); Why = '표현' }
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
 )

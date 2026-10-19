@@ -1,0 +1,96 @@
+using ProtoHarness.ChainRush.Race;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+
+namespace ProtoHarness.ChainRush.Flow
+{
+    // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
+    // the circuit is built, loads the track's environment scene additively, then counts the race in. After the race,
+    // ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
+    // the scene runs as saved, Enter to start.
+    // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
+    [DefaultExecutionOrder(-100)]
+    public sealed class RaceAssembler : MonoBehaviour
+    {
+        [SerializeField] private ChainRushGame game;
+        [SerializeField] private CircuitRace circuit;
+        private RaceSetup setup;
+        private bool launched;
+        private bool countedIn;
+        private bool leaving;
+
+        // Whether this race came from the lobby (and so goes back to it).
+        public bool IsLaunched => launched;
+        // Launched, and the environment is still loading: the countdown has not begun.
+        public bool IsAssembling => launched && !countedIn;
+        public RaceSetup Setup => setup;
+
+        private void Awake()
+        {
+            if (game == null || circuit == null)
+            {
+                Debug.LogError("RaceAssembler: game and circuit are required.", this);
+                enabled = false;
+                return;
+            }
+            if (!RaceLaunch.TryTake(out setup))
+            {
+                Debug.Log("RaceAssembler: no race was requested; the scene runs as saved (opened directly).", this);
+                return;
+            }
+            // Only what the simulation can race today: the rest is locked in the lobby.
+            if (setup.Mode != RaceMode.Single || setup.Speed != SpeedClass.Fast)
+            {
+                Debug.LogError($"RaceAssembler: {setup.Mode} at {setup.Speed} cannot be raced yet (multi: M7, other speed classes: M2-b).", this);
+                game.enabled = false;
+                enabled = false;
+                return;
+            }
+            circuit.UseDefinition(setup.Track);
+            launched = true;
+        }
+
+        private void Start()
+        {
+            if (!launched) return;
+            if (setup.EnvironmentScene.Length == 0)
+            {
+                CountIn();
+                return;
+            }
+            AsyncOperation load = SceneManager.LoadSceneAsync(setup.EnvironmentScene, LoadSceneMode.Additive);
+            if (load == null)
+            {
+                Debug.LogError($"RaceAssembler: could not load the environment scene '{setup.EnvironmentScene}'. Is it in the build's scene list?", this);
+                game.enabled = false;
+                enabled = false;
+                return;
+            }
+            load.completed += _ => CountIn();
+        }
+
+        private void CountIn()
+        {
+            if (leaving) return;
+            countedIn = true;
+            game.StartCountdown();
+        }
+
+        private void Update()
+        {
+            if (!launched || !(game.HasFinished || game.HasFailed)) return;
+            var keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToLobby();
+        }
+
+        // Leaves the race (and its environment scene) for the lobby.
+        public void ReturnToLobby()
+        {
+            if (!launched) throw new System.InvalidOperationException("RaceAssembler: a race opened directly has no lobby to go back to.");
+            if (leaving) return;
+            leaving = true;
+            SceneManager.LoadScene(RaceLaunch.LobbyScene);
+        }
+    }
+}

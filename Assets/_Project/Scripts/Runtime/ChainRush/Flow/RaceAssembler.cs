@@ -6,8 +6,8 @@ using UnityEngine.SceneManagement;
 namespace ProtoHarness.ChainRush.Flow
 {
     // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
-    // the circuit is built, gives the runner the chosen profile, loads the track's environment scene additively, then counts the race in. After the race,
-    // ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
+    // the circuit is built, gives the runner the chosen profile, loads the track's environment scene additively, then counts the race in. A finish
+    // goes to the best records (BestRecords). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
     [DefaultExecutionOrder(-100)]
@@ -20,6 +20,17 @@ namespace ProtoHarness.ChainRush.Flow
         private bool launched;
         private bool countedIn;
         private bool leaving;
+        private bool wasFinished;
+        private BestRecords records = BestRecords.Player;
+
+        // Where a finish from the lobby is kept (the player's records; a test gives its own).
+        public BestRecords Records
+        {
+            get => records;
+            set => records = value ?? throw new System.ArgumentNullException(nameof(value));
+        }
+        // Whether the last finish beat the best record for its track and speed class.
+        public bool LastFinishWasBest { get; private set; }
 
         // Whether this race came from the lobby (and so goes back to it).
         public bool IsLaunched => launched;
@@ -81,7 +92,13 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Update()
         {
-            if (!launched || !(game.HasFinished || game.HasFailed)) return;
+            if (!launched) return;
+            // Each finish counts once; a restart (R) clears it and the next finish counts again.
+            bool finished = game.HasFinished;
+            if (finished && !wasFinished)
+                LastFinishWasBest = records.Submit(setup.Track.name, setup.Speed, circuit.Laps.TotalTicks, setup.Runner.DisplayName);
+            wasFinished = finished;
+            if (!(finished || game.HasFailed)) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToLobby();
         }

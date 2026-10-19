@@ -59,6 +59,9 @@ namespace ProtoHarness.ChainRush.Flow
         [SerializeField] private RunnerProfile[] runners;
         private string[] trackOptions;
         private bool[] trackLocked;
+        // Per track, its best record at the chosen speed class (RefreshRecords).
+        private string[] trackRecords;
+        private BestRecords records = BestRecords.Player;
         private string[] runnerOptions;
         private bool[] runnerLocked;
         // Per runner: the four stats (StatNames order) and their "x1.03" labels, made once.
@@ -77,9 +80,22 @@ namespace ProtoHarness.ChainRush.Flow
         private GUIStyle heading;
         private GUIStyle item;
         private GUIStyle lockedItem;
+        private GUIStyle recordLine;
         private Font font;
 
+        // Where the track page reads best records from (the player's; a test gives its own).
+        public BestRecords Records
+        {
+            get => records;
+            set
+            {
+                records = value ?? throw new ArgumentNullException(nameof(value));
+                if (trackRecords != null) RefreshRecords();
+            }
+        }
         public Page CurrentPage => page;
+        // The track page's record line for a track: "최고 기록  01:19.2 · BETA", or "기록 없음".
+        public string TrackRecordText(int index) => trackRecords[index];
         public int Cursor => cursor;
         // The last refusal (a locked entry), shown under the list; empty when there is none.
         public string Notice => notice;
@@ -94,6 +110,7 @@ namespace ProtoHarness.ChainRush.Flow
             }
             trackOptions = new string[tracks.Length];
             trackLocked = new bool[tracks.Length];
+            trackRecords = new string[tracks.Length];
             for (int i = 0; i < tracks.Length; i++)
             {
                 if (tracks[i].Definition == null || string.IsNullOrEmpty(tracks[i].Title) || tracks[i].EnvironmentScene == null)
@@ -130,6 +147,16 @@ namespace ProtoHarness.ChainRush.Flow
                     runnerStatText[i, s] = "×" + stats[s].ToString("0.00");
                 }
             }
+            RefreshRecords();
+        }
+
+        // Reads the best records again: on waking (a race may have just set one) and whenever the track page opens.
+        private void RefreshRecords()
+        {
+            for (int i = 0; i < tracks.Length; i++)
+                trackRecords[i] = records.TryGet(tracks[i].Definition.name, Speeds[speed], out BestRecords.Record best)
+                    ? "최고 기록  " + ChainRushHud.FormatTime(Ticks.ToSeconds(best.Ticks)) + "  ·  " + best.Runner
+                    : "기록 없음";
         }
 
         private void OnValidate()
@@ -229,6 +256,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             page = next;
             cursor = highlight;
+            if (next == Page.Track) RefreshRecords();
         }
 
         private string[] Options(Page of) =>
@@ -264,6 +292,8 @@ namespace ProtoHarness.ChainRush.Flow
             item.alignment = TextAnchor.MiddleLeft;
             lockedItem = Style(26, Muted);
             lockedItem.alignment = TextAnchor.MiddleLeft;
+            recordLine = Style(18, Muted);
+            recordLine.alignment = TextAnchor.MiddleRight;
         }
 
         private static void Block(Rect rect, Color color)
@@ -308,11 +338,12 @@ namespace ProtoHarness.ChainRush.Flow
         // The highlighted runner's stats as bars between StatBarFloor and StatBarCeiling, with their scales.
         private void DrawRunnerStats(float width, int shown)
         {
-            Block(new Rect(width - 452, 398, 420, 260), Ink);
-            GUI.Label(new Rect(width - 420, 420, 360, 30), runnerOptions[shown], heading);
+            Block(new Rect(width - 452, 398, 420, 270), Ink);
+            // As tall as the 32 px bold heading needs, or its bottom is cut off (user 2026-10-19).
+            GUI.Label(new Rect(width - 420, 416, 360, 44), runnerOptions[shown], heading);
             for (int s = 0; s < StatNames.Length; s++)
             {
-                float y = 476 + s * 44;
+                float y = 484 + s * 44;
                 GUI.Label(new Rect(width - 420, y, 120, 24), StatNames[s], small);
                 var bar = new Rect(width - 300, y + 6, 180, 8);
                 Block(bar, Slate);
@@ -339,6 +370,11 @@ namespace ProtoHarness.ChainRush.Flow
                     Confirm();
                 }
                 style.normal.textColor = text;
+                if (page == Page.Track)
+                {
+                    recordLine.normal.textColor = i == cursor ? Ink : Muted;
+                    GUI.Label(new Rect(row.x + 260, row.y, row.width - 284, row.height), trackRecords[i], recordLine);
+                }
             }
         }
 

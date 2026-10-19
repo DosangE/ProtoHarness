@@ -22,6 +22,7 @@ namespace ProtoHarness.ChainRush
         private float swingHookRadius;
         private float swingCarrySpeed;
         private bool grappleEmpowered;
+        private bool airGrappleUsed;
         private int health;
         private int hits;
         private int grapples;
@@ -54,6 +55,7 @@ namespace ProtoHarness.ChainRush
             public float SwingHookRadius;
             public float SwingCarrySpeed;
             public bool GrappleEmpowered;
+            public bool AirGrappleUsed;
             public int Health;
             public int Hits;
             public int Grapples;
@@ -128,6 +130,8 @@ namespace ProtoHarness.ChainRush
         public ref float SwingCarrySpeed => ref swingCarrySpeed;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
+        // A grapple was hooked since the runner last stood on something: one grapple per time in the air.
+        public bool AirGrappleUsed => airGrappleUsed;
 
         public void AddGauge(float slots)
         {
@@ -171,6 +175,7 @@ namespace ProtoHarness.ChainRush
             swingHookRadius = 0f;
             swingCarrySpeed = 0f;
             grappleEmpowered = false;
+            airGrappleUsed = false;
             jumpQueued = false;
             coyoteTime = 0f;
             anchorIndex = NoAnchor;
@@ -191,6 +196,7 @@ namespace ProtoHarness.ChainRush
             SwingHookRadius = swingHookRadius,
             SwingCarrySpeed = swingCarrySpeed,
             GrappleEmpowered = grappleEmpowered,
+            AirGrappleUsed = airGrappleUsed,
             Health = health,
             Hits = hits,
             Grapples = grapples,
@@ -222,6 +228,7 @@ namespace ProtoHarness.ChainRush
             swingHookRadius = snapshot.SwingHookRadius;
             swingCarrySpeed = snapshot.SwingCarrySpeed;
             grappleEmpowered = snapshot.GrappleEmpowered;
+            airGrappleUsed = snapshot.AirGrappleUsed;
             health = snapshot.Health;
             hits = snapshot.Hits;
             grapples = snapshot.Grapples;
@@ -248,7 +255,11 @@ namespace ProtoHarness.ChainRush
             if (!(length > 0f)) throw new ArgumentOutOfRangeException(nameof(length), length, "Rope length must be positive.");
             anchorIndex = index;
             ropeLength = length;
+            airGrappleUsed = true;
         }
+
+        // Standing on something again gives the next time in the air its grapple back.
+        public void ClearAirGrapple() => airGrappleUsed = false;
 
         public void Detach()
         {

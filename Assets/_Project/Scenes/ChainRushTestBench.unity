@@ -37869,7 +37869,7 @@ MonoBehaviour:
   ropeOrigin: {fileID: 613892960}
   anchors:
   - {fileID: 68805062}
-  maxRange: 32
+  maxRange: 20
   retractSpeed: 3
   empoweredRetractSpeed: 12
   chainVisual: {fileID: 0}

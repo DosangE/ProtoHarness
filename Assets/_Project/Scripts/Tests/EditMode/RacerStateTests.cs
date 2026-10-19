@@ -236,6 +236,20 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void AirGrapple_AttachThenDetach_StaysUsedUntilClearedOrReset()
+        {
+            Assert.That(racer.AirGrappleUsed, Is.False);
+            racer.Attach(0, 8f);
+            racer.Detach();
+            Assert.That(racer.AirGrappleUsed, Is.True);
+            racer.ClearAirGrapple();
+            Assert.That(racer.AirGrappleUsed, Is.False);
+            racer.Attach(0, 8f);
+            racer.Reset();
+            Assert.That(racer.AirGrappleUsed, Is.False);
+        }
+
+        [Test]
         public void Reset_AfterChainUse_ClearsGaugeSlingAndEmpower()
         {
             racer.AddGauge(2f);

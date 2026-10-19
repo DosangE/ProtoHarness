@@ -12,7 +12,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private LineRenderer rope;
         [SerializeField] private Transform ropeOrigin;
         [SerializeField] private Transform[] anchors;
-        [SerializeField] private float maxRange = 32f;
+        [SerializeField] private float maxRange = 20f;
         [SerializeField] private float retractSpeed = 3f;
         // Reel speed once a chain action has empowered the current grapple.
         [SerializeField] private float empoweredRetractSpeed = 12f;
@@ -69,7 +69,8 @@ namespace ProtoHarness.ChainRush
         private void LateUpdate()
         {
             if (game.IsPaused) return;
-            candidate = AnchorAt(SelectCandidate());
+            // A grapple already hooked in this time in the air leaves nothing to offer until the runner lands.
+            candidate = game.Racer.AirGrappleUsed ? null : AnchorAt(SelectCandidate());
             bool swinging = game.IsRunning && !IsAttached && motor.IsSwinging;
             bool slinging = game.IsRunning && !IsAttached && !swinging && motor.IsSlingPulling;
             bool linked = IsAttached || swinging || slinging;
@@ -131,7 +132,8 @@ namespace ProtoHarness.ChainRush
 
         public bool TryAttach()
         {
-            if (!game.IsRunning || motor.IsGrounded || IsAttached) return false;
+            // One grapple per time in the air; a second press does nothing (a miss means no anchor in range).
+            if (!game.IsRunning || motor.IsGrounded || IsAttached || game.Racer.AirGrappleUsed) return false;
             int index = SelectCandidate();
             candidate = AnchorAt(index);
             if (index == RacerState.NoAnchor)

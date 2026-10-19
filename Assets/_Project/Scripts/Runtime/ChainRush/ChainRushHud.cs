@@ -174,7 +174,7 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(32, height - 220, 168, 105), Ink);
             GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
             GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
-            DrawGauge(height);
+            DrawBoost(width, height);
             string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  ALT 로 앵커 잡기";
             if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
@@ -223,18 +223,33 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / SHIFT  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
         }
 
-        // Chain gauge under the speed box: one bar per slot, filled by swinging, spent by Ctrl.
-        private void DrawGauge(float height)
+        // Booster gauge at the bottom middle, above the status line (KartRider style): the bar fills toward the next booster
+        // as the runner swings, and each whole gauge slot is a booster waiting in an item box beside it, spent by Ctrl.
+        // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
+        private void DrawBoost(float width, float height)
         {
-            Block(new Rect(32, height - 108, 168, 46), Ink);
-            GUI.Label(new Rect(54, height - 104, 140, 20), "CHAIN  /  CTRL", small);
+            const float BarWidth = 420f, Box = 52f, Gap = 10f;
+            int boxes = (int)RacerState.MaxGauge;
+            float left = width / 2f - (BarWidth + boxes * (Gap + Box)) / 2f;
+            float top = height - 212f;
             float gauge = player.Gauge;
-            for (int slot = 0; slot < (int)RacerState.MaxGauge; slot++)
+            int boosters = Mathf.Min(boxes, Mathf.FloorToInt(gauge));
+            bool full = boosters >= boxes;
+            float fill = full ? 1f : gauge - boosters;
+            Block(new Rect(left, top, BarWidth, Box), Ink);
+            GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", small);
+            GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", small);
+            var bar = new Rect(left + 18, top + 32, BarWidth - 36, 8);
+            Block(bar, new Color(0.2f, 0.3f, 0.33f));
+            bar.width *= fill;
+            Block(bar, Mint);
+            for (int i = 0; i < boxes; i++)
             {
-                var bar = new Rect(54 + slot * 64, height - 80, 58, 8);
-                Block(bar, new Color(0.2f, 0.3f, 0.33f));
-                bar.width *= Mathf.Clamp01(gauge - slot);
-                Block(bar, Mint);
+                var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
+                Block(slot, Ink);
+                var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
+                Block(item, i < boosters ? Mint : new Color(0.2f, 0.3f, 0.33f));
+                if (i < boosters) GUI.Label(item, "▶▶", button);
             }
         }
 

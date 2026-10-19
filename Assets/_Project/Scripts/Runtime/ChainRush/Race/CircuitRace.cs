@@ -83,6 +83,15 @@ namespace ProtoHarness.ChainRush.Race
             for (int i = 0; i < pieces.Count; i++) pieces[i].Destroy();
         }
 
+        // Races a different track than the one saved in the scene (the lobby's choice, RaceAssembler). The circuit is
+        // built from the definition once, in the first Awake of this or the game, so it must be swapped before that.
+        public void UseDefinition(TrackDefinition replacement)
+        {
+            if (replacement == null) throw new ArgumentNullException(nameof(replacement));
+            if (initialized) throw new InvalidOperationException("CircuitRace: the circuit is already built; set the definition before the scene's Awake.");
+            definition = replacement;
+        }
+
         // The game asks for the centerline in its Awake, which can run before this Awake, so the circuit is
         // made on the first call of either.
         public Centerline BuildTrack()

@@ -10,6 +10,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private RunnerMotor player;
         [SerializeField] private GrappleController grapple;
         [SerializeField] private Camera viewCamera;
+        [Tooltip("Optional: only the race scene the lobby loads has one. Without it the HUD shows its own start panel.")]
+        [SerializeField] private Flow.RaceAssembler assembler;
         private GUIStyle small;
         private GUIStyle body;
         private GUIStyle heading;
@@ -91,7 +93,9 @@ namespace ProtoHarness.ChainRush
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             DrawHeader(width);
             DrawControls(width, height);
-            if (game.IsReady) DrawReady(width, height);
+            // A race from the lobby skips the start panel: it counts in once its environment has loaded.
+            if (game.IsReady && FromLobby) DrawLoading(width, height);
+            else if (game.IsReady) DrawReady(width, height);
             else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString());
             else if (game.IsPaused || game.HasFailed || game.HasFinished) DrawResult(width, height);
             else
@@ -100,6 +104,15 @@ namespace ProtoHarness.ChainRush
                 if (game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
             }
             GUI.matrix = previous;
+        }
+
+        private bool FromLobby => assembler != null && assembler.IsLaunched;
+
+        private void DrawLoading(float width, float height)
+        {
+            Rect panel = new Rect(width / 2f - 210, height / 2f - 40, 420, 80);
+            Block(panel, Ink);
+            GUI.Label(panel, "트랙을 불러오는 중", waiting);
         }
 
         // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen.
@@ -290,6 +303,14 @@ namespace ProtoHarness.ChainRush
             // A run that cannot be restarted from here (ManualStart off) shows no RUN AGAIN.
             if (!game.IsPaused && !game.ManualStart) return;
             Rect action = new Rect(x + 42, y + 283, 586, 66);
+            // A race from the lobby ends with two ways on: again, or back to the lobby.
+            if (!game.IsPaused && FromLobby)
+            {
+                action.width = 288;
+                Rect lobby = new Rect(x + 340, y + 283, 288, 66);
+                Block(lobby, Muted);
+                if (GUI.Button(lobby, "ESC  /  로비로", button)) assembler.ReturnToLobby();
+            }
             Block(action, Mint);
             if (GUI.Button(action, game.IsPaused ? "ESC  /  CONTINUE  →" : "R  /  RUN AGAIN  →", button))
             {

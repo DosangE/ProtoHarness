@@ -41074,6 +41074,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Flow.RaceAssembler
   game: {fileID: 2105445612}
   circuit: {fileID: 1927120373}
+  player: {fileID: 1925527727}
 --- !u!1 &2106195015
 GameObject:
   m_ObjectHideFlags: 0

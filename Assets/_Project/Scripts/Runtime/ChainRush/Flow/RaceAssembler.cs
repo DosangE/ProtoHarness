@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 namespace ProtoHarness.ChainRush.Flow
 {
     // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
-    // the circuit is built, loads the track's environment scene additively, then counts the race in. After the race,
+    // the circuit is built, gives the runner the chosen profile, loads the track's environment scene additively, then counts the race in. After the race,
     // ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
@@ -15,6 +15,7 @@ namespace ProtoHarness.ChainRush.Flow
     {
         [SerializeField] private ChainRushGame game;
         [SerializeField] private CircuitRace circuit;
+        [SerializeField] private RunnerMotor player;
         private RaceSetup setup;
         private bool launched;
         private bool countedIn;
@@ -28,9 +29,9 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Awake()
         {
-            if (game == null || circuit == null)
+            if (game == null || circuit == null || player == null)
             {
-                Debug.LogError("RaceAssembler: game and circuit are required.", this);
+                Debug.LogError("RaceAssembler: game, circuit and player are required.", this);
                 enabled = false;
                 return;
             }
@@ -48,6 +49,7 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             circuit.UseDefinition(setup.Track);
+            player.Configure(setup.Runner);
             launched = true;
         }
 

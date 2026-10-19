@@ -150,8 +150,10 @@
 
 **M2 (v0.3) 게임의 뼈대** (2026-10-19 사용자: Additive 씬 구성, 트랙 쪽은 A안 — DECISIONS "M2 씬 구성")
 - ~~**M2-a1 씬 뼈대**~~ (`feature/m2-scene-flow`, 사용자 "A, M2-a1 ㄱㄱ"): 타이틀·로비·스타디움 장식 씬, `RaceSetup`·`RaceLaunch`·`RaceAssembler`, 결과 → 로비, 서킷 씬의 꺼진 `Skyline Course` 제거. 검증은 DECISIONS "M2 씬 구성".
-- **M2-a2 빌드 씬 목록** (`feature/build-scene-list`, `ProjectSettings/EditorBuildSettings.asset` 만 — §9-2): `ChainRushTitle`(0번, 시작 씬)·`ChainRushLobby`·`ChainRushCircuit`·`ChainRushTrackStadium` 을 넣는다. `Unity_RunCommand` 로 ProjectSettings 를 바꾸지 않으므로(§0) **사용자가 에디터 Build Profiles → Scene List 에서** 넣는다. 그 뒤 `ChainRushFlowTests.Loop_ByName_…` 이 무시에서 실행으로 바뀌고, 사용자 플레이 확인(타이틀 → 로비 → 3랩 → 결과 → 로비)을 한다. 이름으로 씬을 부르는 것은 a2 전까지 Play 에서 실패한다.
-- **M2-b 러너 프로필 + 속도 단계**: 러너마다 최고 속도·가속·무게·게이지 충전량(사용자 2026-10-19), 속도 단계 보통 / 빠름 / 매우빠름(**지금 값 = 빠름**, 사용자 2026-10-19). 기본 프로필 + 빠름 = 지금 서킷 값(지문 그대로). 리플레이·네트워크가 둘 다 알아야 한다(시뮬 입력). 무게는 몸싸움(M7 C2) 전까지 효과 없음. 로비의 잠금(`LobbyMenu` 의 보통·매우빠름, `RaceAssembler` 의 거부)을 푼다.
+- ~~**M2-a2 빌드 씬 목록**~~ (`dev` `0432115`, DECISIONS "M2-a2 빌드 씬 목록").
+- ~~**M2-b 러너 프로필**~~ (`feature/m2-runner-profile`, DECISIONS "M2-b 러너 프로필"): ALPHA~OMEGA 5명, 씬 값에 곱하는 배율.
+- **속도 단계 보통·매우빠름** (후순위, 사용자 2026-10-19): 지금 값 = 빠름(1.0). 배율 후보 0.8 / 1.2 를 속도 전부(그래플 16·놓을 때 13 고정값 포함)와 가속에 곱하고, 점프·중력·최소 회전 반지름은 그대로. 시험용 봇이 1.2 에서 코너를 놓치는지 확인 못 함. 로비(`LobbyMenu` 의 잠금)와 `RaceAssembler` 의 거부를 푼다.
+- **사용자 플레이 확인** (M2 완료 조건): 타이틀 → 로비 → 러너 선택 → 3랩 → 결과 → 로비. 러너마다 차이가 느껴지는지.
 - **M2-c 설정 화면**: 지금은 키 안내만(`LobbyMenu` 설정 페이지). 추가 항목(후보: 화면 모드·해상도, 카메라)과 저장 방식을 정한다(`Resources/` 금지, §0).
 - 헤딩 범위 제한(HANDOFF 3절 #3)은 M2-b 때 같이 본다.
 

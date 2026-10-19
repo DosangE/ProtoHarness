@@ -80,6 +80,11 @@ namespace ProtoHarness.ChainRush
         // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
         [SerializeField] private float respawnBackoff = 4f;
         [SerializeField] private float respawnHoldTime = 1f;
+        // The runner's character (Configure): scales on the values above, all 1 until a profile is given.
+        private RunnerProfile profile;
+        private float topSpeedScale = 1f;
+        private float accelerationScale = 1f;
+        private float gaugeChargeScale = 1f;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
@@ -109,6 +114,28 @@ namespace ProtoHarness.ChainRush
         public bool IsSwinging => game.Racer.SwingTicks > 0;
         public Vector3 SwingAnchor => swingAnchor;
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
+        // The profile given by Configure; null runs on the scene's values.
+        public RunnerProfile Profile => profile;
+        // The values the simulation runs on: the scene's, scaled by the profile.
+        public float RunSpeed => runSpeed * topSpeedScale;
+        public float RunAcceleration => runAcceleration * accelerationScale;
+        public float SlingTopSpeed => slingTopSpeed * topSpeedScale;
+        public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale;
+        public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale;
+        public float SwingMetersPerSlot => swingMetersPerSlot / gaugeChargeScale;
+
+        // Gives the runner a character for the runs to come (the lobby's choice, RaceAssembler). Not while a run is going:
+        // the run would change halfway.
+        public void Configure(RunnerProfile runner)
+        {
+            if (runner == null) throw new System.ArgumentNullException(nameof(runner));
+            if (!runner.TryValidate(out string error)) throw new System.ArgumentException(error, nameof(runner));
+            if (game.IsRunning || game.IsPaused) throw new System.InvalidOperationException("RunnerMotor: configure the runner before the run, not during it.");
+            profile = runner;
+            topSpeedScale = runner.TopSpeedScale;
+            accelerationScale = runner.AccelerationScale;
+            gaugeChargeScale = runner.GaugeChargeScale;
+        }
 
         private void Awake()
         {
@@ -234,8 +261,8 @@ namespace ProtoHarness.ChainRush
             float grip = grounded ? sideGrip : airSideGrip;
             float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
             float runTarget = grounded
-                ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
-                : runSpeed;
+                ? RunSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
+                : RunSpeed;
             if (turnSpeedLoss > 0f && grounded && !swinging && turnLimit > 0f)
                 runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(turnRate) / turnLimit);
             // Without the throttle a grounded runner rolls to a stop; in the air the jump keeps what it took off with.
@@ -248,17 +275,17 @@ namespace ProtoHarness.ChainRush
                 if (swingCarry > runTarget) runTarget = swingCarry;
                 else swingCarry = 0f;
             }
-            if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
-            if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
+            if (carrying) runTarget = Mathf.Max(runTarget, SlingCarrySpeed);
+            if (pulling) runTarget = Mathf.Max(runTarget, SlingTopSpeed);
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = pulling ? BoostAcceleration(currentForward, runTarget)
                 : !grounded ? (grapple.IsAttached ? 5f : airAcceleration)
                 : currentForward > runTarget ? (coasting ? coastDeceleration : overspeedFalloff)
-                : carrying ? BoostAcceleration(currentForward, runTarget) : runAcceleration;
+                : carrying ? BoostAcceleration(currentForward, runTarget) : RunAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
             // A grapple reels at 16 m/s, or at running speed when that is faster.
-            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, runSpeed) : runTarget,
+            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, RunSpeed) : runTarget,
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
@@ -402,7 +429,7 @@ namespace ProtoHarness.ChainRush
             next.y = 0f;
             float reach = next.magnitude;
             if (reach > 0.01f) displacement += next / reach * (racer.SwingRadius - reach);
-            racer.AddGauge(speed * dt / swingMetersPerSlot);
+            racer.AddGauge(speed * dt / SwingMetersPerSlot);
         }
 
         // Ends the swing: the runner goes straight on along its facing at the speed it swung with, and what that is above
@@ -454,7 +481,7 @@ namespace ProtoHarness.ChainRush
             float heading = game.Racer.Heading;
             Vector3 facing = FacingOf(heading);
             Vector3 right = RightOf(heading);
-            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? empoweredReleaseSpeed : 13f);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : 13f);
             velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
         }
 

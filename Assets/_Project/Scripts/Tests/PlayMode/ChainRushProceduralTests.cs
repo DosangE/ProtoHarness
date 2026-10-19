@@ -17,6 +17,8 @@ namespace ProtoHarness.Tests.PlayMode
 {
     // The procedural course scene (COURSE.md T3c): a bot runs seeded courses of generated modules, the
     // same seed rebuilds the same course, pools do not grow, and gaps still kill.
+    // The endless mode is on hold while the circuit comes first (2026-10-18); outside the regular runs.
+    [Category("Endless")]
     public sealed class ChainRushProceduralTests
     {
         private const string ScenePath = "Assets/_Project/Scenes/ChainRushProcedural.unity";
@@ -84,7 +86,8 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- the bot runs seeded courses ----------------------------------------------------------------
 
-        [UnityTest, Timeout(180000)]
+        // Long (CLAUDE.md §9-2): the sweep below runs these seeds too; out of the merge gate unless the branch changes core code.
+        [UnityTest, Category("Long"), Timeout(180000)]
         public IEnumerator Course_BotRunsFourteenHundredMetres_GateSeeds([Values(0, 1, 2)] int seed)
         {
             var report = new Report();
@@ -260,7 +263,7 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- enemies on curves --------------------------------------------------------------------------
 
-        [UnityTest, Timeout(60000)]
+        [UnityTest, Category("Enemy"), Timeout(60000)]
         public IEnumerator Enemy_EncounterOnACurve_FacesTheTrackAndTheAttackConnects()
         {
             double spot = FindCurveSpot(out ulong seed);

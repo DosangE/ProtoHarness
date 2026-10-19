@@ -10,12 +10,14 @@ namespace ProtoHarness.ChainRush.Control
         private bool primaryPressed;
         private bool releasePressed;
         private bool attackPressed;
-        private bool drift;
+        private bool swingHeld;
         private bool chainActionPressed;
+        private bool swingPressed;
+        private bool coasting;
 
-        // Drift is a level like steer; the chain action is an edge like the buttons.
+        // The held swing key and coasting are levels like steer; the chain action and the swing press are edges like the buttons.
         public void Record(float steer, bool primaryPressed, bool releasePressed, bool attackPressed,
-            bool drift = false, bool chainActionPressed = false)
+            bool swingHeld = false, bool chainActionPressed = false, bool swingPressed = false, bool coasting = false)
         {
             if (!(steer >= -1f && steer <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(steer), steer, "Steer must be within [-1, 1].");
@@ -23,17 +25,20 @@ namespace ProtoHarness.ChainRush.Control
             this.primaryPressed |= primaryPressed;
             this.releasePressed |= releasePressed;
             this.attackPressed |= attackPressed;
-            this.drift = drift;
+            this.swingHeld = swingHeld;
             this.chainActionPressed |= chainActionPressed;
+            this.swingPressed |= swingPressed;
+            this.coasting = coasting;
         }
 
         public TickInput Consume()
         {
-            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, drift, chainActionPressed);
+            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, swingHeld, chainActionPressed, swingPressed, coasting);
             primaryPressed = false;
             releasePressed = false;
             attackPressed = false;
             chainActionPressed = false;
+            swingPressed = false;
             return input;
         }
 
@@ -43,8 +48,10 @@ namespace ProtoHarness.ChainRush.Control
             primaryPressed = false;
             releasePressed = false;
             attackPressed = false;
-            drift = false;
+            swingHeld = false;
             chainActionPressed = false;
+            swingPressed = false;
+            coasting = false;
         }
     }
 }

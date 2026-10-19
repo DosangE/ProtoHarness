@@ -33,7 +33,7 @@ namespace ProtoHarness.Tests.EditMode
 
         private static readonly TickInput A = new TickInput(0.25f, true, false, false, false, false);
         private static readonly TickInput B = new TickInput(-1f, false, true, false, true, false);
-        private static readonly TickInput C = new TickInput(0f, false, false, true, false, true);
+        private static readonly TickInput C = new TickInput(0f, false, false, true, false, true, true);
 
         private static void AssertSame(TickInput expected, TickInput actual, string where)
         {
@@ -41,8 +41,9 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(actual.PrimaryPressed, Is.EqualTo(expected.PrimaryPressed), where + " primary");
             Assert.That(actual.ReleasePressed, Is.EqualTo(expected.ReleasePressed), where + " release");
             Assert.That(actual.AttackPressed, Is.EqualTo(expected.AttackPressed), where + " attack");
-            Assert.That(actual.Drift, Is.EqualTo(expected.Drift), where + " drift");
+            Assert.That(actual.SwingHeld, Is.EqualTo(expected.SwingHeld), where + " swing held");
             Assert.That(actual.ChainActionPressed, Is.EqualTo(expected.ChainActionPressed), where + " chain action");
+            Assert.That(actual.SwingPressed, Is.EqualTo(expected.SwingPressed), where + " swing pressed");
         }
 
         // ---- InputLog ------------------------------------------------------------------------------

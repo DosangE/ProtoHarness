@@ -17,7 +17,12 @@ namespace ProtoHarness.ChainRush
         private int slingTicks;
         private int swingTicks;
         private float swingRadius;
+        private Vector3 swingCenter;
+        private float swingHookSpeed;
+        private float swingHookRadius;
+        private float swingCarrySpeed;
         private bool grappleEmpowered;
+        private bool airGrappleUsed;
         private int health;
         private int hits;
         private int grapples;
@@ -34,6 +39,8 @@ namespace ProtoHarness.ChainRush
         private float ropeLength;
         private int missUntilTick;
         private bool grounded;
+        private double lastGroundedS;
+        private int respawnHoldTicks;
 
         // Every field of this class except the rules, by value (the guard test in SnapshotTests keeps the two in step).
         // Treat it as read-only. A copy taken between ticks puts the racer back exactly where it was.
@@ -43,7 +50,12 @@ namespace ProtoHarness.ChainRush
             public int SlingTicks;
             public int SwingTicks;
             public float SwingRadius;
+            public Vector3 SwingCenter;
+            public float SwingHookSpeed;
+            public float SwingHookRadius;
+            public float SwingCarrySpeed;
             public bool GrappleEmpowered;
+            public bool AirGrappleUsed;
             public int Health;
             public int Hits;
             public int Grapples;
@@ -60,6 +72,8 @@ namespace ProtoHarness.ChainRush
             public float RopeLength;
             public int MissUntilTick;
             public bool Grounded;
+            public double LastGroundedS;
+            public int RespawnHoldTicks;
         }
 
         public RacerState(RunRules rules)
@@ -90,6 +104,10 @@ namespace ProtoHarness.ChainRush
         // the controller, and every simulation read goes through this copy. That makes it restorable.
         // Reset does not clear it: it is the controller's answer, not a rule of the run.
         public ref bool Grounded => ref grounded;
+        // The track S where the runner last stood after a move; a circuit runner who falls comes back near it.
+        public ref double LastGroundedS => ref lastGroundedS;
+        // Ticks left in which a runner just put back on the track stands still and ignores its controls; zero otherwise.
+        public ref int RespawnHoldTicks => ref respawnHoldTicks;
 
         // Index into the grapple's anchor array rather than a Transform, so the state stays plain data.
         public int AnchorIndex => anchorIndex;
@@ -99,12 +117,21 @@ namespace ProtoHarness.ChainRush
         public float Gauge => gauge;
         // Ticks left in the current chain slingshot (pull, then carry); zero when none is running.
         public ref int SlingTicks => ref slingTicks;
-        // Ticks left in the current corner swing (zero when none) and its rope length, signed by the turn:
-        // positive swings around a right-hand curve's center, negative a left-hand one.
+        // Ticks the current corner pole swing has lasted so far (zero when none; it has no time limit), its rope length
+        // now (the level distance to the pole when it hooked, then shortened or let out by steering, NEXT_REQUESTS.md R4b)
+        // and the pole (an arc's center, PROPOSAL_CORNER_POLE.md 2-1), moved with the world on an origin shift.
         public ref int SwingTicks => ref swingTicks;
         public ref float SwingRadius => ref swingRadius;
+        public ref Vector3 SwingCenter => ref swingCenter;
+        // The speed and rope length at the moment the swing hooked; the swing's speed is worked out from them.
+        public ref float SwingHookSpeed => ref swingHookSpeed;
+        public ref float SwingHookRadius => ref swingHookRadius;
+        // After a swing lets go, the speed it carried above running speed, falling off over time; zero when none.
+        public ref float SwingCarrySpeed => ref swingCarrySpeed;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
+        // A grapple was hooked since the runner last stood on something: one grapple per time in the air.
+        public bool AirGrappleUsed => airGrappleUsed;
 
         public void AddGauge(float slots)
         {
@@ -143,12 +170,19 @@ namespace ProtoHarness.ChainRush
             slingTicks = 0;
             swingTicks = 0;
             swingRadius = 0f;
+            swingCenter = Vector3.zero;
+            swingHookSpeed = 0f;
+            swingHookRadius = 0f;
+            swingCarrySpeed = 0f;
             grappleEmpowered = false;
+            airGrappleUsed = false;
             jumpQueued = false;
             coyoteTime = 0f;
             anchorIndex = NoAnchor;
             ropeLength = 0f;
             missUntilTick = 0;
+            lastGroundedS = 0d;
+            respawnHoldTicks = 0;
         }
 
         public Snapshot Capture() => new Snapshot
@@ -157,7 +191,12 @@ namespace ProtoHarness.ChainRush
             SlingTicks = slingTicks,
             SwingTicks = swingTicks,
             SwingRadius = swingRadius,
+            SwingCenter = swingCenter,
+            SwingHookSpeed = swingHookSpeed,
+            SwingHookRadius = swingHookRadius,
+            SwingCarrySpeed = swingCarrySpeed,
             GrappleEmpowered = grappleEmpowered,
+            AirGrappleUsed = airGrappleUsed,
             Health = health,
             Hits = hits,
             Grapples = grapples,
@@ -174,6 +213,8 @@ namespace ProtoHarness.ChainRush
             RopeLength = ropeLength,
             MissUntilTick = missUntilTick,
             Grounded = grounded,
+            LastGroundedS = lastGroundedS,
+            RespawnHoldTicks = respawnHoldTicks,
         };
 
         public void Restore(in Snapshot snapshot)
@@ -182,7 +223,12 @@ namespace ProtoHarness.ChainRush
             slingTicks = snapshot.SlingTicks;
             swingTicks = snapshot.SwingTicks;
             swingRadius = snapshot.SwingRadius;
+            swingCenter = snapshot.SwingCenter;
+            swingHookSpeed = snapshot.SwingHookSpeed;
+            swingHookRadius = snapshot.SwingHookRadius;
+            swingCarrySpeed = snapshot.SwingCarrySpeed;
             grappleEmpowered = snapshot.GrappleEmpowered;
+            airGrappleUsed = snapshot.AirGrappleUsed;
             health = snapshot.Health;
             hits = snapshot.Hits;
             grapples = snapshot.Grapples;
@@ -199,6 +245,8 @@ namespace ProtoHarness.ChainRush
             ropeLength = snapshot.RopeLength;
             missUntilTick = snapshot.MissUntilTick;
             grounded = snapshot.Grounded;
+            lastGroundedS = snapshot.LastGroundedS;
+            respawnHoldTicks = snapshot.RespawnHoldTicks;
         }
 
         public void Attach(int index, float length)
@@ -207,7 +255,11 @@ namespace ProtoHarness.ChainRush
             if (!(length > 0f)) throw new ArgumentOutOfRangeException(nameof(length), length, "Rope length must be positive.");
             anchorIndex = index;
             ropeLength = length;
+            airGrappleUsed = true;
         }
+
+        // Standing on something again gives the next time in the air its grapple back.
+        public void ClearAirGrapple() => airGrappleUsed = false;
 
         public void Detach()
         {

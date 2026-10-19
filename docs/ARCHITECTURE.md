@@ -19,7 +19,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 우리 에디터 스크립트 | **2** (`ChainRushSceneBuilder`, `ChainRushCircuitSceneBuilder`) |
 | 우리 테스트 | PlayMode **12 파일 / 46 테스트** (그중 `Device` 카테고리 2개, 공용 헬퍼 `TestRoad.cs`·`TrackFollower.cs` 포함), EditMode **9 파일 / 131 테스트** (`Scripts/Tests/EditMode/`, `ProtoHarness.Tests.EditMode`). 2026-10-07 실행 XML 기준 |
 | 템플릿 잔재 | `Assets/TutorialInfo/Scripts/` 2개 (건드리지 않음) |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` (직선 유한 테스트 맵), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제 |
+| 게임 씬 | `Assets/_Project/Scenes/ChainRushTestBench.unity` (테스트 작업대 — 시험 도로를 코드로 까는 PlayMode 테스트의 그릇. 플레이용이 아니다. 2026-10-14 `ChainRushPrototype` 에서 이름만 바꿈, 2026-10-15 R3 에서 첫 구간(발판·앵커·표적 1개씩)만 남김), `ChainRushProcedural.unity` (절차 무한 전투 맵), `ChainRushCircuit.unity` (서킷 레이스). 옛 직선 무한 씬 `ChainRushEndless` 는 T3d(2026-10-08)에서 삭제. 세 씬의 러너 모형은 프리팹 `Assets/_Project/Prefabs/ArmoredRunner.prefab` 하나다(2026-10-15 R3) |
 | 템플릿 씬 | `Assets/Scenes/SampleScene.unity` |
 
 참조 게임: https://github.com/DosangE/Chain-Rush · 조사 기준 커밋 `17294d85943dfa9fecd6a70272411e035b1ca6bf`.
@@ -44,15 +44,16 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 
 | 책임 | 진입점 (`Assets/_Project/Scripts/` 기준) | 의존 |
 |---|---|---|
-| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 드리프트(그립 저하·게이지 충전)와 체인 액션(우선순위: 그래플 강화 → 커브 드리프트 중 코너 스윙 → 슬링샷, 게이지 1칸). 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
-| 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate` | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
+| 자동 전진·점프·중력·충돌. `Step(in TickInput)` 으로 틱 입력을 받는다 (장치를 읽지 않음, 시각물을 쓰지 않음). 자유 조향: 입력이 헤딩(`RacerState.Heading`)을 돌리고 전진·그립은 헤딩 기준. 가드(난간) 부딪힘은 감속 + 난간과 나란히 돌림. 코너 봉 스윙(R4b: Shift 를 누른 순간 범위 안 봉에 걸고 누르는 동안 돈다, 스윙 중 조향은 줄 길이, 줄이 짧을수록 빠르다, 스윙 거리 35 m 당 게이지 1칸, 놓으면 그 속도로 직진·넘친 속도는 초당 3 m/s 감소. 별도 드리프트는 없다)와 체인 액션(Ctrl: 그래플 강화 → 슬링샷, 게이지 1칸). 접지 중 경사 속도 보정, 내리막 땅 붙잡기(SphereCast), 낙하 실패는 트랙 기준 높이 `H < -12` | `Runtime/ChainRush/RunnerMotor.cs` | CharacterController, Game(`Track`), Grapple, `TickInput` |
+| 몸체 기울이기(표현 전용). `LateUpdate` 에서 모터의 `Velocity`·`Steer` 로 `body.localRotation` 을 쓴다. 공식은 정적 `Evaluate`. 코너 스윙 중에는 몸만 커브 안쪽으로 `SwingLook.SlipAngle` 만큼 튼다 | `Runtime/ChainRush/Visuals/RunnerTilt.cs` (`[DefaultExecutionOrder(100)]`) | Motor, 직렬화 `body` Transform (비어 있으면 LogError 후 비활성화) |
+| 코너 스윙 연출 계산(표현 전용, 2026-10-14, R5 2026-10-18). 봉 모델 크기(봉 점 위 `PoleHeight` 20 m, 아래 `PoleDepth` 20 m, `PoleThickness` 1.6 m)와 줄이 무는 띠 `PoleBite`(3 m)·꼭대기 `PoleTop`, 무한 모드용 안쪽 난간 걸림점 `RailPoint`(R6 까지), 안쪽 방향 `InsideSign`, 0.15초 블렌드. `GrappleController`(줄 끝)·`CircuitRace`(봉 모델)·`ChainRushHud`(봉 표시)·`RunnerTilt`(몸)·`FollowCamera`(바깥쪽 0.6 m, 시야각 +4°)가 부른다. 시뮬의 `RunnerMotor.SwingAnchor`(원 중심)는 바꾸지 않는다 | `Runtime/ChainRush/Visuals/SwingLook.cs` (static class) | Track(`TrackFrame`, `RoadMeshBuilder.GuardRailHeight`) |
 | 틱 한 번의 조작값: 조향 [-1,1] + 주동작·해제·공격 엣지. 범위 밖이면 `ArgumentOutOfRangeException` | `Runtime/ChainRush/Control/TickInput.cs` (readonly struct) | 없음 |
 | 입력 출처 계약: `Poll()`(실행 중 프레임마다) / `Consume()`(틱마다) / `Clear()` | `Runtime/ChainRush/Control/IInputSource.cs` | `TickInput` |
 | 틱 사이 버튼 엣지 보존, 조향은 최신값 유지. 순수 로직 | `Runtime/ChainRush/Control/InputLatch.cs` | `TickInput` |
 | 입력 기록·재생 (P2, 2026-10-08): `InputLog` 가 한 런의 틱별 `TickInput` 을 담고(항목 i = 틱 i + 1 의 입력), `InputRecorder`(`IInputSource` 데코레이터)가 `Consume()` 때 쌓고, `InputReplay` 가 틱마다 하나씩 돌려준다(끝나면 빈 입력, `Finished`). `Clear()` = 새 런(기록은 비우고 재생은 되감는다)이라 `SetInputSource(replay)` + `StartRun()` 이면 처음부터 재생된다. 직렬화·파일 저장은 없다 | `Runtime/ChainRush/Control/InputLog.cs`, `InputRecorder.cs`, `InputReplay.cs` | `TickInput`, `IInputSource` |
 | 롤백 안전성 (P3 준비, 2026-10-08): 서킷 한정 한 틱 스냅샷·복원. `ChainRushGame.CaptureSnapshot()` / `RestoreSnapshot(in SimSnapshot)` 가 틱·`RacerState.Snapshot`(접지 `Grounded` 포함)·러너 위치·`CircuitRace.Snapshot`(`LapCounter.Snapshot`)을 값으로 담고 되돌린다. 무한 모드는 `NotSupportedException`. 한 틱 진입점은 `StepTick(IInputSource)`(`FixedUpdate` 가 부른다). `RunnerMotor` 는 접지를 `Move` 직후 `RacerState.Grounded` 에 복사하고, 매 틱 시작에 컨트롤러를 껐다 켜서(`NormalizeController`) 컨트롤러 내부 위치를 float 위치와 같게 한다 | `Runtime/ChainRush/SimSnapshot.cs`, `RacerState.cs`, `Track/LapCounter.cs`, `Race/CircuitRace.cs`, `ChainRushGame.cs`, `RunnerMotor.cs` | `RacerState`, `LapCounter`, `CircuitRace`, `CharacterController` |
-| 키보드·마우스 매핑 (A/D·←/→ 조향, 좌클릭 주동작, 좌클릭 뗌·우클릭 해제, Space 공격, 왼쪽 Shift 드리프트, 왼쪽 Ctrl 체인 액션) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
-| 전방 앵커 선택·줄 길이 제약·해제 부스트. 체인 액션으로 강화되면 빨리 감고 세게 던진다. 슬링샷 당김 동안 체인 시각물 표시 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
+| 키보드 매핑 (카트라이더식, 마우스 없음 — 2026-10-18: ←/→ 조향, 왼쪽 Alt 주동작, 왼쪽 Alt 뗌·↓ 해제, Space 공격, 왼쪽 Shift 봉 스윙(누름 + 유지), 왼쪽 Ctrl 체인 액션(누름)) | `Runtime/ChainRush/Control/KeyboardMouseInputSource.cs` | Input System, `InputLatch` |
+| 전방 앵커 선택·줄 길이 제약·해제 부스트. 체인 액션으로 강화되면 빨리 감고 세게 던진다. 슬링샷 당김·봉 스윙 동안 체인 시각물 표시(봉 스윙은 봉의 띠, 무한 모드는 R6 까지 안쪽 난간). 매 프레임 지금 걸 수 있는 봉(`PoleCandidate`, 무한 모드 제외)을 HUD 에 내준다 | `Runtime/ChainRush/GrappleController.cs` | 직렬화 앵커 배열, LineRenderer, Motor, Game |
 | 준비·진행·정지·실패·완주 흐름, 공격·피격 판정 진입점. 트랙 중심선을 소유한다(`Track`) | `Runtime/ChainRush/ChainRushGame.cs` | Motor, Grapple, Camera, Targets, AudioSource, RunRules, `RacerState`, `Centerline` |
 | 트랙 좌표계: 직선 조각과 수평 원호(`AppendArc`, 곡률 `TrackFrame.Curvature`, 원호 중심 `CurveCenter`)를 이은 중심선, 조각마다 종단 곡선(경사 연속, 높이 포물선). 월드 위치 → `(S, D, H)` 투영, 그 지점의 앞·오른쪽 축·높이·경사(`TrackFrame`). `ChainRushGame.SetTrack` 으로 교체 가능(유한 모드만). `S` 는 레이스 시작부터의 절대 거리(double)라 원점 이동·조각 버리기 뒤에도 이어진다. 범위 밖은 양 끝 접선으로 연장. 순수 로직. 모터·그래플·카메라·적·코스가 "앞"을 여기서 얻는다. T0 은 두 씬 모두 원점에서 +z 직선 | `Runtime/ChainRush/Track/Centerline.cs` (+ `TrackFrame`, `TrackCoord` readonly struct) | 없음 (`ChainRushGame.Awake` 에서 코드로 생성) |
 | 닫힌 서킷 지원 (T4, 2026-10-08): `Close`/`TryClose` 가 끝 = 시작(위치 0.5m·방향 1°·높이 0.1m·끝 경사 0)을 검증해 루프로 만든다. 루프에서는 `FrameAt(s)`·`Project`·`Frame` 의 `S` 가 한 바퀴 길이로 감기고, 조각을 "앞에서부터 첫 번째로 지나지 않은 것" 이 아니라 **가장 가까운 것**으로 고른다(귀환 직선이 출발 조각으로 오인되던 문제). `SetFocus(s)`/`FocusWindow`(기본 150m)는 어떤 중심선에서든 질의를 초점 근처 조각으로 좁힌다. 루프가 닫힌 뒤 `Append`·`TrimBefore` 는 예외. 초점·루프를 안 쓰는 직선·무한 코스는 동작이 같다 | `Runtime/ChainRush/Track/Centerline.cs` | 없음 |
@@ -61,12 +62,12 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 레이서 한 명분 시뮬 상태(위치 제외): 체력·적중 수·그래플 수·무적/공격 마감 틱, 속도·조향·점프 예약·코요테 시간, 그래플 앵커 인덱스·줄 길이·빗나감 마감 틱. 운동 값은 `ref` 로 노출한다(모터가 성분을 제자리에서 고치고, 그래플의 해제 부스트가 같은 메모리를 고친다). 순수 로직. `ChainRushGame.Racer` 로 접근 | `Runtime/ChainRush/RacerState.cs` | `RunRules` (생성자 인자, null 이면 `ArgumentNullException`) |
 | 추적 카메라·속도에 따른 FOV. 러너 헤딩 뒤를 따르고 yaw 회전은 `maxYawSpeed`(180°/s) 상한. 높이 하한은 중심선 높이 기준. 첫 맞춤은 `Start`(트랙이 `Awake` 에서 생기므로) | `Runtime/ChainRush/FollowCamera.cs` | Motor, Game(`Track`), Camera |
 | 공격 표적·위험물 접촉·복구 | `Runtime/ChainRush/CourseTarget.cs` | 직렬화 Visual Transform |
-| 시작 안내·HUD(체인 게이지 2칸 포함)·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
+| 시작 안내·HUD(체인 게이지 2칸, 앵커·걸 수 있는 봉 표시 포함)·결과 화면 | `Runtime/ChainRush/ChainRushHud.cs` | Game, Motor, Grapple, Camera |
 | 씬 생성·열기·테스트 실행 메뉴. 발판 양쪽 가드 난간(`AddGuards`, 충돌 4m)과 기존 씬용 메뉴 `Add Deck Guards To Open Scene` | `Editor/ChainRush/ChainRushSceneBuilder.cs` | EditorSceneManager, AssetDatabase, TestRunnerApi |
 | 무한 코스가 게임·적 감독에게 내미는 면: `Distance`, `Step`(틱당 1회), `SeedTrack`, `ResetCourse`, `CanStartEncounter`. `ChainRushGame.endlessCourse`·`EnemyDirector.course` 가 이 타입으로 받는다. 구현은 `ProceduralCourse` 하나(옛 직선 풀 `EndlessCourse` 는 T3d 에서 삭제) (T3c, 2026-10-08) | `Runtime/ChainRush/Endless/CourseStream.cs` (abstract) | `Centerline` |
 | 절차 코스 스트리밍 (T3c): `CourseGenerator` 모듈을 플레이어 앞 300m 까지 중심선에 붙이고(`AppendTo`), 모듈마다 `RoadPiece` 풀(24칸)로 노면을 깐다(틈 모듈은 틈 앞뒤 두 구간, 50m 초과는 나눔, 틱당 `Build` 1회). 그래플 앵커 풀(10칸, `GrappleController.anchors` 와 같은 배열)에 `AnchorS`·`AnchorOffset`·`AnchorHeight` 로 앵커를 놓는다. 뒤쪽 60m 밖은 풀로 반환(붙어 있는 앵커는 유지). 플레이어 수평 위치가 원점에서 400m 이상이면 전부 `-(x, 0, z)` 이동. 런마다 새 무작위 시드(`SetSeed` 로 지정). `ChainRushProcedural` 씬에서 쓴다 | `Runtime/ChainRush/Endless/ProceduralCourse.cs` | `CourseGenerator`, `CourseTuning`(`Data/CourseTuning_Default.asset`), `RoadPiece`, Game, Motor, Camera |
-| 수제 서킷 (T4, 2026-10-08): `TrackDefinition`(SO)이 직선·원호·종단 곡선 조각 목록(틈은 노면 없는 평지 직선) + 앵커 + 체크포인트(랩 비율) + 출발 칸 + 랩 수 + 노면 폭을 담고 `TryValidate` 로 규칙(반지름 ≥ 30m, 틈 앞뒤 평지 직선 ≥ 15m, 앵커는 틈 위)과 **닫힘**을 검증한다. 기본값은 스타디움(직선 140m 에 언덕 + 점프 틈, R40 반원, 직선 140m 에 그래플 틈, R40 반원, 한 바퀴 531m). `LapCounter`(순수 로직)가 틱마다 접힌 `S` 를 누적 진행도로 더해 체크포인트·랩 완료·랩 시간을 센다(역주행은 진행도만 줄고 이미 지난 선은 다시 세지 않는다) | `Runtime/ChainRush/Track/TrackDefinition.cs`, `LapCounter.cs` | `Centerline` |
-| 서킷 레이스 (T4): `CircuitRace` 가 정의로 닫힌 중심선을 만들어 게임에 넘기고(`BuildTrack`), 노면을 한 번만 깔고(`RoadPiece` ≤ 50m, 틈 건너뜀), 앵커·출발선·체크포인트 표지를 놓고, 매 틱 `PrepareTick`(초점 = 직전 `S`) → 입력 → 이동 → `Step`(투영 + `LapCounter`)을 돈다. 시계는 `StartRun` 틱 0, 러너는 출발선 위 `S 0`, 1랩 = 선에서 선, 완주 = 3랩. 낙사는 런 종료. 적·`CourseTarget`·`EnemyDirector` 없음. `ChainRushCircuit` 씬에서 쓴다 | `Runtime/ChainRush/Race/CircuitRace.cs` | `TrackDefinition`(`Data/Circuit_Stadium.asset`), `LapCounter`, `RoadPiece`, Game, Motor |
+| 수제 서킷 (T4, 2026-10-08): `TrackDefinition`(SO)이 직선·원호·종단 곡선 조각 목록(틈은 노면 없는 평지 직선) + 앵커 + 체크포인트(랩 비율) + 출발 칸 + 랩 수 + 노면 폭을 담고 `TryValidate` 로 규칙(반지름 ≥ 20m, 틈 앞뒤 평지 직선 ≥ 15m, 앵커는 틈 위)과 **닫힘**을 검증한다. 기본값은 사각 서킷(R4c 2026-10-18: 직선 140m 에 언덕 + 점프 틈, R22 90°, 직선 60m, R22 90°, 직선 140m 에 그래플 틈, R22 90°, 직선 60m, R22 90°, 한 바퀴 538.2m). `LapCounter`(순수 로직)가 틱마다 접힌 `S` 를 누적 진행도로 더해 체크포인트·랩 완료·랩 시간을 센다(역주행은 진행도만 줄고 이미 지난 선은 다시 세지 않는다) | `Runtime/ChainRush/Track/TrackDefinition.cs`, `LapCounter.cs` | `Centerline` |
+| 서킷 레이스 (T4): `CircuitRace` 가 정의로 닫힌 중심선을 만들어 게임에 넘기고(`BuildTrack`), 노면을 한 번만 깔고(`RoadPiece` ≤ 50m, 틈 건너뜀), 앵커·출발선·체크포인트 표지와 원호마다 코너 봉 모델(충돌체 없음, R5)을 놓고, 매 틱 `PrepareTick`(초점 = 직전 `S`) → 입력 → 이동 → `Step`(투영 + `LapCounter`)을 돈다. 시계는 `StartRun` 틱 0, 러너는 출발선 위 `S 0`, 1랩 = 선에서 선, 완주 = 3랩. 낙하하면 틈 앞 트랙으로 복귀하고 1초 멈춘다(R2, 런은 계속). 적·`CourseTarget`·`EnemyDirector` 없음. `ChainRushCircuit` 씬에서 쓴다 | `Runtime/ChainRush/Race/CircuitRace.cs` | `TrackDefinition`(`Data/Circuit_Stadium.asset`), `LapCounter`, `RoadPiece`, Game, Motor |
 | 적 경고·세 방향 진입·제한시간 전투 | `Runtime/ChainRush/Combat/EnemyDirector.cs` | Game, Motor, Course, ChainVisual, EncounterTuning |
 | 조우 시간 5종·조우 간격 곡선 데이터. 순수 계산 `NextGap(distance)` | `Runtime/ChainRush/Combat/EncounterTuning.cs` (SO, 기본값 `Data/EncounterTuning_Default.asset`) | 없음 (`EnemyDirector` 가 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
 | 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
@@ -90,20 +91,20 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 심볼 인덱스 (B모드) | `index/symbols.tsv` — 생성물, `tools/reindex.ps1` 로 재생성 |
 | 서브에이전트 정의 | `.claude/agents/*.md` (5종) |
 | 인덱스 재생성 | `tools/reindex.ps1` |
-| 게임 씬 | `Assets/_Project/Scenes/ChainRushPrototype.unity` |
-| 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Prototype Scene` (Ctrl+Shift+G). 기존 게임 씬을 덮어쓰지 않는다. |
-| 열기 | `ProtoHarness > Chain Rush > Open Prototype Scene` |
+| 게임 씬 | 플레이: `ChainRushProcedural.unity`(무한), `ChainRushCircuit.unity`(서킷). 테스트 작업대: `ChainRushTestBench.unity` |
+| 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Test Bench Scene` (Ctrl+Shift+G, 작업대), `Create Circuit Scene` (서킷). 기존 게임 씬을 덮어쓰지 않는다. |
+| 열기 | `ProtoHarness > Chain Rush > Open Test Bench Scene` |
 | 무한 씬 만들기 | `ProtoHarness > Chain Rush > Create Endless Scene` (Ctrl+Shift+E). 기존 테스트 씬을 복사한 후 별도 경로에만 저장. 재생성으로 덮어쓰지 않음. |
 | 표현 적용 | `ProtoHarness > Chain Rush > Apply Art Sound Animation` (Ctrl+Shift+J). 무한 씬에 한 번 적용, 중복 적용 시 명시적 오류. |
 | 실행 | Play → Enter 또는 START RUN 버튼 |
-| 조작 | A/D 또는 방향키로 진행 방향 틀기(자유 조향, 2026-10-05), 좌클릭 지상 점프 / 공중 재클릭 그래플, 유지 스윙 / 놓기·우클릭 해제, Space 공격, 왼쪽 Shift 드리프트(게이지 충전), 왼쪽 Ctrl 체인 액션(슬링샷 / 그래플 중 강화), R 재시작, Esc 일시정지 |
-| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device` 카테고리 제외) / `Run Device Input Tests` (가상 키보드·마우스 테스트만) |
+| 조작 | ←/→ 로 진행 방향 틀기(자유 조향, 2026-10-05; 2026-10-18 부터 방향키만), 왼쪽 Alt 지상 점프 / 공중에서 다시 Alt 그래플, Alt 유지 스윙 / Alt 뗌·↓ 해제, Space 공격, 왼쪽 Shift 코너 봉 스윙(유지 동안, 스윙 중 ←/→ 는 줄 길이, 게이지 충전 — R4b 부터 드리프트 대신), 왼쪽 Ctrl 체인 액션(슬링샷 / 그래플 중 강화), R 재시작, Esc 일시정지 |
+| 테스트 | `ProtoHarness > Chain Rush > Run PlayMode Tests` (병합 조건용, `Device`·`Sweep`·`Long` 카테고리 제외) / `Run Long Tests` / `Run Device Input Tests` (가상 키보드 테스트만) / `Run Course Sweep` |
 | 테스트 결과 | Unity 프로세스의 `Path.GetTempPath()` 아래 `ChainRush-PlayMode-results.xml` (EditMode 결과도 같은 파일에 덮어쓴다). 경로는 머신마다 다르므로 실행할 때 `Unity_RunCommand` 로 `Path.GetTempPath()` 를 읽어 확인한다 |
 
 코스: 9개 플랫폼, 8개 낭떠러지와 앵커, 결승 z=496. 노란 점프선은 각 가장자리 4m 앞이다.
 첫 점프는 z=44, 첫 앵커는 (0, 10, 56), 첫 착지 플랫폼은 z=64에서 시작한다.
 첫 공격 표적은 (0, 1.1, 18)에 있으며 이후 표적·위험물은 좌우로 배치된다.
-PlayMode 테스트는 장면 로드, 전진, 점프/연결/제약/해제, 사거리 실패, 피격 무적, 낙하 후 재시작과 표적 복구, 일시정지, 자동 조작으로 전체 코스 완주를 검증한다. 가상 Keyboard/Mouse의 Input System 이벤트로 Enter·A/D·좌클릭·놓기·R·Space도 검증하고 장치를 복구한다.
+PlayMode 테스트는 장면 로드, 전진, 점프/연결/제약/해제, 사거리 실패, 피격 무적, 낙하 후 재시작과 표적 복구, 일시정지, 자동 조작으로 전체 코스 완주를 검증한다. 가상 Keyboard 의 Input System 이벤트로 Enter·←/→·Alt·Alt 뗌·R·Space·Shift·Ctrl 도 검증하고 장치를 복구한다.
 시각 검증 캡처는 Unity 프로세스의 임시 폴더에 `ChainRush-ready.png`, `ChainRush-running.png`, `ChainRush-grapple.png`로 저장한다.
 HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 내 합성 AudioClip을 사용한다. 정식 아트·음원과 빌드/배포는 포함하지 않는다.
 

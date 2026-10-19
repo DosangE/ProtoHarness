@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -16,10 +17,19 @@ namespace ProtoHarness.Tests.PlayMode
     // centerline handed to the game with SetTrack. The scene itself has no slopes yet.
     public sealed class ChainRushSlopeTests
     {
+        // Holds the throttle and nothing else: running needs it since 2026-10-19, and these tests read the run, not the keys.
+        private sealed class FullThrottleInputSource : IInputSource
+        {
+            public void Poll() { }
+            public TickInput Consume() => new TickInput(0f, false, false, false);
+            public void Clear() { }
+        }
+
         private const float RoadX = 300f;
         private const float RoadHalfWidth = 4f;
-        // ChainRushPrototype.unity runner values (COURSE.md section 2): runSpeed 10; slope factor 1.5, scale 0.7..1.3.
-        private const float RunSpeed = 10f;
+        // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 20 (circuit physics since 2026-10-19, was 10);
+        // slope factor 1.5, scale 0.7..1.3.
+        private const float RunSpeed = 20f;
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -32,7 +42,7 @@ namespace ProtoHarness.Tests.PlayMode
             previousTimeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;
@@ -44,6 +54,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
             Assert.That(game, Is.Not.Null);
             Assert.That(player, Is.Not.Null);
+            game.SetInputSource(new FullThrottleInputSource());
             yield return null;
         }
 
@@ -73,7 +84,8 @@ namespace ProtoHarness.Tests.PlayMode
                 if (!player.IsGrounded) airborne++;
             }
             Assert.That(game.IsRunning, Is.True, "Run ended on the downhill at s=" + S(line));
-            Assert.That(ticks, Is.GreaterThan(100), "Too few samples on the slope.");
+            // 36 m at the downhill's 26 m/s is about 69 ticks.
+            Assert.That(ticks, Is.GreaterThan(50), "Too few samples on the slope.");
             Assert.That(airborne, Is.Zero, "Lost ground on " + airborne + " of " + ticks + " ticks.");
         }
 
@@ -130,6 +142,46 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log(table.ToString());
             // COURSE.md 6-1: gaps without a grapple are planned at <= 8 m on flat ground.
             Assert.That(flatReach, Is.GreaterThanOrEqualTo(8f), table.ToString());
+        }
+
+        // Off a 20% uphill the grounded run target is 0.7 times run speed, but in the air it is the flat run speed: the
+        // airborne speed moves toward it by airAcceleration a second. The code default is the old 5; the circuit and the bench
+        // use 0, so a jump keeps its takeoff speed (2026-10-19, M1-T play: jumping must not be a way to gain speed uphill).
+        [UnityTest]
+        public IEnumerator Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration([Values(0f, 5f)] float airAcceleration)
+        {
+            SetMotorFloat("airAcceleration", airAcceleration);
+            Centerline line = SlopeRoad(0.2f);
+            yield return StartOn(line, 110d);
+            yield return RunTo(line, 42d);
+            Assert.That(player.IsGrounded, Is.True);
+            player.PrimaryAction();
+            float deadline = Time.time + 1f;
+            while (game.IsRunning && player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.False, "precondition: the jump took off.");
+            float takeoff = player.ForwardSpeed;
+            const int AirTicks = 20;
+            for (int i = 0; i < AirTicks; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.False, "precondition: still in the air.");
+            float expected = Mathf.Min(takeoff + airAcceleration * AirTicks * Ticks.Seconds, RunSpeed);
+            Debug.Log("ChainRush uphill jump (air acceleration " + airAcceleration + "): takeoff " + takeoff.ToString("0.000")
+                + " m/s, after " + AirTicks + " air ticks " + player.ForwardSpeed.ToString("0.000") + " m/s.");
+            Assert.That(takeoff, Is.EqualTo(RunSpeed * 0.7f).Within(0.5f), "precondition: the uphill run target.");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f));
+        }
+
+        // Changes a runner setting on this play-mode instance only; the scene asset is not touched.
+        private void SetMotorFloat(string name, float value)
+        {
+#if UNITY_EDITOR
+            var motor = new UnityEditor.SerializedObject(player);
+            UnityEditor.SerializedProperty property = motor.FindProperty(name);
+            Assert.That(property, Is.Not.Null, "RunnerMotor." + name + " is missing.");
+            property.floatValue = value;
+            motor.ApplyModifiedPropertiesWithoutUndo();
+#else
+            Assert.Fail("Changing a runner setting needs the Unity Editor.");
+#endif
         }
 
         // Horizontal distance where the falling branch of the arc first crosses height dh.

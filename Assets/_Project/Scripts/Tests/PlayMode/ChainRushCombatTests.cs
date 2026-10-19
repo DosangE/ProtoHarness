@@ -17,6 +17,8 @@ namespace ProtoHarness.Tests.PlayMode
     // Encounters, the chain attack and the grapple on the procedural course. These are the combat tests of
     // the old straight endless course, moved here with the same assertions: only where the runner starts
     // changed (the spawn rest instead of a z value on the old decks, a laid gap instead of its fixed place).
+    // The endless mode is on hold while the circuit comes first (2026-10-18); outside the regular runs.
+    [Category("Endless")]
     public sealed class ChainRushCombatTests
     {
         private const string ScenePath = "Assets/_Project/Scenes/ChainRushProcedural.unity";
@@ -89,7 +91,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(enemies.Direction, Is.EqualTo(direction));
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_EachDirection_AttackFiresConnectsAndRetracts()
         {
             var source = new AttackInputSource();
@@ -100,18 +102,19 @@ namespace ProtoHarness.Tests.PlayMode
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-enemy-" + direction + ".png"));
                 yield return null;
                 source.Attack = true;
-                yield return new WaitForSeconds(0.07f);
+                // In ticks: the flight lasts 8 ticks, and one long frame in a 0.07 s wait could run past it.
+                yield return WaitTicks(Ticks.FromSeconds(0.07f));
                 Assert.That(enemies.State, Is.EqualTo(EnemyDirector.EncounterState.Firing));
                 Assert.That(game.Hits, Is.Zero, "Hit must occur after chain flight, not on attack input.");
                 ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ChainRush-chain-" + direction + ".png"));
-                yield return new WaitForSeconds(0.5f);
+                yield return WaitTicks(Ticks.FromSeconds(0.5f));
                 Assert.That(game.Hits, Is.EqualTo(1));
                 Assert.That(game.Health, Is.EqualTo(3));
                 Assert.That(enemies.HasEncounter, Is.False);
             }
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_EachDirection_TimeoutDamagesExactlyOnce()
         {
             foreach (EnemyDirector.Entrance direction in System.Enum.GetValues(typeof(EnemyDirector.Entrance)))
@@ -126,7 +129,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_PauseAndRestart_FreezesWindowAndClearsFlight()
         {
             yield return Prepare(EnemyDirector.Entrance.Left);
@@ -147,7 +150,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(course.Distance, Is.EqualTo(0d).Within(0.1d));
         }
 
-        [UnityTest]
+        [UnityTest, Category("Enemy")]
         public IEnumerator Combat_GapAndJump_DoesNotRequireAttack()
         {
             double gapStart = FindGapSpot(false);
@@ -217,6 +220,17 @@ namespace ProtoHarness.Tests.PlayMode
             float deadline = Time.time + 2f;
             while (!player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.True, "Runner never landed on the procedural road.");
+        }
+
+        // Until the game has run exactly `ticks` more ticks. A wait in game seconds lets one long frame run several
+        // ticks before the coroutine resumes (up to the 0.33 s maximum timestep), so a check of something that lasts
+        // only a few ticks waits in ticks. The final check fails if a resume ever skipped a tick.
+        private IEnumerator WaitTicks(int ticks)
+        {
+            int target = game.Tick + ticks;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (game.Tick < target && Time.realtimeSinceStartup < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Tick, Is.EqualTo(target), $"Waited for {ticks} ticks.");
         }
     }
 }

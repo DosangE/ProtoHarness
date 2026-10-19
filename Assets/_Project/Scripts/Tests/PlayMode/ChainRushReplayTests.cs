@@ -62,8 +62,7 @@ namespace ProtoHarness.Tests.PlayMode
             StateTrace recorded = CircuitTrace(new InputRecorder(new CircuitBot(game, player, grapple, circuit), log));
             yield return Run(recorded, CircuitTicks, 3f, null);
             Assert.That(log.Count, Is.GreaterThanOrEqualTo(CircuitTicks));
-            Assert.That(circuit.Laps.CheckpointsPassed, Is.GreaterThanOrEqualTo(2), "The recorded run should get past two checkpoints.");
-            Assert.That(circuit.Laps.CompletedLaps, Is.Zero, "1700 ticks are short of a lap: the grapple gap is still ahead of the finish.");
+            Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "At 20 m/s (M1-T, 2026-10-18) 1700 ticks are one whole lap, with its checkpoints and grapple gap, and the start of the next.");
 
             // The same session, six times as fast: ticks per frame differ, ticks do not.
             StateTrace sameSession = CircuitTrace(new InputReplay(log));
@@ -81,7 +80,8 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- procedural course ---------------------------------------------------------------------
 
-        [UnityTest, Timeout(300000)]
+        // Long (CLAUDE.md §9-2): out of the merge gate unless the branch changes core code.
+        [UnityTest, Category("Long"), Category("Endless"), Timeout(300000)]
         public IEnumerator Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit()
         {
             yield return Load(ProceduralScene);
@@ -118,7 +118,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             // Same log with the steering of one tick forced to full right.
             TickInput original = log[changed];
-            InputLog tampered = log.CopyWith(changed, new TickInput(1f, original.PrimaryPressed, original.ReleasePressed, original.AttackPressed, original.Drift, original.ChainActionPressed));
+            InputLog tampered = log.CopyWith(changed, new TickInput(1f, original.PrimaryPressed, original.ReleasePressed, original.AttackPressed, original.SwingHeld, original.ChainActionPressed, original.SwingPressed));
             Assert.That(original.Steer, Is.LessThan(1f), "The bot must not already steer full right on that tick.");
             StateTrace diverged = CircuitTrace(new InputReplay(tampered));
             yield return Run(diverged, ticks, 6f, null);

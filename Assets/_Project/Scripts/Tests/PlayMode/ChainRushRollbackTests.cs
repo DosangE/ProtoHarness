@@ -21,7 +21,7 @@ namespace ProtoHarness.Tests.PlayMode
     public sealed class ChainRushRollbackTests
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
-        private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
+        private const string TestBenchScene = "Assets/_Project/Scenes/ChainRushTestBench.unity";
         private const int BotTicks = 1700;
 
         private ChainRushGame game;
@@ -54,18 +54,23 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { }
         }
 
-        // Drifts through the curves to fill the chain gauge, fires the slingshot on the first straight after that,
-        // then hooks the next curve for a corner swing, so the drift, sling and swing states are all visited.
-        private sealed class DriftBot : IInputSource
+        // Fires the slingshot on the first straight, then hooks the next corner pole from inside its arc (the rope then
+        // runs along the centerline), shortens the rope for its first SwingRopeTicks, holds through the arc and lets go
+        // back on the straight, so the sling, swing, rope and carry states are all visited.
+        private sealed class SwingBot : IInputSource
         {
+            private const int SwingRopeTicks = 20;
             private readonly ChainRushGame game;
             private readonly RunnerMotor player;
             private readonly CircuitBot driver;
             private int ticks;
             private bool slung;
+            private bool swung;
+            private bool sawArc;
 
-            // The circuit bot does the steering and the jumps and grapples over the gaps; this adds drift and chain actions.
-            public DriftBot(ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit)
+            // The circuit bot does the steering and the jumps and grapples over the gaps; this adds the chain action and
+            // the swing key, and works the rope while swinging.
+            public SwingBot(ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit)
             {
                 this.game = game;
                 this.player = player;
@@ -81,12 +86,41 @@ namespace ProtoHarness.Tests.PlayMode
                 TickInput driven = driver.Consume();
                 float steer = driven.Steer;
                 float curvature = game.Track.Frame(player.transform.position).Curvature;
-                bool intoCurve = curvature != 0f && steer * curvature > 0f;
-                if (game.Racer.SlingTicks > 0) slung = true;
-                // Straight: try the slingshot every few ticks until it has fired. Curve: hook it once the sling is done.
-                bool chain = curvature == 0f ? !slung && ticks % 10 == 0 : slung && intoCurve;
-                return new TickInput(steer, driven.PrimaryPressed, false, false, intoCurve, chain);
+                RacerState racer = game.Racer;
+                if (racer.SlingTicks > 0) slung = true;
+                bool swinging = player.IsSwinging;
+                if (swinging) swung = true;
+                if (swinging && curvature != 0f) sawArc = true;
+                // First the slingshot: on a straight, every few ticks until it fires. Then the pole swing: press inside the
+                // first arc whose pole is in reach, hold through it and let go back on the straight.
+                bool chain = !slung && curvature == 0f && ticks % 10 == 0;
+                bool press = slung && !swung && curvature != 0f && player.TryFindPole(out _);
+                bool hold = swinging ? !(sawArc && curvature == 0f) : press;
+                if (swinging)
+                {
+                    // While swinging steering works the rope: the key toward the pole shortens it, for a while, then none.
+                    float h = player.Heading * Mathf.Deg2Rad;
+                    var right = new Vector3(Mathf.Cos(h), 0f, -Mathf.Sin(h));
+                    float poleSide = Vector3.Dot(racer.SwingCenter - player.transform.position, right) >= 0f ? 1f : -1f;
+                    steer = racer.SwingTicks <= SwingRopeTicks ? poleSide : 0f;
+                }
+                return new TickInput(steer, driven.PrimaryPressed, false, false, hold, chain, press);
             }
+        }
+
+        // The circuit bot's steering without its jumps and grapples, so the runner falls into the first gap it meets.
+        private sealed class NoPressBot : IInputSource
+        {
+            private readonly CircuitBot driver;
+
+            public NoPressBot(ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit)
+            {
+                driver = new CircuitBot(game, player, grapple, circuit);
+            }
+
+            public void Poll() { }
+            public void Clear() { }
+            public TickInput Consume() => new TickInput(driver.Consume().Steer, false, false, false);
         }
 
         [UnitySetUp]
@@ -207,32 +241,35 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest, Timeout(180000)]
-        public IEnumerator Rollback_DuringSlingAndCornerSwing_ReplaysEveryTickBitForBit()
+        public IEnumerator Rollback_DuringSlingCornerSwingRopeAndCarry_ReplaysEveryTickBitForBit()
         {
             yield return Load(CircuitScene);
             var log = new InputLog();
             var marks = new List<Mark>();
-            StateTrace original = CircuitTrace(new InputRecorder(new DriftBot(game, player, grapple, circuit), log));
+            StateTrace original = CircuitTrace(new InputRecorder(new SwingBot(game, player, grapple, circuit), log));
             Time.timeScale = 0f;
             game.StartRun();
-            // Two chain slots up front (as the drift tests do): a bot following the line slides too little to fill the
-            // gauge itself. The snapshots are all taken after this, so the replays carry the gauge in the snapshot.
+            // Two chain slots up front (as the chain tests do): the slingshot comes before the first swing fills the gauge.
+            // The snapshots are all taken after this, so the replays carry the gauge in the snapshot.
             game.Racer.AddGauge(2f);
-            bool sling = false, swing = false, drifting = false;
-            while (game.IsRunning && game.Tick < 5000 && !(sling && swing && drifting))
+            bool sling = false, swing = false, rope = false, carry = false;
+            while (game.IsRunning && game.Tick < 5000 && !(sling && swing && rope && carry))
             {
                 RacerState racer = game.Racer;
-                if (!drifting && player.IsDrifting && racer.SwingTicks == 0 && racer.SlingTicks == 0) { drifting = true; marks.Add(Take("drift")); }
-                else if (!sling && racer.SlingTicks > 0 && racer.SwingTicks == 0) { sling = true; marks.Add(Take("sling")); }
+                if (!sling && racer.SlingTicks > 0 && racer.SwingTicks == 0) { sling = true; marks.Add(Take("sling")); }
                 else if (!swing && racer.SwingTicks > 0) { swing = true; marks.Add(Take("swing")); }
+                else if (!rope && racer.SwingTicks > 0 && racer.SwingRadius < racer.SwingHookRadius - 1f) { rope = true; marks.Add(Take("rope")); }
+                else if (!carry && racer.SwingTicks == 0 && racer.SwingCarrySpeed > 0f) { carry = true; marks.Add(Take("carry")); }
                 game.StepTick(original);
             }
             // Run a little on so every snapshot has ticks after it to replay.
             for (int i = 0; i < 120 && game.IsRunning; i++) game.StepTick(original);
-            Assert.That(drifting, Is.True, $"The drift bot never drifted (tick {game.Tick}, running {game.IsRunning}, failed {game.HasFailed}, S {game.Track.Project(player.transform.position).S:F1}, " +
-                                           $"curvature {game.Track.Frame(player.transform.position).Curvature:F4}, gauge {game.Racer.Gauge:F2}).");
-            Assert.That(sling, Is.True, $"The drift bot never fired the slingshot (gauge {game.Racer.Gauge:F2}, tick {game.Tick}).");
-            Assert.That(swing, Is.True, $"The drift bot never hooked a corner swing (gauge {game.Racer.Gauge:F2}, tick {game.Tick}).");
+            string where = $"tick {game.Tick}, running {game.IsRunning}, failed {game.HasFailed}, S {game.Track.Project(player.transform.position).S:F1}, " +
+                           $"curvature {game.Track.Frame(player.transform.position).Curvature:F4}, gauge {game.Racer.Gauge:F2}, rope {game.Racer.SwingRadius:F2}/{game.Racer.SwingHookRadius:F2}";
+            Assert.That(sling, Is.True, $"The swing bot never fired the slingshot ({where}).");
+            Assert.That(swing, Is.True, $"The swing bot never hooked a corner swing ({where}).");
+            Assert.That(rope, Is.True, $"The swing bot never shortened the rope by a metre ({where}).");
+            Assert.That(carry, Is.True, $"The swing bot never let go with speed to carry ({where}).");
 
             foreach (Mark mark in marks)
             {
@@ -241,7 +278,46 @@ namespace ProtoHarness.Tests.PlayMode
                 string difference = Replay(original, log, mark, count);
                 Assert.That(difference, Is.Null, $"snapshot '{mark.Name}' at tick {mark.Tick}: {difference}");
             }
-            Debug.Log("ChainRush rollback: drift, sling and corner swing snapshots " + string.Join(", ", marks.ConvertAll(m => m.Name + "@" + m.Tick)) + " replay identically.");
+            Debug.Log("ChainRush rollback: sling, corner swing, rope and carry snapshots " + string.Join(", ", marks.ConvertAll(m => m.Name + "@" + m.Tick)) + " replay identically.");
+        }
+
+        // A fall in a circuit race puts the runner back on the track and holds it (RunnerMotor.RespawnOnTrack). Snapshots
+        // taken while falling and in the middle of the hold replay every tick bit for bit, through the respawn, the rest of
+        // the hold and the running on after it (where the bot, still pressing nothing, may fall again).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit()
+        {
+            yield return Load(CircuitScene);
+            var log = new InputLog();
+            var marks = new List<Mark>();
+            StateTrace original = CircuitTrace(new InputRecorder(new NoPressBot(game, player, grapple, circuit), log));
+            Time.timeScale = 0f;
+            game.StartRun();
+            const int heldFor = 20;
+            const int after = 200;
+            int respawnTick = -1;
+            while (game.IsRunning && game.Tick < 3000)
+            {
+                if (respawnTick < 0 && marks.Count == 0 && game.Tick > 50 && game.Track.Project(player.transform.position).H < -3f) marks.Add(Take("falling"));
+                game.StepTick(original);
+                if (respawnTick < 0 && player.IsRespawning) respawnTick = game.Tick;
+                if (respawnTick > 0 && game.Tick == respawnTick + heldFor) marks.Add(Take("held"));
+                if (respawnTick > 0 && game.Tick >= respawnTick + after) break;
+            }
+            Assert.That(respawnTick, Is.GreaterThan(0), $"The bot pressing nothing never fell (tick {game.Tick}, running {game.IsRunning}, failed {game.HasFailed}).");
+            Assert.That(game.IsRunning, Is.True, "A fall must not end a circuit run.");
+            Assert.That(marks.Count, Is.EqualTo(2), "The run must be snapshotted while falling and during the hold.");
+            Assert.That(marks[0].Tick, Is.LessThan(respawnTick));
+            Assert.That(marks[1].Snapshot.Racer.RespawnHoldTicks, Is.EqualTo(Ticks.FromSeconds(1f) - heldFor), "The held snapshot is in the middle of the hold.");
+
+            foreach (Mark mark in marks)
+            {
+                int count = original.Samples - mark.Tick;
+                string difference = Replay(original, log, mark, count);
+                Assert.That(difference, Is.Null, $"snapshot '{mark.Name}' at tick {mark.Tick}: {difference}");
+                Assert.That(game.Tick, Is.EqualTo(mark.Tick + count));
+            }
+            Debug.Log($"ChainRush rollback: respawn at tick {respawnTick}; falling@{marks[0].Tick} and held@{marks[1].Tick} replay to tick {respawnTick + after} identically.");
         }
 
         // ---- the manual step is the same simulation --------------------------------------------------
@@ -292,7 +368,8 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load(CircuitScene);
             Assert.Throws<InvalidOperationException>(() => game.CaptureSnapshot(), "A snapshot before the run starts has no tick to hold.");
-            yield return Load(ProceduralScene);
+            // Outside a circuit race: the test bench (the endless course is on hold, 2026-10-18).
+            yield return Load(TestBenchScene);
             Time.timeScale = 0f;
             game.StartRun();
             Assert.Throws<NotSupportedException>(() => game.CaptureSnapshot());
@@ -325,7 +402,9 @@ namespace ProtoHarness.Tests.PlayMode
         private StateTrace CircuitTrace(IInputSource inner) => new StateTrace(game, player, inner,
             ("lapProgress", () => circuit.Laps.Progress),
             ("checkpoints", () => circuit.Laps.CheckpointsPassed),
-            ("laps", () => circuit.Laps.CompletedLaps));
+            ("laps", () => circuit.Laps.CompletedLaps),
+            ("lastGroundedS", () => game.Racer.LastGroundedS),
+            ("respawnHold", () => game.Racer.RespawnHoldTicks));
 
         private Mark Take(string name) => new Mark { Name = name, Tick = game.Tick, Snapshot = game.CaptureSnapshot() };
 

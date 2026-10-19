@@ -44,18 +44,48 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void Consume_DriftLevel_KeepsLatestAndClearResetsIt()
+        public void Consume_SwingHeldLevel_KeepsLatestAndClearResetsIt()
         {
             latch.Record(0f, false, false, false, true);
-            Assert.That(latch.Consume().Drift, Is.True);
-            Assert.That(latch.Consume().Drift, Is.True, "Drift is held, not an edge.");
+            Assert.That(latch.Consume().SwingHeld, Is.True);
+            Assert.That(latch.Consume().SwingHeld, Is.True, "Holding the swing key is a level, not an edge.");
             latch.Record(0f, false, false, false, false);
-            Assert.That(latch.Consume().Drift, Is.False);
+            Assert.That(latch.Consume().SwingHeld, Is.False);
             latch.Record(0f, false, false, false, true, true);
             latch.Clear();
             TickInput cleared = latch.Consume();
-            Assert.That(cleared.Drift, Is.False);
+            Assert.That(cleared.SwingHeld, Is.False);
             Assert.That(cleared.ChainActionPressed, Is.False);
+        }
+
+        [Test]
+        public void Consume_SwingPressEdge_KeptUntilConsumedOnceAndClearResetsIt()
+        {
+            latch.Record(0f, false, false, false, true, false, true);
+            latch.Record(0f, false, false, false, true, false, false);
+            TickInput pressed = latch.Consume();
+            Assert.That(pressed.SwingPressed, Is.True, "A press seen between two ticks is kept for the next one.");
+            Assert.That(pressed.SwingHeld, Is.True);
+            TickInput still = latch.Consume();
+            Assert.That(still.SwingPressed, Is.False, "The press is an edge.");
+            Assert.That(still.SwingHeld, Is.True, "Holding the key is a level, kept until a new record says otherwise.");
+            latch.Record(0f, false, false, false, false, false, true);
+            latch.Clear();
+            Assert.That(latch.Consume().SwingPressed, Is.False);
+        }
+
+        [Test]
+        public void Consume_CoastingLevel_KeepsLatestAndClearResetsIt()
+        {
+            Assert.That(latch.Consume().Coasting, Is.False, "Nothing recorded reads as full throttle, like every older source.");
+            latch.Record(0f, false, false, false, coasting: true);
+            Assert.That(latch.Consume().Coasting, Is.True);
+            Assert.That(latch.Consume().Coasting, Is.True, "Letting go of the throttle is a level, not an edge.");
+            latch.Record(0f, false, false, false, coasting: false);
+            Assert.That(latch.Consume().Coasting, Is.False);
+            latch.Record(0f, false, false, false, coasting: true);
+            latch.Clear();
+            Assert.That(latch.Consume().Coasting, Is.False);
         }
 
         [Test]

@@ -1,4 +1,5 @@
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 
 namespace ProtoHarness.ChainRush
@@ -124,9 +125,9 @@ namespace ProtoHarness.ChainRush
         private void DrawControls(float width, float height)
         {
             Block(new Rect(32, height - 92, width - 64, 60), Ink);
-            GUI.Label(new Rect(55, height - 75, 145, 30), "A / D   이동", body);
-            GUI.Label(new Rect(232, height - 75, 390, 30), "좌클릭   점프 → 공중에서 다시 잡기", body);
-            GUI.Label(new Rect(650, height - 75, 270, 30), "유지  스윙 / 놓기  해제", body);
+            GUI.Label(new Rect(55, height - 75, 175, 30), "↑ 가속   ← / → 이동", body);
+            GUI.Label(new Rect(232, height - 75, 390, 30), "ALT   점프 → 공중에서 다시 잡기", body);
+            GUI.Label(new Rect(650, height - 75, 270, 30), "ALT 유지  스윙 / ↓  해제", body);
             GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);
             string restart = game.ManualStart ? "R  재시작   " : "";
             GUI.Label(new Rect(width - 405, height - 75, 390, 30), restart + (game.HasPresentation ? "ESC  정지   M  음소거" : "  ESC  일시정지"), body);
@@ -141,7 +142,7 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(70, 470, 65, 4), Mint);
             GUI.Label(new Rect(70, 500, 640, 37), "달리고, 걸고, 도약하세요.", heading);
             GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
-            GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 점프 → 공중에서 다시 클릭하고 유지", body);
+            GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 ALT 점프 → 공중에서 다시 ALT 누르고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
             if (game.ManualStart)
             {
@@ -172,11 +173,10 @@ namespace ProtoHarness.ChainRush
             if (game.IsEndless) DrawEncounter(width, scale);
             Block(new Rect(32, height - 220, 168, 105), Ink);
             GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
-            GUI.Label(new Rect(52, height - 180, 140, 50), player.Speed.ToString("00.0"), number);
-            DrawGauge(height);
-            string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  좌클릭으로 앵커 잡기";
-            if (player.IsDrifting) status = "DRIFT  /  미끄러지며 체인 게이지 충전";
-            if (player.IsSwinging) status = "SWING  /  SHIFT 를 떼면 튀어 나간다";
+            GUI.Label(new Rect(52, height - 180, 140, 50), player.HorizontalSpeed.ToString("00.0"), number);
+            DrawBoost(width, height);
+            string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  ALT 로 앵커 잡기";
+            if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
             Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);
             GUI.Label(new Rect(width / 2f - 220, height - 145, 450, 28), status, body);
@@ -196,6 +196,7 @@ namespace ProtoHarness.ChainRush
                     GUI.Label(new Rect(x + 34, y - 10, 170, 25), "LINK / " + Vector3.Distance(player.transform.position, anchor.position).ToString("0") + "m", small);
                 }
             }
+            if (grapple.HasPoleCandidate) DrawPoleCandidate(scale);
             if (game.DamageFlash)
             {
                 Color flash = Coral;
@@ -205,18 +206,50 @@ namespace ProtoHarness.ChainRush
             }
         }
 
-        // Chain gauge under the speed box: one bar per slot, filled by drifting, spent by Ctrl.
-        private void DrawGauge(float height)
+        // The corner pole Shift would hook now, bracketed at the band the chain bites, like an anchor. A hook costs nothing,
+        // so it is always mint.
+        private void DrawPoleCandidate(float scale)
         {
-            Block(new Rect(32, height - 108, 168, 46), Ink);
-            GUI.Label(new Rect(54, height - 104, 140, 20), "CHAIN  /  CTRL", small);
+            Vector3 top = SwingLook.PoleBite(grapple.PoleCandidate);
+            Vector3 screen = viewCamera.WorldToScreenPoint(top);
+            if (screen.z <= 0f) return;
+            float x = screen.x / scale;
+            float y = (Screen.height - screen.y) / scale;
+            Color color = Mint;
+            Block(new Rect(x - 26, y - 26, 15, 3), color);
+            Block(new Rect(x - 26, y - 26, 3, 15), color);
+            Block(new Rect(x + 11, y + 23, 15, 3), color);
+            Block(new Rect(x + 23, y + 11, 3, 15), color);
+            GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / SHIFT  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
+        }
+
+        // Booster gauge at the bottom middle, above the status line (KartRider style): the bar fills toward the next booster
+        // as the runner swings, and each whole gauge slot is a booster waiting in an item box beside it, spent by Ctrl.
+        // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
+        private void DrawBoost(float width, float height)
+        {
+            const float BarWidth = 420f, Box = 52f, Gap = 10f;
+            int boxes = (int)RacerState.MaxGauge;
+            float left = width / 2f - (BarWidth + boxes * (Gap + Box)) / 2f;
+            float top = height - 212f;
             float gauge = player.Gauge;
-            for (int slot = 0; slot < (int)RacerState.MaxGauge; slot++)
+            int boosters = Mathf.Min(boxes, Mathf.FloorToInt(gauge));
+            bool full = boosters >= boxes;
+            float fill = full ? 1f : gauge - boosters;
+            Block(new Rect(left, top, BarWidth, Box), Ink);
+            GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", small);
+            GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", small);
+            var bar = new Rect(left + 18, top + 32, BarWidth - 36, 8);
+            Block(bar, new Color(0.2f, 0.3f, 0.33f));
+            bar.width *= fill;
+            Block(bar, Mint);
+            for (int i = 0; i < boxes; i++)
             {
-                var bar = new Rect(54 + slot * 64, height - 80, 58, 8);
-                Block(bar, new Color(0.2f, 0.3f, 0.33f));
-                bar.width *= Mathf.Clamp01(gauge - slot);
-                Block(bar, Mint);
+                var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
+                Block(slot, Ink);
+                var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
+                Block(item, i < boosters ? Mint : new Color(0.2f, 0.3f, 0.33f));
+                if (i < boosters) GUI.Label(item, "▶▶", button);
             }
         }
 

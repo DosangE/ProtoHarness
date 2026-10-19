@@ -13,22 +13,22 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // Drift, the chain gauge and the chain actions (COURSE.md T2c), driven through IInputSource only.
+    // The chain gauge and the chain actions (COURSE.md T2c), driven through IInputSource only. Drift lived here too until
+    // R4b took it out (the swing is the drift now, ChainRushCornerSwingTests); the file kept its name.
     // Open-road checks use a wide visible test road beside the prototype course; the grapple check uses
     // the prototype course's first gap like ChainRushTests.
     public sealed class ChainRushDriftTests
     {
         private sealed class ScriptedInputSource : IInputSource
         {
-            public float Steer;
-            public bool Drift;
             public bool ChainAction;
+            public bool Coasting;
 
             public void Poll() { }
 
             public TickInput Consume()
             {
-                var input = new TickInput(Steer, false, false, false, Drift, ChainAction);
+                var input = new TickInput(0f, false, false, false, false, ChainAction, coasting: Coasting);
                 ChainAction = false;
                 return input;
             }
@@ -37,7 +37,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private const float RoadX = 300f;
-        private const float RunSpeed = 10f;
+        // ChainRushTestBench.unity runner: circuit physics since 2026-10-19 (run 20, slingshot to 28, carry 26 for 2.6 s with
+        // a push of 30 m/s a second at rest easing off toward the boost speed, overspeed falls off by 8 m/s a second).
+        private const float RunSpeed = 20f;
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -50,7 +52,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(
-                "Assets/_Project/Scenes/ChainRushPrototype.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                "Assets/_Project/Scenes/ChainRushTestBench.unity", new LoadSceneParameters(LoadSceneMode.Single));
 #else
             Assert.Fail("These prototype tests require the Unity Editor.");
             yield break;
@@ -79,35 +81,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Drift_FullSteer_SlidesFillsGaugeAndRegainsGrip()
-        {
-            Centerline line = OpenRoad();
-            yield return StartOn(line);
-            yield return RunTo(line, 15d);
-            source.Drift = true;
-            source.Steer = 1f;
-            float peakSlip = 0f;
-            float until = Time.time + 1f;
-            while (Time.time < until)
-            {
-                yield return new WaitForFixedUpdate();
-                Assert.That(player.IsDrifting, Is.True);
-                var flat = new Vector3(player.Velocity.x, 0f, player.Velocity.z);
-                if (flat.sqrMagnitude > 1f) peakSlip = Mathf.Max(peakSlip, Vector3.Angle(flat, player.Facing));
-            }
-            float gauge = game.Racer.Gauge;
-            Debug.Log("ChainRush drift: 1 s full steer, peak slip " + peakSlip.ToString("0.0") + " deg, gauge " + gauge.ToString("0.00") + " slots.");
-            Assert.That(peakSlip, Is.GreaterThan(10f), "Drifting at full steer must slide.");
-            Assert.That(gauge, Is.GreaterThan(0.2f), "Sliding must fill the gauge.");
-            source.Drift = false;
-            source.Steer = 0f;
-            yield return new WaitForSeconds(0.3f);
-            Assert.That(Mathf.Abs(player.SideSpeed), Is.LessThan(0.5f), "Releasing drift must restore grip.");
-            Assert.That(game.Racer.Gauge, Is.EqualTo(gauge).Within(1e-4f), "Only drifting fills the gauge.");
-        }
-
-        [UnityTest]
-        public IEnumerator Sling_WithSlot_PullsPastFifteenThenSettles()
+        public IEnumerator Sling_WithSlot_PullsWellPastRunSpeedThenSettles()
         {
             Centerline line = OpenRoad();
             yield return StartOn(line);
@@ -115,17 +89,60 @@ namespace ProtoHarness.Tests.PlayMode
             game.Racer.AddGauge(1f);
             source.ChainAction = true;
             float peak = 0f;
-            float until = Time.time + 0.5f;
+            // The boost eases off as it nears its speed (2026-10-19): from 20 it is about 24.4 after 1 s and 25.8 at the end
+            // of the 3 s boost (pull 0.4 s + carry 2.6 s), so the peak is read over the whole boost.
+            float until = Time.time + 3f;
             while (Time.time < until)
             {
                 yield return new WaitForFixedUpdate();
                 peak = Mathf.Max(peak, player.ForwardSpeed);
             }
             Assert.That(game.Racer.Gauge, Is.EqualTo(0f).Within(1e-4f), "The slingshot spends one slot.");
-            Assert.That(peak, Is.GreaterThan(15f), "The chain pull must accelerate the runner.");
-            yield return new WaitForSeconds(1.5f);
+            Assert.That(peak, Is.GreaterThan(RunSpeed + 5f), "The chain pull must accelerate the runner.");
+            // Then about 25.8 -> 20 at 8 m/s a second (0.73 s): settled about 3.7 s after the press.
+            yield return new WaitForSeconds(1f);
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed).Within(0.5f), "Speed returns to the run speed after the carry.");
+        }
+
+        // KartRider style (2026-10-19): letting go of the throttle cuts a booster at once, the slingshot and a swing's carry,
+        // and the runner then coasts down instead of riding the 2 s carry at 26.
+        [UnityTest]
+        public IEnumerator Sling_ThrottleLetGo_CutsTheBoostAtOnce()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            source.ChainAction = true;
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(player.IsSlingPulling, Is.True, "precondition: the slingshot is pulling.");
+            game.Racer.SwingCarrySpeed = 25f;
+            source.Coasting = true;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(game.Racer.SlingTicks, Is.Zero, "Letting go of the throttle ends the slingshot.");
+            Assert.That(game.Racer.SwingCarrySpeed, Is.Zero, "Letting go of the throttle ends a swing's carry.");
+            float cut = player.ForwardSpeed;
+            yield return new WaitForSeconds(0.5f);
+            Assert.That(player.ForwardSpeed, Is.LessThan(cut - 2f), "After the cut the runner coasts down.");
+        }
+
+        // The slingshot is a booster, and a booster needs the throttle (2026-10-19): without it the chain action keeps the slot.
+        [UnityTest]
+        public IEnumerator Sling_WithoutThrottle_DoesNotFireAndKeepsTheSlot()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            source.Coasting = true;
+            source.ChainAction = true;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(source.ChainAction, Is.False, "precondition: the press was consumed.");
+            Assert.That(game.Racer.SlingTicks, Is.Zero, "No slingshot without the throttle.");
+            Assert.That(game.Racer.Gauge, Is.EqualTo(1f).Within(1e-4f), "The slot is kept.");
         }
 
         [UnityTest]
@@ -169,7 +186,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.ForwardSpeed, Is.GreaterThanOrEqualTo(18f - 1e-3f), "Empowered release throws at 18 m/s or more.");
         }
 
-        // A wide straight road (no guards) so slides and pulls never touch an edge.
+        // A wide straight road (no guards) so pulls never touch an edge.
         private Centerline OpenRoad()
         {
             var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);

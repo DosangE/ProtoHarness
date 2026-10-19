@@ -70,7 +70,12 @@ namespace ProtoHarness.Net
             w.Write(s.SlingTicks);
             w.Write(s.SwingTicks);
             w.Write(s.SwingRadius);
+            Write(w, s.SwingCenter);
+            w.Write(s.SwingHookSpeed);
+            w.Write(s.SwingHookRadius);
+            w.Write(s.SwingCarrySpeed);
             w.Write(s.GrappleEmpowered);
+            w.Write(s.AirGrappleUsed);
             w.Write(s.Health);
             w.Write(s.Hits);
             w.Write(s.Grapples);
@@ -87,6 +92,8 @@ namespace ProtoHarness.Net
             w.Write(s.RopeLength);
             w.Write(s.MissUntilTick);
             w.Write(s.Grounded);
+            w.Write(s.LastGroundedS);
+            w.Write(s.RespawnHoldTicks);
         }
 
         private static RacerState.Snapshot ReadRacer(BinaryReader r) => new RacerState.Snapshot
@@ -95,7 +102,12 @@ namespace ProtoHarness.Net
             SlingTicks = r.ReadInt32(),
             SwingTicks = r.ReadInt32(),
             SwingRadius = r.ReadSingle(),
+            SwingCenter = ReadVector(r),
+            SwingHookSpeed = r.ReadSingle(),
+            SwingHookRadius = r.ReadSingle(),
+            SwingCarrySpeed = r.ReadSingle(),
             GrappleEmpowered = r.ReadBoolean(),
+            AirGrappleUsed = r.ReadBoolean(),
             Health = r.ReadInt32(),
             Hits = r.ReadInt32(),
             Grapples = r.ReadInt32(),
@@ -112,6 +124,8 @@ namespace ProtoHarness.Net
             RopeLength = r.ReadSingle(),
             MissUntilTick = r.ReadInt32(),
             Grounded = r.ReadBoolean(),
+            LastGroundedS = r.ReadDouble(),
+            RespawnHoldTicks = r.ReadInt32(),
         };
 
         private static void WriteLaps(BinaryWriter w, in LapCounter.Snapshot s)

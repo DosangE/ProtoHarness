@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
@@ -364,6 +365,105 @@ namespace ProtoHarness.Tests.EditMode
         {
             var line = new Centerline(Vector3.zero, 0f);
             Assert.Throws<ArgumentOutOfRangeException>(() => line.AppendArc(radius, degrees));
+        }
+
+        // ---- corner poles (PROPOSAL_CORNER_POLE.md 2-1, 2-2) ---------------------------------------------
+
+        // Straight 30 m along +z, an R30 right quarter arc (its pole at (30, 0, 30)), straight 40 m along +x.
+        private static Centerline QuarterTurn()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(30f);
+            line.AppendArc(30f, 90f);
+            line.AppendStraight(40f);
+            return line;
+        }
+
+        [Test]
+        public void TryFindPole_OnTheStraightBeforeAnArc_FindsItsCenter()
+        {
+            Assert.That(QuarterTurn().TryFindPole(new Vector3(0f, 0f, 16f), 0f, 75f, 5f, out Vector3 pole), Is.True);
+            Assert.That(Vector3.Distance(pole, new Vector3(30f, 0f, 30f)), Is.LessThan(1e-3f));
+        }
+
+        [Test]
+        public void TryFindPole_InsideTheArc_ThePoleIsAside_FindsNone()
+        {
+            Centerline line = QuarterTurn();
+            TrackFrame frame = line.FrameAt(30d + 30d * Math.PI / 4d);
+            float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+            Assert.That(line.TryFindPole(frame.Position, heading, 75f, 5f, out _), Is.False, "Inside its arc the pole is 90 degrees aside.");
+            Assert.That(line.TryFindPole(frame.Position, heading, 91f, 5f, out _), Is.True, "Only the angle keeps it out.");
+        }
+
+        [Test]
+        public void TryFindPole_PastRadiusPlusReach_FindsNone()
+        {
+            Centerline line = QuarterTurn();
+            // 24 m before the arc: sqrt(30^2 + 24^2) = 38.4 m from the pole, past 30 + 5.
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 6f), 0f, 75f, 5f, out _), Is.False);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 6f), 0f, 75f, 9f, out _), Is.True, "Only the distance keeps it out.");
+        }
+
+        [Test]
+        public void TryFindPole_AngleLimit_IsMeasuredFromTheHeading()
+        {
+            Centerline line = QuarterTurn();
+            // From (0, 0, 16) the pole is atan2(30, 14) = 65.0 degrees right of +z.
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), 0f, 64f, 5f, out _), Is.False);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), 0f, 66f, 5f, out _), Is.True);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), 60f, 10f, 5f, out _), Is.True, "Facing toward it, a narrow angle is enough.");
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), -60f, 75f, 5f, out _), Is.False, "Facing away from it, none.");
+        }
+
+        [Test]
+        public void TryFindPole_TwoPolesInReach_TakesTheNearest()
+        {
+            // An R20 right quarter (pole (20, 0, 10)) then an R20 left quarter (pole (20, 0, 50)).
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(10f);
+            line.AppendArc(20f, 90f);
+            line.AppendArc(20f, -90f);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 40f), 90f, 75f, 100f, out Vector3 pole), Is.True);
+            Assert.That(Vector3.Distance(pole, new Vector3(20f, 0f, 50f)), Is.LessThan(1e-3f), "22.4 m beats 36.1 m.");
+        }
+
+        [Test]
+        public void TryFindPole_StraightTrack_FindsNone()
+        {
+            Assert.That(StraightAlongZ(200f).TryFindPole(new Vector3(0f, 0f, 50f), 0f, 180f, 1000f, out _), Is.False);
+        }
+
+        [Test]
+        public void GetPoles_EveryArcInOrder_StraightsHaveNone()
+        {
+            // Same track as TwoPolesInReach: poles (20, 0, 10) and (20, 0, 50), then a straight with none.
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(10f);
+            line.AppendArc(20f, 90f);
+            line.AppendArc(20f, -90f);
+            line.AppendStraight(30f);
+            var poles = new List<Vector3> { Vector3.one };
+            line.GetPoles(poles);
+            Assert.That(poles.Count, Is.EqualTo(3), "It appends, keeping what the list held.");
+            Assert.That(poles[0], Is.EqualTo(Vector3.one));
+            Assert.That(Vector3.Distance(poles[1], new Vector3(20f, 0f, 10f)), Is.LessThan(1e-3f));
+            Assert.That(Vector3.Distance(poles[2], new Vector3(20f, 0f, 50f)), Is.LessThan(1e-3f));
+            var none = new List<Vector3>();
+            StraightAlongZ(200f).GetPoles(none);
+            Assert.That(none, Is.Empty);
+            Assert.Throws<ArgumentNullException>(() => line.GetPoles(null));
+        }
+
+        [TestCase(-1f, 5f)]
+        [TestCase(181f, 5f)]
+        [TestCase(float.NaN, 5f)]
+        [TestCase(75f, -1f)]
+        [TestCase(75f, float.NaN)]
+        [TestCase(75f, float.PositiveInfinity)]
+        public void TryFindPole_InvalidAngleOrReach_Throws(float maxAngle, float reach)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => QuarterTurn().TryFindPole(Vector3.zero, 0f, maxAngle, reach, out _));
         }
 
         private static Centerline StraightAlongZ(float length, float toGrade)

@@ -12,7 +12,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private LineRenderer rope;
         [SerializeField] private Transform ropeOrigin;
         [SerializeField] private Transform[] anchors;
-        [SerializeField] private float maxRange = 32f;
+        [SerializeField] private float maxRange = 20f;
         [SerializeField] private float retractSpeed = 3f;
         // Reel speed once a chain action has empowered the current grapple.
         [SerializeField] private float empoweredRetractSpeed = 12f;
@@ -20,11 +20,16 @@ namespace ProtoHarness.ChainRush
         private float visualExtension;
         private Vector3 lastAnchor;
         private Transform candidate;
+        private bool hasPoleCandidate;
+        private Vector3 poleCandidate;
 
         // Attachment, rope length and the miss deadline live in the racer's RacerState.
         public bool IsAttached => game.Racer.HasAnchor;
         public Vector3 AnchorPosition => IsAttached ? anchors[game.Racer.AnchorIndex].position : Vector3.zero;
         public Transform Candidate => candidate;
+        // The corner pole a chain action would hook right now (its foot), for the HUD; refreshed every frame.
+        public bool HasPoleCandidate => hasPoleCandidate;
+        public Vector3 PoleCandidate => poleCandidate;
         public float RopeLength => game.Racer.RopeLength;
         public bool JustMissed => game.Tick < game.Racer.MissUntilTick;
 
@@ -64,11 +69,14 @@ namespace ProtoHarness.ChainRush
         private void LateUpdate()
         {
             if (game.IsPaused) return;
-            candidate = AnchorAt(SelectCandidate());
+            // A grapple already hooked in this time in the air leaves nothing to offer until the runner lands.
+            candidate = game.Racer.AirGrappleUsed ? null : AnchorAt(SelectCandidate());
             bool swinging = game.IsRunning && !IsAttached && motor.IsSwinging;
             bool slinging = game.IsRunning && !IsAttached && !swinging && motor.IsSlingPulling;
             bool linked = IsAttached || swinging || slinging;
-            Vector3 target = IsAttached ? AnchorPosition : swinging ? motor.SwingAnchor : motor.SlingTarget;
+            // Endless mode has no pole models yet (R6), so a pole is only offered where it is drawn.
+            hasPoleCandidate = game.IsRunning && !game.IsEndless && !IsAttached && !swinging && motor.TryFindPole(out poleCandidate);
+            Vector3 target = IsAttached ? AnchorPosition : swinging ? SwingBite() : motor.SlingTarget;
             if (game.IsEndless)
             {
                 if (linked) lastAnchor = target;
@@ -81,6 +89,16 @@ namespace ProtoHarness.ChainRush
             if (!linked) return;
             rope.SetPosition(0, ropeOrigin.position);
             rope.SetPosition(1, target);
+        }
+
+        // A corner swing's chain bites the band on the pole it circles (R5). Endless mode shows no poles yet (R6), so there
+        // it still bites the inside rail beside the runner (SwingLook S1), and past the arc's end, where the frame is
+        // straight, the motor's swing anchor.
+        private Vector3 SwingBite()
+        {
+            if (!game.IsEndless) return SwingLook.PoleBite(game.Racer.SwingCenter);
+            TrackFrame frame = game.Track.Frame(transform.position);
+            return frame.Curvature != 0f ? SwingLook.RailPoint(frame, RoadProfile.DeckHalfWidth) : motor.SwingAnchor;
         }
 
         private Transform AnchorAt(int index) => index == RacerState.NoAnchor ? null : anchors[index];
@@ -114,7 +132,8 @@ namespace ProtoHarness.ChainRush
 
         public bool TryAttach()
         {
-            if (!game.IsRunning || motor.IsGrounded || IsAttached) return false;
+            // One grapple per time in the air; a second press does nothing (a miss means no anchor in range).
+            if (!game.IsRunning || motor.IsGrounded || IsAttached || game.Racer.AirGrappleUsed) return false;
             int index = SelectCandidate();
             candidate = AnchorAt(index);
             if (index == RacerState.NoAnchor)

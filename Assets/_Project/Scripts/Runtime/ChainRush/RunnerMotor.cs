@@ -92,6 +92,9 @@ namespace ProtoHarness.ChainRush
         public float Heading => game.Racer.Heading;
         public Vector3 Facing => FacingOf(game.Racer.Heading);
         public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
+        // The ground turn rate full steering reaches at the current speed, in degrees a second (Step's limit, before the
+        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set.
+        public float TurnLimit => TurnLimitAt(game.Racer.Velocity);
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RightOf(game.Racer.Heading));
         public bool IsGrounded => game.Racer.Grounded;
         public float Speed => game.Racer.Velocity.magnitude;
@@ -209,9 +212,7 @@ namespace ProtoHarness.ChainRush
             // A swing ignores steering for the facing (steering works the rope there): the rope sets the facing
             // (SwingStep), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
-            float turnLimit = maxTurnRate;
-            if (minTurnRadius > 0f)
-                turnLimit = Mathf.Min(turnLimit, new Vector2(velocity.x, velocity.z).magnitude / minTurnRadius * Mathf.Rad2Deg);
+            float turnLimit = TurnLimitAt(velocity);
             turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steer * turnLimit * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             if (pulling)
@@ -332,6 +333,10 @@ namespace ProtoHarness.ChainRush
             racer.SlingTicks = Ticks.FromSeconds(slingPullTime) + Ticks.FromSeconds(slingCarryTime);
             game.PlayCue(1);
         }
+
+        private float TurnLimitAt(Vector3 velocity) => minTurnRadius > 0f
+            ? Mathf.Min(maxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / minTurnRadius * Mathf.Rad2Deg)
+            : maxTurnRate;
 
         // A swing key press hooks the corner pole in reach, if there is one, at the rope length and speed of this moment.
         // It costs nothing. In the air (a jump, or past the coyote time off a ledge), while grappling or already swinging,

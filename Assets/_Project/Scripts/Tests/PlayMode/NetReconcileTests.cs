@@ -319,7 +319,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load();
             InputLog log = RecordBot(BotTicks);
-            int dropTick = BiggestSteerChange(log, 700, 800);
+            int dropTick = BiggestSteerChange(log, 600, 1000);
             byte[][] manual = RunWith(new DroppedInputReplay(log, dropTick), BotTicks);
             byte[][] viaBuffer = RunServer(log, BotTicks, dropTick, out ServerInputBuffer buffer);
             Assert.That(buffer.Missed, Is.EqualTo(1));
@@ -342,7 +342,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load();
             InputLog log = RecordBot(BotTicks);
-            int dropTick = BiggestSteerChange(log, 700, 800);
+            int dropTick = BiggestSteerChange(log, 600, 1000);
             byte[][] truth = RunTruth(log, BotTicks);
             byte[][] server = RunServer(log, BotTicks, dropTick, out _);
             int diverge = FirstDifference(truth, server);
@@ -383,7 +383,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load();
             InputLog log = RecordBot(BotTicks);
-            int dropTick = BiggestSteerChange(log, 700, 800);
+            int dropTick = BiggestSteerChange(log, 600, 1000);
             byte[][] truth = RunTruth(log, BotTicks);
             byte[][] server = RunServer(log, BotTicks, dropTick, out _);
             // The server's states are delivered up to the missed input and not after, and the run stops well inside the
@@ -843,7 +843,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return Load();
             InputLog log = RecordBot(BotTicks);
-            int dropTick = BiggestSteerChange(log, 700, 800);
+            int dropTick = BiggestSteerChange(log, 600, 1000);
             byte[][] server = RunServer(log, BotTicks, dropTick, out _);
             const int latency = 15;
             ClientPredictor predictor = StartClient(log);

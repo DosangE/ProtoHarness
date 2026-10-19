@@ -9,8 +9,6 @@ namespace ProtoHarness.Tests.PlayMode
     // correction. Steering off sends Override instead. SwingHold is held as set; SwingPress and ChainAction fire once.
     internal sealed class TrackFollower : IInputSource
     {
-        // RunnerMotor defaults (T2a): the feed-forward converts the needed turn rate into input.
-        private const float MaxTurnRate = 120f;
         private readonly Centerline line;
         private readonly RunnerMotor runner;
         public bool Steering = true;
@@ -41,7 +39,10 @@ namespace ProtoHarness.Tests.PlayMode
             float offset = line.Project(position).D;
             float trackYaw = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
             float wanted = trackYaw - Mathf.Clamp(offset * 4f, -20f, 20f);
-            float feedForward = runner.ForwardSpeed * frame.Curvature * Mathf.Rad2Deg / MaxTurnRate;
+            // The feed-forward converts the needed turn rate into input against the runner's real limit now (2026-10-19:
+            // with a minimum turn radius that is speed / radius, well under maxTurnRate at circuit speed).
+            float turnLimit = runner.TurnLimit;
+            float feedForward = turnLimit > 0f ? runner.ForwardSpeed * frame.Curvature * Mathf.Rad2Deg / turnLimit : 0f;
             float steer = feedForward + Mathf.DeltaAngle(runner.Heading, wanted) / 20f;
             return new TickInput(Mathf.Clamp(steer, -1f, 1f), false, false, false, SwingHold, chainAction, swingPress);
         }

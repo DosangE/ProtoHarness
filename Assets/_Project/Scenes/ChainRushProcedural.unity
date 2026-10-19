@@ -149038,9 +149038,10 @@ MonoBehaviour:
   maxTurnRate: 120
   turnAcceleration: 200
   airTurnScale: 0.5
-  minTurnRadius: 22
-  turnSpeedLoss: 0.1
+  minTurnRadius: 25
+  turnSpeedLoss: 0.2
   runAcceleration: 8
+  coastDeceleration: 6
   airAcceleration: 0
   sideGrip: 60
   airSideGrip: 18

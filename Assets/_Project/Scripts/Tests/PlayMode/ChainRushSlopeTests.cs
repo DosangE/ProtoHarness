@@ -25,6 +25,15 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { }
         }
 
+        // The throttle held or let go, as the test sets it.
+        private sealed class ThrottleInputSource : IInputSource
+        {
+            public bool LetGo;
+            public void Poll() { }
+            public TickInput Consume() => new TickInput(0f, false, false, false, coasting: LetGo);
+            public void Clear() { }
+        }
+
         private const float RoadX = 300f;
         private const float RoadHalfWidth = 4f;
         // ChainRushTestBench.unity runner values (COURSE.md section 2): runSpeed 20 (circuit physics since 2026-10-19, was 10);
@@ -144,30 +153,97 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(flatReach, Is.GreaterThanOrEqualTo(8f), table.ToString());
         }
 
-        // Off a 20% uphill the grounded run target is 0.7 times run speed, but in the air it is the flat run speed: the
-        // airborne speed moves toward it by airAcceleration a second. The code default is the old 5; the circuit and the bench
-        // use 0, so a jump keeps its takeoff speed (2026-10-19, M1-T play: jumping must not be a way to gain speed uphill).
+        // In the air the run target is the one the road below sets, as on the ground: off a 20% uphill it stays 0.7 times run
+        // speed, so a jump is not a way to gain speed uphill (2026-10-19, M1-T play; until the second 2026-10-19 change the air
+        // kept the takeoff speed outright for this).
         [UnityTest]
-        public IEnumerator Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration([Values(0f, 5f)] float airAcceleration)
+        public IEnumerator Jump_OffAnUphill_TheAirKeepsTheUphillRunTarget()
         {
-            SetMotorFloat("airAcceleration", airAcceleration);
             Centerline line = SlopeRoad(0.2f);
             yield return StartOn(line, 110d);
             yield return RunTo(line, 42d);
-            Assert.That(player.IsGrounded, Is.True);
+            yield return TakeOff();
+            float takeoff = player.ForwardSpeed;
+            const int AirTicks = 20;
+            yield return AirTicksPass(AirTicks);
+            Debug.Log("ChainRush uphill jump: takeoff " + takeoff.ToString("0.000") + " m/s, after " + AirTicks + " air ticks " + player.ForwardSpeed.ToString("0.000") + " m/s.");
+            Assert.That(takeoff, Is.EqualTo(RunSpeed * 0.7f).Within(0.5f), "precondition: the uphill run target.");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(takeoff).Within(0.02f), "Over the uphill the air must not speed the runner past the uphill run target.");
+        }
+
+        // User 2026-10-19: "점프일때 속도 고정보단 가속은 먹게 해줘 감속은 아니더라도", "공중 가속이더라도 최대속도엔 걸려야한다".
+        // A runner that jumps while still speeding up keeps speeding up in the air at the ground's rate, up to the run speed
+        // and no further.
+        [UnityTest]
+        public IEnumerator Jump_FromLowSpeedWithTheThrottle_SpeedsUpInTheAirUpToTheRunSpeed()
+        {
+            Centerline line = SlopeRoad(0f);
+            yield return StartOn(line, 110d);
+            yield return TakeOff();
+            float takeoff = player.ForwardSpeed;
+            Assert.That(takeoff, Is.LessThan(RunSpeed * 0.5f), "precondition: the jump left while the runner was still slow.");
+            const int FirstTicks = 10;
+            yield return AirTicksPass(FirstTicks);
+            float expected = Mathf.Min(takeoff + player.RunAcceleration * FirstTicks * Ticks.Seconds, RunSpeed);
+            Debug.Log($"ChainRush slow jump: takeoff {takeoff:0.000} m/s, after {FirstTicks} air ticks {player.ForwardSpeed:0.000} m/s (expected {expected:0.000}).");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f), "In the air the runner speeds up at the ground's rate.");
+            // Long enough at that rate to pass the run speed twice over: it stops there.
+            int ticksToTop = Mathf.CeilToInt((RunSpeed - takeoff) / (player.RunAcceleration * Ticks.Seconds));
+            Assert.That(ticksToTop, Is.LessThan(40), "precondition: the run speed is reached within the jump.");
+            yield return AirTicksPass(40 - FirstTicks);
+            Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed).Within(0.02f), "The air speeds the runner up to the run speed and no further.");
+        }
+
+        // User 2026-10-19: "떼고있을땐 당연히 가속 되면 안된다. 떼면 고정으로". With the throttle let go the air neither speeds the
+        // runner up nor slows it.
+        [UnityTest]
+        public IEnumerator Jump_WithTheThrottleLetGo_KeepsItsSpeedInTheAir()
+        {
+            var throttle = new ThrottleInputSource();
+            game.SetInputSource(throttle);
+            Centerline line = SlopeRoad(0f);
+            yield return StartOn(line, 110d);
+            yield return TakeOff();
+            throttle.LetGo = true;
+            float takeoff = player.ForwardSpeed;
+            Assert.That(takeoff, Is.LessThan(RunSpeed * 0.5f), "precondition: below the run speed, where the throttle would speed it up.");
+            yield return AirTicksPass(20);
+            Assert.That(player.ForwardSpeed, Is.EqualTo(takeoff).Within(1e-4f), "With the throttle let go the air keeps the speed.");
+        }
+
+        // Above the run speed (a booster's leftover, the bunny hop of 2026-10-19) the air slows the runner only by
+        // airDeceleration: the circuit and the bench use 0, so a jump keeps it; the code default is 5.
+        [UnityTest]
+        public IEnumerator Jump_AboveTheRunSpeed_SlowsOnlyByAirDeceleration([Values(0f, 5f)] float airDeceleration)
+        {
+            SetMotorFloat("airDeceleration", airDeceleration);
+            Centerline line = SlopeRoad(0f);
+            yield return StartOn(line, 110d);
+            yield return RunTo(line, 15d);
+            yield return TakeOff();
+            const float Over = 26f;
+            float heading = player.Heading * Mathf.Deg2Rad;
+            game.Racer.Velocity = new Vector3(Mathf.Sin(heading), 0f, Mathf.Cos(heading)) * Over + Vector3.up * player.Velocity.y;
+            const int AirTicks = 20;
+            yield return AirTicksPass(AirTicks);
+            float expected = Mathf.Max(Over - airDeceleration * AirTicks * Ticks.Seconds, RunSpeed);
+            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f));
+        }
+
+        // Jumps and waits for the first tick in the air.
+        private IEnumerator TakeOff()
+        {
+            Assert.That(player.IsGrounded, Is.True, "precondition: on the road.");
             player.PrimaryAction();
             float deadline = Time.time + 1f;
             while (game.IsRunning && player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.False, "precondition: the jump took off.");
-            float takeoff = player.ForwardSpeed;
-            const int AirTicks = 20;
-            for (int i = 0; i < AirTicks; i++) yield return new WaitForFixedUpdate();
+        }
+
+        private IEnumerator AirTicksPass(int ticks)
+        {
+            for (int i = 0; i < ticks; i++) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.False, "precondition: still in the air.");
-            float expected = Mathf.Min(takeoff + airAcceleration * AirTicks * Ticks.Seconds, RunSpeed);
-            Debug.Log("ChainRush uphill jump (air acceleration " + airAcceleration + "): takeoff " + takeoff.ToString("0.000")
-                + " m/s, after " + AirTicks + " air ticks " + player.ForwardSpeed.ToString("0.000") + " m/s.");
-            Assert.That(takeoff, Is.EqualTo(RunSpeed * 0.7f).Within(0.5f), "precondition: the uphill run target.");
-            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f));
         }
 
         // Changes a runner setting on this play-mode instance only; the scene asset is not touched.

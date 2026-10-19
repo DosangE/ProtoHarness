@@ -168,10 +168,14 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Grapple_ChainActionWhileAttached_ReelsFasterAndThrowsHarder()
         {
             game.StartRun();
-            MovePlayer(new Vector3(0f, 1f, 44f));
+            // 1 m before the bench deck's edge (z 48): a jump from rest brings its anchor (z 56, 10 m up) within the rope's
+            // reach in the air, about 9 m since 2026-10-19 (GrappleController.minHangHeight). Press once it is offered.
+            MovePlayer(new Vector3(0f, 1f, 47f));
             yield return new WaitForFixedUpdate();
             player.PrimaryAction();
-            yield return new WaitForSeconds(0.25f);
+            float deadline = Time.time + 1f;
+            while (grapple.Candidate == null && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(grapple.Candidate, Is.Not.Null, $"No anchor came within the rope's reach: runner at {player.transform.position}.");
             Assert.That(grapple.TryAttach(), Is.True);
             game.Racer.AddGauge(1f);
             source.ChainAction = true;

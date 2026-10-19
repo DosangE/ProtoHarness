@@ -7,6 +7,47 @@
 
 ---
 
+## 2026-10-19 · 그래플: 앵커 높이 안에서만 건다 · 공중 가속 · NetReconcile 1건 M7 까지 보류
+
+- **결정 (사용자, 2026-10-19 새 세션, `fix/swing-boost-grapple`)**:
+  - NetReconcile 1건(아래 항목의 "NetReconcileTests 1건"): B "M7까지 게이트 제외". `NetEndReplay` 카테고리를 붙이고 메뉴 `Run PlayMode Tests`·`tools/select-tests.ps1` 필터·`CLAUDE.md` §9-2·`docs/RULES/VERIFICATION.md` §4-4 의 제외 목록에 넣었다. 같은 파일의 다른 결승 테스트 5개는 게이트에 남는다.
+  - 그래플 낙하(보고 2) — 사용자 보충 "떨어지기보단 그래플을 너무 일찍 걸면 그 줄이 길어져서 떨어질 정도의 길이가 된다는 뜻". 사거리 줄이기·앙각 제한을 거쳐(아래) 추천안 "줄 길이 상한" 에 "추천대로", 그 결과(너무 일찍 뛰면 걸 수 없어 떨어진다)에 "추천대로 ㄱㄱ". 빨리 감기는 "속도 이득이 아닌가"(사용자) — 수평 속도 이득은 없지만 강화 그래플 보상과 겹쳐 버렸다. 그래플 타이밍 보상은 추후 아이디어(NEXT_REQUESTS M6).
+  - 공중 가속 — "점프일때 속도 고정보단 가속은 먹게 해줘 감속은 아니더라도", "공중 가속이더라도 최대속도엔 걸려야한다", "떼고있을땐 당연히 가속 되면 안된다. 떼면 고정으로".
+  - 스윙 순간이동·코너 중간 미걸림(보고 3): "2+3" — 측정은 이 브랜치 밖, 기록만.
+- **그래플 측정** (`ChainRushProbeTests` 에서 시작해 `ChainRushCircuitTests.Grapple_JumpedBeforeTheGap_…` 로 옮김; 서킷 첫 그래플 틈 s 314.1~330.1, 앵커 노면 위 10 m, s 약 322): 틈 앞 4.5/8/10/12/14/16 m 에서 뛰어 걸 수 있게 되자마자 걸면 줄 14.8/17.7/19.4/19.8/19.9/20.0 m, 가장 낮은 높이 1.37/1.37/1.37/1.00/−0.22/−1.67 m(러너 중심, 선 높이 1.05). 위험한 경우는 모두 **올라가는 중**(세로 +5~+9 m/s)에 걸었다 — 처음 추정 "내려가는 중" 은 틀렸다. 그래플 중 앞 속도는 약 20 m/s 로 유지돼(`RunnerMotor.Step` 의 그래플 가속 5, 목표 max(16, 달리기)) 긴 줄은 느슨한 채로 러너가 점프 포물선대로 떨어지고, 앵커를 0.5 m 지나는 바닥에서 놓인다.
+  - **사거리 17 m** (사용자가 씬에서 바꿈, 뒤에 20 으로 되돌림): 16 m 점프가 −1.99 m 로 더 나빠졌다. 거는 지점이 조금 당겨질 뿐.
+  - **앙각 30° 이상만** (코드, 걷어냄): 12/14/16 m 점프가 33° 에서 줄 11.5~12.4 m 로 걸려 0.77/−0.35/−0.90 m. 걸려 있는 동안 러너는 앵커에서 줄 길이보다 멀어질 수 없으므로 가장 낮을 수 있는 높이는 앵커 높이 − 줄 길이다 — 각도로는 보장되지 않는다.
+- **결정한 규칙 (`GrappleController`)**: 새 필드 `minHangHeight` 1.05(선 높이). 앵커까지 거리가 (앵커의 노면 위 높이 − `minHangHeight`) 이하일 때만 후보가 되고 걸린다(`SelectCandidate`, `TryAttach` 의 줄 = 그 거리). 이 서킷은 8.95 m. 씬에 값이 없어 코드 기본값을 쓴다(씬 수정 없음). 사거리 `maxRange` 20 은 그대로.
+  - 결과(같은 테스트, 공중 가속 뒤): 4.5~14 m 점프는 그 점프에서 줄 8.7~8.9 m 로 걸리고 가장 낮은 높이 1.69~3.50 m. 16·18 m(약 0.8초 이상 일찍)는 앵커가 손에 닿지 않아 **걸 수 없고 떨어져 복귀**한다 — 점프 실수와 같은 종류의 벌이고, 후보 표시(이미 있던 걸 수 있을 때의 강조)가 끝내 안 켜진다. 공중 가속 전에는 경계가 12/14 m 사이였다.
+  - 대가: 걸 수 있는 구간이 앵커 앞 약 6 m(s 316~322)로 좁아졌다. 봇의 평소 걸기는 줄 11.5 → 8.6 m.
+  - 버린 대안: 긴 줄 빨리 감기(강화 그래플 보상과 겹치고 일찍 걸기의 대가가 사라짐), 놓는 조건 변경(바닥에서 놓이지 않을 뿐 틈 안으로 내려가는 것은 남음), 사거리·앙각(위 측정).
+- **공중 가속 (`RunnerMotor`)**: 공중(그래플 아님)에서 ↑ 를 누르면 땅과 같은 가속(`RunAcceleration`, 부스터 유지 중이면 `BoostAcceleration`)으로 목표까지만 빨라진다. 목표는 땅처럼 **아래 노면의 경사**를 반영한다 — 오르막에서 뛰어 평지 속도로 빨라지던 꼼수(2026-10-19 "이륙 속력 유지" 의 이유)는 그대로 막힌다. ↑ 를 떼면 공중에서는 오르지도 줄지도 않는다. 목표보다 빠르면 `airDeceleration`(옛 `airAcceleration`, `[FormerlySerializedAs]` 로 세 씬의 0 을 그대로 읽는다 — 씬 수정 없음)로 줄어든다 — 0 이라 버니합(같은 날 "버니합")은 그대로.
+- **테스트**:
+  - 새로: `ChainRushCircuitTests.Grapple_JumpedBeforeTheGap_HooksAboveTheRoadOrFromTooEarlyCannotHookAndFalls` — 고치기 전 실패 `jump 12.0 m before the gap: … the runner hung 1.00 m over the track, its feet below the road. Expected: greater than or equal to 1.04999995f But was: 1.00120199f`. `ChainRushSlopeTests.Jump_FromLowSpeedWithTheThrottle_SpeedsUpInTheAirUpToTheRunSpeed` — 고치기 전 `takeoff 0.600 m/s, after 10 air ticks 0.600 m/s (expected 6.600)`, 뒤 `6.600`. `Jump_WithTheThrottleLetGo_KeepsItsSpeedInTheAir`, `Jump_AboveTheRunSpeed_SlowsOnlyByAirDeceleration(0, 5)` — 고치기 전 `RunnerMotor.airDeceleration is missing.`
+  - 사양 변경으로 고침(사용자 "ㄱㄱ"): `Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration` → `Jump_OffAnUphill_TheAirKeepsTheUphillRunTarget`(14.000 → 14.000 m/s). 걸 수 있는 거리가 20 → 약 9 m 가 되어, 정지 상태에서 틈 4 m 앞(작업대 z 44)에서 뛰고 0.25초 뒤 걸던 테스트 5개의 배치만 바꿨다 — 틈 1 m 앞(z 47)에서 ↑ 를 누른 채 뛰고 후보가 뜨면 건다(서킷의 팔 자세 테스트는 틈 4.5 m 앞에서 20 m/s): `ChainRushTests.Grapple_JumpAtGap_…`·`Grapple_SecondPressInTheSameAir_…`·`Input_ArrowKeys_…`(Device), `ChainRushDriftTests.Grapple_ChainActionWhileAttached_…`, `ChainRushPresentationTests.Animation_JumpAndGrapple_…`. 단언 값은 그대로. 세 개는 키보드 입력원이라 ↑ 가 없어 제자리에서 뛰었다(예전엔 사거리 20 m 라 그래도 걸렸다).
+  - `ChainRushProbeTests` 의 일찍 걸기 측정은 위 진짜 테스트로 옮기고 지웠다(측정 3개 + 그래플 1개 남음).
+- **검증** (에디터 6000.3.25f1, `fix/swing-boost-grapple` 커밋 전, UTC):
+  - 컴파일: 리로드마다 `error CS` 없음(Editor.log), Console Error 0건.
+  - 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="164" result="Failed(Child)" passed="153" failed="4" skipped="7"` (14:14:40Z~14:21:28Z) — 위 배치 테스트 4개 `Expected: True`(`TryAttach`).
+  - 게이트 2회차 (배치 고친 뒤): `testcasecount="164" result="Passed" passed="157" failed="0" skipped="7"` (14:27:01Z~14:33:50Z). skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. `ClientEnd_WhenTheServerMissed…` 는 결과에 없음(제외 확인), 다른 `ClientEnd_` 5개는 돌았다.
+  - 서킷 지문 새 기준 `0x18F31E7A2B4F79B3` (`ChainRush replay circuit: 1700 ticks identical`) — 이전 `0xE3744A27006C0BB2`. 그래플·공중 가속 사양 변경.
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="235" result="Passed" passed="235" failed="0"` (14:34:15Z~14:34:18Z).
+  - Device 1회차 `testcasecount="3" result="Failed(Child)" passed="2" failed="1"` (14:34:39Z~14:34:51Z) — `Input_ArrowKeys_…` `ChainRushTests.cs:200` `Expected: True`(`grapple.IsAttached`), 같은 원인. 배치 고친 뒤 2회차 `testcasecount="3" result="Passed" passed="3" failed="0"` (14:35:46Z~14:36:02Z). 이 수정은 Device 테스트 줄만이라 게이트 2회차 뒤에 했다.
+  - `tools/select-tests.ps1` 실행: 기본 범위는 "전체"(씬·코어 시뮬), `-Range 75df74d^..75df74d` 출력의 필터에 `"!NetEndReplay"` 가 들어간 것을 확인.
+- **남은 것**: 사용자 플레이 확인(걸 수 있는 구간이 좁아진 체감). 스윙 순간이동·코너 중간 미걸림은 NEXT_REQUESTS.
+
+## 2026-10-19 · 스윙 중 부스터가 스윙 속도를 올린다(C), 그래플 낙하·스윙 순간이동은 측정만
+
+- **보고 (사용자, 2026-10-19 플레이)**: "1. 스윙 중에 부스터를 사용하면 제대로 가속 적용이 안되는 경우가 있다. 2. 점프 그래플링 … 특정지점 까지 가면 자동으로 튀어오르게 되는 것 같은데 중간에 가속이 되어버리면 위험하게 떨어질뻔한 상황이 연출된다. 3. 코너에 진입할때 스윙들어가면 현재 좌표가 아닌 줄 길이? 로 순간이동 되는 이슈가 있다." 1 의 선택지(A 스윙을 놓고 부스터 / B 놓은 뒤 시작 / C 스윙 속도를 올림)에 "C를 원한다", 진행에 "3은 기억안난다 일단 해봐라 너무 빠르다싶으면 스윙 속도 관련한 로직을 바꿔야겟다".
+- **1 원인**: 스윙 중 Ctrl 은 슬롯을 쓰고 부스터 타이머(당김 0.4초 + 유지 2.6초)를 시작했지만, 스윙 중에는 속도가 "걸 때의 속도 × 줄 비율"로만 정해지고(`SwingStep`) 달리기 가속은 0 이라 부스터가 아무 일도 안 했다. 타이머는 그동안 줄어, 놓을 때까지 남은 만큼만 적용됐다(3초 넘게 잡으면 통째로 사라짐). **고치기 전 재현**: `ChainRushCornerSwingTests.Swing_BoosterWhileSwinging_SpeedsTheSwingUp` 실패 — "hook speed 20.00 -> 20.00 m/s after 0.5 s" (`Expected: greater than 22.0f But was: 20.0f`).
+- **1 결정 (C)**: 스윙 중 부스터가 도는 동안 걸 때의 속도(`RacerState.SwingHookSpeed`, 줄 비율이 곱해지는 값)를 부스터 목표(당김 28 → 유지 26, 러너 배율 적용)로 땅의 부스터와 같은 힘(`BoostAcceleration`)으로 올린다. 목표보다 이미 빠르면 깎지 않는다. 스윙 중에는 부스터 당김이 방향을 돌리지 않는다(줄이 방향을 정한다). 고친 뒤 같은 테스트 "20.00 -> 23.16 m/s after 0.5 s". 부스터 28 에 줄을 끝까지 감으면 최대 42 m/s(28 × 1.5) — 너무 빠르면 스윙 속도 규칙을 다시 본다(사용자).
+- **2 측정** (`ChainRushProbeTests`, `[Explicit]`, 서킷, 시험용 봇): 그래플은 앵커를 0.5 m 지나면 저절로 놓이고 위로 11.5 m/s 를 받는다. 봇 기준 네 경우 모두 가장 낮은 곳이 노면 위 2.76 m, 놓는 높이 3.59~4.11 m — 위험한 낙하는 재현되지 않았다. 평소: 줄 11.47 m, 19.48 m/s 로 걸고 20.00 m/s 로 놓음. 40 m 전 부스터: 줄 10.63 m, 24.65 m/s 로 걸고 22.95 m/s 로 놓음. 15 m 전 부스터: 10.85 m, 22.56 → 20.66. 강화 그래플: 놓을 때 26.00 m/s. 봇은 틈 4.5 m 앞에서 뛰고 노면 위 2.6 m 를 넘으면 건다 — 사람이 더 멀리(줄 최대 20 m)·낮게 걸면 진자의 바닥이 앵커(노면 위 10 m) 아래로 더 내려가 그 바닥에서 놓일 수 있다는 계산은 남는다(재현 안 함).
+- **3 측정** (같은 클래스, 한 바퀴, 봉이 닿는 순간 스윙 0.6초): 8번 걸었고 거는 틱의 줄 길이 = 그 순간 봉까지 거리(오차 0.00 m), 틱 이동량은 속도 범위 안(속도로 설명 안 되는 이동 0.00 m), 카메라와 러너 사이 거리의 프레임 변화 최대 0.39 m(2배속). **위치 순간이동은 재현되지 않았다.** 대신 보인 것: 봉에 닿자마자 걸면 줄이 27.8~28.0 m(코너 반지름 22 + 손 닿는 거리 6)로 걸려 원이 코너 노면의 바깥 가장자리(22 + 6)를 돌고, 거는 틱에 속도·방향이 원의 접선으로 한 번에 바뀐다. 사용자에게 이것이 본 현상인지 묻는다.
+- **3 추가 측정** — 사용자 "인코스쪽에있었는데 shift 거니까 외곽으로 순간이동되었다": ① 안쪽 4 m 라인, 코너 안에서 걸기 4번 — 거는 틱 전후 D 그대로(+3.87 → +3.87 → 5틱 뒤 +3.87), 줄 = 거리, 속도 밖 이동 0.00 m. ② 첫 코너(s 140.5~175.0, 봉은 오른쪽), 안쪽 라인, 거는 시점 3 × 부스터 2 × 조향 3 = 18가지(사용자 "ㄱㄱ"): 걸린 12가지 모두 줄 = 거리, 속도 밖 이동 0.00 m — **순간이동 재현 안 됨**. 조향을 봉 반대쪽으로 누르면 10틱(0.2초)에 바깥으로 1.3 m(줄이 초당 6 m 풀림), 봉 쪽이면 안쪽으로 1.2 m. 부스터 중에는 안쪽 라인까지 못 들어가 D +2.43 에서 걸림. **"코너 중간에 걸기" 6가지는 한 번도 걸리지 않았다** — 원인 미확인. 추정: 최소 회전 반지름 25 m 가 안쪽 라인(봉에서 약 18 m)보다 커서 러너 방향이 커브를 못 따라가고, 봉이 앞 방향에서 95° 를 넘어간다.
+- **NetReconcileTests 1건** (`ClientEnd_WhenTheServerMissedTheInputOfItsLastTick_…`): 이 변경으로 실패. 테스트가 "스윙은 부스터를 무시한다"는 전제로 입력 경우를 찾는데 그 전제가 바뀌었다. 사용자 승인("1 ㅇㅇ")으로 탐색을 두 번 고쳤으나(줄 미세조정을 그 런의 스윙 N번째 틱에 / 미세조정 조향 0.15) 세 번째도 "No case fits"(659가지, 클라 결승선 앞·서버 뒤 경우 0) — §4-5 에 따라 멈췄다. 남은 결정은 `docs/NEXT_REQUESTS.md` "fix/swing-boost-grapple 남은 결정".
+- **Presentation 테스트 1건** (`Presentation_RunPauseRestart_…`): 게이트에서 "걸음 위상 0" 실패. 키보드 입력원으로 출발해 ↑ 를 누르지 않아, 첫 프레임의 입력 읽기 전에 물리 틱이 돌았는지에 따라 움직였다 말았다 했다(`InputLatch.Clear` 는 가속 중으로 둔다). 단독 실행은 통과. 사용자 승인("2 ㅇㅇ")으로 `ChainRushTests` 와 같은 `FullThrottleInputSource` 를 쓰게 고쳤고 통과.
+- **검증** (에디터 6000.3.25f1, `fix/swing-boost-grapple` 커밋 전, 진행 중): 컴파일 성공·Console Error 0건. `ChainRushCornerSwingTests` 10/10(고친 뒤). EditMode `testcasecount="235" result="Passed"` (12:33:50Z). 게이트 1회(고치기 전 테스트들) `testcasecount="159" passed="152" failed="2" skipped="5"` (12:34:11Z~12:40:28Z) — 실패 2건은 위 NetReconcile·Presentation, 서킷 지문 `0xE3744A27006C0BB2` 그대로. 게이트 재실행은 NetReconcile 결정 뒤.
+
 ## 2026-10-19 · 점프로 부스터 속도가 이어지는 것(버니합)은 그대로 둔다 — 기록만
 
 - **결정 (사용자, 2026-10-19 플레이 확인 "현재 점프하면 그 속도가 고정이 되는 듯한데 부스터 끝나는 시간에 점프를 하면 조금 더 유지가 된다. 이는 버니합같은 버그 겸 기술 요소로 남길까?", 선택지 A 한계 두기·B 그대로·C 막기 중 "3은 그대로 두고 기록해놓자")**: 바꾸지 않는다.

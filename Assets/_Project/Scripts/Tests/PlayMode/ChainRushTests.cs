@@ -82,11 +82,13 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Grapple_JumpAtGap_AttachesConstrainsAndReleases()
         {
+            // Running toward the anchor needs the throttle; jumping in place no longer reaches it (GrappleJumpZ).
+            game.SetInputSource(new FullThrottleInputSource());
             game.StartRun();
-            MovePlayer(new Vector3(0f, 1f, 44f));
+            MovePlayer(new Vector3(0f, 1f, GrappleJumpZ));
             yield return new WaitForFixedUpdate();
             player.PrimaryAction();
-            yield return new WaitForSeconds(0.25f);
+            yield return WaitForAnchorInReach();
             Assert.That(player.IsGrounded, Is.False);
             Assert.That(grapple.TryAttach(), Is.True);
             Assert.That(game.Grapples, Is.EqualTo(1));
@@ -113,11 +115,12 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Grapple_SecondPressInTheSameAir_IsRefusedWithoutAMissUntilLanding()
         {
+            game.SetInputSource(new FullThrottleInputSource());
             game.StartRun();
-            MovePlayer(new Vector3(0f, 1f, 44f));
+            MovePlayer(new Vector3(0f, 1f, GrappleJumpZ));
             yield return new WaitForFixedUpdate();
             player.PrimaryAction();
-            yield return new WaitForSeconds(0.25f);
+            yield return WaitForAnchorInReach();
             Assert.That(grapple.TryAttach(), Is.True);
             grapple.Release(false);
             Assert.That(player.IsGrounded, Is.False);
@@ -184,14 +187,15 @@ namespace ProtoHarness.Tests.PlayMode
                 yield return new WaitForSeconds(0.4f);
                 Assert.That(player.Heading, Is.GreaterThan(leftHeading + 10f));
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
-                MovePlayer(new Vector3(0f, 1f, 44f));
+                MovePlayer(new Vector3(0f, 1f, GrappleJumpZ));
                 player.FaceTrack();
                 yield return new WaitForFixedUpdate();
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftAlt));
                 yield return new WaitForSeconds(0.15f);
                 Assert.That(player.IsGrounded, Is.False);
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
-                yield return new WaitForSeconds(0.05f);
+                // Left Alt again once the anchor is in reach (about 9 m since 2026-10-19, see GrappleJumpZ).
+                yield return WaitForAnchorInReach();
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.LeftAlt));
                 yield return new WaitForSeconds(0.1f);
                 Assert.That(grapple.IsAttached, Is.True);
@@ -436,6 +440,19 @@ namespace ProtoHarness.Tests.PlayMode
             game.TogglePause();
             yield return new WaitForSeconds(0.2f);
             Assert.That(player.transform.position.z, Is.GreaterThan(position.z));
+        }
+
+        // The bench deck ends at z 48 and its anchor hangs at z 56, 10 m up. Since 2026-10-19 an anchor is in reach only
+        // within its height over the track less standing height (GrappleController.minHangHeight): about 9 m, where it was
+        // 20 m. A jump from rest 1 m before the edge brings it in reach in the air.
+        private const float GrappleJumpZ = 47f;
+
+        // Waits (up to 1 s) for the grapple to offer an anchor, then the test presses. Pressing earlier would be a miss.
+        private IEnumerator WaitForAnchorInReach()
+        {
+            float deadline = Time.time + 1f;
+            while (grapple.Candidate == null && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(grapple.Candidate, Is.Not.Null, $"No anchor came within the rope's reach: runner at {player.transform.position}.");
         }
 
         private void MovePlayer(Vector3 position)

@@ -36,7 +36,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private const float RoadX = 300f;
-        private const float RunSpeed = 10f;
+        // ChainRushTestBench.unity runner: circuit physics since 2026-10-19 (run 20, slingshot to 28, carry 26 for 2 s,
+        // overspeed falls off by 8 m/s a second).
+        private const float RunSpeed = 20f;
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -78,7 +80,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Sling_WithSlot_PullsPastFifteenThenSettles()
+        public IEnumerator Sling_WithSlot_PullsWellPastRunSpeedThenSettles()
         {
             Centerline line = OpenRoad();
             yield return StartOn(line);
@@ -93,8 +95,9 @@ namespace ProtoHarness.Tests.PlayMode
                 peak = Mathf.Max(peak, player.ForwardSpeed);
             }
             Assert.That(game.Racer.Gauge, Is.EqualTo(0f).Within(1e-4f), "The slingshot spends one slot.");
-            Assert.That(peak, Is.GreaterThan(15f), "The chain pull must accelerate the runner.");
-            yield return new WaitForSeconds(1.5f);
+            Assert.That(peak, Is.GreaterThan(RunSpeed + 5f), "The chain pull must accelerate the runner.");
+            // Pull 0.4 s + carry 2 s, then 26 -> 20 at 8 m/s a second (0.75 s): settled about 3.2 s after the press.
+            yield return new WaitForSeconds(3f);
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed).Within(0.5f), "Speed returns to the run speed after the carry.");
         }

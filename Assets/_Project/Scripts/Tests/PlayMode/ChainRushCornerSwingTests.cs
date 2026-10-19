@@ -31,6 +31,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const float InnerEdge = HalfWidth - 0.38f;
         private const double ArcStart = 30d;
         private const double HookS = 16d;
+        private const double WideArcStart = 40d;
         private const float RopeRate = 6f;
         private const float MetersPerSlot = 35f;
         private const float CarryFalloff = 3f;
@@ -203,14 +204,16 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // A swing hooks only from the ground (2026-10-19, M1-T play): a press in the middle of a jump does nothing, and the
-        // key held into the landing does not hook either. A fresh press on the ground does.
+        // key held into the landing does not hook either. A fresh press on the ground does. At the bench's 20 m/s a jump
+        // flies about 21 m, longer than the R30 road's reach before its arc (about 20 m), so this runs on an R60 road: its
+        // pole is in reach from about 27.5 m before the arc (60 + 6 m), and the jump lands on the straight.
         [UnityTest]
         public IEnumerator Swing_PressedInTheAir_DoesNotHook_NorWhenHeldIntoTheLanding()
         {
-            Centerline line = CurveRoad();
+            Centerline line = WideCurveRoad();
             var bot = new TrackFollower(line, player);
             yield return StartOn(line, bot, HalfWidth, true);
-            yield return RunTo(line, 11d);
+            yield return RunTo(line, WideArcStart - 26d);
             player.PrimaryAction();
             float deadline = Time.time + 1f;
             while (game.IsRunning && player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
@@ -225,7 +228,7 @@ namespace ProtoHarness.Tests.PlayMode
             while (game.IsRunning && !player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.True, "The jump must land before the arc.");
-            Assert.That(S(line), Is.LessThan(ArcStart), "precondition: landed before the arc.");
+            Assert.That(S(line), Is.LessThan(WideArcStart), "precondition: landed before the arc.");
             Assert.That(player.TryFindPole(out _), Is.True);
             Assert.That(player.IsSwinging, Is.False, "The key held into the landing does not hook: only a press does.");
             bot.SwingHold = false;
@@ -352,6 +355,16 @@ namespace ProtoHarness.Tests.PlayMode
             var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);
             line.AppendStraight((float)ArcStart);
             line.AppendArc(Radius, 90f);
+            line.AppendStraight(40f);
+            return line;
+        }
+
+        // Straight 40 m, an R60 right-hand quarter arc, straight 40 m: a longer reach before the arc than CurveRoad's.
+        private static Centerline WideCurveRoad()
+        {
+            var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);
+            line.AppendStraight((float)WideArcStart);
+            line.AppendArc(60f, 90f);
             line.AppendStraight(40f);
             return line;
         }

@@ -22,12 +22,13 @@ namespace ProtoHarness.Tests.PlayMode
         private sealed class ScriptedInputSource : IInputSource
         {
             public bool ChainAction;
+            public bool Coasting;
 
             public void Poll() { }
 
             public TickInput Consume()
             {
-                var input = new TickInput(0f, false, false, false, false, ChainAction);
+                var input = new TickInput(0f, false, false, false, false, ChainAction, coasting: Coasting);
                 ChainAction = false;
                 return input;
             }
@@ -100,6 +101,29 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForSeconds(3f);
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed).Within(0.5f), "Speed returns to the run speed after the carry.");
+        }
+
+        // KartRider style (2026-10-19): letting go of the throttle cuts a booster at once, the slingshot and a swing's carry,
+        // and the runner then coasts down instead of riding the 2 s carry at 26.
+        [UnityTest]
+        public IEnumerator Sling_ThrottleLetGo_CutsTheBoostAtOnce()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            source.ChainAction = true;
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(player.IsSlingPulling, Is.True, "precondition: the slingshot is pulling.");
+            game.Racer.SwingCarrySpeed = 25f;
+            source.Coasting = true;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(game.Racer.SlingTicks, Is.Zero, "Letting go of the throttle ends the slingshot.");
+            Assert.That(game.Racer.SwingCarrySpeed, Is.Zero, "Letting go of the throttle ends a swing's carry.");
+            float cut = player.ForwardSpeed;
+            yield return new WaitForSeconds(0.5f);
+            Assert.That(player.ForwardSpeed, Is.LessThan(cut - 2f), "After the cut the runner coasts down.");
         }
 
         [UnityTest]

@@ -7,6 +7,25 @@
 
 ---
 
+## 2026-10-19 · 위 방향키가 가속 (자동 달리기 끝), 떼면 부스터가 끊긴다 — 카트라이더식
+
+- **결정 (사용자, 2026-10-19 "자동진행이 아니라 방향키 윗키를 눌러야 가속하도록 해줘 이럴려고 점프키를 뺀거였다", "카트라이더 부스터 중에도 앞키를 빼면 끊긴다", 극성 "B안", 계획 "부스터 변경 계획도 진행", 테스트 입력 "ㄱㄱ")**:
+  - `TickInput.Coasting` (↑ 를 **뗀** 상태, 레벨값, 기본 false). `InputLatch` 는 `SwingHeld` 처럼 레벨로 전달, `Clear` 는 false. `TickInputCodec` 비트 64. `KeyboardMouseInputSource`: `coasting = !upArrowKey.isPressed`, 키보드가 없으면 true.
+  - `RunnerMotor.Step`: `Coasting` 이면 ① 슬링샷(당김·유지)과 스윙을 놓은 뒤의 남은 속도를 **바로 끊는다**(`SlingTicks`·`SwingCarrySpeed` = 0), ② 땅에서는 목표 속력 0, 감속 `coastDeceleration`(새 `[SerializeField]`, 기본 6 m/s² — 20 m/s 에서 약 3.3초에 멈춤, 씬 값은 안 넣어 세 씬 모두 기본값). 공중·그래플·봉 스윙 자체의 속력은 그대로. HUD 조작 안내 "↑ 가속   ← / → 이동".
+  - **극성을 반대로(`Coasting`) 둔 이유**: 이 칸이 없던 입력(봇 `CircuitBot`·`CourseBot`, 스크립트 입력 30여 곳, 리플레이 로그, 네트워크 바이트)이 모두 "↑ 누름" 으로 읽혀 그대로 달린다. 서킷 지문이 그대로인 근거다. **대가**: 장치를 읽는 새 입력 소스(터치 등)가 `coasting` 을 채우지 않으면 계속 달린다 — 그런 소스에는 "↑ 안 누르면 Coasting" 을 확인하는 테스트를 붙인다(키보드는 Device 테스트 `Input_ArrowKeys_…` 의 "출발선에 그대로" 단언).
+  - Ctrl(체인 액션)을 ↑ 없이 누르면 게이지 1칸을 쓰고 슬링샷은 같은 틱에 끊긴다(쓰기만 하고 효과 없음). 막지 않았다 — 플레이 뒤 판단.
+- **테스트 사양 변경**: `NetRemoteTests` 코덱 테스트가 비트 64 를 "모르는 값" 으로 단언했다 → 7비트 128조합 왕복, 비트 64 없는 바이트는 `Coasting` false, 모르는 값은 0x80. 기본 키보드 입력으로 달리던 테스트 8건(`ChainRushSlopeTests` 6건, `ChainRushTests.StartRun_Ready_RunsAndMovesForward`·`Pause_Running_FreezesMotionAndTimer`)이 출발하지 않아 실패(1회차 원문 아래) → 파일 안 `FullThrottleInputSource`(↑ 만 누른 입력)를 쓰게 했다. 단언 값은 그대로. Device 테스트 2건은 ↑ 를 같이 누르도록, `Input_ArrowKeys_…` 는 ↑ 없이 출발선에 그대로인지 단언을 더하고 ↑ 로 0.7초 달린 뒤 꺾도록(1회차 실패 아래).
+- **테스트 추가**: `InputLatchTests.Consume_CoastingLevel_KeepsLatestAndClearResetsIt`, `ChainRushInputSourceTests.Coasting_ScriptedLetGoThenThrottle_StaysThenRunsThenRollsDown`(↑ 없으면 정지, ↑ 1초에 20 m/s, 떼고 1초에 −6 m/s), `ChainRushDriftTests.Sling_ThrottleLetGo_CutsTheBoostAtOnce`.
+- **검증** (`feature/control-throttle`, 커밋 전, 에디터 6000.3.19f1, UTC): `tools/select-tests.ps1` 판정 EditMode 전체·PlayMode 전체(코어 시뮬), 입력 장치 경로라 Device 1회, Long 은 무한 모드 보류로 안 돌림.
+  - 컴파일 `*** Tundra build success (4.83 seconds)`, 테스트 수정 뒤 `(1.51 seconds)`, Device 수정 뒤 `(2.09 seconds)`.
+  - EditMode(`!Enemy`·`!Endless`) `testcasecount="230" result="Passed" passed="230" failed="0"` (04:59:56Z~05:00:00Z).
+  - `Run PlayMode Tests` 1회차 `testcasecount="138" result="Failed(Child)" passed="127" failed="8" skipped="3"` (05:00:21Z~05:06:20Z) — 위 8건, 메시지 `Expected: greater than or equal to 32.0d`·`17.0d`·`42.0d`·`40.0d` 등, `But was: 5.0f`·`5.03599977f`(출발선 근처). 새 테스트·고친 코덱 테스트는 통과.
+  - `Run PlayMode Tests` 2회차 `testcasecount="138" result="Passed" passed="135" failed="0" skipped="3"` (05:08:50Z~05:14:14Z, 323.7초). **서킷 지문 `0x1BB2D21DADD3F85F` 그대로**, 봇 랩 29.62·28.44·28.44 초.
+  - `Run Device Input Tests` 1회차 `testcasecount="3" result="Failed(Child)" passed="2" failed="1"` (05:15:13Z~05:15:25Z, 시작 시 `isApplicationActive=False`) — `Input_ArrowKeys_…` `ChainRushTests.cs:177` `Expected: less than -10.0f But was: -2.43762207f`. 출발(Enter)과 ↑+← 는 전달됐고(2.4° 돎), 정지에서 0.3초 꺾기는 회전 한계 속력/22 m 로 몇 도뿐이다(스크립트 조향 테스트를 0.7초 달린 뒤로 바꾼 "다른 씬도 서킷 물리값" 과 같은 원인). 이 Device 테스트가 그 변경 뒤 `dev` 에서도 실패했는지는 **확인 못 했다**.
+  - `Run Device Input Tests` 2회차 `testcasecount="3" result="Passed" passed="3" failed="0"` (05:16:39Z~05:16:56Z, `isApplicationActive=False`). 2회차 PlayMode 뒤에 바뀐 것은 Device 테스트 본문뿐이다(게이트에서 빠지는 테스트).
+- **사용자 플레이** (2026-10-19): "괜찮다".
+- **버린 대안**: `Throttle`(누름 = true) — 이 칸이 없던 입력 30여 곳과 리플레이 로그가 모두 "안 누름" 이 되어 고치고 다시 녹화해야 한다. 가상 키보드로 ↑ 를 누르게 해 기존 테스트를 살리기 — 장치 이벤트 전달이 흔들려 게이트에서 뺀 방식(2026-10-04).
+
 ## 2026-10-19 · 그래플 사거리 20 m·한 체공에 한 번 (M1-T 피드백 #4)
 
 - **결정 (사용자, 2026-10-18 M1-T 피드백 "그래플이 32 m 에서 걸리고 공중에서 반복해 떠 있을 수 있다(→ 20 m, 공중 한 번)", 2026-10-19 요청서에 "진행하라", 씬 저장 코드에 "ㄱㄱ")**:

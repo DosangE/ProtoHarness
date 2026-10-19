@@ -5,9 +5,21 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/_Project/Scenes/ChainRushTitle.unity
+    guid: aa06e3ba08e8d1140bd0db928f53fb78
+  - enabled: 1
+    path: Assets/_Project/Scenes/ChainRushLobby.unity
+    guid: 9087a9a73d83ad34b80193423604db91
+  - enabled: 1
+    path: Assets/_Project/Scenes/ChainRushCircuit.unity
+    guid: 70d0dbfcece3c3240a578d62b61cb872
+  - enabled: 1
+    path: Assets/_Project/Scenes/ChainRushTrackStadium.unity
+    guid: 303ffed2dacbd7f4ca84ff2438bffcb1
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

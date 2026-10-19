@@ -13,6 +13,11 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private Transform ropeOrigin;
         [SerializeField] private Transform[] anchors;
         [SerializeField] private float maxRange = 20f;
+        // The lowest the rope may let the runner (its center) hang over the track: standing height, so its feet stay above the
+        // road. The rope never lets the runner further from the anchor than its length, so an anchor is offered only within
+        // its height over the track less this. A longer rope hooked far behind the anchor is still slack while the runner
+        // flies on at running speed, and it is let go at the bottom of the swing, in the gap (docs/DECISIONS.md 2026-10-19).
+        [SerializeField] private float minHangHeight = 1.05f;
         [SerializeField] private float retractSpeed = 3f;
         // Reel speed once a chain action has empowered the current grapple.
         [SerializeField] private float empoweredRetractSpeed = 12f;
@@ -62,6 +67,8 @@ namespace ProtoHarness.ChainRush
         {
             if (maxRange <= 5f || retractSpeed < 0f || empoweredRetractSpeed < retractSpeed)
                 Debug.LogError("GrappleController: range must exceed 5, retract speed cannot be negative, and the empowered reel cannot be slower.", this);
+            if (minHangHeight < 0f)
+                Debug.LogError("GrappleController: the lowest hanging height cannot be negative.", this);
         }
 
         // The chain shows for a grapple and for the motor's slingshot pull: the chain visual in endless
@@ -120,6 +127,9 @@ namespace ProtoHarness.ChainRush
                 // "Ahead" and "off to the side" are measured along the track, not world z/x.
                 Vector3 local = frame.InverseTransformDirection(offset);
                 if (local.z < 1f || local.y < 0f || offset.sqrMagnitude > maxRange * maxRange) continue;
+                // The rope is the distance from the runner (TryAttach), not from the sight line's origin.
+                float hold = game.Track.Project(anchors[i].position).H - minHangHeight;
+                if ((anchors[i].position - transform.position).sqrMagnitude > hold * hold || hold <= 0f) continue;
                 // PhysicsScene has no Linecast; a line from origin to the anchor is a ray of that length along that offset.
                 if (world.Raycast(origin, offset, offset.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
                 float score = offset.sqrMagnitude + local.x * local.x * 3f;

@@ -40,7 +40,7 @@ $course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests',
 
 # 전체 실행에서만 도는 클래스, 이름으로 따로 돌리는 클래스. 표가 모든 클래스를 아는지 확인할 때 쓴다.
 $allOnly      = @('ChainRushTests')
-$explicitOnly = @('NetworkRaceTests')
+$explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 
 # 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Note = 보고에 붙일 말.
 $rules = @(
@@ -166,4 +166,4 @@ $quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
 $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (테스트·Net 만 바뀌어 지문 없음)' }
 Write-Output "  PlayMode: 클래스 $($classes.Count)개$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
-Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless" } }));')
+Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless", "!NetEndReplay" } }));')

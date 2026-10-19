@@ -263,6 +263,34 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(10f), "Still above the run speed after a second.");
         }
 
+        // A booster fired while swinging speeds the swing up like a booster on the ground (user 2026-10-19 "C"): the hook's
+        // speed rises toward the pull's 28 m/s, the rope's ratio still applies on top. Until then the swing ignored it and the
+        // booster's time ran out unused while the key was held.
+        [UnityTest]
+        public IEnumerator Swing_BoosterWhileSwinging_SpeedsTheSwingUp()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True);
+            float hookSpeed = game.Racer.SwingHookSpeed;
+            Assert.That(hookSpeed, Is.LessThan(player.SlingTopSpeed - 4f), "precondition: room below the booster's speed.");
+            game.Racer.AddGauge(1f);
+            float gaugeBefore = game.Racer.Gauge;
+            bot.ChainAction = true;
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.True, "A booster does not end the swing.");
+            // The swing goes on filling the gauge (about 0.3 of a slot in these 0.5 s), so the slot shows as a drop of over half.
+            Assert.That(game.Racer.Gauge, Is.LessThan(gaugeBefore - 0.5f), "The booster spent a slot.");
+            Debug.Log("ChainRush pole swing booster: hook speed " + hookSpeed.ToString("0.00") + " -> " + game.Racer.SwingHookSpeed.ToString("0.00")
+                + " m/s after 0.5 s, swing speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 2f), "Half a second of booster speeds the swing up.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.LessThanOrEqualTo(player.SlingTopSpeed), "No faster than the booster's own speed.");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "boosted");
+        }
+
         // Held past the arc the runner keeps circling, crosses the straight after it and meets the inside guard there
         // (rope 33.1 m around a pole 30 m from the centerline: about 23 m into the straight). The guard ends the swing
         // without the carry.

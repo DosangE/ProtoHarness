@@ -48,6 +48,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float groundSnapDistance = 0.3f;
         // Chain slingshot (chain action when not grappling): the chain hooks a point slingLead ahead on the
         // centerline and pulls hard, turning the runner toward it, then extra speed carries for a moment.
+        // While it runs and the runner is below its boost speed, it accelerates by slingPullAcceleration scaled by how far
+        // below that speed it is (2026-10-19): strong from low speed, easing off as it closes in.
         [SerializeField] private float slingLead = 18f;
         [SerializeField] private float slingPullTime = 0.4f;
         [SerializeField] private float slingPullAcceleration = 45f;
@@ -98,6 +100,9 @@ namespace ProtoHarness.ChainRush
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RightOf(game.Racer.Heading));
         public bool IsGrounded => game.Racer.Grounded;
         public float Speed => game.Racer.Velocity.magnitude;
+        // Speed along the ground only: a grounded runner keeps a small downward velocity that holds it to the road
+        // (-2 m/s plus one tick of gravity), which Speed counts and a speedometer must not.
+        public float HorizontalSpeed => new Vector2(game.Racer.Velocity.x, game.Racer.Velocity.z).magnitude;
         public float Gauge => game.Racer.Gauge;
         public bool IsSlingPulling => game.Racer.SlingTicks > Ticks.FromSeconds(slingCarryTime);
         public Vector3 SlingTarget => slingTarget;
@@ -246,9 +251,10 @@ namespace ProtoHarness.ChainRush
             if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
             if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
             float currentForward = Vector3.Dot(velocity, facing);
-            float acceleration = pulling ? slingPullAcceleration
+            float acceleration = pulling ? BoostAcceleration(currentForward, runTarget)
                 : !grounded ? (grapple.IsAttached ? 5f : airAcceleration)
-                : currentForward > runTarget ? (coasting ? coastDeceleration : overspeedFalloff) : runAcceleration;
+                : currentForward > runTarget ? (coasting ? coastDeceleration : overspeedFalloff)
+                : carrying ? BoostAcceleration(currentForward, runTarget) : runAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
             // A grapple reels at 16 m/s, or at running speed when that is faster.
@@ -333,6 +339,11 @@ namespace ProtoHarness.ChainRush
             racer.SlingTicks = Ticks.FromSeconds(slingPullTime) + Ticks.FromSeconds(slingCarryTime);
             game.PlayCue(1);
         }
+
+        // A booster's push toward its speed: slingPullAcceleration at rest, shrinking to nothing at the boost speed. Above it
+        // the speed falls back like any overspeed. The boost speed is never zero (slingTopSpeed, slingCarrySpeed > runSpeed).
+        private float BoostAcceleration(float speed, float boostSpeed) =>
+            speed < boostSpeed ? slingPullAcceleration * (1f - speed / boostSpeed) : overspeedFalloff;
 
         private float TurnLimitAt(Vector3 velocity) => minTurnRadius > 0f
             ? Mathf.Min(maxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / minTurnRadius * Mathf.Rad2Deg)

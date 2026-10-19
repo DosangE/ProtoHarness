@@ -149054,10 +149054,10 @@ MonoBehaviour:
   groundSnapDistance: 0.3
   slingLead: 18
   slingPullTime: 0.4
-  slingPullAcceleration: 45
+  slingPullAcceleration: 30
   slingTopSpeed: 28
   slingTurnRate: 90
-  slingCarryTime: 2
+  slingCarryTime: 2.6
   slingCarrySpeed: 26
   empoweredReleaseSpeed: 26
   poleMaxAngle: 95

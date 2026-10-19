@@ -202,6 +202,38 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsSwinging, Is.True);
         }
 
+        // A swing hooks only from the ground (2026-10-19, M1-T play): a press in the middle of a jump does nothing, and the
+        // key held into the landing does not hook either. A fresh press on the ground does.
+        [UnityTest]
+        public IEnumerator Swing_PressedInTheAir_DoesNotHook_NorWhenHeldIntoTheLanding()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, HalfWidth, true);
+            yield return RunTo(line, 11d);
+            player.PrimaryAction();
+            float deadline = Time.time + 1f;
+            while (game.IsRunning && player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            for (int i = 0; i < 10; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.False, "precondition: the runner is in the middle of its jump.");
+            Assert.That(player.TryFindPole(out _), Is.True, "precondition: the pole is in reach.");
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsGrounded, Is.False);
+            Assert.That(player.IsSwinging, Is.False, "A press in the air must not hook.");
+
+            deadline = Time.time + 2f;
+            while (game.IsRunning && !player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.IsGrounded, Is.True, "The jump must land before the arc.");
+            Assert.That(S(line), Is.LessThan(ArcStart), "precondition: landed before the arc.");
+            Assert.That(player.TryFindPole(out _), Is.True);
+            Assert.That(player.IsSwinging, Is.False, "The key held into the landing does not hook: only a press does.");
+            bot.SwingHold = false;
+            yield return new WaitForFixedUpdate();
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True, "A press on the ground hooks.");
+        }
+
         [UnityTest]
         public IEnumerator Swing_LettingGo_GoesStraightOnAtTheSwingSpeed_ThenTheExtraFallsOffByThreeASecond()
         {

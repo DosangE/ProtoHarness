@@ -26,6 +26,9 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float turnSpeedLoss = 0f;
         // How fast a grounded runner below its run target speeds up to it, in m/s a second.
         [SerializeField] private float runAcceleration = 30f;
+        // How fast an airborne runner (not on a grapple) moves toward the flat run target, in m/s a second either way.
+        // 0 keeps the takeoff speed through the jump, so jumping neither gains nor loses speed.
+        [SerializeField] private float airAcceleration = 5f;
         // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
         [SerializeField] private float sideGrip = 60f;
         [SerializeField] private float airSideGrip = 18f;
@@ -53,7 +56,7 @@ namespace ProtoHarness.ChainRush
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
-        // the swing key hooks the nearest pole within poleMaxAngle either side of the facing and no farther than its arc's
+        // the swing key on the ground hooks the nearest pole within poleMaxAngle either side of the facing and no farther than its arc's
         // radius plus poleReach (holding the key into reach does not); the runner circles it for as long as the key is
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
@@ -114,8 +117,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
             if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f || minTurnRadius < 0f)
                 Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1], the turn radius not negative.", this);
-            if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f)
-                Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive.", this);
+            if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f || airAcceleration < 0f)
+                Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive, the air acceleration not negative.", this);
             if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f || guardScrapeDecel < 0f)
                 Debug.LogError("RunnerMotor: grips and the guard scrape cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
@@ -231,7 +234,7 @@ namespace ProtoHarness.ChainRush
             if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = pulling ? slingPullAcceleration
-                : !grounded ? 5f
+                : !grounded ? (grapple.IsAttached ? 5f : airAcceleration)
                 : currentForward > runTarget ? overspeedFalloff : runAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
@@ -316,11 +319,13 @@ namespace ProtoHarness.ChainRush
         }
 
         // A swing key press hooks the corner pole in reach, if there is one, at the rope length and speed of this moment.
-        // It costs nothing. While grappling or already swinging, a press does nothing.
+        // It costs nothing. In the air (a jump, or past the coyote time off a ledge), while grappling or already swinging,
+        // a press does nothing. Step calls it after the jump, which clears the coyote time, so a press on the takeoff tick
+        // does not hook either.
         private void TryHookPole()
         {
             RacerState racer = game.Racer;
-            if (grapple.IsAttached || racer.SwingTicks > 0 || !TryFindPole(out Vector3 pole)) return;
+            if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || !TryFindPole(out Vector3 pole)) return;
             Vector3 radial = transform.position - pole;
             radial.y = 0f;
             Vector3 velocity = racer.Velocity;

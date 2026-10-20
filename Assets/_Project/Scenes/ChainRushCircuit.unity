@@ -36461,6 +36461,7 @@ MonoBehaviour:
   - {fileID: 294906967}
   - {fileID: 1479941584}
   maxRange: 20
+  minHangHeight: 1.05
   retractSpeed: 3
   empoweredRetractSpeed: 12
   chainVisual: {fileID: 1332659873}
@@ -36489,7 +36490,7 @@ MonoBehaviour:
   turnSpeedLoss: 0.2
   runAcceleration: 8
   coastDeceleration: 6
-  airAcceleration: 0
+  airDeceleration: 0
   sideGrip: 60
   airSideGrip: 18
   guardSpeedLoss: 0.4
@@ -40735,6 +40736,7 @@ MonoBehaviour:
   grapple: {fileID: 1925527726}
   viewCamera: {fileID: 493584858}
   assembler: {fileID: 2105445621}
+  nightBackground: {fileID: 2800000, guid: a8700617a79091f46bdf9037022fd350, type: 3}
 --- !u!4 &2105445615
 Transform:
   m_ObjectHideFlags: 0

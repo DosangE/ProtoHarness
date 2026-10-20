@@ -18,6 +18,7 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private Camera viewCamera;
         [Tooltip("Optional: only the race scene the lobby loads has one. Without it the HUD shows its own start panel.")]
         [SerializeField] private Flow.RaceAssembler assembler;
+        [SerializeField] private Texture2D nightBackground;
         private GUIStyle small;
         private GUIStyle body;
         private GUIStyle heading;
@@ -28,19 +29,24 @@ namespace ProtoHarness.ChainRush
         private GUIStyle cue;
         private GUIStyle pauseItem;
         private Font font;
+        private Font displayFont;
+        private GUIStyle speedNumber;
+        private GUIStyle raceWord;
+        private GUIStyle accentWord;
+        private GUIStyle totalTime;
         private int pauseCursor;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
         private const string CueGlyphs = "321GO!";
         // How long "GO!" stays up once a run has started.
         private const float GoSeconds = 1f;
-        private static readonly Color Ink = new Color(0.025f, 0.055f, 0.08f, 0.94f);
-        private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
-        private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
+        private static readonly Color Ink = NightUi.Panel;
+        private static readonly Color Mint = NightUi.Accent;
+        private static readonly Color Muted = NightUi.Muted;
         private static readonly Color Coral = new Color(1f, 0.36f, 0.3f);
         // Over the game while paused: dims it without hiding it.
-        private static readonly Color Dim = new Color(0f, 0f, 0f, 0.5f);
-        private static readonly Color Row = new Color(0.08f, 0.13f, 0.16f, 1f);
+        private static readonly Color Dim = new Color(0f, 0f, 0f, 0.72f);
+        private static readonly Color Row = NightUi.Border;
 
         // The highlighted pause entry; back on Continue whenever the game is not paused.
         public PauseChoice PauseCursor => (PauseChoice)pauseCursor;
@@ -109,7 +115,8 @@ namespace ProtoHarness.ChainRush
         private void InitializeStyles()
         {
             font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
-            if (font == null)
+            displayFont = NightUi.DisplayFont();
+            if (font == null || displayFont == null)
             {
                 Debug.LogError("ChainRushHud: could not create the HUD font.", this);
                 enabled = false;
@@ -117,9 +124,14 @@ namespace ProtoHarness.ChainRush
             }
             small = Style(15, Muted);
             body = Style(21, Color.white);
-            heading = Style(32, Color.white, FontStyle.Bold);
-            title = Style(96, Color.white, FontStyle.Bold);
-            number = Style(38, Mint, FontStyle.Bold);
+            heading = NightUi.Style(displayFont, 36, Color.white, FontStyle.BoldAndItalic);
+            title = NightUi.Style(displayFont, 96, Color.white, FontStyle.BoldAndItalic);
+            number = NightUi.Style(displayFont, 44, Color.white, FontStyle.BoldAndItalic);
+            speedNumber = NightUi.Style(displayFont, 94, Color.white, FontStyle.BoldAndItalic);
+            speedNumber.alignment = TextAnchor.MiddleRight;
+            raceWord = NightUi.Style(displayFont, 112, Color.white, FontStyle.BoldAndItalic);
+            accentWord = NightUi.Style(displayFont, 112, Mint, FontStyle.BoldAndItalic);
+            totalTime = NightUi.Style(displayFont, 84, Color.white, FontStyle.BoldAndItalic);
             button = Style(22, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
@@ -177,36 +189,32 @@ namespace ProtoHarness.ChainRush
         // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen.
         private void DrawCue(float width, float height, string text)
         {
-            Block(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), Ink);
-            GUI.Label(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), text, cue);
+            NightUi.ShadowLabel(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), text, cue);
         }
 
         private void DrawHeader(float width)
         {
-            Block(new Rect(32, 26, 310, 74), Ink);
-            Block(new Rect(32, 26, 5, 74), Mint);
-            GUI.Label(new Rect(53, 37, 270, 38), "CHAIN / RUSH", heading);
-            GUI.Label(new Rect(55, 78, 280, 20), game.IsEndless ? "03D    /    ENDLESS PURSUIT" : game.IsCircuit ? "03D    /    CIRCUIT TRIAL" : "03D    /    SKYLINE TRIAL", small);
-            Block(new Rect(width - 382, 26, 350, 74), Ink);
-            GUI.Label(new Rect(width - 359, 37, 155, 22), "SUIT INTEGRITY", small);
+            NightUi.ShadowLabel(new Rect(64, 38, 410, 54), game.IsCircuit ? "STADIUM" : "CHAIN RUSH", heading);
+            GUI.Label(new Rect(66, 97, 350, 28), game.IsEndless ? "ENDLESS PURSUIT" : game.IsCircuit ? "SINGLE RACE / CIRCUIT" : "SKYLINE TRIAL", small);
             for (int i = 0; i < 3; i++)
-                Block(new Rect(width - 356 + i * 49, 68, 37, 10), i < game.Health ? Mint : new Color(0.17f, 0.23f, 0.26f));
-            GUI.Label(new Rect(width - 177, 43, 130, 45), game.Elapsed.ToString("00.0") + "s", heading);
+                Block(new Rect(66 + i * 39, 138, 30, 5), i < game.Health ? Mint : Row);
+            if (game.IsCircuit && game.Circuit.Laps != null)
+                NightUi.ShadowLabel(new Rect(width - 330, 31, 266, 72), game.Circuit.Laps.CurrentLap + " / " + game.Circuit.Laps.LapCount + " LAP", number);
+            GUI.Label(new Rect(width - 330, 118, 100, 26), "TIME", small);
+            NightUi.ShadowLabel(new Rect(width - 226, 100, 190, 58), FormatTime(game.Elapsed), heading);
         }
 
         private void DrawControls(float width, float height)
         {
-            Block(new Rect(32, height - 92, width - 64, 60), Ink);
-            GUI.Label(new Rect(55, height - 75, 175, 30), "↑ 가속   ← / → 이동", body);
-            GUI.Label(new Rect(232, height - 75, 390, 30), "ALT   점프 → 공중에서 다시 잡기", body);
-            GUI.Label(new Rect(650, height - 75, 270, 30), "ALT 유지  스윙 / ↓  해제", body);
-            GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);
-            GUI.Label(new Rect(width - 405, height - 75, 390, 30), game.HasPresentation ? "ESC  일시정지   M  음소거" : "ESC  일시정지", body);
+            Block(new Rect(0, height - 72, width, 72), new Color(.025f, .04f, .065f, .85f));
+            GUI.Label(new Rect(64, height - 48, width - 128, 30), game.HasPresentation
+                ? "↑ 가속   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지     M 음소거"
+                : "↑ 가속   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지", small);
         }
 
         private void DrawReady(float width, float height)
         {
-            Block(new Rect(32, 128, 750, height - 248), Ink);
+            Block(new Rect(32, 178, 750, height - 298), Ink);
             GUI.Label(new Rect(69, 169, 640, 26), game.IsEndless ? "FIELD TEST  /  002                         ENDLESS COMBAT" : game.IsCircuit ? "FIELD TEST  /  003                         TIME ATTACK" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
             GUI.Label(new Rect(62, 222, 660, 130), "CHAIN", title);
             GUI.Label(new Rect(62, 326, 660, 130), "THE SKY.", title);
@@ -217,7 +225,7 @@ namespace ProtoHarness.ChainRush
             Rect start = new Rect(70, height - 240, 370, 68);
             if (game.ManualStart)
             {
-                Block(start, Mint);
+                Block(start, NightUi.Action);
                 if (GUI.Button(start, "ENTER   /   START RUN  →", button)) game.StartCountdown();
             }
             else
@@ -237,20 +245,21 @@ namespace ProtoHarness.ChainRush
 
         private void DrawPlay(float width, float height, float scale)
         {
-            Block(new Rect(width / 2f - 210, 34, 420, 62), Ink);
-            GUI.Label(new Rect(width / 2f - 184, 42, 380, 24), game.IsEndless ? "ENDLESS / " + game.Distance.ToString("0") + " M     HITS / " + game.Hits : game.IsCircuit ? CircuitLine() : "ROUTE  /  " + Mathf.FloorToInt(game.Progress * 496f) + " M   →   496 M", small);
-            Block(new Rect(width / 2f - 184, 78, 368, 4), new Color(0.2f, 0.3f, 0.33f));
-            Block(new Rect(width / 2f - 184, 78, 368 * (game.IsEndless ? (float)(game.Distance % 500d / 500d) : game.Progress), 4), Mint);
+            Block(new Rect(66, 163, 300, 4), Row);
+            Block(new Rect(66, 163, 300 * (game.IsEndless ? (float)(game.Distance % 500d / 500d) : game.Progress), 4), Mint);
+            if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), game.IsEndless ? "DISTANCE / " + game.Distance.ToString("0") + " M   HITS / " + game.Hits : "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
             if (game.IsEndless) DrawEncounter(width, scale);
-            Block(new Rect(32, height - 220, 168, 105), Ink);
-            GUI.Label(new Rect(54, height - 207, 140, 20), "VELOCITY / M·S", small);
-            GUI.Label(new Rect(52, height - 180, 140, 50), player.HorizontalSpeed.ToString("00.0"), number);
+            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), player.HorizontalSpeed.ToString("00.0"), speedNumber);
+            GUI.Label(new Rect(width - 150, height - 169, 90, 26), "M / S", small);
+            int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
+            for (int i = 0; i < 20; i++) Block(new Rect(width - 332 + i * 13, height - 125, 9, 5), i < speedMarks ? Mint : Row);
             DrawBoost(width, height);
-            string status = grapple.IsAttached ? "LINKED  /  놓으면 도약" : player.IsGrounded ? "RUN  /  노란 선에서 점프" : "AIR  /  ALT 로 앵커 잡기";
-            if (player.IsSwinging) status = "SWING  /  안쪽 키 줄 짧게 · 바깥 키 길게 · SHIFT 떼면 직진";
+            string status = grapple.IsAttached ? "LINKED / 놓으면 도약" : player.IsGrounded ? "RUN / 노란 선에서 점프" : "AIR / ALT 로 앵커 잡기";
+            if (player.IsSwinging) status = "SWING / SHIFT 유지 · ←/→ 길이";
             if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
-            Block(new Rect(width / 2f - 240, height - 151, 480, 40), Ink);
-            GUI.Label(new Rect(width / 2f - 220, height - 145, 450, 28), status, body);
+            Block(new Rect(64, height - 185, 430, 63), Ink);
+            Block(new Rect(64, height - 185, 3, 63), Mint);
+            GUI.Label(new Rect(84, height - 167, 400, 32), status, small);
             Transform anchor = grapple.Candidate;
             if (anchor != null)
             {
@@ -299,10 +308,10 @@ namespace ProtoHarness.ChainRush
         // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
         private void DrawBoost(float width, float height)
         {
-            const float BarWidth = 420f, Box = 52f, Gap = 10f;
+            const float BarWidth = 300f, Box = 48f, Gap = 8f;
             int boxes = (int)RacerState.MaxGauge;
             float left = width / 2f - (BarWidth + boxes * (Gap + Box)) / 2f;
-            float top = height - 212f;
+            float top = height - 184f;
             float gauge = player.Gauge;
             int boosters = Mathf.Min(boxes, Mathf.FloorToInt(gauge));
             bool full = boosters >= boxes;
@@ -311,7 +320,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", small);
             GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", small);
             var bar = new Rect(left + 18, top + 32, BarWidth - 36, 8);
-            Block(bar, new Color(0.2f, 0.3f, 0.33f));
+            Block(bar, Row);
             bar.width *= fill;
             Block(bar, Mint);
             for (int i = 0; i < boxes; i++)
@@ -319,7 +328,7 @@ namespace ProtoHarness.ChainRush
                 var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
                 Block(slot, Ink);
                 var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
-                Block(item, i < boosters ? Mint : new Color(0.2f, 0.3f, 0.33f));
+                Block(item, i < boosters ? Mint : Row);
                 if (i < boosters) GUI.Label(item, "▶▶", button);
             }
         }
@@ -348,29 +357,48 @@ namespace ProtoHarness.ChainRush
 
         private void DrawResult(float width, float height)
         {
-            float x = width / 2f - 335;
-            float y = height / 2f - 215;
-            Block(new Rect(x, y, 670, 410), Ink);
-            Block(new Rect(x, y, 670, 5), game.HasFailed ? Coral : Mint);
-            GUI.Label(new Rect(x + 42, y + 34, 600, 25), game.IsCircuit ? "CIRCUIT TRIAL / RACE STATUS" : "SKYLINE TRIAL / MISSION STATUS", small);
-            string label = game.HasFinished ? (game.IsCircuit ? "RACE COMPLETE." : "ROUTE COMPLETE.") : "SIGNAL LOST.";
-            GUI.Label(new Rect(x + 40, y + 84, 610, 54), label, number);
-            string subtitle = game.HasFinished ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 노란 선에서 점프 후 앵커를 잡으세요.";
-            GUI.Label(new Rect(x + 42, y + 147, 610, 35), subtitle, body);
-            GUI.Label(new Rect(x + 42, y + 207, 600, 34), game.IsCircuit ? CircuitResult() : "TIME   " + game.Elapsed.ToString("0.0") + "s      LINKS   " + game.Grapples + "      HITS   " + game.Hits, body);
-            // A run that cannot be restarted from here (ManualStart off) shows no RUN AGAIN.
-            if (!game.ManualStart) return;
-            Rect action = new Rect(x + 42, y + 283, 586, 66);
-            // A race from the lobby ends with two ways on: again, or back to the lobby.
-            if (FromLobby)
+            NightUi.Backdrop(nightBackground, width, height);
+            GUI.Label(new Rect(64, 35, 500, 56), "CHAIN RUSH", heading);
+            float left = width * .06f, x = width * .53f, y = height * .22f;
+            float panelWidth = width * .41f;
+            GUI.Label(new Rect(left, y + 10, width * .45f, 142), game.HasFinished ? "RACE" : "SIGNAL", raceWord);
+            GUI.Label(new Rect(left, y + 128, width * .45f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
+            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), game.HasFinished
+                ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 점프 후 앵커를 잡으세요.", small);
+            NightUi.Surface(new Rect(x, y, panelWidth, 520));
+            Block(new Rect(x, y, panelWidth, 3), game.HasFailed ? Coral : Mint);
+            GUI.Label(new Rect(x + 34, y + 30, panelWidth - 68, 30), "TOTAL TIME / RACE RESULT", small);
+            float total = game.IsCircuit && game.Circuit.Laps.IsFinished ? Ticks.ToSeconds(game.Circuit.Laps.TotalTicks) : game.Elapsed;
+            GUI.Label(new Rect(x + 30, y + 76, panelWidth - 60, 112), FormatTime(total), totalTime);
+            if (game.IsCircuit)
             {
-                action.width = 288;
-                Rect lobby = new Rect(x + 340, y + 283, 288, 66);
-                Block(lobby, Muted);
-                if (GUI.Button(lobby, "ESC  /  로비로", button)) assembler.ReturnToLobby();
+                var laps = game.Circuit.Laps;
+                for (int lap = 1; lap <= laps.CompletedLaps; lap++)
+                {
+                    float row = y + 210 + (lap - 1) * 50;
+                    Block(new Rect(x + 34, row - 7, panelWidth - 68, 1), Row);
+                    GUI.Label(new Rect(x + 34, row, 180, 34), "LAP 0" + lap, body);
+                    GUI.Label(new Rect(x + panelWidth - 200, row, 166, 34), FormatTime(Ticks.ToSeconds(laps.LapTicks(lap))), body);
+                }
             }
-            Block(action, Mint);
-            if (GUI.Button(action, "ENTER  /  RUN AGAIN  →", button)) game.StartCountdown();
+            else GUI.Label(new Rect(x + 34, y + 222, panelWidth - 68, 38), "LINKS " + game.Grapples + "   HITS " + game.Hits, body);
+            bool again = false, lobby = false;
+            if (game.ManualStart)
+            {
+                float actionWidth = FromLobby ? (panelWidth - 82) / 2 : panelWidth - 68;
+                Rect action = new Rect(x + 34, y + 405, actionWidth, 72);
+                Block(action, NightUi.Action);
+                again = GUI.Button(action, "다시 달리기", button);
+                if (FromLobby)
+                {
+                    var back = new Rect(action.xMax + 14, action.y, actionWidth, action.height);
+                    Block(back, Row);
+                    lobby = GUI.Button(back, "ESC / 로비로", pauseItem);
+                }
+            }
+            DrawControls(width, height);
+            if (lobby) assembler.ReturnToLobby();
+            else if (again) game.StartCountdown();
         }
 
         // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in
@@ -392,7 +420,7 @@ namespace ProtoHarness.ChainRush
                 if (!Offers((PauseChoice)i)) continue;
                 var row = new Rect(x + 42, rowY, 436, 66);
                 bool highlighted = i == pauseCursor;
-                Block(row, highlighted ? Mint : Row);
+                Block(row, highlighted ? NightUi.Action : Row);
                 if (GUI.Button(row, PauseLabels[i], highlighted ? button : pauseItem)) clicked = i;
                 rowY += 84;
             }
@@ -426,6 +454,7 @@ namespace ProtoHarness.ChainRush
         private void OnDestroy()
         {
             if (font != null) Destroy(font);
+            if (displayFont != null) Destroy(displayFont);
         }
     }
 }

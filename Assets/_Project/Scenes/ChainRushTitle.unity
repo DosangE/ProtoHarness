@@ -148,6 +148,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0c73c6e473e944143bdae9cdb2ec5acf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Flow.TitleScreen
+  nightBackground: {fileID: 2800000, guid: a8700617a79091f46bdf9037022fd350, type: 3}
+  runnerArtwork: {fileID: 2800000, guid: dcd2dd543490a5445a62a44984aa5797, type: 3}
 --- !u!4 &1740583680
 Transform:
   m_ObjectHideFlags: 0

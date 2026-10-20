@@ -27,6 +27,7 @@ namespace ProtoHarness.ChainRush
         private Transform candidate;
         private bool hasPoleCandidate;
         private Vector3 poleCandidate;
+        private MetalChain steelChain;
 
         // Attachment, rope length and the miss deadline live in the racer's RacerState.
         public bool IsAttached => game.Racer.HasAnchor;
@@ -61,6 +62,12 @@ namespace ProtoHarness.ChainRush
             }
             rope.positionCount = 2;
             rope.enabled = false;
+            if (!game.IsEndless)
+            {
+                steelChain = new MetalChain(rope.transform);
+                // Keep the endpoint line as a presentation probe; the visible connection is the steel mesh.
+                rope.widthMultiplier = 0.001f;
+            }
         }
 
         private void OnValidate()
@@ -93,9 +100,10 @@ namespace ProtoHarness.ChainRush
                 return;
             }
             rope.enabled = linked;
-            if (!linked) return;
+            if (!linked) { steelChain.Hide(); return; }
             rope.SetPosition(0, ropeOrigin.position);
             rope.SetPosition(1, target);
+            steelChain.Present(ropeOrigin.position, target);
         }
 
         // A corner swing's chain bites the band on the pole it circles (R5). Endless mode shows no poles yet (R6), so there
@@ -184,6 +192,7 @@ namespace ProtoHarness.ChainRush
             bool empowered = game.Racer.GrappleEmpowered;
             game.Racer.Detach();
             rope.enabled = false;
+            steelChain?.Hide();
             if (boost && game.IsRunning) motor.AddReleaseBoost(empowered);
         }
 
@@ -195,5 +204,7 @@ namespace ProtoHarness.ChainRush
             lastAnchor += offset;
             if (game.IsEndless) chainVisual.ShiftOrigin(offset);
         }
+
+        private void OnDestroy() => steelChain?.Dispose();
     }
 }

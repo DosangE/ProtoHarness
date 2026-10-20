@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.ChainRush.Flow
 {
@@ -8,14 +9,19 @@ namespace ProtoHarness.ChainRush.Flow
     // a 1600 x 900 canvas scaled to the screen, Malgun Gothic).
     public sealed class TitleScreen : MonoBehaviour
     {
-        private static readonly Color Ink = new Color(0.025f, 0.055f, 0.08f, 0.94f);
-        private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
-        private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
+        private static readonly Color Ink = NightUi.Background;
+        private static readonly Color Mint = NightUi.Accent;
+        private static readonly Color Muted = NightUi.Muted;
+        [SerializeField] private Texture2D nightBackground;
+        [SerializeField] private Texture2D runnerArtwork;
         private GUIStyle small;
         private GUIStyle body;
         private GUIStyle title;
         private GUIStyle button;
+        private GUIStyle accentTitle;
+        private GUIStyle brand;
         private Font font;
+        private Font displayFont;
         private bool leaving;
 
         private void Update()
@@ -46,7 +52,8 @@ namespace ProtoHarness.ChainRush.Flow
         private void InitializeStyles()
         {
             font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
-            if (font == null)
+            displayFont = NightUi.DisplayFont();
+            if (font == null || displayFont == null)
             {
                 Debug.LogError("TitleScreen: could not create the font.", this);
                 enabled = false;
@@ -54,8 +61,10 @@ namespace ProtoHarness.ChainRush.Flow
             }
             small = Style(15, Muted);
             body = Style(21, Color.white);
-            title = Style(140, Color.white, FontStyle.Bold);
-            button = Style(24, Ink, FontStyle.Bold);
+            title = NightUi.Style(displayFont, 160, Color.white, FontStyle.BoldAndItalic);
+            accentTitle = NightUi.Style(displayFont, 160, Mint, FontStyle.BoldAndItalic);
+            brand = NightUi.Style(displayFont, 34, Color.white, FontStyle.BoldAndItalic);
+            button = Style(26, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
         }
 
@@ -76,22 +85,28 @@ namespace ProtoHarness.ChainRush.Flow
             float width = Screen.width / scale;
             float height = Screen.height / scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            Block(new Rect(0, 0, width, height), Ink);
-            Block(new Rect(96, 200, 8, 330), Mint);
-            GUI.Label(new Rect(130, 196, 900, 26), "03D    /    CIRCUIT RACING PROTOTYPE", small);
-            GUI.Label(new Rect(124, 232, 1200, 160), "CHAIN", title);
-            GUI.Label(new Rect(124, 372, 1200, 160), "RUSH.", title);
-            GUI.Label(new Rect(130, 548, 900, 34), "달리고, 걸고, 도약하세요.", body);
-            Rect enter = new Rect(130, height - 250, 420, 72);
-            Block(enter, Mint);
-            if (GUI.Button(enter, "ENTER   /   시작하기  →", button)) Enter();
-            GUI.Label(new Rect(130, height - 80, 600, 24), "INSPIRED BY CHAIN-RUSH  /  DOSANGE", small);
+            NightUi.Backdrop(nightBackground, width, height);
+            GUI.Label(new Rect(64, 38, 500, 52), "CHAIN RUSH", brand);
+            GUI.Label(new Rect(width - 305, 49, 250, 28), "STADIUM / AFTER DARK", small);
+            GUI.Label(new Rect(96, 200, 700, 30), "N I G H T   C I R C U I T", small);
+            GUI.Label(new Rect(87, 245, 780, 190), "CHAIN", title);
+            GUI.Label(new Rect(87, 397, 780, 190), "RUSH", accentTitle);
+            GUI.Label(new Rect(96, 585, 700, 36), "도시가 잠들면, 레이스가 시작된다.", body);
+            NightUi.Portrait(runnerArtwork, 0, new Rect(width * .55f, 190, 440, 550));
+            Rect enter = new Rect(96, height - 210, 450, 84);
+            Block(enter, NightUi.Action);
+            bool start = GUI.Button(enter, "레이스 시작     ENTER   →", button);
+            GUI.Label(new Rect(width * .61f, 764, 500, 26), "ALPHA  /  ARMORED RUNNER", small);
+            GUI.Label(new Rect(64, height - 60, 700, 24), "ENTER 시작", small);
+            GUI.Label(new Rect(width - 440, height - 60, 380, 24), "CHAIN RUSH  /  NIGHT DRIFT", small);
             GUI.matrix = previous;
+            if (start) Enter();
         }
 
         private void OnDestroy()
         {
             if (font != null) Destroy(font);
+            if (displayFont != null) Destroy(displayFont);
         }
     }
 }

@@ -158,6 +158,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 939024b43794adc4d90581ddd9e087eb, type: 2}
   - {fileID: 11400000, guid: 7822bc817583d674d8f1c8436dbc12ea, type: 2}
   - {fileID: 11400000, guid: 731d18b39cbc9464493a5143c24ad3bf, type: 2}
+  nightBackground: {fileID: 2800000, guid: a8700617a79091f46bdf9037022fd350, type: 3}
+  runnerArtwork: {fileID: 2800000, guid: dcd2dd543490a5445a62a44984aa5797, type: 3}
 --- !u!4 &1740583680
 Transform:
   m_ObjectHideFlags: 0

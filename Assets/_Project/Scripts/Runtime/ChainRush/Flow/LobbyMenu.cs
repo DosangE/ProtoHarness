@@ -3,6 +3,7 @@ using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.ChainRush.Flow
 {
@@ -53,7 +54,7 @@ namespace ProtoHarness.ChainRush.Flow
         private static readonly string RunnerHelp = "↑ / ↓  선택      ENTER  결정      ESC  뒤로      마우스 드래그  회전";
         // The preview sits between the list and the right-hand panels, as tall as the stats panel's bottom; its texture is
         // drawn at twice the lobby's units.
-        private const float PreviewWidth = 364f, PreviewTop = 128f, PreviewHeight = 540f;
+        private const float PreviewWidth = 480f, PreviewTop = 165f, PreviewHeight = 480f;
         private const int PreviewTextureScale = 2;
         private static readonly string[] Keys =
         {
@@ -66,15 +67,17 @@ namespace ProtoHarness.ChainRush.Flow
             "SPACE   공격",
             "ESC   일시정지 (계속 · 재시작 · 로비)",
         };
-        private static readonly Color Ink = new Color(0.025f, 0.055f, 0.08f, 0.94f);
-        private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
-        private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
-        private static readonly Color Slate = new Color(0.2f, 0.3f, 0.33f);
+        private static readonly Color Ink = NightUi.Background;
+        private static readonly Color Mint = NightUi.Accent;
+        private static readonly Color Muted = NightUi.Muted;
+        private static readonly Color Slate = NightUi.Border;
         // Ink over the lobby's background, opaque, so the preview's texture matches the panels around it.
-        private static readonly Color PreviewBackground = new Color(0.026f, 0.056f, 0.081f, 1f);
+        private static readonly Color PreviewBackground = new Color(0, 0, 0, 0);
 
         [SerializeField] private TrackChoice[] tracks;
         [SerializeField] private RunnerProfile[] runners;
+        [SerializeField] private Texture2D nightBackground;
+        [SerializeField] private Texture2D runnerArtwork;
         private string[] trackOptions;
         private bool[] trackLocked;
         // Per track, its best record at the chosen speed class (RefreshRecords).
@@ -107,6 +110,11 @@ namespace ProtoHarness.ChainRush.Flow
         private GUIStyle enterButton;
         private GUIStyle backButton;
         private Font font;
+        private Font displayFont;
+        private GUIStyle brand;
+        private GUIStyle pageHeading;
+        private GUIStyle tileLabel;
+        private int pendingRow = -1;
 
         // Where the track page reads best records from (the player's; a test gives its own).
         public BestRecords Records
@@ -352,7 +360,7 @@ namespace ProtoHarness.ChainRush.Flow
         private static float GuiScale() => Mathf.Min(Screen.width / 1600f, Screen.height / 900f);
 
         // The preview's left edge in the lobby's units: centred between the list (ends at 732) and the right-hand panels.
-        private static float PreviewLeft(float width) => 732f + (width - 452f - 732f - PreviewWidth) * 0.5f;
+        private static float PreviewLeft(float width) => width * .27f;
 
         // Where the preview is drawn, in the lobby's units (OnGUI, y down).
         private static Rect PreviewRect(float width) => new Rect(PreviewLeft(width), PreviewTop, PreviewWidth, PreviewHeight);
@@ -400,7 +408,8 @@ namespace ProtoHarness.ChainRush.Flow
         private void InitializeStyles()
         {
             font = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 24);
-            if (font == null)
+            displayFont = NightUi.DisplayFont();
+            if (font == null || displayFont == null)
             {
                 Debug.LogError("LobbyMenu: could not create the font.", this);
                 enabled = false;
@@ -408,14 +417,18 @@ namespace ProtoHarness.ChainRush.Flow
             }
             small = Style(15, Muted);
             body = Style(21, Color.white);
-            heading = Style(32, Color.white, FontStyle.Bold);
+            heading = NightUi.Style(displayFont, 44, Color.white, FontStyle.BoldAndItalic);
+            brand = NightUi.Style(displayFont, 34, Color.white, FontStyle.BoldAndItalic);
+            pageHeading = NightUi.Style(displayFont, 52, Color.white, FontStyle.BoldAndItalic);
+            tileLabel = NightUi.Style(displayFont, 23, Color.white, FontStyle.Bold);
+            tileLabel.alignment = TextAnchor.MiddleCenter;
             item = Style(26, Color.white, FontStyle.Bold);
             item.alignment = TextAnchor.MiddleLeft;
             lockedItem = Style(26, Muted);
             lockedItem.alignment = TextAnchor.MiddleLeft;
             recordLine = Style(18, Muted);
             recordLine.alignment = TextAnchor.MiddleRight;
-            enterButton = Style(32, Ink, FontStyle.Bold);
+            enterButton = Style(28, Ink, FontStyle.Bold);
             enterButton.alignment = TextAnchor.MiddleCenter;
             backButton = Style(22, Color.white, FontStyle.Bold);
             backButton.alignment = TextAnchor.MiddleCenter;
@@ -438,107 +451,116 @@ namespace ProtoHarness.ChainRush.Flow
             float width = Screen.width / scale;
             float height = Screen.height / scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            Block(new Rect(0, 0, width, height), new Color(0.04f, 0.07f, 0.1f, 1f));
-            Block(new Rect(32, 26, 310, 74), Ink);
-            Block(new Rect(32, 26, 5, 74), Mint);
-            GUI.Label(new Rect(53, 37, 270, 38), "CHAIN / RUSH", heading);
-            GUI.Label(new Rect(55, 78, 280, 20), "LOBBY    /    " + PageTitles[(int)page], small);
-            // Beside the title on every page: ESC by mouse (user 2026-10-20), back one page or, from the main menu, to the title.
-            var backRect = new Rect(362, 26, 200, 74);
-            Block(backRect, Ink);
-            Block(new Rect(backRect.x, backRect.yMax - 4, backRect.width, 4), Muted);
+            NightUi.Backdrop(nightBackground, width, height);
+            GUI.Label(new Rect(64, 34, 400, 54), "CHAIN RUSH", brand);
+            GUI.Label(new Rect(64, 108, 900, 28), "SINGLE RACE  /  " + PageTitles[(int)page], small);
+            GUI.Label(new Rect(61, 145, 1050, 68), page == Page.Runner ? "CHOOSE YOUR RUNNER" : PageTitles[(int)page], pageHeading);
+            var backRect = new Rect(width - 250, 34, 186, 48);
+            NightUi.Surface(backRect);
             bool back = GUI.Button(backRect, "←  이전   ESC", backButton);
-
-            Block(new Rect(32, 128, 700, height - 248), Ink);
+            pendingRow = -1;
             if (page == Page.Keys) DrawKeys();
-            else DrawList();
-            GUI.Label(new Rect(70, height - 170, 640, 26), notice, body);
-            GUI.Label(new Rect(70, height - 92, 900, 24), page == Page.Settings ? SettingsHelp : page == Page.Runner ? RunnerHelp : Help, small);
+            else DrawList(width, height);
+            GUI.Label(new Rect(64, height - 113, 1000, 28), notice, body);
+            GUI.Label(new Rect(64, height - 58, width - 128, 28), page == Page.Settings ? SettingsHelp : page == Page.Runner ? RunnerHelp : Help, small);
 
-            Block(new Rect(width - 452, 128, 420, 250), Ink);
-            GUI.Label(new Rect(width - 420, 152, 360, 24), "RACE SETUP", small);
-            GUI.Label(new Rect(width - 420, 196, 360, 30), "트랙     " + trackOptions[track], body);
-            GUI.Label(new Rect(width - 420, 240, 360, 30), "속도     " + SpeedOptions[speed], body);
-            GUI.Label(new Rect(width - 420, 284, 360, 30), "러너     " + runnerOptions[SetupRunner], body);
-            GUI.Label(new Rect(width - 420, 328, 360, 24), "모드     싱글", small);
             bool enter = false;
             if (page == Page.Runner)
             {
                 DrawPreview(width, cursor);
                 DrawRunnerStats(width, cursor);
-                // Under the stats, down to the list panel's bottom: the one way into the race besides Enter.
-                var start = new Rect(width - 452, 688, 420, height - 120 - 688);
-                Block(start, Mint);
-                enter = GUI.Button(start, "입장   ENTER  →", enterButton);
+                var start = new Rect(width - 484, height - 240, 420, 140);
+                Block(start, NightUi.Action);
+                enter = GUI.Button(start, "레이스 시작   ENTER  →", enterButton);
+            }
+            else
+            {
+                NightUi.Portrait(runnerArtwork, runner, new Rect(width * .45f, 238, 340, 425));
+                NightUi.Surface(new Rect(width - 484, 238, 420, 286));
+                Block(new Rect(width - 484, 238, 420, 2), Mint);
+                GUI.Label(new Rect(width - 452, 264, 360, 28), "RACE SETUP", small);
+                GUI.Label(new Rect(width - 452, 313, 360, 34), trackOptions[track], body);
+                GUI.Label(new Rect(width - 452, 367, 360, 34), "속도  /  " + SpeedOptions[speed], body);
+                GUI.Label(new Rect(width - 452, 421, 360, 34), "러너  /  " + runnerOptions[SetupRunner], body);
+                GUI.Label(new Rect(width - 452, 477, 360, 28), "SINGLE RACE  /  STADIUM", small);
             }
             GUI.matrix = previous;
             // Acted on after drawing: either changes the page the rest of this draw would read.
             if (back) Back();
             else if (enter) Confirm();
+            else if (pendingRow >= 0)
+            {
+                if (page == Page.Runner) Highlight(pendingRow);
+                else { cursor = pendingRow; Confirm(); }
+            }
         }
 
         // The highlighted runner's look as the preview draws it, or a line when the runner has none.
         private void DrawPreview(float width, int shown)
         {
             Rect rect = PreviewRect(width);
-            Block(rect, Ink);
-            if (preview.HasModel(shown)) GUI.DrawTexture(rect, preview.Texture, ScaleMode.StretchToFill, false);
+            if (preview.HasModel(shown)) GUI.DrawTexture(rect, preview.Texture, ScaleMode.StretchToFill, true);
             else GUI.Label(new Rect(rect.x + 24, rect.y + rect.height * 0.5f - 15, rect.width - 48, 30), "디자인 없음", body);
         }
 
         // The highlighted runner's stats as bars between StatBarFloor and StatBarCeiling, with their scales.
         private void DrawRunnerStats(float width, int shown)
         {
-            Block(new Rect(width - 452, 398, 420, 270), Ink);
-            // As tall as the 32 px bold heading needs, or its bottom is cut off (user 2026-10-19).
-            GUI.Label(new Rect(width - 420, 416, 360, 44), runnerOptions[shown], heading);
+            NightUi.Surface(new Rect(width - 484, 238, 420, 382));
+            Block(new Rect(width - 484, 238, 420, 2), Mint);
+            GUI.Label(new Rect(width - 452, 261, 360, 28), "RUNNER PROFILE", small);
+            GUI.Label(new Rect(width - 452, 298, 360, 62), runnerOptions[shown], heading);
             for (int s = 0; s < StatNames.Length; s++)
             {
-                float y = 484 + s * 44;
-                GUI.Label(new Rect(width - 420, y, 120, 24), StatNames[s], small);
-                var bar = new Rect(width - 300, y + 6, 180, 8);
+                float y = 390 + s * 43;
+                GUI.Label(new Rect(width - 452, y, 120, 28), StatNames[s], small);
+                var bar = new Rect(width - 308, y + 9, 150, 6);
                 Block(bar, Slate);
                 bar.width *= Mathf.InverseLerp(StatBarFloor, StatBarCeiling, runnerStats[shown, s]);
                 Block(bar, Mint);
-                GUI.Label(new Rect(width - 106, y, 70, 24), runnerStatText[shown, s], small);
+                GUI.Label(new Rect(width - 135, y, 65, 28), runnerStatText[shown, s], small);
             }
+            GUI.Label(new Rect(width - 452, 574, 360, 28), trackOptions[track] + "  /  " + SpeedOptions[speed], small);
         }
 
-        private void DrawList()
+        private void DrawList(float width, float height)
         {
             string[] options = Options(page);
             bool[] locked = Locked(page);
             // A click is confirmed after the list is drawn: confirming opens another page, and the rest of this loop
             // would index that page's arrays with this page's rows (a click on 싱글 레이스 threw, 2026-10-20).
-            int clicked = -1;
             for (int i = 0; i < options.Length; i++)
             {
-                var row = new Rect(70, 170 + i * 84, 620, 68);
-                Block(row, i == cursor ? (locked[i] ? Slate : Mint) : new Color(0.08f, 0.13f, 0.16f, 1f));
+                bool runnerPage = page == Page.Runner;
+                float tileWidth = (width - 580) / options.Length;
+                var row = runnerPage ? new Rect(64 + i * tileWidth, height - 240, tileWidth - 12, 140)
+                    : new Rect(64, 238 + i * 86, 600, 70);
+                NightUi.Surface(row, i == cursor && !locked[i]);
                 GUIStyle style = locked[i] ? lockedItem : item;
-                Color text = style.normal.textColor;
-                if (i == cursor && !locked[i]) style.normal.textColor = Ink;
-                if (GUI.Button(new Rect(row.x + 26, row.y, row.width - 26, row.height), locked[i] ? options[i] + "   (잠김)" : options[i], style))
-                    clicked = i;
-                style.normal.textColor = text;
+                if (runnerPage)
+                {
+                    if (GUI.Button(row, GUIContent.none, GUIStyle.none)) pendingRow = i;
+                    NightUi.Portrait(runnerArtwork, i, new Rect(row.center.x - 42, row.y + 1, 84, 105));
+                    GUI.Label(new Rect(row.x + 8, row.y + 103, row.width - 16, 34), options[i], tileLabel);
+                }
+                else if (GUI.Button(new Rect(row.x + 26, row.y, row.width - 26, row.height), locked[i] ? options[i] + "   (잠김)" : options[i], style))
+                    pendingRow = i;
                 if (page == Page.Track)
                 {
-                    recordLine.normal.textColor = i == cursor ? Ink : Muted;
-                    GUI.Label(new Rect(row.x + 260, row.y, row.width - 284, row.height), trackRecords[i], recordLine);
+                    recordLine.normal.textColor = Muted;
+                    GUI.Label(new Rect(row.x + 225, row.y, row.width - 249, row.height), trackRecords[i], recordLine);
                 }
                 else if (page == Page.Settings && i != SettingKeys)
                 {
-                    recordLine.normal.textColor = i == cursor ? Ink : Muted;
-                    GUI.Label(new Rect(row.x + 260, row.y, row.width - 284, row.height), SettingValue(i), recordLine);
+                    recordLine.normal.textColor = Mint;
+                    if (i < SettingSpeedView)
+                    {
+                        int level = i == SettingMaster ? settings.MasterLevel : i == SettingMusic ? settings.MusicLevel : settings.EffectsLevel;
+                        var bar = new Rect(row.x + 283, row.y + 33, 180, 5);
+                        Block(bar, Slate); bar.width *= (float)level / GameSettings.MaxLevel; Block(bar, Mint);
+                    }
+                    GUI.Label(new Rect(row.x + 485, row.y, 88, row.height), SettingValue(i), recordLine);
                 }
-            }
-            if (clicked < 0) return;
-            // On the runner page a click only picks the runner; the enter button (or Enter) starts the race (user 2026-10-20).
-            if (page == Page.Runner) Highlight(clicked);
-            else
-            {
-                cursor = clicked;
-                Confirm();
             }
         }
 
@@ -553,13 +575,13 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void DrawKeys()
         {
-            GUI.Label(new Rect(70, 168, 600, 36), "조작 키", heading);
-            for (int i = 0; i < Keys.Length; i++) GUI.Label(new Rect(70, 226 + i * 44, 620, 30), Keys[i], body);
+            for (int i = 0; i < Keys.Length; i++) GUI.Label(new Rect(64, 245 + i * 48, 650, 36), Keys[i], body);
         }
 
         private void OnDestroy()
         {
             if (font != null) Destroy(font);
+            if (displayFont != null) Destroy(displayFont);
             preview?.Release();
         }
     }

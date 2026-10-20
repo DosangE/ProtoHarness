@@ -5,6 +5,7 @@ using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -28,6 +29,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
 
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
+        private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
         private TrackDefinition made;
         // A runner of all 1s: races exactly as the scene's values.
@@ -141,9 +143,74 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Move(2);
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
-            menu.Confirm();
+            menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+        }
+
+        // ---- settings (M2-c, user 2026-10-20) --------------------------------------------------------------
+
+        [UnityTest]
+        public IEnumerator Lobby_SettingsPage_AdjustsOnlyTheHighlightedSettingAndOpensTheKeys()
+        {
+            var store = TestSettings();
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Settings = store;
+            try
+            {
+                menu.Adjust(1);
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Adjusting does nothing off the settings page.");
+                menu.Move(2);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                Assert.That(menu.Cursor, Is.EqualTo(0));
+                menu.Adjust(1);
+                Assert.That(store.MasterLevel, Is.EqualTo(GameSettings.MaxLevel), "A volume stops at the top.");
+                for (int i = 0; i < 11; i++) menu.Adjust(-1);
+                Assert.That(store.MasterLevel, Is.EqualTo(0), "A volume stops at zero, it does not wrap.");
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel));
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.SpeedFieldOfView, Is.True);
+                menu.Move(1);
+                menu.Adjust(1);
+                Assert.That(store.SpeedFieldOfView, Is.False, "Either direction switches the speed view.");
+                menu.Confirm();
+                Assert.That(store.SpeedFieldOfView, Is.True, "Enter switches it too.");
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                menu.Move(-3);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings), "Enter on a volume row does nothing.");
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                menu.Move(4);
+                menu.Adjust(-1);
+                menu.Adjust(1);
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings), "The keys row has nothing to adjust.");
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.SpeedFieldOfView, Is.True);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Keys));
+                menu.Back();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                Assert.That(menu.Cursor, Is.EqualTo(4), "Back on the keys row.");
+                menu.Back();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+            }
+            finally
+            {
+                store.Clear();
+            }
         }
 
         // ---- the race scene ------------------------------------------------------------------------------
@@ -164,6 +231,30 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Find<RunnerMotor>(assembler.gameObject.scene).Profile, Is.SameAs(runner), "The runner races the lobby's profile.");
             Assert.That(assembler.IsAssembling, Is.False, "No environment scene: it counts in at once.");
             Assert.That(game.IsCountingDown, Is.True);
+        }
+
+        // The chosen runner's look is what the race shows (presentation only, RunnerLook): BETA from the lobby puts BETA's
+        // look on the runner model, part by part in order.
+        [UnityTest]
+        public IEnumerator Race_FromTheLobby_WearsTheChosenRunnersLook()
+        {
+            RunnerProfile beta = Beta();
+            Assert.That(beta.Look, Is.Not.Null, "BETA has no look.");
+            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.Fast, beta));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            Assert.That(assembler.IsLaunched, Is.True);
+            Transform body = Find<RunnerTilt>(assembler.gameObject.scene).Body;
+            MeshFilter[] worn = body.GetComponentsInChildren<MeshFilter>(true);
+            MeshFilter[] look = beta.Look.GetComponentsInChildren<MeshFilter>(true);
+            Assert.That(worn.Length, Is.EqualTo(look.Length));
+            Assert.That(worn.Length, Is.GreaterThan(0));
+            for (int i = 0; i < worn.Length; i++)
+            {
+                Assert.That(worn[i].sharedMesh, Is.SameAs(look[i].sharedMesh), worn[i].name);
+                Assert.That(worn[i].GetComponent<MeshRenderer>().sharedMaterials,
+                    Is.EqualTo(look[i].GetComponent<MeshRenderer>().sharedMaterials), worn[i].name);
+            }
         }
 
         [UnityTest]
@@ -297,12 +388,32 @@ namespace ProtoHarness.Tests.PlayMode
             return store;
         }
 
+        // Settings under a test prefix, at their defaults, so the player's settings are never touched.
+        private GameSettings TestSettings()
+        {
+            var store = new GameSettings("ChainRush.Test.ChainRushFlowTests.Settings.");
+            store.Clear();
+            return store;
+        }
+
         private static T Find<T>(Scene scene) where T : Component
         {
             foreach (GameObject root in scene.GetRootGameObjects())
                 if (root.TryGetComponent(out T component)) return component;
             Assert.Fail($"Scene '{scene.name}' has no {typeof(T).Name} at its roots.");
             return null;
+        }
+
+        private static RunnerProfile Beta()
+        {
+#if UNITY_EDITOR
+            var beta = AssetDatabase.LoadAssetAtPath<RunnerProfile>(BetaPath);
+            Assert.That(beta, Is.Not.Null, BetaPath);
+            return beta;
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            return null;
+#endif
         }
 
         private static TrackDefinition Stadium()

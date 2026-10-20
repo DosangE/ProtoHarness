@@ -1,4 +1,5 @@
 using ProtoHarness.ChainRush.Race;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -6,7 +7,7 @@ using UnityEngine.SceneManagement;
 namespace ProtoHarness.ChainRush.Flow
 {
     // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
-    // the circuit is built, gives the runner the chosen profile, loads the track's environment scene additively, then counts the race in. A finish
+    // the circuit is built, gives the runner the chosen profile and its look, loads the track's environment scene additively, then counts the race in. A finish
     // goes to the best records (BestRecords). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
@@ -61,7 +62,34 @@ namespace ProtoHarness.ChainRush.Flow
             }
             circuit.UseDefinition(setup.Track);
             player.Configure(setup.Runner);
+            if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
+        }
+
+        // Puts the runner's look on the race's runner model (presentation only, RunnerLook). A look that does not fit
+        // the model is refused loudly and the race is not run in it: there is no right look to fall back to.
+        private bool TryDress(GameObject look)
+        {
+            Transform model = player.TryGetComponent(out RunnerTilt tilt) ? tilt.Body : null;
+            if (model == null)
+            {
+                Debug.LogError($"RaceAssembler: the runner has no RunnerTilt with a body to wear the look '{look.name}'.", this);
+                game.enabled = false;
+                enabled = false;
+                return false;
+            }
+            try
+            {
+                RunnerLook.Apply(model, look);
+            }
+            catch (System.ArgumentException e)
+            {
+                Debug.LogException(e, this);
+                game.enabled = false;
+                enabled = false;
+                return false;
+            }
+            return true;
         }
 
         private void Start()

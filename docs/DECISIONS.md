@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-10-20 · M2-c 설정 · 로비 클릭 버그 · 러너 디자인 5종 연결 (아트 AI 병행)
+
+- **결정 (사용자, 2026-10-20, `feature/m2-settings`)**:
+  - M2-c 항목: 추천 1차안 "ㅇㅋ" — 전체·음악·효과음 볼륨(0~10)과 속도 시야 효과(켬/끔), 조작 키는 하위 페이지. 화면(창/전체·해상도·VSync)은 에디터에서 검증할 수 없어 플레이어 빌드 때로, 피격 깜빡임은 서킷에 맞을 대상이 없어 뺐다. 저장은 `PlayerPrefs`(2026-10-19 "저장방식은 그대로").
+  - **손상된 저장값**: "1승인" — 생성 시 키·값을 `Debug.LogError` 로 알리고 그 항목만 기본값, 저장값은 덮어쓰지 않는다(`GameSettings.ReadLevel`·`ReadSwitch`). 이유: 예외를 던지면 `static Player` 초기화가 `TypeInitializationException` 이 되어 로비·오디오·카메라가 함께 깨지고 플레이어가 고칠 길이 없다. 잡아서 삼키는 예외가 없고 로그가 남아 §5 위반이 아니다(리뷰). 버린 대안: 예외(위 이유), 지연 로드 후 예외(컴포넌트 Awake 에서 터져 이후 매 프레임 NullReference).
+  - 리뷰 권고 "2 a,b,c,d ㄱㄱ": 손상값 테스트, 로비 설정 페이지 PlayMode 테스트, 키 문자열을 생성자에서 한 번, 설정 페이지 하단 "← / →  조절" 안내.
+  - `ChainRushFlowTests.Lobby_BackAndSettings_GoPageByPage` 의 설정 페이지 `Confirm()` → `Back()`: 사양 변경(설정에서 Enter 는 항목 선택)으로 사용자 승인.
+  - **로비 마우스 클릭 버그** ("1 브랜치 2 ㄱ"): 메인에서 "싱글 레이스"를 클릭하면 `IndexOutOfRangeException at LobbyMenu.cs:433`. `DrawList` 반복 도중 `GUI.Button` → `Confirm()` 이 페이지를 바꿔 남은 줄이 새 페이지의 배열(`trackRecords`)을 읽었다. `caf9338`(로비 최고 기록) 때부터 있었다. 키보드 Enter 는 `Update` 라 나지 않고, 테스트는 `Confirm()` 을 직접 불러 잡지 못했다. 클릭한 줄만 기억했다가 반복 뒤에 `Confirm()` 한다. 실제 마우스 이벤트가 필요해 고치기 전 실패 테스트는 없다 — 사용자가 수동 클릭 확인으로 받아들였다(VERIFICATION §4-4 예외).
+  - **러너 디자인 연결**: "진행하라 그리고 각 러너 별로 어울릴만한 디자인을 골라서 적용까지". `RunnerProfile.look`(비면 씬 모형 그대로) → `RaceAssembler` 가 능력치 다음 `RunnerLook.Apply` 로 메시·재질만 옮긴다(자식 순서로 전부 검사한 뒤에만 복사, 어긋나면 `ArgumentException` → 레이스를 끔). 매핑은 능력치로 골랐고 같은 이름 디자인이 맞았다: ALPHA(전부 1.0) 청록 표준형, BETA(가속 1.2·무게 0.9) 주황 등 추진기, DELTA(게이지 1.2) 보라 에너지 링, THETA(최고 속도 1.03) 흰색 날개, OMEGA(무게 1.2) 검정 중장형. 연결은 `Unity_RunCommand`(SerializedObject, 다섯 디자인을 `LoadPrefabContents` 복사본에 먼저 적용해 본 뒤) — 에셋마다 `look:` 1줄.
+- **아트 AI 병행** (사용자 "다른 ai 에게 아트적인 요소 작업시킬건데"): 같은 폴더·같은 브랜치에서, 파일 경계(아트 = 장식 씬·`ArmoredRunner`·`Art/`·`docs/ART_UI.md`, 코드 = `Scripts/`)와 에디터 시간 나누기(검증 전 아트가 저장하고 손 뗌, 사용자가 신호 중계)로 진행했다. 다른 브랜치·클론은 §9-2(워크트리 금지)와 Unity MCP 가 어느 에디터에 붙는지 확인 못 한 문제로 쓰지 않았다. 아트의 `Unity_RunCommand` 는 사용자가 코드 전문을 보고 승인했다. 아트가 만든 것: 스타디움 장식(관중석 2,048석·육상 트랙 등, 물리 0), `ArmoredRunner` 모서리 메시, 러너 디자인 5종(`Art/Models/Runner*.prefab`, 계층은 `ArmoredRunner` 와 같음). 커밋은 경로로 나눴다(`47bbe68` 설정, `13c24c5` 아트, `2c2111f` 디자인 연결).
+- **M7 할 일**: `RemoteGhost` 는 로컬 `RunnerTilt.Body` 를 복제하므로 멀티에서 상대가 **내** 디자인으로 보인다(리뷰). 멀티가 잠긴 동안은 닿지 않는다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋한 내용 = 3차 검증 때의 작업 트리 + 이 머신 버전 차이 파일 3개 제외):
+  - 1차(M2-c): EditMode `testcasecount="243" result="Passed" passed="243"` (04:56:21Z), 게이트 `testcasecount="165" result="Passed" passed="158" failed="0" skipped="7"` (04:57:02Z~05:04:24Z).
+  - 2차(클릭 수정 + 장식 씬 확장): EditMode `243 Passed` (05:41:50Z), 게이트 `testcasecount="165" result="Passed" passed="158" failed="0" skipped="7"` (05:42:27Z~05:49:20Z).
+  - 3차(디자인 연결): 컴파일 `Tundra build success`, `error CS` 0건. EditMode `testcasecount="249" result="Passed" passed="249" failed="0"` (06:22:19Z~06:22:23Z). 게이트 `testcasecount="167" result="Passed" passed="160" failed="0" skipped="7"` (06:23:03Z~06:30:07Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3.
+  - 서킷 지문 세 번 모두 `0x18F31E7A2B4F79B3` 그대로(설정·디자인·장식은 표현만).
+  - 실행 뒤 Console 의 Error 2건은 테스트가 기대한 로그(`cannot be raced yet`, `must be positive`).
+  - `tools/select-tests.ps1 -Range dev...HEAD`: "전체"(프로필 `.asset`·장식 씬·`Prefabs/`). `Long` 은 Endless 보류로 돌리지 않음, 입력 장치 경로를 바꾸지 않아 Device 해당 없음.
+  - 사용자 플레이 확인: "플레이 확인했다"(2026-10-20 — 클릭, 설정, 디자인 5종).
+
 ## 2026-10-19 · 그래플: 앵커 높이 안에서만 건다 · 공중 가속 · NetReconcile 1건 M7 까지 보류
 
 - **결정 (사용자, 2026-10-19 새 세션, `fix/swing-boost-grapple`)**:

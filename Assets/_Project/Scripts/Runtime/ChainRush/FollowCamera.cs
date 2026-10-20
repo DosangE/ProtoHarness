@@ -1,4 +1,6 @@
+using System;
 using UnityEngine;
+using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 
@@ -19,9 +21,19 @@ namespace ProtoHarness.ChainRush
         private float yaw;
         private float swingBlend;
         private float insideSign = 1f;
+        // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
+        private GameSettings settings;
+
+        // Whether the view widens with speed comes from here (the player's lobby settings; a test gives its own).
+        public GameSettings Settings
+        {
+            get => settings;
+            set => settings = value ?? throw new ArgumentNullException(nameof(value));
+        }
 
         private void Awake()
         {
+            if (settings == null) settings = GameSettings.Player;
             if (target == null || game == null || viewCamera == null)
             {
                 Debug.LogError("FollowCamera: target, game and camera must be assigned.", this);
@@ -56,7 +68,8 @@ namespace ProtoHarness.ChainRush
             Vector3 lookPoint = targetPosition + turn * LookAhead;
             transform.rotation = Quaternion.Slerp(transform.rotation,
                 Quaternion.LookRotation(lookPoint - transform.position), 8f * Time.deltaTime);
-            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + Mathf.Min(target.Speed, 30f) * 0.5f + SwingLook.CameraFieldOfView * swingBlend, Time.deltaTime * 3f);
+            float speedView = settings.SpeedFieldOfView ? Mathf.Min(target.Speed, 30f) * 0.5f : 0f;
+            viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, 62f + speedView + SwingLook.CameraFieldOfView * swingBlend, Time.deltaTime * 3f);
         }
 
         public void ShiftOrigin(Vector3 offset) => transform.position += offset;

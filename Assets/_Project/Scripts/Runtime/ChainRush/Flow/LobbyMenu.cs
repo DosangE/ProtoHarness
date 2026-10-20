@@ -9,9 +9,10 @@ namespace ProtoHarness.ChainRush.Flow
     // The lobby: main menu (single race / multi, locked / settings), then for a single race the track, the speed class
     // and the runner, then RaceLaunch and the race scene. ↑/↓ choose, Enter confirms, ESC goes back (from the main menu,
     // to the title). Locked entries are shown but refuse with a notice. Drawn like ChainRushHud (OnGUI, 1600 x 900).
+    // The settings page (M2-c) lists the volumes and the speed field of view, changed with ←/→, and opens the keys page.
     public sealed class LobbyMenu : MonoBehaviour
     {
-        public enum Page { Main, Settings, Track, Speed, Runner }
+        public enum Page { Main, Settings, Track, Speed, Runner, Keys }
 
         // One track the lobby offers: what the circuit is built from and the scene loaded around it for looks.
         [Serializable]
@@ -30,6 +31,11 @@ namespace ProtoHarness.ChainRush.Flow
         private const int MainSingle = 0, MainMulti = 1, MainSettings = 2;
         private static readonly string[] MainOptions = { "싱글 레이스", "멀티 레이스", "설정" };
         private static readonly bool[] MainLocked = { false, true, false };
+        private const int SettingMaster = 0, SettingMusic = 1, SettingEffects = 2, SettingSpeedView = 3, SettingKeys = 4;
+        private static readonly string[] SettingsOptions = { "전체 볼륨", "음악", "효과음", "속도 시야 효과", "조작 키" };
+        private static readonly bool[] SettingsLocked = { false, false, false, false, false };
+        // A volume row's value, by level ("0" .. "10"), made once.
+        private static readonly string[] LevelTexts = MakeLevelTexts();
         private static readonly SpeedClass[] Speeds = { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast };
         private static readonly string[] SpeedOptions = { "보통", "빠름", "매우빠름" };
         private static readonly bool[] SpeedLocked = { true, false, true };
@@ -38,7 +44,10 @@ namespace ProtoHarness.ChainRush.Flow
         private const float StatBarFloor = 0.7f, StatBarCeiling = 1.3f;
         private static readonly string[] NoOptions = new string[0];
         private static readonly bool[] NoLocks = new bool[0];
-        private static readonly string[] PageTitles = { "MAIN MENU", "SETTINGS", "TRACK", "SPEED", "RUNNER" };
+        private static readonly string[] PageTitles = { "MAIN MENU", "SETTINGS", "TRACK", "SPEED", "RUNNER", "KEYS" };
+        // The help line under the list; the settings page also names ←/→.
+        private static readonly string Help = "↑ / ↓  선택      ENTER  결정      ESC  뒤로";
+        private static readonly string SettingsHelp = "↑ / ↓  선택      ← / →  조절      ENTER  결정      ESC  뒤로";
         private static readonly string[] Keys =
         {
             "↑   가속",
@@ -62,6 +71,8 @@ namespace ProtoHarness.ChainRush.Flow
         // Per track, its best record at the chosen speed class (RefreshRecords).
         private string[] trackRecords;
         private BestRecords records = BestRecords.Player;
+        // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
+        private GameSettings settings;
         private string[] runnerOptions;
         private bool[] runnerLocked;
         // Per runner: the four stats (StatNames order) and their "x1.03" labels, made once.
@@ -93,6 +104,12 @@ namespace ProtoHarness.ChainRush.Flow
                 if (trackRecords != null) RefreshRecords();
             }
         }
+        // Where the settings page reads and writes the settings (the player's; a test gives its own).
+        public GameSettings Settings
+        {
+            get => settings;
+            set => settings = value ?? throw new ArgumentNullException(nameof(value));
+        }
         public Page CurrentPage => page;
         // The track page's record line for a track: "최고 기록  01:19.2 · BETA", or "기록 없음".
         public string TrackRecordText(int index) => trackRecords[index];
@@ -102,6 +119,7 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Awake()
         {
+            if (settings == null) settings = GameSettings.Player;
             if (tracks == null || tracks.Length == 0)
             {
                 Debug.LogError("LobbyMenu: at least one track is required.", this);
@@ -176,6 +194,8 @@ namespace ProtoHarness.ChainRush.Flow
             if (keyboard == null) return;
             if (keyboard.upArrowKey.wasPressedThisFrame) Move(-1);
             else if (keyboard.downArrowKey.wasPressedThisFrame) Move(1);
+            else if (keyboard.leftArrowKey.wasPressedThisFrame) Adjust(-1);
+            else if (keyboard.rightArrowKey.wasPressedThisFrame) Adjust(1);
             else if (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame) Confirm();
             else if (keyboard.escapeKey.wasPressedThisFrame) Back();
         }
@@ -189,7 +209,25 @@ namespace ProtoHarness.ChainRush.Flow
             notice = "";
         }
 
-        // Chooses the highlighted entry. On the runner page this starts the race.
+        // Changes the highlighted setting: a volume by delta levels, stopping at 0 and MaxLevel (no wrapping); the speed
+        // field of view switches whichever way. Nothing off the settings page or on the keys row.
+        public void Adjust(int delta)
+        {
+            if (!enabled || leaving || page != Page.Settings) return;
+            notice = "";
+            switch (cursor)
+            {
+                case SettingMaster: settings.SetMasterLevel(Step(settings.MasterLevel, delta)); break;
+                case SettingMusic: settings.SetMusicLevel(Step(settings.MusicLevel, delta)); break;
+                case SettingEffects: settings.SetEffectsLevel(Step(settings.EffectsLevel, delta)); break;
+                case SettingSpeedView: settings.SetSpeedFieldOfView(!settings.SpeedFieldOfView); break;
+            }
+        }
+
+        private static int Step(int level, int delta) => Mathf.Clamp(level + delta, 0, GameSettings.MaxLevel);
+
+        // Chooses the highlighted entry. On the runner page this starts the race. On the settings page a volume row
+        // does nothing (←/→ change it), the speed field of view switches and the keys row opens the keys page.
         public void Confirm()
         {
             if (!enabled || leaving) return;
@@ -206,7 +244,11 @@ namespace ProtoHarness.ChainRush.Flow
                     else if (cursor == MainSettings) Open(Page.Settings, 0);
                     break;
                 case Page.Settings:
-                    Open(Page.Main, MainSettings);
+                    if (cursor == SettingSpeedView) settings.SetSpeedFieldOfView(!settings.SpeedFieldOfView);
+                    else if (cursor == SettingKeys) Open(Page.Keys, 0);
+                    break;
+                case Page.Keys:
+                    Open(Page.Settings, SettingKeys);
                     break;
                 case Page.Track:
                     track = cursor;
@@ -238,6 +280,7 @@ namespace ProtoHarness.ChainRush.Flow
                 case Page.Track: Open(Page.Main, MainSingle); break;
                 case Page.Speed: Open(Page.Track, track); break;
                 case Page.Runner: Open(Page.Speed, speed); break;
+                case Page.Keys: Open(Page.Settings, SettingKeys); break;
             }
         }
 
@@ -260,10 +303,24 @@ namespace ProtoHarness.ChainRush.Flow
         }
 
         private string[] Options(Page of) =>
-            of == Page.Main ? MainOptions : of == Page.Track ? trackOptions : of == Page.Speed ? SpeedOptions : of == Page.Runner ? runnerOptions : NoOptions;
+            of == Page.Main ? MainOptions : of == Page.Settings ? SettingsOptions : of == Page.Track ? trackOptions
+            : of == Page.Speed ? SpeedOptions : of == Page.Runner ? runnerOptions : NoOptions;
 
         private bool[] Locked(Page of) =>
-            of == Page.Main ? MainLocked : of == Page.Track ? trackLocked : of == Page.Speed ? SpeedLocked : of == Page.Runner ? runnerLocked : NoLocks;
+            of == Page.Main ? MainLocked : of == Page.Settings ? SettingsLocked : of == Page.Track ? trackLocked
+            : of == Page.Speed ? SpeedLocked : of == Page.Runner ? runnerLocked : NoLocks;
+
+        // A settings row's value: the level, or 켬 / 끔. The keys row has none.
+        private string SettingValue(int row) =>
+            row == SettingMaster ? LevelTexts[settings.MasterLevel] : row == SettingMusic ? LevelTexts[settings.MusicLevel]
+            : row == SettingEffects ? LevelTexts[settings.EffectsLevel] : row == SettingSpeedView ? (settings.SpeedFieldOfView ? "켬" : "끔") : "";
+
+        private static string[] MakeLevelTexts()
+        {
+            var texts = new string[GameSettings.MaxLevel + 1];
+            for (int level = 0; level < texts.Length; level++) texts[level] = level.ToString();
+            return texts;
+        }
 
         private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal)
         {
@@ -320,10 +377,10 @@ namespace ProtoHarness.ChainRush.Flow
             GUI.Label(new Rect(55, 78, 280, 20), "LOBBY    /    " + PageTitles[(int)page], small);
 
             Block(new Rect(32, 128, 700, height - 248), Ink);
-            if (page == Page.Settings) DrawKeys();
+            if (page == Page.Keys) DrawKeys();
             else DrawList();
             GUI.Label(new Rect(70, height - 170, 640, 26), notice, body);
-            GUI.Label(new Rect(70, height - 92, 900, 24), "↑ / ↓  선택      ENTER  결정      ESC  뒤로", small);
+            GUI.Label(new Rect(70, height - 92, 900, 24), page == Page.Settings ? SettingsHelp : Help, small);
 
             Block(new Rect(width - 452, 128, 420, 250), Ink);
             GUI.Label(new Rect(width - 420, 152, 360, 24), "RACE SETUP", small);
@@ -357,6 +414,9 @@ namespace ProtoHarness.ChainRush.Flow
         {
             string[] options = Options(page);
             bool[] locked = Locked(page);
+            // A click is confirmed after the list is drawn: confirming opens another page, and the rest of this loop
+            // would index that page's arrays with this page's rows (a click on 싱글 레이스 threw, 2026-10-20).
+            int clicked = -1;
             for (int i = 0; i < options.Length; i++)
             {
                 var row = new Rect(70, 170 + i * 84, 620, 68);
@@ -365,17 +425,22 @@ namespace ProtoHarness.ChainRush.Flow
                 Color text = style.normal.textColor;
                 if (i == cursor && !locked[i]) style.normal.textColor = Ink;
                 if (GUI.Button(new Rect(row.x + 26, row.y, row.width - 26, row.height), locked[i] ? options[i] + "   (잠김)" : options[i], style))
-                {
-                    cursor = i;
-                    Confirm();
-                }
+                    clicked = i;
                 style.normal.textColor = text;
                 if (page == Page.Track)
                 {
                     recordLine.normal.textColor = i == cursor ? Ink : Muted;
                     GUI.Label(new Rect(row.x + 260, row.y, row.width - 284, row.height), trackRecords[i], recordLine);
                 }
+                else if (page == Page.Settings && i != SettingKeys)
+                {
+                    recordLine.normal.textColor = i == cursor ? Ink : Muted;
+                    GUI.Label(new Rect(row.x + 260, row.y, row.width - 284, row.height), SettingValue(i), recordLine);
+                }
             }
+            if (clicked < 0) return;
+            cursor = clicked;
+            Confirm();
         }
 
         private void DrawKeys()

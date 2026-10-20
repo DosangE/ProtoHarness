@@ -141,9 +141,74 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Move(2);
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
-            menu.Confirm();
+            menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+        }
+
+        // ---- settings (M2-c, user 2026-10-20) --------------------------------------------------------------
+
+        [UnityTest]
+        public IEnumerator Lobby_SettingsPage_AdjustsOnlyTheHighlightedSettingAndOpensTheKeys()
+        {
+            var store = TestSettings();
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Settings = store;
+            try
+            {
+                menu.Adjust(1);
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Adjusting does nothing off the settings page.");
+                menu.Move(2);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                Assert.That(menu.Cursor, Is.EqualTo(0));
+                menu.Adjust(1);
+                Assert.That(store.MasterLevel, Is.EqualTo(GameSettings.MaxLevel), "A volume stops at the top.");
+                for (int i = 0; i < 11; i++) menu.Adjust(-1);
+                Assert.That(store.MasterLevel, Is.EqualTo(0), "A volume stops at zero, it does not wrap.");
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel));
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.SpeedFieldOfView, Is.True);
+                menu.Move(1);
+                menu.Adjust(1);
+                Assert.That(store.SpeedFieldOfView, Is.False, "Either direction switches the speed view.");
+                menu.Confirm();
+                Assert.That(store.SpeedFieldOfView, Is.True, "Enter switches it too.");
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                menu.Move(-3);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings), "Enter on a volume row does nothing.");
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                menu.Move(4);
+                menu.Adjust(-1);
+                menu.Adjust(1);
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings), "The keys row has nothing to adjust.");
+                Assert.That(store.MasterLevel, Is.EqualTo(0));
+                Assert.That(store.MusicLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.EffectsLevel, Is.EqualTo(GameSettings.MaxLevel - 1));
+                Assert.That(store.SpeedFieldOfView, Is.True);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Keys));
+                menu.Back();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                Assert.That(menu.Cursor, Is.EqualTo(4), "Back on the keys row.");
+                menu.Back();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+            }
+            finally
+            {
+                store.Clear();
+            }
         }
 
         // ---- the race scene ------------------------------------------------------------------------------
@@ -294,6 +359,14 @@ namespace ProtoHarness.Tests.PlayMode
         {
             var store = new BestRecords("ChainRush.Test.FlowTests.");
             store.Clear(Stadium().name, SpeedClass.Fast);
+            return store;
+        }
+
+        // Settings under a test prefix, at their defaults, so the player's settings are never touched.
+        private GameSettings TestSettings()
+        {
+            var store = new GameSettings("ChainRush.Test.ChainRushFlowTests.Settings.");
+            store.Clear();
             return store;
         }
 

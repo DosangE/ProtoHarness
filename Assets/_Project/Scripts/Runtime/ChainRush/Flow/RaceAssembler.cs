@@ -121,7 +121,7 @@ namespace ProtoHarness.ChainRush.Flow
         private void Update()
         {
             if (!launched) return;
-            // Each finish counts once; a restart (R) clears it and the next finish counts again.
+            // Each finish counts once; a restart (pause menu or RUN AGAIN) clears it and the next finish counts again.
             bool finished = game.HasFinished;
             if (finished && !wasFinished)
                 LastFinishWasBest = records.Submit(setup.Track.name, setup.Speed, circuit.Laps.TotalTicks, setup.Runner.DisplayName);

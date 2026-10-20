@@ -105,6 +105,63 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(RaceLaunch.HasPending, Is.False, "Nothing is requested before the runner is confirmed.");
         }
 
+        // The runner page's preview follows the highlight and really draws the runner; it stops drawing off that page.
+        [UnityTest]
+        public IEnumerator Lobby_RunnerPage_PreviewShowsAndDrawsTheHighlightedRunner()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            RunnerPreview preview = menu.Preview;
+            Assert.That(preview, Is.Not.Null);
+            Assert.That(preview.Rendering, Is.False, "The main menu draws no preview.");
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            Assert.That(preview.Rendering, Is.True);
+            Assert.That(preview.Shown, Is.EqualTo(0));
+            for (int i = 0; i < 5; i++) Assert.That(preview.HasModel(i), Is.True, $"Runner {i} has a look.");
+            Assert.That(preview.IsVisible(0), Is.True);
+
+            menu.Move(1);
+            Assert.That(preview.Shown, Is.EqualTo(1));
+            Assert.That(preview.IsVisible(1), Is.True);
+            Assert.That(preview.IsVisible(0), Is.False);
+            for (int frame = 0; frame < 3; frame++) yield return null;
+            yield return new WaitForEndOfFrame();
+            Assert.That(DrawnPixels(preview.Texture), Is.GreaterThan(500), "The runner is drawn in the middle of the preview.");
+
+            menu.Back();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            Assert.That(preview.Rendering, Is.False, "Leaving the runner page stops the preview.");
+        }
+
+        // On the runner page a click (Highlight) only picks the runner; the enter button or Enter (Confirm) starts the race.
+        [UnityTest]
+        public IEnumerator Lobby_RunnerPage_HighlightPicksWithoutStarting()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            menu.Highlight(2);
+            Assert.That(menu.Cursor, Is.EqualTo(2));
+            Assert.That(menu.Preview.Shown, Is.EqualTo(2));
+            Assert.That(menu.SetupRunner, Is.EqualTo(2), "RACE SETUP names the runner being picked (user 2026-10-20).");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            Assert.That(RaceLaunch.HasPending, Is.False, "Highlighting starts nothing.");
+            menu.Highlight(0);
+            Assert.That(menu.Cursor, Is.EqualTo(0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(5));
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(-1));
+            Assert.That(menu.Cursor, Is.EqualTo(0));
+            menu.Highlight(3);
+            menu.Back();
+            Assert.That(menu.SetupRunner, Is.EqualTo(0), "Off the runner page it names the runner last entered with (none yet: the first).");
+        }
+
         [UnityTest]
         public IEnumerator Lobby_LockedEntries_RefuseWithANoticeAndStay()
         {
@@ -231,6 +288,86 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Find<RunnerMotor>(assembler.gameObject.scene).Profile, Is.SameAs(runner), "The runner races the lobby's profile.");
             Assert.That(assembler.IsAssembling, Is.False, "No environment scene: it counts in at once.");
             Assert.That(game.IsCountingDown, Is.True);
+        }
+
+        // ESC's pause menu in a race from the lobby (user 2026-10-20): continue, restart and back to the lobby, the
+        // highlight wrapping over all three and back on continue once the game runs again.
+        [UnityTest]
+        public IEnumerator Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby()
+        {
+            made = ScriptableObject.CreateInstance<TrackDefinition>();
+            Assert.That(made.TryValidate(out string error), Is.True, error);
+            RaceLaunch.Request(new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
+            ChainRushHud hud = Find<ChainRushHud>(assembler.gameObject.scene);
+            Assert.Throws<InvalidOperationException>(() => hud.ChoosePause(ChainRushHud.PauseChoice.Continue), "Not paused: no menu.");
+            game.StartRun();
+            game.TogglePause();
+            Assert.That(game.IsPaused, Is.True);
+            foreach (ChainRushHud.PauseChoice choice in Enum.GetValues(typeof(ChainRushHud.PauseChoice)))
+                Assert.That(hud.Offers(choice), Is.True, choice.ToString());
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Continue));
+            hud.MovePause(1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Restart));
+            hud.MovePause(1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Lobby));
+            hud.MovePause(1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Continue), "Wraps around.");
+            hud.MovePause(-1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Lobby));
+
+            hud.ChoosePause(ChainRushHud.PauseChoice.Continue);
+            Assert.That(game.IsRunning, Is.True);
+            yield return null;
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Continue), "The next pause opens on continue.");
+
+            yield return new WaitForSeconds(0.2f);
+            Assert.That(game.Tick, Is.GreaterThan(0));
+            game.TogglePause();
+            hud.ChoosePause(ChainRushHud.PauseChoice.Restart);
+            Assert.That(game.IsCountingDown, Is.True, "Restart counts in a new run.");
+            Assert.That(game.Tick, Is.Zero, "From the start.");
+
+            game.StartRun();
+            game.TogglePause();
+            hud.ChoosePause(ChainRushHud.PauseChoice.Lobby);
+            yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
+        }
+
+        // A race opened directly has no lobby to go back to; with ManualStart off (a network race) no restart either.
+        [UnityTest]
+        public IEnumerator Race_PauseMenuOpenedDirectly_OffersOnlyWhatTheRaceCanDo()
+        {
+            ChainRushGame game = null;
+            yield return Load(RacePath, scene => game = Find<ChainRushGame>(scene));
+            ChainRushHud hud = Find<ChainRushHud>(game.gameObject.scene);
+            game.StartRun();
+            game.TogglePause();
+            Assert.That(hud.Offers(ChainRushHud.PauseChoice.Restart), Is.True);
+            Assert.That(hud.Offers(ChainRushHud.PauseChoice.Lobby), Is.False);
+            hud.MovePause(1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Restart));
+            hud.MovePause(1);
+            Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Continue), "Skips the lobby.");
+            Assert.Throws<InvalidOperationException>(() => hud.ChoosePause(ChainRushHud.PauseChoice.Lobby));
+
+            game.ManualStart = false;
+            try
+            {
+                Assert.That(hud.Offers(ChainRushHud.PauseChoice.Restart), Is.False);
+                hud.MovePause(1);
+                Assert.That(hud.PauseCursor, Is.EqualTo(ChainRushHud.PauseChoice.Continue), "Continue is all there is.");
+                Assert.Throws<InvalidOperationException>(() => hud.ChoosePause(ChainRushHud.PauseChoice.Restart));
+                Assert.That(game.IsPaused, Is.True, "A refused entry changes nothing.");
+            }
+            finally
+            {
+                game.ManualStart = true;
+            }
         }
 
         // The chosen runner's look is what the race shows (presentation only, RunnerLook): BETA from the lobby puts BETA's
@@ -394,6 +531,37 @@ namespace ProtoHarness.Tests.PlayMode
             var store = new GameSettings("ChainRush.Test.ChainRushFlowTests.Settings.");
             store.Clear();
             return store;
+        }
+
+        // How many pixels in the middle third of a texture differ clearly from its corner (the cleared background).
+        // Copied through a plain texture first: the preview's texture is multisampled.
+        private static int DrawnPixels(Texture texture)
+        {
+            var plain = RenderTexture.GetTemporary(texture.width, texture.height, 0);
+            var read = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+            RenderTexture active = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(texture, plain);
+                RenderTexture.active = plain;
+                read.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+                read.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = active;
+                RenderTexture.ReleaseTemporary(plain);
+            }
+            Color corner = read.GetPixel(1, 1);
+            int drawn = 0;
+            for (int y = texture.height / 3; y < texture.height * 2 / 3; y++)
+                for (int x = texture.width / 3; x < texture.width * 2 / 3; x++)
+                {
+                    Color pixel = read.GetPixel(x, y);
+                    if (Mathf.Abs(pixel.r - corner.r) + Mathf.Abs(pixel.g - corner.g) + Mathf.Abs(pixel.b - corner.b) > 0.1f) drawn++;
+                }
+            UnityEngine.Object.Destroy(read);
+            return drawn;
         }
 
         private static T Find<T>(Scene scene) where T : Component

@@ -167,11 +167,8 @@ namespace ProtoHarness.ChainRush
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
-                if (ManualStart)
-                {
-                    if (keyboard.rKey.wasPressedThisFrame) StartCountdown();
-                    else if (keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused && !IsCountingDown) StartCountdown();
-                }
+                // A run in progress restarts from the pause menu (ChainRushHud), not from a key (user 2026-10-20: R removed).
+                if (ManualStart && keyboard.enterKey.wasPressedThisFrame && !IsRunning && !IsPaused && !IsCountingDown) StartCountdown();
                 if (keyboard.escapeKey.wasPressedThisFrame) TogglePause();
             }
             if (IsCountingDown)

@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-10-20 · 러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴 · R 재시작 제거
+
+- **결정 (사용자, 2026-10-20, `feature/m2-runner-preview` → `feature/m2-lobby-pause-ui`)**:
+  - **러너 프리뷰** (요청서 "ㄱㄱ"): 로비 러너 페이지 가운데 칸(1600 기준 364×540)에 커서가 가리키는 러너의 디자인(`RunnerProfile.Look`)을 보이고, 칸 안에서 누른 마우스 드래그로 좌우 회전(0.45°/px, 처음 −30°, 러너를 바꿔도 각도 유지, 자동 회전 없음). `Flow/RunnerPreview`(sealed class)가 무대(턴테이블·카메라·방향 조명, y −1000)를 실행 중에 만들고 디자인 5개를 Awake 에서 한 번만 복제해 `SetActive` 만 바꾼다 — 로비 씬·프리팹·레이어(ProjectSettings)를 건드리지 않으려고(`RemoteGhost` 와 같은 방식). 로비 OnGUI 가 화면 전체를 불투명하게 덮어 씬 안 모형은 안 보이므로 카메라 → RenderTexture(2배 해상도, MSAA 4) → `GUI.DrawTexture`. 로비 씬에 조명이 없어 무대 조명을 만든다. 디자인이 빈 러너는 "디자인 없음", 그릴 것이 없는 디자인은 `ArgumentException` → 로비가 로그를 남기고 꺼진다. 런타임에서 처음으로 `Application.isPlaying` 에 따라 `Destroy`/`DestroyImmediate` 를 고른다(EditMode 테스트가 정리를 확인하려고).
+  - **입장 버튼** ("잘 보이도록 디자인및크기"): 러너 줄 클릭은 고르기만(`LobbyMenu.Highlight`), 능력치 칸 아래 민트 "입장   ENTER  →"(420×92, 32pt) 또는 Enter 로 레이스. 다른 페이지의 클릭은 그대로 바로 결정.
+  - **RACE SETUP 러너 이름** (플레이 피드백 "러너 이름이 바뀌지않는다"): 입장한 러너만 보여서, 클릭이 고르기만 하게 바뀐 뒤 드러났다. 러너 페이지에서는 커서, 다른 페이지에서는 입장한 러너(`SetupRunner`). 고치기 전 실패 테스트 있음(아래).
+  - **이전 버튼** ("esc 기능도 그대로 두고"): 모든 로비 페이지 제목 칸 오른쪽 "←  이전   ESC" = `Back()`. 클릭은 그리기가 끝난 뒤 처리(입장 버튼도) — 2026-10-20 클릭 버그와 같은 이유.
+  - **일시정지 메뉴** (요청서 "ㄱㄱ", 기본값 ↑/↓·Enter 포함): ESC 가 화면을 50% 어둡게 하고 PAUSED·지금 랩/시간·**계속 / 재시작 / 로비로**(클릭 또는 ↑/↓ + Enter, ESC 는 계속). 재시작은 `ManualStart` 일 때만(네트워크 레이스 숨김), 로비로는 로비에서 온 레이스만(`ChainRushHud.Offers`). 결과 패널에서 떼어 `DrawPause` 로.
+  - **R 재시작 제거** ("인게임에서 r 버튼은 없어져도 되겠다"): `ChainRushGame.Update` 에서 R 을 뺐다. 결과 화면의 재시작은 Enter(원래 동작)·버튼("ENTER / RUN AGAIN"). Device 테스트 `Input_ArrowKeys_…Restarts` 의 R 재시작을 "R 은 아무것도 안 함" + ESC → ↓ → Enter 재시작으로 바꿨다 — 사양 변경으로 사용자 승인. `Input_ManualStartOff_EnterAndRDoNothing` 은 지금 사양에서도 맞아 그대로.
+- **브랜치**: 프리뷰를 커밋하지 않은 채 `feature/m2-lobby-pause-ui` 로 뻗어 한 브랜치로 묶었다(검증 비용 1회, 사용자 기본값 3).
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 `11a72d4` = 이 머신 버전 차이 파일 3개 제외):
+  - 컴파일 `Tundra build success`, `error CS` 0건.
+  - RACE SETUP 고치기 전: `ChainRushFlowTests.Lobby_RunnerPage_HighlightPicksWithoutStarting` `result="Failed"` "RACE SETUP names the runner being picked" `ChainRushFlowTests.cs:152` (07:17:01Z). 고친 뒤 통과.
+  - `tools/select-tests.ps1 -Range dev...HEAD`: "전체"(`ChainRushGame.cs` → 코어 시뮬). `Long` 은 Endless 보류로 돌리지 않음.
+  - EditMode `testcasecount="255" result="Passed" passed="255" failed="0"` (07:29:09Z~07:29:13Z) — 새 `RunnerPreviewTests` 6건.
+  - 게이트 `testcasecount="171" result="Passed" passed="164" failed="0" skipped="7"` (07:29:38Z~07:36:49Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. 새 PlayMode 4건(프리뷰가 RenderTexture 가운데에 실제로 그리는지 픽셀로 확인 포함).
+  - Device (`Run Device Input Tests`, 입력 장치 경로 `ChainRushGame.Update` 를 바꿔서): `testcasecount="3" result="Passed" passed="3" failed="0"` (07:38:06Z~07:38:23Z), 시작 때 `isApplicationActive [True]`. 그 직전 시도는 에디터가 뒤에 있어(`False`) 시작하지 않았다.
+  - 서킷 지문 테스트는 게이트 안에서 통과(시뮬 변경 없음, R 키 한 줄만).
+  - 사용자 플레이 확인: "다 좋다"(프리뷰·입장·일시정지), "확인했다"(이전 버튼) — 2026-10-20.
+
 ## 2026-10-20 · M2-c 설정 · 로비 클릭 버그 · 러너 디자인 5종 연결 (아트 AI 병행)
 
 - **결정 (사용자, 2026-10-20, `feature/m2-settings`)**:

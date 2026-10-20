@@ -10,6 +10,8 @@ namespace ProtoHarness.ChainRush.Flow
     // and the runner, then RaceLaunch and the race scene. ↑/↓ choose, Enter confirms, ESC goes back (from the main menu,
     // to the title). Locked entries are shown but refuse with a notice. Drawn like ChainRushHud (OnGUI, 1600 x 900).
     // The settings page (M2-c) lists the volumes and the speed field of view, changed with ←/→, and opens the keys page.
+    // The runner page shows the highlighted runner's look (RunnerPreview), turned by dragging the mouse across it; a click
+    // on a runner only highlights it, and the enter button (or Enter) starts the race.
     public sealed class LobbyMenu : MonoBehaviour
     {
         public enum Page { Main, Settings, Track, Speed, Runner, Keys }
@@ -48,6 +50,11 @@ namespace ProtoHarness.ChainRush.Flow
         // The help line under the list; the settings page also names ←/→.
         private static readonly string Help = "↑ / ↓  선택      ENTER  결정      ESC  뒤로";
         private static readonly string SettingsHelp = "↑ / ↓  선택      ← / →  조절      ENTER  결정      ESC  뒤로";
+        private static readonly string RunnerHelp = "↑ / ↓  선택      ENTER  결정      ESC  뒤로      마우스 드래그  회전";
+        // The preview sits between the list and the right-hand panels, as tall as the stats panel's bottom; its texture is
+        // drawn at twice the lobby's units.
+        private const float PreviewWidth = 364f, PreviewTop = 128f, PreviewHeight = 540f;
+        private const int PreviewTextureScale = 2;
         private static readonly string[] Keys =
         {
             "↑   가속",
@@ -57,12 +64,14 @@ namespace ProtoHarness.ChainRush.Flow
             "왼쪽 SHIFT 유지   코너 봉 스윙",
             "왼쪽 CTRL   부스터 (게이지 1칸)",
             "SPACE   공격",
-            "R   재시작      ESC   일시정지",
+            "ESC   일시정지 (계속 · 재시작 · 로비)",
         };
         private static readonly Color Ink = new Color(0.025f, 0.055f, 0.08f, 0.94f);
         private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
         private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
         private static readonly Color Slate = new Color(0.2f, 0.3f, 0.33f);
+        // Ink over the lobby's background, opaque, so the preview's texture matches the panels around it.
+        private static readonly Color PreviewBackground = new Color(0.026f, 0.056f, 0.081f, 1f);
 
         [SerializeField] private TrackChoice[] tracks;
         [SerializeField] private RunnerProfile[] runners;
@@ -84,6 +93,9 @@ namespace ProtoHarness.ChainRush.Flow
         // Starts on Fast, the only class unlocked (Speeds[1]).
         private int speed = 1;
         private int runner;
+        private RunnerPreview preview;
+        // A drag that began on the preview turns it until the button is released.
+        private bool dragging;
         private string notice = "";
         private bool leaving;
         private GUIStyle small;
@@ -92,6 +104,8 @@ namespace ProtoHarness.ChainRush.Flow
         private GUIStyle item;
         private GUIStyle lockedItem;
         private GUIStyle recordLine;
+        private GUIStyle enterButton;
+        private GUIStyle backButton;
         private Font font;
 
         // Where the track page reads best records from (the player's; a test gives its own).
@@ -114,6 +128,11 @@ namespace ProtoHarness.ChainRush.Flow
         // The track page's record line for a track: "최고 기록  01:19.2 · BETA", or "기록 없음".
         public string TrackRecordText(int index) => trackRecords[index];
         public int Cursor => cursor;
+        // The runner RACE SETUP names: on the runner page the highlighted one (a click only picks it since 2026-10-20),
+        // elsewhere the one last entered with.
+        public int SetupRunner => page == Page.Runner ? cursor : runner;
+        // The runner page's preview (null if the lobby failed to wake).
+        public RunnerPreview Preview => preview;
         // The last refusal (a locked entry), shown under the list; empty when there is none.
         public string Notice => notice;
 
@@ -165,6 +184,19 @@ namespace ProtoHarness.ChainRush.Flow
                     runnerStatText[i, s] = "×" + stats[s].ToString("0.00");
                 }
             }
+            var looks = new GameObject[runners.Length];
+            for (int i = 0; i < runners.Length; i++) looks[i] = runners[i].Look;
+            try
+            {
+                preview = new RunnerPreview(looks, (int)PreviewWidth * PreviewTextureScale, (int)PreviewHeight * PreviewTextureScale, PreviewBackground);
+            }
+            catch (ArgumentException e)
+            {
+                // A look with nothing to draw: the lobby stops, as for any other invalid runner.
+                Debug.LogException(e, this);
+                enabled = false;
+                return;
+            }
             RefreshRecords();
         }
 
@@ -190,6 +222,8 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Update()
         {
+            var mouse = Mouse.current;
+            if (mouse != null) DragPreview(mouse);
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
             if (keyboard.upArrowKey.wasPressedThisFrame) Move(-1);
@@ -200,6 +234,15 @@ namespace ProtoHarness.ChainRush.Flow
             else if (keyboard.escapeKey.wasPressedThisFrame) Back();
         }
 
+        // Turns the preview while the left button, pressed on it, is held.
+        private void DragPreview(Mouse mouse)
+        {
+            if (page != Page.Runner || leaving) dragging = false;
+            else if (mouse.leftButton.wasPressedThisFrame) dragging = OverPreview(mouse.position.ReadValue());
+            else if (!mouse.leftButton.isPressed) dragging = false;
+            if (dragging) preview.Turn(mouse.delta.ReadValue().x / GuiScale());
+        }
+
         // Moves the highlight, wrapping around the list.
         public void Move(int delta)
         {
@@ -207,6 +250,7 @@ namespace ProtoHarness.ChainRush.Flow
             if (count == 0) return;
             cursor = ((cursor + delta) % count + count) % count;
             notice = "";
+            if (page == Page.Runner) preview.Show(cursor);
         }
 
         // Changes the highlighted setting: a volume by delta levels, stopping at 0 and MaxLevel (no wrapping); the speed
@@ -300,6 +344,26 @@ namespace ProtoHarness.ChainRush.Flow
             page = next;
             cursor = highlight;
             if (next == Page.Track) RefreshRecords();
+            if (next == Page.Runner) preview.Show(cursor);
+            else preview.Hide();
+        }
+
+        // The lobby's units (1600 x 900) to screen pixels, as OnGUI scales them.
+        private static float GuiScale() => Mathf.Min(Screen.width / 1600f, Screen.height / 900f);
+
+        // The preview's left edge in the lobby's units: centred between the list (ends at 732) and the right-hand panels.
+        private static float PreviewLeft(float width) => 732f + (width - 452f - 732f - PreviewWidth) * 0.5f;
+
+        // Where the preview is drawn, in the lobby's units (OnGUI, y down).
+        private static Rect PreviewRect(float width) => new Rect(PreviewLeft(width), PreviewTop, PreviewWidth, PreviewHeight);
+
+        // Whether a mouse position (screen pixels, y up) is over the preview.
+        private static bool OverPreview(Vector2 point)
+        {
+            float scale = GuiScale();
+            float x = point.x / scale, y = (Screen.height - point.y) / scale;
+            float left = PreviewLeft(Screen.width / scale);
+            return x >= left && x < left + PreviewWidth && y >= PreviewTop && y < PreviewTop + PreviewHeight;
         }
 
         private string[] Options(Page of) =>
@@ -351,6 +415,10 @@ namespace ProtoHarness.ChainRush.Flow
             lockedItem.alignment = TextAnchor.MiddleLeft;
             recordLine = Style(18, Muted);
             recordLine.alignment = TextAnchor.MiddleRight;
+            enterButton = Style(32, Ink, FontStyle.Bold);
+            enterButton.alignment = TextAnchor.MiddleCenter;
+            backButton = Style(22, Color.white, FontStyle.Bold);
+            backButton.alignment = TextAnchor.MiddleCenter;
         }
 
         private static void Block(Rect rect, Color color)
@@ -366,7 +434,7 @@ namespace ProtoHarness.ChainRush.Flow
             if (small == null) InitializeStyles();
             if (!enabled) return;
             Matrix4x4 previous = GUI.matrix;
-            float scale = Mathf.Min(Screen.width / 1600f, Screen.height / 900f);
+            float scale = GuiScale();
             float width = Screen.width / scale;
             float height = Screen.height / scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
@@ -375,21 +443,47 @@ namespace ProtoHarness.ChainRush.Flow
             Block(new Rect(32, 26, 5, 74), Mint);
             GUI.Label(new Rect(53, 37, 270, 38), "CHAIN / RUSH", heading);
             GUI.Label(new Rect(55, 78, 280, 20), "LOBBY    /    " + PageTitles[(int)page], small);
+            // Beside the title on every page: ESC by mouse (user 2026-10-20), back one page or, from the main menu, to the title.
+            var backRect = new Rect(362, 26, 200, 74);
+            Block(backRect, Ink);
+            Block(new Rect(backRect.x, backRect.yMax - 4, backRect.width, 4), Muted);
+            bool back = GUI.Button(backRect, "←  이전   ESC", backButton);
 
             Block(new Rect(32, 128, 700, height - 248), Ink);
             if (page == Page.Keys) DrawKeys();
             else DrawList();
             GUI.Label(new Rect(70, height - 170, 640, 26), notice, body);
-            GUI.Label(new Rect(70, height - 92, 900, 24), page == Page.Settings ? SettingsHelp : Help, small);
+            GUI.Label(new Rect(70, height - 92, 900, 24), page == Page.Settings ? SettingsHelp : page == Page.Runner ? RunnerHelp : Help, small);
 
             Block(new Rect(width - 452, 128, 420, 250), Ink);
             GUI.Label(new Rect(width - 420, 152, 360, 24), "RACE SETUP", small);
             GUI.Label(new Rect(width - 420, 196, 360, 30), "트랙     " + trackOptions[track], body);
             GUI.Label(new Rect(width - 420, 240, 360, 30), "속도     " + SpeedOptions[speed], body);
-            GUI.Label(new Rect(width - 420, 284, 360, 30), "러너     " + runnerOptions[runner], body);
+            GUI.Label(new Rect(width - 420, 284, 360, 30), "러너     " + runnerOptions[SetupRunner], body);
             GUI.Label(new Rect(width - 420, 328, 360, 24), "모드     싱글", small);
-            if (page == Page.Runner) DrawRunnerStats(width, cursor);
+            bool enter = false;
+            if (page == Page.Runner)
+            {
+                DrawPreview(width, cursor);
+                DrawRunnerStats(width, cursor);
+                // Under the stats, down to the list panel's bottom: the one way into the race besides Enter.
+                var start = new Rect(width - 452, 688, 420, height - 120 - 688);
+                Block(start, Mint);
+                enter = GUI.Button(start, "입장   ENTER  →", enterButton);
+            }
             GUI.matrix = previous;
+            // Acted on after drawing: either changes the page the rest of this draw would read.
+            if (back) Back();
+            else if (enter) Confirm();
+        }
+
+        // The highlighted runner's look as the preview draws it, or a line when the runner has none.
+        private void DrawPreview(float width, int shown)
+        {
+            Rect rect = PreviewRect(width);
+            Block(rect, Ink);
+            if (preview.HasModel(shown)) GUI.DrawTexture(rect, preview.Texture, ScaleMode.StretchToFill, false);
+            else GUI.Label(new Rect(rect.x + 24, rect.y + rect.height * 0.5f - 15, rect.width - 48, 30), "디자인 없음", body);
         }
 
         // The highlighted runner's stats as bars between StatBarFloor and StatBarCeiling, with their scales.
@@ -439,8 +533,22 @@ namespace ProtoHarness.ChainRush.Flow
                 }
             }
             if (clicked < 0) return;
-            cursor = clicked;
-            Confirm();
+            // On the runner page a click only picks the runner; the enter button (or Enter) starts the race (user 2026-10-20).
+            if (page == Page.Runner) Highlight(clicked);
+            else
+            {
+                cursor = clicked;
+                Confirm();
+            }
+        }
+
+        // Highlights a row without choosing it, as ↑/↓ would.
+        public void Highlight(int row)
+        {
+            int count = Options(page).Length;
+            if (row < 0 || row >= count)
+                throw new ArgumentOutOfRangeException(nameof(row), row, $"LobbyMenu: the {page} page has {count} rows.");
+            Move(row - cursor);
         }
 
         private void DrawKeys()
@@ -452,6 +560,7 @@ namespace ProtoHarness.ChainRush.Flow
         private void OnDestroy()
         {
             if (font != null) Destroy(font);
+            preview?.Release();
         }
     }
 }

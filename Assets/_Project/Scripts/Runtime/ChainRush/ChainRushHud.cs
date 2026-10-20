@@ -1,11 +1,17 @@
+using System;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace ProtoHarness.ChainRush
 {
     public sealed class ChainRushHud : MonoBehaviour
     {
+        // The pause menu's entries (ESC during a run, user 2026-10-20). Restart only where a run can be restarted
+        // (ManualStart), back to the lobby only in a race the lobby launched.
+        public enum PauseChoice { Continue, Restart, Lobby }
+
         [SerializeField] private ChainRushGame game;
         [SerializeField] private RunnerMotor player;
         [SerializeField] private GrappleController grapple;
@@ -20,7 +26,10 @@ namespace ProtoHarness.ChainRush
         private GUIStyle button;
         private GUIStyle waiting;
         private GUIStyle cue;
+        private GUIStyle pauseItem;
         private Font font;
+        private int pauseCursor;
+        private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
         private const string CueGlyphs = "321GO!";
         // How long "GO!" stays up once a run has started.
@@ -29,6 +38,12 @@ namespace ProtoHarness.ChainRush
         private static readonly Color Mint = new Color(0.43f, 1f, 0.8f);
         private static readonly Color Muted = new Color(0.58f, 0.71f, 0.75f);
         private static readonly Color Coral = new Color(1f, 0.36f, 0.3f);
+        // Over the game while paused: dims it without hiding it.
+        private static readonly Color Dim = new Color(0f, 0f, 0f, 0.5f);
+        private static readonly Color Row = new Color(0.08f, 0.13f, 0.16f, 1f);
+
+        // The highlighted pause entry; back on Continue whenever the game is not paused.
+        public PauseChoice PauseCursor => (PauseChoice)pauseCursor;
 
         private void Awake()
         {
@@ -36,6 +51,47 @@ namespace ProtoHarness.ChainRush
             {
                 Debug.LogError("ChainRushHud: game, player, grapple and camera are required.", this);
                 enabled = false;
+            }
+        }
+
+        private void Update()
+        {
+            if (!game.IsPaused)
+            {
+                pauseCursor = (int)PauseChoice.Continue;
+                return;
+            }
+            // ESC (continue) is the game's own key; the game ignores Enter while paused.
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+            if (keyboard.upArrowKey.wasPressedThisFrame) MovePause(-1);
+            else if (keyboard.downArrowKey.wasPressedThisFrame) MovePause(1);
+            else if (keyboard.enterKey.wasPressedThisFrame) ChoosePause(PauseCursor);
+        }
+
+        // Whether this race's pause menu has that entry.
+        public bool Offers(PauseChoice choice) =>
+            choice == PauseChoice.Continue || (choice == PauseChoice.Restart && game.ManualStart) || (choice == PauseChoice.Lobby && FromLobby);
+
+        // Moves the pause highlight, wrapping and skipping entries this race does not offer (Continue always is).
+        public void MovePause(int delta)
+        {
+            if (!game.IsPaused) throw new InvalidOperationException("ChainRushHud: the pause menu is not open.");
+            int count = PauseLabels.Length;
+            do pauseCursor = ((pauseCursor + delta) % count + count) % count;
+            while (!Offers((PauseChoice)pauseCursor));
+        }
+
+        // Does what a pause entry says: go on, count in a new run from the start line, or leave for the lobby.
+        public void ChoosePause(PauseChoice choice)
+        {
+            if (!game.IsPaused) throw new InvalidOperationException("ChainRushHud: the pause menu is not open.");
+            if (!Offers(choice)) throw new InvalidOperationException($"ChainRushHud: this race's pause menu has no {choice}.");
+            switch (choice)
+            {
+                case PauseChoice.Continue: game.TogglePause(); break;
+                case PauseChoice.Restart: game.StartCountdown(); break;
+                case PauseChoice.Lobby: assembler.ReturnToLobby(); break;
             }
         }
 
@@ -68,6 +124,8 @@ namespace ProtoHarness.ChainRush
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
             waiting.alignment = TextAnchor.MiddleCenter;
+            pauseItem = Style(22, Color.white, FontStyle.Bold);
+            pauseItem.alignment = TextAnchor.MiddleCenter;
             cue = Style(CueSize, Mint, FontStyle.Bold);
             cue.alignment = TextAnchor.MiddleCenter;
             // The first draw of new glyphs can stall a frame (DECISIONS P3 C1c-2b), and "GO!" is drawn on a run's first frame.
@@ -97,7 +155,8 @@ namespace ProtoHarness.ChainRush
             if (game.IsReady && FromLobby) DrawLoading(width, height);
             else if (game.IsReady) DrawReady(width, height);
             else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString());
-            else if (game.IsPaused || game.HasFailed || game.HasFinished) DrawResult(width, height);
+            else if (game.IsPaused) DrawPause(width, height);
+            else if (game.HasFailed || game.HasFinished) DrawResult(width, height);
             else
             {
                 DrawPlay(width, height, scale);
@@ -142,8 +201,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(232, height - 75, 390, 30), "ALT   점프 → 공중에서 다시 잡기", body);
             GUI.Label(new Rect(650, height - 75, 270, 30), "ALT 유지  스윙 / ↓  해제", body);
             GUI.Label(new Rect(951, height - 75, 210, 30), "SPACE   공격", body);
-            string restart = game.ManualStart ? "R  재시작   " : "";
-            GUI.Label(new Rect(width - 405, height - 75, 390, 30), restart + (game.HasPresentation ? "ESC  정지   M  음소거" : "  ESC  일시정지"), body);
+            GUI.Label(new Rect(width - 405, height - 75, 390, 30), game.HasPresentation ? "ESC  일시정지   M  음소거" : "ESC  일시정지", body);
         }
 
         private void DrawReady(float width, float height)
@@ -295,16 +353,16 @@ namespace ProtoHarness.ChainRush
             Block(new Rect(x, y, 670, 410), Ink);
             Block(new Rect(x, y, 670, 5), game.HasFailed ? Coral : Mint);
             GUI.Label(new Rect(x + 42, y + 34, 600, 25), game.IsCircuit ? "CIRCUIT TRIAL / RACE STATUS" : "SKYLINE TRIAL / MISSION STATUS", small);
-            string label = game.IsPaused ? "PAUSED" : game.HasFinished ? (game.IsCircuit ? "RACE COMPLETE." : "ROUTE COMPLETE.") : "SIGNAL LOST.";
+            string label = game.HasFinished ? (game.IsCircuit ? "RACE COMPLETE." : "ROUTE COMPLETE.") : "SIGNAL LOST.";
             GUI.Label(new Rect(x + 40, y + 84, 610, 54), label, number);
-            string subtitle = game.IsPaused ? "잠시 쉬어가세요. ESC로 계속합니다." : game.HasFinished ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 노란 선에서 점프 후 앵커를 잡으세요.";
+            string subtitle = game.HasFinished ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 노란 선에서 점프 후 앵커를 잡으세요.";
             GUI.Label(new Rect(x + 42, y + 147, 610, 35), subtitle, body);
             GUI.Label(new Rect(x + 42, y + 207, 600, 34), game.IsCircuit ? CircuitResult() : "TIME   " + game.Elapsed.ToString("0.0") + "s      LINKS   " + game.Grapples + "      HITS   " + game.Hits, body);
             // A run that cannot be restarted from here (ManualStart off) shows no RUN AGAIN.
-            if (!game.IsPaused && !game.ManualStart) return;
+            if (!game.ManualStart) return;
             Rect action = new Rect(x + 42, y + 283, 586, 66);
             // A race from the lobby ends with two ways on: again, or back to the lobby.
-            if (!game.IsPaused && FromLobby)
+            if (FromLobby)
             {
                 action.width = 288;
                 Rect lobby = new Rect(x + 340, y + 283, 288, 66);
@@ -312,10 +370,33 @@ namespace ProtoHarness.ChainRush
                 if (GUI.Button(lobby, "ESC  /  로비로", button)) assembler.ReturnToLobby();
             }
             Block(action, Mint);
-            if (GUI.Button(action, game.IsPaused ? "ESC  /  CONTINUE  →" : "R  /  RUN AGAIN  →", button))
+            if (GUI.Button(action, "ENTER  /  RUN AGAIN  →", button)) game.StartCountdown();
+        }
+
+        // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in
+        // mint. A click chooses after the rows are drawn, as the lobby does (choosing changes what is drawn).
+        private void DrawPause(float width, float height)
+        {
+            Block(new Rect(0, 0, width, height), Dim);
+            float x = width / 2f - 260;
+            float y = height / 2f - 230;
+            Block(new Rect(x, y, 520, 460), Ink);
+            Block(new Rect(x, y, 520, 5), Mint);
+            GUI.Label(new Rect(x + 42, y + 34, 440, 25), "ESC  계속      ↑ / ↓  선택      ENTER  결정", small);
+            GUI.Label(new Rect(x + 40, y + 70, 440, 54), "PAUSED", number);
+            if (game.IsCircuit) GUI.Label(new Rect(x + 42, y + 130, 440, 30), CircuitLine(), body);
+            int clicked = -1;
+            float rowY = y + 186;
+            for (int i = 0; i < PauseLabels.Length; i++)
             {
-                if (game.IsPaused) game.TogglePause(); else game.StartCountdown();
+                if (!Offers((PauseChoice)i)) continue;
+                var row = new Rect(x + 42, rowY, 436, 66);
+                bool highlighted = i == pauseCursor;
+                Block(row, highlighted ? Mint : Row);
+                if (GUI.Button(row, PauseLabels[i], highlighted ? button : pauseItem)) clicked = i;
+                rowY += 84;
             }
+            if (clicked >= 0) ChoosePause((PauseChoice)clicked);
         }
 
         // "LAP 2 / 3   01:23.4": the lap being run and the whole race time so far.

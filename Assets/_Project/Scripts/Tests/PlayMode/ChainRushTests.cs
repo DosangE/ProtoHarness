@@ -204,8 +204,21 @@ namespace ProtoHarness.Tests.PlayMode
                 InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
                 yield return new WaitForSeconds(0.05f);
                 Assert.That(grapple.IsAttached, Is.False);
-                // R puts the runner back on the start line at once and counts down again.
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.R));
+                // R no longer restarts (user 2026-10-20): the run goes on.
+                int tickBeforeR = game.Tick;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow, Key.R));
+                yield return new WaitForSeconds(0.15f);
+                Assert.That(game.IsRunning, Is.True, "R must not restart the run.");
+                Assert.That(game.Tick, Is.GreaterThan(tickBeforeR));
+                Assert.That(game.Grapples, Is.GreaterThan(0));
+                // ESC opens the pause menu; ↓ then Enter picks 재시작, which puts the runner back on the start line and
+                // counts down again.
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Escape));
+                yield return new WaitForSeconds(0.05f);
+                Assert.That(game.IsPaused, Is.True);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.DownArrow));
+                yield return new WaitForSeconds(0.05f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
                 yield return new WaitForSeconds(0.05f);
                 Assert.That(game.IsCountingDown, Is.True);
                 Assert.That(game.Grapples, Is.Zero);

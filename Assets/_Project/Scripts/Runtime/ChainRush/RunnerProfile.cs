@@ -17,12 +17,17 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float gaugeChargeScale = 1f;
         [Tooltip("For contact between runners (M7 C2). No effect until then.")]
         [SerializeField] private float weight = 1f;
+        // Presentation only: RaceAssembler copies its meshes and materials onto the race's runner model (RunnerLook);
+        // the simulation never reads it. Empty means the scene's model as saved, by definition (not a fallback).
+        [Tooltip("The runner's look: a model with the same hierarchy as the scene's runner model (Art/Models/Runner*.prefab). Empty keeps the scene's model as saved.")]
+        [SerializeField] private GameObject look;
 
         public string DisplayName => displayName;
         public float TopSpeedScale => topSpeedScale;
         public float AccelerationScale => accelerationScale;
         public float GaugeChargeScale => gaugeChargeScale;
         public float Weight => weight;
+        public GameObject Look => look;
 
         // Whether every value is usable; RunnerMotor.Configure refuses a profile that is not.
         public bool TryValidate(out string error)

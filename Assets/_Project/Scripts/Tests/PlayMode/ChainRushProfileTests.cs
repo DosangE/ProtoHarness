@@ -4,6 +4,7 @@ using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -20,6 +21,8 @@ namespace ProtoHarness.Tests.PlayMode
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         private const string DataFolder = "Assets/_Project/Data/";
+        // The runner model the race scene's runner is built from (ChainRushSceneBuilder.RunnerModelPath).
+        private const string RunnerModelPath = "Assets/_Project/Prefabs/ArmoredRunner.prefab";
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -69,6 +72,35 @@ namespace ProtoHarness.Tests.PlayMode
             RunnerProfile alpha = Load("Alpha");
             Assert.That(new[] { alpha.TopSpeedScale, alpha.AccelerationScale, alpha.GaugeChargeScale, alpha.Weight }, Is.All.EqualTo(1f),
                 "ALPHA is the circuit as tuned: every scale exactly 1.");
+        }
+
+        // Each runner wears a look (Art/Models/Runner*.prefab) that fits the runner model: RunnerLook takes it on a copy of
+        // the model, and the copy then shows the look's meshes.
+        [Test]
+        public void Profiles_TheFiveRunners_EachHaveALookThatFitsTheRunnerModel()
+        {
+#if UNITY_EDITOR
+            var runnerModel = AssetDatabase.LoadAssetAtPath<GameObject>(RunnerModelPath);
+            Assert.That(runnerModel, Is.Not.Null, RunnerModelPath);
+            foreach (string name in new[] { "Alpha", "Beta", "Theta", "Delta", "Omega" })
+            {
+                RunnerProfile profile = Load(name);
+                Assert.That(profile.Look, Is.Not.Null, profile.name + " has no look.");
+                GameObject copy = UnityEngine.Object.Instantiate(runnerModel);
+                try
+                {
+                    Assert.DoesNotThrow(() => RunnerLook.Apply(copy.transform, profile.Look), profile.name);
+                    Assert.That(copy.GetComponentInChildren<MeshFilter>(true).sharedMesh,
+                        Is.SameAs(profile.Look.GetComponentInChildren<MeshFilter>(true).sharedMesh), profile.name);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(copy);
+                }
+            }
+#else
+            Assert.Fail("Profile tests require the Unity Editor.");
+#endif
         }
 
         [Test]

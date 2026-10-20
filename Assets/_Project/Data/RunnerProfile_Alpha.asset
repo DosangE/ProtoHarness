@@ -17,3 +17,4 @@ MonoBehaviour:
   accelerationScale: 1
   gaugeChargeScale: 1
   weight: 1
+  look: {fileID: 2284774015091370233, guid: c69ac9cbea9efdb4d9704c7d4bb640ae, type: 3}

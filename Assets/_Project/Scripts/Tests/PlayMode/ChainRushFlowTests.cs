@@ -5,6 +5,7 @@ using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -28,6 +29,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
 
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
+        private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
         private TrackDefinition made;
         // A runner of all 1s: races exactly as the scene's values.
@@ -231,6 +233,30 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.IsCountingDown, Is.True);
         }
 
+        // The chosen runner's look is what the race shows (presentation only, RunnerLook): BETA from the lobby puts BETA's
+        // look on the runner model, part by part in order.
+        [UnityTest]
+        public IEnumerator Race_FromTheLobby_WearsTheChosenRunnersLook()
+        {
+            RunnerProfile beta = Beta();
+            Assert.That(beta.Look, Is.Not.Null, "BETA has no look.");
+            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.Fast, beta));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            Assert.That(assembler.IsLaunched, Is.True);
+            Transform body = Find<RunnerTilt>(assembler.gameObject.scene).Body;
+            MeshFilter[] worn = body.GetComponentsInChildren<MeshFilter>(true);
+            MeshFilter[] look = beta.Look.GetComponentsInChildren<MeshFilter>(true);
+            Assert.That(worn.Length, Is.EqualTo(look.Length));
+            Assert.That(worn.Length, Is.GreaterThan(0));
+            for (int i = 0; i < worn.Length; i++)
+            {
+                Assert.That(worn[i].sharedMesh, Is.SameAs(look[i].sharedMesh), worn[i].name);
+                Assert.That(worn[i].GetComponent<MeshRenderer>().sharedMaterials,
+                    Is.EqualTo(look[i].GetComponent<MeshRenderer>().sharedMaterials), worn[i].name);
+            }
+        }
+
         [UnityTest]
         public IEnumerator Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter()
         {
@@ -376,6 +402,18 @@ namespace ProtoHarness.Tests.PlayMode
                 if (root.TryGetComponent(out T component)) return component;
             Assert.Fail($"Scene '{scene.name}' has no {typeof(T).Name} at its roots.");
             return null;
+        }
+
+        private static RunnerProfile Beta()
+        {
+#if UNITY_EDITOR
+            var beta = AssetDatabase.LoadAssetAtPath<RunnerProfile>(BetaPath);
+            Assert.That(beta, Is.Not.Null, BetaPath);
+            return beta;
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            return null;
+#endif
         }
 
         private static TrackDefinition Stadium()

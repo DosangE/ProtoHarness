@@ -45,11 +45,10 @@ namespace ProtoHarness.ChainRush.Flow
             "볼륨과 속도 시야 효과를 조절하고\n조작 키를 확인합니다.",
         };
         // Tracks still to come, listed after the scene's tracks and locked; they have no definition yet.
-        private static readonly string[] PlaceholderTracks = { "NEON HARBOR", "SKYWAY LOOP" };
+        private static readonly string[] PlaceholderTracks = { "NEON HARBOR" };
         private static readonly string[] PlaceholderDescriptions =
         {
             "네온이 비치는 항구 부두를 도는 코스.\n준비 중인 트랙입니다.",
-            "도시 위 고가도로를 감아 오르는 코스.\n준비 중인 트랙입니다.",
         };
         private const string PlaceholderRecord = "준비 중";
         private const int SettingMaster = 0, SettingMusic = 1, SettingEffects = 2, SettingSpeedView = 3, SettingKeys = 4;
@@ -269,6 +268,7 @@ namespace ProtoHarness.ChainRush.Flow
             switch (title)
             {
                 case "STADIUM": return "야간 조명 아래의 경기장 서킷.\n지금 달릴 수 있는 트랙입니다.";
+                case "SKYWAY LOOP": return "마을을 지나 고가도로를 달리는 2바퀴 코스.\n긴 고가 직선 뒤 급한 내리막이 기다립니다.";
                 default: return "";
             }
         }

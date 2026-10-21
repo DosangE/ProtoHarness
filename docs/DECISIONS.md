@@ -7,6 +7,27 @@
 
 ---
 
+## 2026-10-21 · 타이틀 카트라이더풍 로고 · 버전/빌드 표기 · 로비 항목 설명 · 임시 잠금 트랙
+
+- **결정 (사용자, 2026-10-21, 요청서 "ㄱㄱ", `feature/ui-title-lobby-info`)**:
+  - **타이틀**: `STADIUM / AFTER DARK`, `ALPHA / ARMORED RUNNER`, `CHAIN RUSH / NIGHT DRIFT`, 러너 초상을 지웠다. 카트라이더(원작·드리프트) 타이틀을 참고해 큰 기울임 로고(그림자, RUSH 를 오른쪽으로 밀어 질주감) 뒤로 사선 스피드 스트라이프 4줄(−9°, 직접 만든 `GUI.matrix`), 체커기 띠, 숨 쉬듯 밝아졌다 어두워지는 시작 버튼 테두리. 오른쪽 가운데는 러너 그림이 정해질 때까지 비운다. `TitleScreen.runnerArtwork` 필드를 지웠다 — 타이틀 씬 YAML 의 참조는 고아로 남고(동작 영향 없음), 에디터에서 씬을 다음에 저장할 때 사라진다.
+  - **버전·빌드**: 오른쪽 위 `v0.0.1 · TEST BUILD`. 버전은 `TitleScreen.Version` 상수(손으로 올린다). Player Settings `bundleVersion`(0.1.0)은 ProjectSettings 금지선(§0)이라 쓰지 않았다. 빌드 이름은 `Debug.isDebugBuild` 로 자동 — 에디터·개발 빌드 `TEST BUILD`, 릴리스 빌드 `RELEASE`.
+  - **로비 설명 패널**: RACE SETUP 패널과 러너 초상을 지우고, 메인·트랙·속도 페이지 오른쪽에 커서가 가리키는 항목의 설명(페이지 태그 · 이름 · 잠김이면 `LOCKED · 준비 중` · 설명 · 트랙이면 최고 기록)을 둔다. 설정·조작 키·러너 페이지에는 없다. `SetupRunner` 는 테스트가 쓰고 있어 남겼다(그리는 곳만 없어짐).
+  - **임시 잠금 트랙**: 씬 트랙 뒤에 `NEON HARBOR`, `SKYWAY LOOP` 를 코드 배열(`PlaceholderTracks`)로 붙였다. 정의가 없어 잠그고, 기록 칸은 "준비 중", 결정하면 "새 트랙은 이후 마일스톤에서 열립니다." 씬은 고치지 않았다. 씬 트랙의 설명은 제목으로 찾고(`TrackDescription`), 없으면 `LogError`(트랙은 그대로 달린다).
+  - **플레이 피드백 반영** ("배경 위아래 절반이 우측 판과 색이 비슷해 판이 잘 안 보인다", "이전 버튼을 좌측 하단에, 키 설명은 우측 하단으로"): 오른쪽 판(설명·러너 프로필)을 `LobbyMenu.Card` 로 — `Surface` 보다 밝은 채움(24,36,54), 민트 35% 테두리 1px, 오른쪽 아래 그림자, 위쪽 민트 3px. 이전 버튼은 왼쪽 아래(높이−84), 키 설명은 같은 줄 오른쪽 정렬, 알림 줄은 버튼 위(높이−140)로.
+  - **카드 확대 · 호버 · 눌림 · UI 사운드 자리** (플레이 피드백 "살짝 띄운 박스 디자인 맘에 든다, 버튼들·선택 요소에도", "호버는 살짝 회색, 클릭은 눌리는 효과", "사운드는 추후에, 세팅만" → 요청서 "진행"): `Card` 를 `NightUi.Card`(모양 `CardLook` Plain/Selected/Locked/Action)로 옮기고, 누를 수 있는 카드 `NightUi.PressableCard`·`CardButton` 을 두었다. 호버는 회색 16% 덮개, 누르는 동안은 면이 그림자 쪽으로 (4,5) 내려앉고 22% 덮개. 눌림 판정은 `GUIUtility.hotControl != 0` 이고 마우스가 그 카드 위일 때(새 입력 의존 없음). 클릭 판정은 원래 칸 전체(`GUI.Button`, 빈 스타일), 글자는 내려앉은 면 위에 그린다. 적용: 로비 목록 칸·러너 칸·이전·레이스 시작, 오른쪽 판(`PanelCard`), 타이틀 시작 버튼·버전 태그, HUD 출발 START RUN·결과 다시 달리기/로비로·일시정지 칸.
+  - **`Audio/UiSound`** (static class, 첫 UI 사운드 사례): `Cue` = Move / Confirm / Back / Denied, `Played` 이벤트, `Play(cue)`. 아직 듣는 쪽이 없어 소리는 안 난다 — 나중에 재생기 하나가 `Played` 를 구독하면 된다. 씬을 고치지 않으려고 직렬화 참조 대신 static 이벤트. 부르는 곳: 로비 `Move`(커서가 실제로 움직일 때만)·`Adjust`·`Confirm`(잠김이면 Denied)·`Back`, 타이틀 `Enter`, HUD `MovePause`·`ChoosePause`(로비로는 Back)·마우스 버튼 클릭, 그리고 마우스가 새 카드에 올라갈 때(`PressableCard`). **키보드 경로인 `ChainRushGame.Update`(Enter 출발·재시작, ESC 일시정지)는 장치 입력 경로라 이번에 건드리지 않아 아직 신호가 없다.**
+  - 이름 충돌: 판 함수를 처음 `NightUi.Panel` 로 지었다가 같은 이름의 색 필드와 겹쳐 `error CS0102` → `PanelCard`.
+- **버린 대안**: UI 사운드를 ScriptableObject 클립 묶음 + 화면별 AudioSource 직렬화로 — 씬 3개를 에디터에서 고쳐야 하고 소리가 아직 없다. 설명을 `TrackChoice` 직렬화 필드로 — 로비 씬을 에디터에서 고쳐야 해서 이번 범위 밖. 버전을 `Application.version` 으로 — ProjectSettings 를 0.0.1 로 바꿔야 한다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리 = 이 머신 버전 차이 파일 제외):
+  - 컴파일 `*** Tundra build success (62.55 seconds - 0:01:02), 29 items updated, 1618 evaluated`, `error CS` 0건, Console Error 0건.
+  - ① 빠른 확인: `tools/select-tests.ps1` 기본 범위는 "전체"(이 머신의 `ProjectSettings`·`packages-lock` 버전 차이 때문). 바뀐 코드가 고르는 `ChainRushFlowTests`·`ChainRushProfileTests` + 서킷 지문으로 돌림 → `testcasecount="27" result="Passed" passed="27" failed="0"` (05:31:08Z~05:33:31Z). 새 테스트 2건(`Lobby_PlaceholderTracks_RefuseWithANoticeAndStay`, `Lobby_MainTrackAndSpeedEntries_EachHaveADescription`) 포함.
+  - 화면: 플레이 모드(시작 씬을 타이틀로 잠시 지정, 끝나고 되돌림)에서 타이틀·메인·트랙(NEON HARBOR 잠김 알림)·속도를 `ScreenCapture` 로 찍어 확인. 그때 Console 에 `Deleting invalid font reference.` 경고 20건(14:34:12, 플레이 모드 진입 시)이 있었다 — 이번 변경 전 세션의 `Editor-prev.log` 에도 745건이 있어 기존 경고다(원인은 조사하지 않음).
+  - 피드백 반영 뒤: 컴파일 `*** Tundra build success (10.39 seconds), 11 items updated, 1618 evaluated`, 같은 27건 `testcasecount="27" result="Passed" passed="27" failed="0"` (05:44:02Z~05:45:57Z), 메인(멀티 잠김 알림)·러너 페이지 캡처로 판 테두리·버튼 위치 확인, Console Error 0건.
+  - 카드·호버·UiSound 뒤: 컴파일 `*** Tundra build success (8.34 seconds), 29 items updated, 1618 evaluated`. `select-tests` "전체"(HUD·NightUi + 버전 차이 파일) → EditMode `testcasecount="258" result="Passed" passed="258" failed="0"` (05:53:32Z~05:53:38Z), 메뉴 `Run PlayMode Tests` `testcasecount="174" result="Passed" passed="167" failed="0" skipped="7"` (05:54:12Z~06:02:57Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3, 새 `Lobby_MovesChoicesRefusalsAndBack_EachPlayTheirCueOnce` 포함. 타이틀·트랙·레이스 일시정지 캡처로 카드 확인, Console Error 0건. **호버 회색·눌림은 실제 마우스가 필요해 캡처로 확인하지 못했다** — 사용자 플레이 확인 대상.
+  - ② 병합 게이트 (커밋 `24e7a22`, 에디터 6000.3.19f1): `tools/select-tests.ps1 -Range dev...HEAD` → 바뀐 파일 7개(UiSound·HUD·LobbyMenu·TitleScreen·NightUi·FlowTests), EditMode 전체, PlayMode 클래스 10개(Combat·Flow·InputSource·Presentation·Profile·NetReconcile·NetRemote·RaceOrder·RaceStandings·RaceStandingsText) + 지문 1건. "전체" 아님 → `Long` 안 돌림. 결과 PlayMode `testcasecount="101" result="Passed" passed="101" failed="0" skipped="0"` (06:10:28Z~06:12:50Z) — XML 클래스 목록은 도구 출력에서 `ChainRushCombatTests` 만 빠졌고, 그 클래스는 통째로 `[Category("Endless")]` 라 `!Endless` 로 제외된 것(`ChainRushCombatTests.cs:21`). EditMode `testcasecount="258" result="Passed" passed="258" failed="0"` (06:13:18Z~06:13:22Z). 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update`)는 안 바꿔 Device 안 돌림. 코스 코드 안 바꿔 Sweep 안 돌림.
+  - 사용자 플레이 확인: "좋다 커밋 병합 푸시 ㄱㄱ" — 2026-10-21.
+
 ## 2026-10-20 · 러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴 · R 재시작 제거
 
 - **결정 (사용자, 2026-10-20, `feature/m2-runner-preview` → `feature/m2-lobby-pause-ui`)**:

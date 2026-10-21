@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
@@ -84,8 +85,10 @@ namespace ProtoHarness.ChainRush
         {
             if (!game.IsPaused) throw new InvalidOperationException("ChainRushHud: the pause menu is not open.");
             int count = PauseLabels.Length;
+            int was = pauseCursor;
             do pauseCursor = ((pauseCursor + delta) % count + count) % count;
             while (!Offers((PauseChoice)pauseCursor));
+            if (pauseCursor != was) UiSound.Play(UiSound.Cue.Move);
         }
 
         // Does what a pause entry says: go on, count in a new run from the start line, or leave for the lobby.
@@ -93,6 +96,7 @@ namespace ProtoHarness.ChainRush
         {
             if (!game.IsPaused) throw new InvalidOperationException("ChainRushHud: the pause menu is not open.");
             if (!Offers(choice)) throw new InvalidOperationException($"ChainRushHud: this race's pause menu has no {choice}.");
+            UiSound.Play(choice == PauseChoice.Lobby ? UiSound.Cue.Back : UiSound.Cue.Confirm);
             switch (choice)
             {
                 case PauseChoice.Continue: game.TogglePause(); break;
@@ -225,8 +229,11 @@ namespace ProtoHarness.ChainRush
             Rect start = new Rect(70, height - 240, 370, 68);
             if (game.ManualStart)
             {
-                Block(start, NightUi.Action);
-                if (GUI.Button(start, "ENTER   /   START RUN  →", button)) game.StartCountdown();
+                if (NightUi.CardButton(start, "ENTER   /   START RUN  →", button, NightUi.CardLook.Action))
+                {
+                    UiSound.Play(UiSound.Cue.Confirm);
+                    game.StartCountdown();
+                }
             }
             else
             {
@@ -387,18 +394,24 @@ namespace ProtoHarness.ChainRush
             {
                 float actionWidth = FromLobby ? (panelWidth - 82) / 2 : panelWidth - 68;
                 Rect action = new Rect(x + 34, y + 405, actionWidth, 72);
-                Block(action, NightUi.Action);
-                again = GUI.Button(action, "다시 달리기", button);
+                again = NightUi.CardButton(action, "다시 달리기", button, NightUi.CardLook.Action);
                 if (FromLobby)
                 {
                     var back = new Rect(action.xMax + 14, action.y, actionWidth, action.height);
-                    Block(back, Row);
-                    lobby = GUI.Button(back, "ESC / 로비로", pauseItem);
+                    lobby = NightUi.CardButton(back, "ESC / 로비로", pauseItem);
                 }
             }
             DrawControls(width, height);
-            if (lobby) assembler.ReturnToLobby();
-            else if (again) game.StartCountdown();
+            if (lobby)
+            {
+                UiSound.Play(UiSound.Cue.Back);
+                assembler.ReturnToLobby();
+            }
+            else if (again)
+            {
+                UiSound.Play(UiSound.Cue.Confirm);
+                game.StartCountdown();
+            }
         }
 
         // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in
@@ -420,8 +433,8 @@ namespace ProtoHarness.ChainRush
                 if (!Offers((PauseChoice)i)) continue;
                 var row = new Rect(x + 42, rowY, 436, 66);
                 bool highlighted = i == pauseCursor;
-                Block(row, highlighted ? NightUi.Action : Row);
-                if (GUI.Button(row, PauseLabels[i], highlighted ? button : pauseItem)) clicked = i;
+                if (NightUi.CardButton(row, PauseLabels[i], highlighted ? button : pauseItem,
+                    highlighted ? NightUi.CardLook.Action : NightUi.CardLook.Plain)) clicked = i;
                 rowY += 84;
             }
             if (clicked >= 0) ChoosePause((PauseChoice)clicked);

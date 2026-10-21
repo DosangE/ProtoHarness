@@ -26,6 +26,7 @@
   - 메뉴 `Run PlayMode Tests` 1회차 `testcasecount="178" result="Failed(Child)" passed="170" failed="1" skipped="7"` (15:08:01Z~15:15:36Z) — 실패는 위 "반지름을 키운 두 곳" 의 첫 번째. 지그 R26 뒤 두 테스트만 `testcasecount="2" passed="1" failed="1"` (15:17:02Z~15:17:33Z) — 두 번째(Ω). Ω 를 키우고 장식을 다시 만든 뒤 2회차 `testcasecount="178" result="Passed" passed="171" failed="0" skipped="7"` (15:20:06Z~15:27:39Z). skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3.
   - 그 실행의 값: SKYWAY 2랩 86.08 / 84.88 s(기준 74.97 s ±20%), 한 바퀴 1499.4 m, 최대 옆 거리 5.04 m(S 1172.7). 직선 봉 테스트 — 줄 11.00 m, 65.2° 왼쪽으로 돌고, 12.0 m 돌아 게이지 +0.343, 최대 옆 거리 6.76 m(반폭 15). **스타디움 지문 그대로** `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3`.
   - `Long` 은 Endless 보류로 돌리지 않았다(`CLAUDE.md` §9-2). **사용자 플레이 확인: 아직** — 직선 슬라럼의 체감(봉 간격 40 m, 걸리는 거리 16 m, 한 번에 ⅓칸 남짓)은 플레이해 보고 정한다.
+  - **② 병합** (사용자 "괜찮네 푸쉬 병합까지 완료"): 커밋 `e6900ab` 에서 `select-tests -Range dev...HEAD` = 전체(바뀐 파일 17개 — `Centerline`·SO·프리팹·씬 빌더, ProjectSettings 0개). 그 전체 판정의 근거는 위 2회차 EditMode·PlayMode 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 뿐이다. `ProtoHarness.slnx` 는 이 머신의 차이라 넣지 않았다.
 - **버린 대안**: 봉을 가드 밖에 세우기 — 봉을 중심으로 원을 돌면 봉 쪽 가드에 먼저 닿아 스윙이 캐리 없이 끝난다. 폭을 조각 경계에서 계단처럼 바꾸기 — 넓은 쪽 가드의 끝면이 진행 방향을 막는다. 직선 봉을 위한 새 스윙 규칙(예: 직선에서는 앞으로 끌어 주기) — 이번 요청은 "직선에도 스윙하며 게이지 채우기" 이고 규칙 변경은 체감을 본 뒤에 정한다.
 
 ## 2026-10-21 · SKYWAY LOOP 외부 장식과 로비 연결

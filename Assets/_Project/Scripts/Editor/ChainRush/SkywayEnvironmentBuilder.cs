@@ -51,6 +51,33 @@ namespace ProtoHarness.Editor.ChainRush
             Debug.Log($"Skyway exterior: prefab saved at {PrefabPath}; {root.GetComponentsInChildren<Renderer>(true).Length} renderers; physics=0; gameplay scripts=0. Save the open scene as {ScenePath}, add it to Build Profiles, then connect the lobby.", root);
         }
 
+        // Lays the exterior out again on the current Circuit_Skyway (its layout and road width changed, DECISIONS 2026-10-22)
+        // and writes it over the existing prefab, so its GUID and the decoration scene's instance stay. Built in a preview
+        // scene: the open scenes are not touched.
+        [MenuItem("ProtoHarness/Chain Rush/Rebuild Skyway Exterior")]
+        public static void RebuildExterior()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before rebuilding the exterior.");
+            if (!File.Exists(PrefabPath)) throw new InvalidOperationException("There is no Skyway exterior to rebuild; use Create Skyway Exterior.");
+            TrackDefinition definition = Require<TrackDefinition>(DefinitionPath);
+            if (!definition.TryValidate(out string error)) throw new InvalidOperationException(error);
+            string guid = AssetDatabase.AssetPathToGUID(PrefabPath);
+            Scene preview = EditorSceneManager.NewPreviewScene();
+            try
+            {
+                GameObject root = new Layout(definition).Build(preview);
+                Validate(root);
+                GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath, out bool saved);
+                if (!saved || prefab == null) throw new IOException("Could not save the Skyway exterior prefab.");
+                if (AssetDatabase.AssetPathToGUID(PrefabPath) != guid) throw new InvalidOperationException("The rebuilt prefab lost its GUID.");
+                Debug.Log($"Skyway exterior rebuilt at {PrefabPath} (GUID kept); {prefab.GetComponentsInChildren<Renderer>(true).Length} renderers; physics=0; gameplay scripts=0.", prefab);
+            }
+            finally
+            {
+                EditorSceneManager.ClosePreviewScene(preview);
+            }
+        }
+
         // Use after the user has saved/registered the scene. This edits only the selected lobby entry and never saves it.
         [MenuItem("ProtoHarness/Chain Rush/Connect Saved Skyway Exterior To Lobby")]
         public static void ConnectLobby()
@@ -127,9 +154,11 @@ namespace ProtoHarness.Editor.ChainRush
 
         private sealed class Layout
         {
+            private readonly TrackDefinition definition;
             private readonly Centerline line;
             private readonly double length;
-            private readonly float clearance;
+            // Per sample, how far from the centerline the decoration keeps away: the road's half width there plus 7 m.
+            private readonly float[] clearances;
             private readonly Vector3[] samples;
             private readonly UnityEngine.Mesh cube = Resources.GetBuiltinResource<UnityEngine.Mesh>("Cube.fbx");
             private readonly UnityEngine.Mesh sphere = Resources.GetBuiltinResource<UnityEngine.Mesh>("Sphere.fbx");
@@ -145,24 +174,35 @@ namespace ProtoHarness.Editor.ChainRush
 
             internal Layout(TrackDefinition definition)
             {
+                this.definition = definition;
                 line = definition.BuildCenterline(Vector3.zero, 0f);
                 length = definition.LapLength;
-                clearance = definition.RoadHalfWidth + 7f;
                 samples = new Vector3[Mathf.CeilToInt((float)length / 2f)];
-                for (int i = 0; i < samples.Length; i++) samples[i] = line.FrameAt(i * 2d).Position;
+                clearances = new float[samples.Length];
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    samples[i] = line.FrameAt(i * 2d).Position;
+                    clearances[i] = Clearance(i * 2d);
+                }
                 if (cube == null || sphere == null) throw new InvalidOperationException("Built-in decoration meshes are missing.");
             }
 
-            internal GameObject Build()
+            private float Clearance(double s) => definition.HalfWidthAt(s) + 7f;
+
+            // Builds in the active scene, or in into when it is given (Rebuild's preview scene).
+            internal GameObject Build(Scene into = default)
             {
                 var root = new GameObject("Skyway Exterior");
+                if (into.IsValid()) SceneManager.MoveGameObjectToScene(root, into);
                 Transform terrain = Group("01 Landscape", root.transform);
                 Box("City foundation", terrain, new Vector3(-85f, Ground - 0.5f, -55f), new Vector3(740f, 1f, 550f), city);
                 Transform village = Group("02 Village and shops", root.transform);
                 for (float s = 0f; s < length; s += 34f)
                 {
-                    if (s > 440f && s < 1210f) continue;
                     TrackFrame f = line.FrameAt(s);
+                    // No village beside the climb, the viaduct and its exit.
+                    if (f.Position.y > 2f) continue;
+                    float clearance = Clearance(s);
                     for (int side = -1; side <= 1; side += 2)
                     {
                         int index = Mathf.RoundToInt(s / 34f) * 2 + (side + 1) / 2;
@@ -195,7 +235,8 @@ namespace ProtoHarness.Editor.ChainRush
                     }
 
                 Transform supports = Group("04 Elevated viaduct piers", root.transform);
-                for (float s = 410f; s < 1250f; s += 32f)
+                // Wherever the road runs high enough over the ground; the cap spans the road's width there.
+                for (float s = 0f; s < length; s += 32f)
                 {
                     TrackFrame f = line.FrameAt(s);
                     float top = f.Position.y - 1.5f;
@@ -205,7 +246,7 @@ namespace ProtoHarness.Editor.ChainRush
                     float height = top - Ground;
                     Box("Plinth", pier, new Vector3(0f, 0.35f, 0f), new Vector3(5.8f, 0.7f, 5.5f), ink);
                     Box("Concrete pier", pier, new Vector3(0f, height * 0.5f, 0f), new Vector3(2.7f, height, 2.9f), concrete);
-                    Box("Hammerhead cap", pier, new Vector3(0f, height - 0.45f, 0f), new Vector3(11.2f, 0.9f, 3.4f), steel);
+                    Box("Hammerhead cap", pier, new Vector3(0f, height - 0.45f, 0f), new Vector3(definition.HalfWidthAt(s) * 2f - 0.8f, 0.9f, 3.4f), steel);
                 }
 
                 Transform lamps = Group("05 Boulevard lamps", root.transform);
@@ -213,7 +254,7 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     TrackFrame f = line.FrameAt(s);
                     int side = (int)(s / 42f) % 2 == 0 ? -1 : 1;
-                    Vector3 p = f.Position + f.Right * (clearance + 1.5f) * side;
+                    Vector3 p = f.Position + f.Right * (Clearance(s) + 1.5f) * side;
                     if (!Clear(p, 0.8f)) continue;
                     Transform lamp = Group("Lamp S" + s.ToString("0"), lamps);
                     lamp.SetPositionAndRotation(new Vector3(p.x, Ground, p.z), Quaternion.LookRotation(-f.Right * side));
@@ -242,10 +283,10 @@ namespace ProtoHarness.Editor.ChainRush
 
             private bool Clear(Vector3 p, float radius)
             {
-                float limit = clearance + radius;
-                foreach (Vector3 sample in samples)
+                for (int i = 0; i < samples.Length; i++)
                 {
-                    float dx = p.x - sample.x, dz = p.z - sample.z;
+                    float limit = clearances[i] + radius;
+                    float dx = p.x - samples[i].x, dz = p.z - samples[i].z;
                     if (dx * dx + dz * dz < limit * limit) return false;
                 }
                 return true;

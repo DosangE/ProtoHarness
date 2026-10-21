@@ -60,6 +60,36 @@ namespace ProtoHarness.Tests.EditMode
             }
         }
 
+        // A tapering profile (user 2026-10-22, the Skyway's wide straight): the edges go linearly from the start half width
+        // to the end one, the guards following just outside them, and the end cap is the end width.
+        [Test]
+        public void AppendRoadAndGuards_Tapering_EdgesGoLinearlyFromStartToEndWidth()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(40f);
+            var profile = new RoadProfile(6f, 14f, Thickness, true, true);
+            RoadMeshBuilder.AppendRoad(line, 0d, 40d, profile, Vector3.zero, vertices, triangles);
+            Assert.That(vertices.Count, Is.EqualTo(SweepVertices(40)));
+            foreach (Vector3 vertex in vertices)
+                Assert.That(Mathf.Abs(vertex.x), Is.EqualTo(6f + 8f * vertex.z / 40f).Within(Tolerance), "Road edge at z " + vertex.z);
+            vertices.Clear();
+            triangles.Clear();
+            RoadMeshBuilder.AppendGuards(line, 0d, 40d, profile, RoadMeshBuilder.GuardBlockHeight, Vector3.zero, vertices, triangles);
+            foreach (Vector3 vertex in vertices)
+            {
+                float edge = 6f + 8f * vertex.z / 40f;
+                Assert.That(Mathf.Abs(vertex.x), Is.EqualTo(edge).Within(Tolerance).Or.EqualTo(edge + RoadMeshBuilder.GuardThickness).Within(Tolerance), "Guard at z " + vertex.z);
+            }
+        }
+
+        [Test]
+        public void RoadProfile_EndHalfWidth_DefaultsToTheStartAndMustBePositive()
+        {
+            Assert.That(RoadProfile.Guarded.EndHalfWidth, Is.EqualTo(HalfWidth));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RoadProfile(HalfWidth, 0f, Thickness, true, true));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RoadProfile(HalfWidth, float.PositiveInfinity, Thickness, true, true));
+        }
+
         [Test]
         public void AppendRoad_CurvedHill_EveryVertexOnSectionCorner()
         {

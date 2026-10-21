@@ -24,6 +24,18 @@ namespace ProtoHarness.Editor.ChainRush
         private const string MaterialFolder = "Assets/_Project/Art/Materials/";
         // One grapple gap in the stadium; four is room for edits.
         private const int AnchorCount = 4;
+        // The Skyway's elevated stretch (user 2026-10-22): the road widens to this half width (12 -> 30 m across), and
+        // swing poles stand along the long straight every SkywayPoleSpacing, left first, SkywayPoleOffset off the
+        // centerline inside the road, hookable from SkywayPoleReach plus the runner's poleReach.
+        private const float SkywayWideHalfWidth = 15f;
+        private const float SkywayStraightLength = 280f;
+        // The long straight is this piece of SkywaySegments.
+        private const int SkywayStraightIndex = 10;
+        private const int SkywayPoleCount = 7;
+        private const float SkywayPoleFirst = 20f;
+        private const float SkywayPoleSpacing = 40f;
+        private const float SkywayPoleOffset = 11f;
+        private const float SkywayPoleReach = 10f;
 
         // Scene objects that only the endless modes use.
         private static readonly string[] EnemyObjects = { "Interceptor Drone", "Enemy Warning Ring", "Chain Impact Ring", "Attack Chain" };
@@ -119,11 +131,12 @@ namespace ProtoHarness.Editor.ChainRush
             Debug.Log("ChainRush: circuit scene saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.");
         }
 
-        // Makes the Skyway Loop definition (DECISIONS 2026-10-21 "SKYWAY LOOP"): the layout of KartRider's Village
-        // Highway read from a record run, scaled to the circuit's 20 m/s. Clockwise from the start line heading north: a
-        // half turn, two village corners, the climb, the elevated road (a 355.56 m straight, two wide quarter turns and an
-        // S-bend at 12 m), its exit, two corners, the steep descent and the last corner. No gaps, no anchors, two laps.
-        // An existing asset is written over in place, so its GUID (the lobby's reference) and best records stay.
+        // Makes the Skyway Loop definition (DECISIONS 2026-10-21 "SKYWAY LOOP", reshaped 2026-10-22): the layout of
+        // KartRider's Village Highway traced from its track outline at 0.5 m a pixel, heights from a record run.
+        // Clockwise from the start line heading north: the bump's half turn, a jog and the climb (0 -> 12 m), the elevated
+        // straight (280 m) between two wide corners, the exit descent (12 -> 9 m), the omega curl, the top edge with its
+        // kink, the steep descent (9 -> 0 m) and the U-turn to the line. No gaps, no anchors, two laps.
+        // An existing asset is written over in place, so its GUID (the lobby's reference) stays.
         [MenuItem("ProtoHarness/Chain Rush/Create Skyway Track")]
         public static void CreateSkywayTrack()
         {
@@ -144,9 +157,20 @@ namespace ProtoHarness.Editor.ChainRush
                 element.FindPropertyRelative("radius").floatValue = segments[i].Radius;
                 element.FindPropertyRelative("degrees").floatValue = segments[i].Degrees;
                 element.FindPropertyRelative("endGrade").floatValue = segments[i].EndGrade;
+                element.FindPropertyRelative("endHalfWidth").floatValue = segments[i].EndHalfWidth;
                 element.FindPropertyRelative("gap").boolValue = segments[i].IsGap;
             }
             data.FindProperty("anchors").arraySize = 0;
+            TrackDefinition.Pole[] poles = SkywayPoles(segments);
+            SerializedProperty poleList = data.FindProperty("poles");
+            poleList.arraySize = poles.Length;
+            for (int i = 0; i < poles.Length; i++)
+            {
+                SerializedProperty element = poleList.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("s").floatValue = poles[i].S;
+                element.FindPropertyRelative("offset").floatValue = poles[i].Offset;
+                element.FindPropertyRelative("reach").floatValue = poles[i].Reach;
+            }
             data.FindProperty("lapCount").intValue = 2;
             data.ApplyModifiedPropertiesWithoutUndo();
             if (!definition.TryValidate(out string error))
@@ -169,25 +193,47 @@ namespace ProtoHarness.Editor.ChainRush
 
         private static TrackDefinition.Segment[] SkywaySegments() => new[]
         {
-            // The start straight north, the half turn and the two village corners (ground level).
-            // The half turn is R28: at R22 the bot ran wide to the guard mid-turn (5.62 m off at S 111.6).
-            TrackDefinition.Segment.Straight(71f), TrackDefinition.Segment.Arc(28f, 180f),
-            TrackDefinition.Segment.Straight(57f), TrackDefinition.Segment.Arc(36f, -90f),
-            TrackDefinition.Segment.Straight(14f), TrackDefinition.Segment.Arc(36f, 90f),
-            // The climb south (0 -> +15% -> 0, 12 m) and the turn onto the elevated road.
-            TrackDefinition.Segment.Straight(20f, 0.15f), TrackDefinition.Segment.Straight(60f, 0.15f), TrackDefinition.Segment.Straight(20f, 0f),
-            TrackDefinition.Segment.Arc(27f, 90f),
-            // The elevated road: the long straight west, a wide turn north, an S-bend, a wide turn east.
-            TrackDefinition.Segment.Straight(355.56f), TrackDefinition.Segment.Arc(60f, 90f),
-            TrackDefinition.Segment.Straight(15f), TrackDefinition.Segment.Arc(80f, -30f), TrackDefinition.Segment.Arc(80f, 30f),
-            TrackDefinition.Segment.Arc(60f, 90f), TrackDefinition.Segment.Straight(60f),
-            // Its exit down to the upper village (-10%, 12 m -> 9 m), the long right and the left.
-            TrackDefinition.Segment.Straight(15f, -0.1f), TrackDefinition.Segment.Straight(15f, -0.1f), TrackDefinition.Segment.Straight(15f, 0f),
-            TrackDefinition.Segment.Arc(40f, 90f), TrackDefinition.Segment.Straight(14f), TrackDefinition.Segment.Arc(27f, -90f),
-            // The steep descent east (-20%, 9 m -> 0) and the last corner to the line.
+            // The start straight north and the bump's half turn (R28: at R22 the bot ran wide to the guard mid-turn).
+            TrackDefinition.Segment.Straight(20.5f), TrackDefinition.Segment.Arc(28f, 180f),
+            // Down its right leg, the jog east and the climb south (0 -> +15% -> 0, 12 m) along the right side, where the
+            // road widens from 6 to SkywayWideHalfWidth (user 2026-10-22). The jog is R26: at R22 the bot ran 5.61 m wide
+            // in its second corner (S 256.8), past the 5.6 m guard limit.
+            TrackDefinition.Segment.Straight(56f), TrackDefinition.Segment.Arc(26f, -90f),
+            TrackDefinition.Segment.Straight(15f, 0.15f), TrackDefinition.Segment.Arc(26f, 90f, 0.15f),
+            TrackDefinition.Segment.Straight(24.22f, 0.15f, 10f), TrackDefinition.Segment.Straight(15f, 0f, 13f),
+            TrackDefinition.Segment.Straight(15.78f, 0f, SkywayWideHalfWidth),
+            // The elevated road, wide: a wide corner west, the long straight with its swing poles, a wide corner north.
+            TrackDefinition.Segment.Arc(60f, 90f, 0f, SkywayWideHalfWidth),
+            TrackDefinition.Segment.Straight(SkywayStraightLength, 0f, SkywayWideHalfWidth),
+            TrackDefinition.Segment.Arc(65f, 90f, 0f, SkywayWideHalfWidth),
+            // Its exit down to the upper village (-10%, 12 m -> 9 m) along the left side, narrowing back to 6.
+            TrackDefinition.Segment.Straight(15f, -0.1f, 12f), TrackDefinition.Segment.Straight(15f, -0.1f, 9f), TrackDefinition.Segment.Straight(15f, 0f),
+            TrackDefinition.Segment.Straight(10.56f),
+            // The omega curl: left, round the bulb to the right, left again to head north. R26 / R30 / R28: with R24 / R28 /
+            // R22 the bot ran 5.61 m wide in the last left (S 1028.1), past the 5.6 m guard limit.
+            TrackDefinition.Segment.Arc(26f, -90f), TrackDefinition.Segment.Arc(30f, 120f), TrackDefinition.Segment.Arc(30f, 105f),
+            TrackDefinition.Segment.Arc(28f, -135f),
+            // Up to the top-left corner, then the top edge east with its kink.
+            TrackDefinition.Segment.Straight(62.5f), TrackDefinition.Segment.Arc(22f, 90f), TrackDefinition.Segment.Straight(7.5f),
+            TrackDefinition.Segment.Arc(30f, 45f), TrackDefinition.Segment.Arc(30f, -45f), TrackDefinition.Segment.Straight(83.06f),
+            // Down into the dip: the steep descent south (-20%, 9 m -> 0) and the U-turn back north to the line.
+            TrackDefinition.Segment.Arc(22f, 90f),
             TrackDefinition.Segment.Straight(15f, -0.2f), TrackDefinition.Segment.Straight(30f, -0.2f), TrackDefinition.Segment.Straight(15f, 0f),
-            TrackDefinition.Segment.Straight(5f), TrackDefinition.Segment.Arc(25f, -90f), TrackDefinition.Segment.Straight(26f),
+            TrackDefinition.Segment.Arc(31f, -180f),
         };
+
+        // The swing poles along the Skyway's long straight, alternating left and right.
+        private static TrackDefinition.Pole[] SkywayPoles(TrackDefinition.Segment[] segments)
+        {
+            if (segments[SkywayStraightIndex].IsArc || segments[SkywayStraightIndex].Length != SkywayStraightLength)
+                throw new InvalidOperationException($"Skyway piece {SkywayStraightIndex} is no longer the {SkywayStraightLength} m straight; move SkywayStraightIndex.");
+            double start = 0d;
+            for (int i = 0; i < SkywayStraightIndex; i++) start += segments[i].Length;
+            var poles = new TrackDefinition.Pole[SkywayPoleCount];
+            for (int i = 0; i < poles.Length; i++)
+                poles[i] = new TrackDefinition.Pole((float)(start + SkywayPoleFirst + SkywayPoleSpacing * i), i % 2 == 0 ? -SkywayPoleOffset : SkywayPoleOffset, SkywayPoleReach);
+            return poles;
+        }
 
         private static Material RequireMaterial(string name)
         {

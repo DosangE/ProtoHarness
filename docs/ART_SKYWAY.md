@@ -10,6 +10,7 @@
 - 빌드 씬 목록에 새 씬을 활성화해 추가했고, 로비 SKYWAY LOOP 항목의 `environmentScene`을 `ChainRushTrackSkyway`로 연결해 저장했다.
 - 사용자 승인: 외부 장식 진행, 이후 현재 브랜치에서 MCP 씬 저장·빌드 목록 등록·로비 연결 예외 요청에 **"ㄱㄱ"**. 이번 작업에만 적용하며 기존 규칙 자체는 수정하지 않았다.
 - 기존 스타디움처럼 장식 전용으로 구성했다. `RaceAssembler.cs:102`의 Additive 로드 구조와 `RaceSetup.cs:9`의 물리 분리 계약을 참고했다.
+- 2026-10-22 `feature/skyway-reshape`: 트랙을 원작 윤곽대로 다시 짜고 고가 구간을 30 m 로 넓혀(DECISIONS 2026-10-22) 메뉴 `Rebuild Skyway Exterior` 로 같은 프리팹에 다시 지었다(GUID 유지, 씬 파일 무변경). 교각 36·마을 22동·가로등 36·충돌체 0. 아래 "구성"의 개수와 S 범위는 2026-10-21 옛 배치의 값이다.
 
 ## 구성
 

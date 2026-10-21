@@ -9,15 +9,26 @@ namespace ProtoHarness.ChainRush.Track
     // The defaults are the "stadium": a 140 m straight with a hill and a jump gap, a half turn of R40, a 140 m
     // straight with a grapple gap, and a second half turn, about 531 m a lap. TryValidate is the one source of
     // truth for OnValidate, the builder and CircuitRace: it checks the segment rules and that the end meets the start.
+    // The road is roadHalfWidth wide unless a piece names its own end width: then the width goes linearly from the
+    // previous piece's end width to it over the piece (the first piece starts from the last one's, the lap being closed).
+    // Swing poles beside the road (Pole) join the corner poles at the arcs' centers (user 2026-10-22, the Skyway).
     [CreateAssetMenu(menuName = "ProtoHarness/ChainRush/Track Definition")]
     public sealed class TrackDefinition : ScriptableObject
     {
         public const float MinRadius = 20f;
         public const float MinGapRunway = 15f;
         public const float MaxGrade = 0.2f;
+        public const float MinHalfWidth = 3f;
+        public const float MaxHalfWidth = 20f;
+        // Half width gained or lost per metre of a piece: 0.25 turns a guard at most 14 degrees off the track, well
+        // inside the 60 degrees RunnerMotor still takes for a guard (|normal . track forward| <= 0.5).
+        public const float MaxWidthChange = 0.25f;
+        public const float MinPoleReach = 2f;
+        public const float MaxPoleReach = 40f;
 
         // One piece of the circuit. A straight (Radius 0) keeps its Length; an arc turns Degrees (positive
         // right) at Radius and its length follows from those. EndGrade is where the grade eases to over the piece.
+        // EndHalfWidth is where the road's half width goes to over it; 0 means the track's roadHalfWidth.
         // A gap is a flat straight with no road surface.
         [Serializable]
         public struct Segment
@@ -26,26 +37,29 @@ namespace ProtoHarness.ChainRush.Track
             [SerializeField] private float radius;
             [SerializeField] private float degrees;
             [SerializeField] private float endGrade;
+            [SerializeField] private float endHalfWidth;
             [SerializeField] private bool gap;
 
-            private Segment(float length, float radius, float degrees, float endGrade, bool gap)
+            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap)
             {
                 this.length = length;
                 this.radius = radius;
                 this.degrees = degrees;
                 this.endGrade = endGrade;
+                this.endHalfWidth = endHalfWidth;
                 this.gap = gap;
             }
 
-            public static Segment Straight(float length, float endGrade = 0f) => new Segment(length, 0f, 0f, endGrade, false);
-            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, true);
-            public static Segment Arc(float radius, float degrees, float endGrade = 0f) => new Segment(0f, radius, degrees, endGrade, false);
+            public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false);
+            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true);
+            public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false);
 
             public bool IsArc => radius != 0f;
             public bool IsGap => gap;
             public float Radius => radius;
             public float Degrees => degrees;
             public float EndGrade => endGrade;
+            public float EndHalfWidth => endHalfWidth;
 
             // The same float expression as Centerline.AppendArc, so the S values match exactly.
             public float Length => IsArc ? radius * Mathf.Abs(degrees) * Mathf.Deg2Rad : length;
@@ -77,6 +91,27 @@ namespace ProtoHarness.ChainRush.Track
             public float Height => height;
         }
 
+        // A swing pole that is not an arc's center: S along the lap, Offset to the right of the centerline (on the road),
+        // standing at road level; a runner can hook it from Reach metres plus the motor's poleReach (Centerline.AddPole).
+        [Serializable]
+        public struct Pole
+        {
+            [SerializeField] private float s;
+            [SerializeField] private float offset;
+            [SerializeField] private float reach;
+
+            public Pole(float s, float offset, float reach)
+            {
+                this.s = s;
+                this.offset = offset;
+                this.reach = reach;
+            }
+
+            public float S => s;
+            public float Offset => offset;
+            public float Reach => reach;
+        }
+
         [SerializeField] private List<Segment> segments = new List<Segment>
         {
             // Straight A (140 m): a hill (0 -> +10% -> -10% -> 0, 2 m high) and a jump gap of 6 m.
@@ -94,6 +129,7 @@ namespace ProtoHarness.ChainRush.Track
 
         // The anchor hangs over the middle of the grapple gap: 140 + 60 + pi x 22 + 30 + 15 + 8.
         [SerializeField] private List<Anchor> anchors = new List<Anchor> { new Anchor(322.12f, 0f, 10f) };
+        [SerializeField] private List<Pole> poles = new List<Pole>();
         [Tooltip("Checkpoints as fractions of a lap, ascending, strictly between 0 and 1.")]
         [SerializeField] private float[] checkpointFractions = { 0.25f, 0.5f, 0.75f };
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]
@@ -104,6 +140,7 @@ namespace ProtoHarness.ChainRush.Track
 
         public IReadOnlyList<Segment> Segments => segments;
         public IReadOnlyList<Anchor> Anchors => anchors;
+        public IReadOnlyList<Pole> Poles => poles;
         public int LapCount => lapCount;
         public float RoadHalfWidth => roadHalfWidth;
         public float RoadThickness => roadThickness;
@@ -148,14 +185,59 @@ namespace ProtoHarness.ChainRush.Track
             return gaps;
         }
 
-        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z).
+        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles added.
         public Centerline BuildCenterline(Vector3 origin, float yawDegrees)
         {
             if (!TryValidate(out string error)) throw new InvalidOperationException(error);
             var line = new Centerline(origin, yawDegrees);
             for (int i = 0; i < segments.Count; i++) segments[i].AppendTo(line);
             line.Close();
+            for (int i = 0; i < poles.Count; i++)
+                line.AddPole(line.FrameAt(poles[i].S).TransformPoint(new Vector3(poles[i].Offset, 0f, 0f)), poles[i].Reach);
             return line;
+        }
+
+        // A piece's end half width, the track's roadHalfWidth where it names none.
+        public float EndHalfWidth(int index)
+        {
+            if (index < 0 || index >= segments.Count) throw new ArgumentOutOfRangeException(nameof(index), index, "No such segment.");
+            float own = segments[index].EndHalfWidth;
+            return own > 0f ? own : roadHalfWidth;
+        }
+
+        // A piece's start half width: the end width of the piece before it, going round the lap.
+        public float StartHalfWidth(int index) => EndHalfWidth(index == 0 ? segments.Count - 1 : index - 1);
+
+        // The road's half width at S along the lap (S is folded into one lap).
+        public float HalfWidthAt(double s)
+        {
+            double lap = LapLength;
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            s -= Math.Floor(s / lap) * lap;
+            double start = 0d;
+            for (int i = 0; i < segments.Count; i++)
+            {
+                double length = segments[i].Length;
+                if (s <= start + length || i == segments.Count - 1)
+                {
+                    float t = (float)Math.Min(1d, Math.Max(0d, (s - start) / length));
+                    float from = StartHalfWidth(i);
+                    return from + (EndHalfWidth(i) - from) * t;
+                }
+                start += length;
+            }
+            return roadHalfWidth;
+        }
+
+        // The widest the road gets anywhere on the lap.
+        public float WidestHalfWidth
+        {
+            get
+            {
+                float widest = roadHalfWidth;
+                for (int i = 0; i < segments.Count; i++) widest = Mathf.Max(widest, EndHalfWidth(i));
+                return widest;
+            }
         }
 
         public bool TryValidate(out string error)
@@ -193,6 +275,19 @@ namespace ProtoHarness.ChainRush.Track
             if (lap < 100d) return Fail($"a lap of {lap:F1} m is too short (at least 100 m).", out error);
             if (lapCount < 1 || lapCount > 20) return Fail($"the lap count {lapCount} must be within [1, 20].", out error);
             if (!(roadHalfWidth >= 3f) || roadHalfWidth > 12f || !(roadThickness > 0f)) return Fail("the road half width must be within [3, 12] m and the thickness positive.", out error);
+            for (int i = 0; i < segments.Count; i++)
+            {
+                float own = segments[i].EndHalfWidth;
+                if (own != 0f && !(own >= MinHalfWidth && own <= MaxHalfWidth))
+                    return Fail($"segment {i}: the end half width {own} must be 0 (the road's) or within [{MinHalfWidth}, {MaxHalfWidth}] m.", out error);
+            }
+            for (int i = 0; i < segments.Count; i++)
+            {
+                float change = Mathf.Abs(EndHalfWidth(i) - StartHalfWidth(i));
+                if (segments[i].IsGap && change != 0f) return Fail($"segment {i}: the road must keep its width across a gap.", out error);
+                if (change > MaxWidthChange * segments[i].Length)
+                    return Fail($"segment {i}: the half width changes {change:F2} m over {segments[i].Length:F1} m, more than {MaxWidthChange} a metre.", out error);
+            }
             float previous = 0f;
             for (int i = 0; i < checkpointFractions.Length; i++)
             {
@@ -211,7 +306,14 @@ namespace ProtoHarness.ChainRush.Track
                 for (int g = 0; g < gaps.Count; g++)
                     if (anchor.S >= gaps[g].Start && anchor.S <= gaps[g].End) overGap = true;
                 if (!overGap) return Fail($"anchor {i} at S {anchor.S} is not over a gap.", out error);
-                if (!(anchor.Height >= 1f) || Mathf.Abs(anchor.Offset) > roadHalfWidth) return Fail($"anchor {i}: the height must be at least 1 m and the offset within the road.", out error);
+                if (!(anchor.Height >= 1f) || !(Mathf.Abs(anchor.Offset) <= HalfWidthAt(anchor.S))) return Fail($"anchor {i}: the height must be at least 1 m and the offset within the road.", out error);
+            }
+            for (int i = 0; i < poles.Count; i++)
+            {
+                Pole pole = poles[i];
+                if (!(pole.S >= 0f) || !(pole.S < lap)) return Fail($"pole {i}: S {pole.S} must be within the lap [0, {lap:F1}).", out error);
+                if (!(Mathf.Abs(pole.Offset) <= HalfWidthAt(pole.S))) return Fail($"pole {i}: the offset {pole.Offset} must be within the road ({HalfWidthAt(pole.S):F1} m there).", out error);
+                if (!(pole.Reach >= MinPoleReach && pole.Reach <= MaxPoleReach)) return Fail($"pole {i}: the reach {pole.Reach} must be within [{MinPoleReach}, {MaxPoleReach}] m.", out error);
             }
             var line = new Centerline(Vector3.zero, 0f);
             for (int i = 0; i < segments.Count; i++) segments[i].AppendTo(line);

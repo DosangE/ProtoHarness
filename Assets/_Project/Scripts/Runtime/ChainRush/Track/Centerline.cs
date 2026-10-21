@@ -35,7 +35,15 @@ namespace ProtoHarness.ChainRush.Track
             public Vector3 EndRight;
         }
 
+        // A pole that is not an arc's center (AddPole): where it stands and how far from it a runner can hook it.
+        private struct ExtraPole
+        {
+            public Vector3 Position;
+            public float Reach;
+        }
+
         private readonly List<Piece> pieces = new List<Piece>(16);
+        private readonly List<ExtraPole> extraPoles = new List<ExtraPole>(8);
         private readonly Vector3 origin;
         private readonly float originYaw;
         private Vector3 end;
@@ -75,10 +83,11 @@ namespace ProtoHarness.ChainRush.Track
             }
         }
 
-        // Back to the construction origin with no pieces; S restarts at zero and the grade at flat.
+        // Back to the construction origin with no pieces and no added poles; S restarts at zero and the grade at flat.
         public void Clear()
         {
             pieces.Clear();
+            extraPoles.Clear();
             end = origin;
             endYaw = originYaw;
             endGrade = 0f;
@@ -227,6 +236,12 @@ namespace ProtoHarness.ChainRush.Track
                 piece.End += offset;
                 pieces[i] = piece;
             }
+            for (int i = 0; i < extraPoles.Count; i++)
+            {
+                ExtraPole pole = extraPoles[i];
+                pole.Position += offset;
+                extraPoles[i] = pole;
+            }
             end += offset;
         }
 
@@ -256,19 +271,32 @@ namespace ProtoHarness.ChainRush.Track
             return FrameOn(piece, (float)(s - piece.StartS));
         }
 
-        // Appends the pole of every arc piece (its center, at the arc's start height), in piece order: the same points
-        // TryFindPole chooses from, for presentation to stand a pole model on (R5).
+        // Appends the pole of every arc piece (its center, at the arc's start height), in piece order, then the added
+        // poles (AddPole) in the order they were added: the same points TryFindPole chooses from, for presentation to
+        // stand a pole model on (R5).
         public void GetPoles(List<Vector3> poles)
         {
             if (poles == null) throw new ArgumentNullException(nameof(poles));
             for (int i = 0; i < pieces.Count; i++)
                 if (pieces[i].Curvature != 0f) poles.Add(pieces[i].Center);
+            for (int i = 0; i < extraPoles.Count; i++) poles.Add(extraPoles[i].Position);
         }
 
-        // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1). Of the poles
-        // within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading) and no farther than their
-        // arc's radius plus extraReach, the nearest, measured level; ties go to the earlier piece. False when there is none.
-        // The pole sits at the arc's start height. All pieces are searched, focus or not: a runner asks only when it acts.
+        // A pole that is not an arc's center, such as one beside a straight (user 2026-10-22, the Skyway's wide straight):
+        // TryFindPole offers it like a corner pole, with reach in place of an arc's radius. It is a world position like the
+        // pieces' and moves with ShiftOrigin; Clear removes it, TrimBefore keeps it.
+        public void AddPole(Vector3 position, float reach)
+        {
+            if (!IsFinite(position)) throw new ArgumentOutOfRangeException(nameof(position), position, "Position must be finite.");
+            if (!(reach > 0f) || float.IsInfinity(reach)) throw new ArgumentOutOfRangeException(nameof(reach), reach, "Reach must be positive and finite.");
+            extraPoles.Add(new ExtraPole { Position = position, Reach = reach });
+        }
+
+        // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1), and AddPole
+        // adds others. Of the poles within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading)
+        // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level; ties
+        // go to the earlier piece, and arcs come before added poles. False when there is none. An arc's pole sits at the
+        // arc's start height. All poles are searched, focus or not: a runner asks only when it acts.
         public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole)
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
@@ -284,17 +312,30 @@ namespace ProtoHarness.ChainRush.Track
             {
                 Piece piece = pieces[i];
                 if (piece.Curvature == 0f) continue;
-                Vector3 toward = piece.Center - world;
-                toward.y = 0f;
-                float distance = toward.magnitude;
-                if (distance > 1f / Mathf.Abs(piece.Curvature) + extraReach || distance >= bestDistance) continue;
-                float yaw = Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg;
-                if (Mathf.Abs(Mathf.DeltaAngle(headingDegrees, yaw)) > maxAngleDegrees) continue;
+                if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
                 pole = piece.Center;
-                bestDistance = distance;
+                found = true;
+            }
+            for (int i = 0; i < extraPoles.Count; i++)
+            {
+                if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
+                pole = extraPoles[i].Position;
                 found = true;
             }
             return found;
+        }
+
+        // Whether a pole is within reach, nearer than the best so far and inside the angle; if so it becomes the best.
+        private static bool InReach(Vector3 pole, float reach, Vector3 world, float headingDegrees, float maxAngleDegrees, ref float bestDistance)
+        {
+            Vector3 toward = pole - world;
+            toward.y = 0f;
+            float distance = toward.magnitude;
+            if (distance > reach || distance >= bestDistance) return false;
+            float yaw = Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg;
+            if (Mathf.Abs(Mathf.DeltaAngle(headingDegrees, yaw)) > maxAngleDegrees) return false;
+            bestDistance = distance;
+            return true;
         }
 
         private static TrackFrame FrameOn(Piece piece, float along)

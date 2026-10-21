@@ -28,6 +28,8 @@ namespace ProtoHarness.Tests.PlayMode
         private const string EnvironmentPath = "Assets/_Project/Scenes/ChainRushTrackStadium.unity";
         private const string EnvironmentScene = "ChainRushTrackStadium";
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
+        private const string SkywayPath = "Assets/_Project/Data/Circuit_Skyway.asset";
+        private const string SkywayEnvironmentScene = "ChainRushTrackSkyway";
 
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
@@ -187,7 +189,8 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "A refused entry is not chosen.");
         }
 
-        // The tracks still to come are listed after the stadium, locked (user 2026-10-21).
+        // The tracks still to come are listed after the scene's tracks, locked (user 2026-10-21; the skyway took the
+        // second placeholder's place the same day, DECISIONS "SKYWAY LOOP").
         [UnityTest]
         public IEnumerator Lobby_PlaceholderTracks_RefuseWithANoticeAndStay()
         {
@@ -195,15 +198,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
-            for (int row = 1; row <= 2; row++)
-            {
-                menu.Highlight(row);
-                Assert.That(menu.TrackRecordText(row), Is.EqualTo("준비 중"));
-                menu.Confirm();
-                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), $"Placeholder track {row} is locked.");
-                Assert.That(menu.Notice, Is.Not.Empty);
-            }
-            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(3), "The stadium and two placeholders.");
+            menu.Highlight(2);
+            Assert.That(menu.TrackRecordText(2), Is.EqualTo("준비 중"));
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), "The placeholder track is locked.");
+            Assert.That(menu.Notice, Is.Not.Empty);
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(3), "The stadium, the skyway and one placeholder.");
             menu.Move(1);
             Assert.That(menu.Cursor, Is.EqualTo(0), "The cursor wraps from the last placeholder to the stadium.");
             Assert.That(menu.BuildSetup().Track, Is.SameAs(Stadium()), "A refused track is not chosen.");
@@ -566,6 +566,105 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // ---- the skyway (DECISIONS 2026-10-21 "SKYWAY LOOP") -----------------------------------------------
+
+        [UnityTest]
+        public IEnumerator Lobby_SkywayTrack_IsChosenWithItsEnvironment()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
+            menu.Highlight(1);
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "The skyway can be raced.");
+            RaceSetup setup = menu.BuildSetup();
+            Assert.That(setup.Track, Is.SameAs(Skyway()));
+            Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
+        }
+
+        // The real lobby setup loads the decoration-only skyway environment, then the bot runs both laps: no fall,
+        // no guard touched, each lap close to the lap length at 20 m/s. Returning unloads the decoration too.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_SkywayFromTheLobby_BotFinishesTwoLaps()
+        {
+            var store = TestRecords();
+            TrackDefinition skyway = Skyway();
+            store.Clear(skyway.name, SpeedClass.Fast);
+            Assert.That(skyway.TryValidate(out string error), Is.True, error);
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
+            menu.Confirm();
+            menu.Highlight(1);
+            menu.Confirm();
+            RaceSetup setup = menu.BuildSetup();
+            Assert.That(setup.Track, Is.SameAs(skyway));
+            Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
+            RaceLaunch.Request(setup);
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            Assert.That(circuit.Definition, Is.SameAs(skyway));
+            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The Skyway decoration did not finish loading.");
+            Scene environment = SceneManager.GetSceneByName(SkywayEnvironmentScene);
+            Assert.That(environment.isLoaded, Is.True);
+            Assert.That(environment.rootCount, Is.EqualTo(1), "Only the exterior prefab belongs in the decoration scene.");
+            GameObject exterior = environment.GetRootGameObjects()[0];
+            Assert.That(exterior.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(0));
+            Assert.That(exterior.GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<Rigidbody>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
+            float scale = Time.timeScale;
+            try
+            {
+                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
+                Time.timeScale = 6f;
+                game.StartRun();
+                float deadline = Time.realtimeSinceStartup + 90f;
+                float maxOffset = 0f;
+                double maxOffsetS = 0d;
+                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
+                {
+                    TrackCoord coord = game.Track.Project(player.transform.position);
+                    if (Mathf.Abs(coord.D) > maxOffset)
+                    {
+                        maxOffset = Mathf.Abs(coord.D);
+                        maxOffsetS = coord.S;
+                    }
+                    yield return null;
+                }
+                Time.timeScale = scale;
+                Assert.That(game.HasFailed, Is.False, "The bot fell or died.");
+                Assert.That(game.HasFinished, Is.True, "The bot did not finish two laps.");
+                LapCounter laps = circuit.Laps;
+                Assert.That(laps.CompletedLaps, Is.EqualTo(2));
+                double lapSeconds = skyway.LapLength / 20d;
+                for (int lap = 1; lap <= 2; lap++)
+                {
+                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
+                    Debug.Log($"ChainRush skyway lap {lap}: {seconds:F2} s");
+                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
+                }
+                Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), $"The bot touched a guard at S {maxOffsetS:F1} (segment {SegmentAt(skyway, maxOffsetS)}).");
+                Debug.Log($"ChainRush skyway race: {skyway.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
+                assembler.ReturnToLobby();
+                yield return null;
+                yield return null;
+                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
+                Assert.That(SceneManager.GetSceneByName(SkywayEnvironmentScene).isLoaded, Is.False, "The Skyway exterior must leave with the race.");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(skyway.name, SpeedClass.Fast);
+            }
+        }
+
         // ---- the whole loop, by scene name ---------------------------------------------------------------
 
         // Needs the four scenes in the build's scene list (M2-a2); until then it is reported as ignored, not passed.
@@ -669,6 +768,30 @@ namespace ProtoHarness.Tests.PlayMode
             var beta = AssetDatabase.LoadAssetAtPath<RunnerProfile>(BetaPath);
             Assert.That(beta, Is.Not.Null, BetaPath);
             return beta;
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            return null;
+#endif
+        }
+
+        // The index of the segment that holds s (0 .. count - 1), for messages.
+        private static int SegmentAt(TrackDefinition definition, double s)
+        {
+            double end = 0d;
+            for (int i = 0; i < definition.Segments.Count; i++)
+            {
+                end += definition.Segments[i].Length;
+                if (s < end) return i;
+            }
+            return definition.Segments.Count - 1;
+        }
+
+        private static TrackDefinition Skyway()
+        {
+#if UNITY_EDITOR
+            var skyway = AssetDatabase.LoadAssetAtPath<TrackDefinition>(SkywayPath);
+            Assert.That(skyway, Is.Not.Null, SkywayPath + " (menu: Create Skyway Track)");
+            return skyway;
 #else
             Assert.Fail("Flow tests require the Unity Editor.");
             return null;

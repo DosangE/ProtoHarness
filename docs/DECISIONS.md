@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-21 · SKYWAY LOOP 외부 장식과 로비 연결
+
+- **결정 (사용자)**: 기존 스타디움처럼 주행 서킷과 무관한 외부 디자인을 추가한다. "computer use 말고 mcp 써라"에 따라 Unity MCP로 진행했다. 현재 브랜치에서 MCP 씬 저장·빌드 목록 등록·로비 연결까지 하는 이번 작업의 예외 승인: "ㄱㄱ". 이후 "일단 커밋 병합 푸쉬 진행"으로 Git 작업을 승인했다.
+- **결과**: `ChainRushTrackSkyway.unity`가 `SkywayExterior.prefab` 하나를 배치하고, 로비 SKYWAY LOOP가 해당 씬을 Additive로 불러온다. 마을 건물 42동·교각 27개·가로등 35개·타워 24동·정원·가로수·입체 간판. 기존 재질을 재사용하며 충돌체·Rigidbody·런타임 스크립트 0개. 실제 서킷 정의·주행 씬·기존 스타디움 씬의 해시는 그대로다.
+- **검증** (UTC, 에디터 6000.3.19f1): EditMode `testcasecount="258" result="Passed" passed="258" failed="0" skipped="0"` (08:28:27Z~08:28:33Z). PlayMode `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (08:30:15Z~08:39:03Z). 제외 7건은 기존 Explicit 측정 4건·네트워크 레이스 3건. Flow 22/22, SKYWAY 장식 로드·물리 분리·2랩 완주·로비 복귀 시 장식 해제 포함. 랩 81.12/79.88초, 최대 옆 거리 1.92m. 실제 야간 Main Camera 화면 확인, 편집 상태 복원 후 Console Error 0건. 상세 로그·선택 도구 출력: `ART_SKYWAY.md`.
+- **커밋 범위**: SKYWAY 트랙·외부 장식·연결·테스트·문서. 기존 머신 차이 `Packages/packages-lock.json`, `ProjectSettings/ProjectSettings.asset`, `ProjectSettings/ProjectVersion.txt`, `ProtoHarness.slnx`는 로컬에 보존하고 제외한다. 빌드 씬 목록 변경은 위 승인 범위에 포함한다. 사용자 직접 2랩 플레이는 아직 확인하지 않았으므로 `main` 마일스톤 병합은 하지 않는다.
+
+## 2026-10-21 · SKYWAY LOOP — 빌리지 고가의 질주를 옮긴 두 번째 서킷
+
+- **결정 (사용자, 2026-10-21, "빌리지 고가의 질주를 똑같이" → 합의안 "ㄱㄱ", `feature/track-skyway`)**:
+  - **배치를 읽은 곳**: 사용자가 준 기록 영상(크레이지레이싱 카트라이더 매우빠름 2랩 1:30.42, 1랩 45.61초)을 받아 1랩을 0.5초 간격으로 읽었고, 카운트다운 화면의 트랙 썸네일(흰 윤곽)로 위상을 맞췄다. 웹 문서(나무위키 등)에는 구간 순서가 없었다. 자동 추출 3가지(미니맵 화살표 각도, 하늘 가로 이동량, 지평선 띠 이동량)는 실패해 멈췄다 — 미니맵이 진행 방향 기준으로 돌고, 화면 고정 HUD 가 이동량을 0 쪽으로 끌었다.
+  - **배치** (시계 방향, 출발선에서 북쪽): 출발 직선 71 → ① 우180 R28 고리 → 아치 밑 직선 → ② 좌90 R36 → ③ 우90 R36 → 초반 오르막(15%, 0 → 12 m) → ④ 우90 R27 로 고가 진입 → **고가 서쪽 직선 355.56 m**(한 바퀴에서 가장 긴 직선, 원작 "까마득한 직선") → 완만한 우90 R60 → S자(좌30·우30 R80) → 완만한 우90 R60 → 고가 동쪽 직선 60 → 출구 내리막(−10%, 12 → 9 m) → ⑤ 긴 우90 R40 → ⑥ 좌90 R27 → **깎아자른 내리막**(−20%, 9 → 0 m) → ⑦ 좌90 R25 → 골인. 29조각, 한 바퀴 1482.82 m, 회전 합 +360°.
+  - **축척**: 영상 시간 비례(영상 1초 ≈ 28.5 m). 원작 길이(한 바퀴 3.7 km)는 20 m/s 에서 한 바퀴 3분이 넘어 버렸다. 랩 수는 원작대로 2랩(약 2분 30초, 사용자 기본값 수락).
+  - **추정한 것**: 코너 각도는 썸네일에서, 고가 위 완만한 커브 두 개는 썸네일 + "회전 합 360°" 에서 거꾸로 정했다(시속 300 km 안팎이라 0.5초 간격 화면에 거의 안 보였다). 꼬리(⑤~⑦)는 썸네일과 영상 시간 비율이 맞지 않아 절충했다. 서쪽 직선 길이는 닫힘을 맞추려고 푼 값(오차 4 mm).
+  - **이름**: 원작 이름을 쓰지 않고 로비의 자리표시 `SKYWAY LOOP` 를 채웠다(같은 날 "임시 잠금 트랙" 항목의 두 번째 자리). 에셋 `Circuit_Skyway` — 최고 기록 키가 에셋 이름이다(`BestRecords.cs:63`). 장식 씬은 아직 없다(`environmentScene` 빈 값).
+  - **만드는 법**: 에디터 메뉴 `ProtoHarness > Chain Rush > Create Skyway Track`(`ChainRushCircuitSceneBuilder.SkywaySegments` 가 원본). 새 인스턴스에 채우고 `TryValidate` 를 통과해야 저장하며, 에셋이 이미 있으면 `CopySerialized` 로 덮어써 GUID(로비 참조)와 기록을 지킨다.
+  - **① R22 → R28**: 처음 R22 180° 에서 봇이 고리 한가운데(S 111.6)에서 5.62 m 밀려 가드에 닿았다(기준 5.6). R22 90° 인 스타디움은 문제가 없었다 — 180° 를 이어 도는 동안 바깥으로 밀리는 양이 커진다. 테스트 기준은 두고 코스를 고쳤다(사용자 "ㄱㄱ"). R28 에서 가드와 가장 가까운 거리는 1.92 m(S 1456.8, ⑦).
+  - **로비 씬**: `LobbyMenu.tracks` 에 항목을 `Unity_RunCommand` 로 넣고, 저장은 사용자가 했다 — §0 이 `Unity_RunCommand` 로 씬 저장을 금지한다. 합의안에는 "RunCommand 로" 라고만 적어 이 금지를 놓쳤고, 실행 전에 알아채 나눴다.
+- **버린 대안**: 원작 길이 그대로(한 바퀴 3분 이상). 첫 초안(웹 문서의 특징만으로 짠 배치) — 영상으로 확인하니 골인 직전 코너가 오른쪽 U자가 아니라 왼쪽 90°였고, 연속 90도 코너가 고가 앞에 있었다. ① 을 R26 으로 — 여유가 적다. 에셋을 지우고 다시 만들기 — 삭제는 §0 승인 대상이고 GUID 가 바뀌어 로비 참조가 끊긴다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리 = 이 머신 버전 차이 파일 제외):
+  - 컴파일 `*** Tundra build success (50.55 seconds), 23 items updated, 1618 evaluated` → 테스트 진단 메시지 `(2.87 seconds), 5 items` → 빌더 덮어쓰기 `(2.52 seconds), 7 items`. `error CS` 0건.
+  - 메뉴 실행: `asset=Circuit_Skyway segments=29 lap=1482.818 laps=2 anchors=0 arc1R=28 valid=True guid same=True (1b518dfd3292dce47904e7b029d0c925)`.
+  - `ChainRushFlowTests` (R22): `testcasecount="22" result="Failed(Child)" passed="21" failed="1"` (07:26:24Z~07:27:37Z) — 실패 `Race_SkywayFromTheLobby_BotFinishesTwoLaps` "The bot touched a guard. Expected: less than 5.5999999f But was: 5.61562395f". 같은 테스트 단독 재실행 `testcasecount="1" passed="0" failed="1"` (07:29:47Z~07:30:16Z), "at S 111.6 (segment 1)", 같은 값.
+  - R28 뒤 단독: `testcasecount="1" result="Passed" passed="1" failed="0"` (07:33:49Z~07:34:18Z), 랩 81.12 s / 79.88 s(기준 74.1 s ±20%), 최대 옆 거리 1.92 m.
+  - ① `tools/select-tests.ps1` 기본 범위 → "전체"(새 SO·씬·에디터 빌더, 그리고 이 머신의 버전 차이 파일). EditMode `!Enemy !Endless` `testcasecount="258" result="Passed" passed="258" failed="0"` (07:34:36Z~07:34:40Z). 메뉴 `Run PlayMode Tests` `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (07:35:07Z~07:44:19Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. 스타디움 지문 테스트 포함. `Long` 은 모두 무한 모드라 Endless 보류 동안 돌리지 않는다(`CLAUDE.md` §9-2).
+  - Console Error 2건은 테스트가 기대하는 로그다: `RaceAssembler: Single at VeryFast cannot be raced yet` (`Race_LockedSpeedClass_…`), `RunnerProfile '': every scale and the weight must be positive.` (`ChainRushProfileTests.cs:138`).
+  - **사용자 플레이 확인: 아직.**
+
 ## 2026-10-21 · 타이틀 카트라이더풍 로고 · 버전/빌드 표기 · 로비 항목 설명 · 임시 잠금 트랙
 
 - **결정 (사용자, 2026-10-21, 요청서 "ㄱㄱ", `feature/ui-title-lobby-info`)**:

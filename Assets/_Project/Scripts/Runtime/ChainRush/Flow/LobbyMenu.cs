@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -13,6 +14,9 @@ namespace ProtoHarness.ChainRush.Flow
     // The settings page (M2-c) lists the volumes and the speed field of view, changed with ←/→, and opens the keys page.
     // The runner page shows the highlighted runner's look (RunnerPreview), turned by dragging the mouse across it; a click
     // on a runner only highlights it, and the enter button (or Enter) starts the race.
+    // The main, track and speed pages describe the highlighted entry in a panel on the right (user 2026-10-21). The track
+    // page also lists tracks still to come (PlaceholderTracks), locked. Rows and buttons are NightUi pressable cards; moving,
+    // choosing, going back and a refusal each play their UiSound cue.
     public sealed class LobbyMenu : MonoBehaviour
     {
         public enum Page { Main, Settings, Track, Speed, Runner, Keys }
@@ -34,6 +38,20 @@ namespace ProtoHarness.ChainRush.Flow
         private const int MainSingle = 0, MainMulti = 1, MainSettings = 2;
         private static readonly string[] MainOptions = { "싱글 레이스", "멀티 레이스", "설정" };
         private static readonly bool[] MainLocked = { false, true, false };
+        private static readonly string[] MainDescriptions =
+        {
+            "혼자 코스를 달려 기록에 도전합니다.\n트랙과 속도, 러너를 골라 출발하세요.\n트랙과 속도마다 최고 기록이 남습니다.",
+            "다른 러너들과 같은 코스에서 순위를 겨룹니다.\n멀티 레이스는 M7 에서 열립니다.",
+            "볼륨과 속도 시야 효과를 조절하고\n조작 키를 확인합니다.",
+        };
+        // Tracks still to come, listed after the scene's tracks and locked; they have no definition yet.
+        private static readonly string[] PlaceholderTracks = { "NEON HARBOR", "SKYWAY LOOP" };
+        private static readonly string[] PlaceholderDescriptions =
+        {
+            "네온이 비치는 항구 부두를 도는 코스.\n준비 중인 트랙입니다.",
+            "도시 위 고가도로를 감아 오르는 코스.\n준비 중인 트랙입니다.",
+        };
+        private const string PlaceholderRecord = "준비 중";
         private const int SettingMaster = 0, SettingMusic = 1, SettingEffects = 2, SettingSpeedView = 3, SettingKeys = 4;
         private static readonly string[] SettingsOptions = { "전체 볼륨", "음악", "효과음", "속도 시야 효과", "조작 키" };
         private static readonly bool[] SettingsLocked = { false, false, false, false, false };
@@ -42,6 +60,14 @@ namespace ProtoHarness.ChainRush.Flow
         private static readonly SpeedClass[] Speeds = { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast };
         private static readonly string[] SpeedOptions = { "보통", "빠름", "매우빠름" };
         private static readonly bool[] SpeedLocked = { true, false, true };
+        private static readonly string[] SpeedDescriptions =
+        {
+            "처음 달리는 러너를 위한 속도.\n코스를 익히기 좋습니다.\n아직 열리지 않았습니다.",
+            "기본 레이스 속도.\n지금 달릴 수 있는 단계입니다.",
+            "숙련자를 위한 가장 빠른 속도.\n아직 열리지 않았습니다.",
+        };
+        // The description panel's small heading, by page (Page order); the pages without the panel have none.
+        private static readonly string[] DescriptionTags = { "MODE", "", "TRACK", "SPEED CLASS", "", "" };
         private static readonly string[] StatNames = { "최고 속도", "가속", "게이지 충전", "무게" };
         // A stat bar is full at this scale; the runners differ by a few percent, so the bars start from StatBarFloor.
         private const float StatBarFloor = 0.7f, StatBarCeiling = 1.3f;
@@ -78,8 +104,10 @@ namespace ProtoHarness.ChainRush.Flow
         [SerializeField] private RunnerProfile[] runners;
         [SerializeField] private Texture2D nightBackground;
         [SerializeField] private Texture2D runnerArtwork;
+        // The scene's tracks, then PlaceholderTracks; a placeholder's index is past tracks' end.
         private string[] trackOptions;
         private bool[] trackLocked;
+        private string[] trackDescriptions;
         // Per track, its best record at the chosen speed class (RefreshRecords).
         private string[] trackRecords;
         private BestRecords records = BestRecords.Player;
@@ -114,6 +142,10 @@ namespace ProtoHarness.ChainRush.Flow
         private GUIStyle brand;
         private GUIStyle pageHeading;
         private GUIStyle tileLabel;
+        private GUIStyle infoTitle;
+        private GUIStyle infoBody;
+        private GUIStyle lockTag;
+        private GUIStyle helpLine;
         private int pendingRow = -1;
 
         // Where the track page reads best records from (the player's; a test gives its own).
@@ -136,9 +168,18 @@ namespace ProtoHarness.ChainRush.Flow
         // The track page's record line for a track: "최고 기록  01:19.2 · BETA", or "기록 없음".
         public string TrackRecordText(int index) => trackRecords[index];
         public int Cursor => cursor;
-        // The runner RACE SETUP names: on the runner page the highlighted one (a click only picks it since 2026-10-20),
-        // elsewhere the one last entered with.
+        // The runner the setup names: on the runner page the highlighted one (a click only picks it since 2026-10-20),
+        // elsewhere the one last entered with. No longer drawn: the RACE SETUP panel gave way to the descriptions (2026-10-21).
         public int SetupRunner => page == Page.Runner ? cursor : runner;
+        // The highlighted entry's description on the main, track and speed pages; empty on the others.
+        public string Description
+        {
+            get
+            {
+                string[] descriptions = Descriptions(page);
+                return cursor < descriptions.Length ? descriptions[cursor] : "";
+            }
+        }
         // The runner page's preview (null if the lobby failed to wake).
         public RunnerPreview Preview => preview;
         // The last refusal (a locked entry), shown under the list; empty when there is none.
@@ -153,9 +194,11 @@ namespace ProtoHarness.ChainRush.Flow
                 enabled = false;
                 return;
             }
-            trackOptions = new string[tracks.Length];
-            trackLocked = new bool[tracks.Length];
-            trackRecords = new string[tracks.Length];
+            int trackCount = tracks.Length + PlaceholderTracks.Length;
+            trackOptions = new string[trackCount];
+            trackLocked = new bool[trackCount];
+            trackRecords = new string[trackCount];
+            trackDescriptions = new string[trackCount];
             for (int i = 0; i < tracks.Length; i++)
             {
                 if (tracks[i].Definition == null || string.IsNullOrEmpty(tracks[i].Title) || tracks[i].EnvironmentScene == null)
@@ -165,6 +208,18 @@ namespace ProtoHarness.ChainRush.Flow
                     return;
                 }
                 trackOptions[i] = tracks[i].Title;
+                trackDescriptions[i] = TrackDescription(tracks[i].Title);
+                // A track without a description still races; the empty panel is the loud part, with this error.
+                if (trackDescriptions[i].Length == 0)
+                    Debug.LogError($"LobbyMenu: track {i} ({tracks[i].Title}) has no description in TrackDescription.", this);
+            }
+            for (int p = 0; p < PlaceholderTracks.Length; p++)
+            {
+                int i = tracks.Length + p;
+                trackOptions[i] = PlaceholderTracks[p];
+                trackLocked[i] = true;
+                trackRecords[i] = PlaceholderRecord;
+                trackDescriptions[i] = PlaceholderDescriptions[p];
             }
             if (runners == null || runners.Length == 0)
             {
@@ -208,7 +263,18 @@ namespace ProtoHarness.ChainRush.Flow
             RefreshRecords();
         }
 
+        // A scene track's description, by its title; empty for a title not written here.
+        private static string TrackDescription(string title)
+        {
+            switch (title)
+            {
+                case "STADIUM": return "야간 조명 아래의 경기장 서킷.\n지금 달릴 수 있는 트랙입니다.";
+                default: return "";
+            }
+        }
+
         // Reads the best records again: on waking (a race may have just set one) and whenever the track page opens.
+        // The placeholders keep PlaceholderRecord.
         private void RefreshRecords()
         {
             for (int i = 0; i < tracks.Length; i++)
@@ -256,7 +322,9 @@ namespace ProtoHarness.ChainRush.Flow
         {
             int count = Options(page).Length;
             if (count == 0) return;
+            int was = cursor;
             cursor = ((cursor + delta) % count + count) % count;
+            if (cursor != was) UiSound.Play(UiSound.Cue.Move);
             notice = "";
             if (page == Page.Runner) preview.Show(cursor);
         }
@@ -267,6 +335,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (!enabled || leaving || page != Page.Settings) return;
             notice = "";
+            if (cursor != SettingKeys) UiSound.Play(UiSound.Cue.Move);
             switch (cursor)
             {
                 case SettingMaster: settings.SetMasterLevel(Step(settings.MasterLevel, delta)); break;
@@ -285,10 +354,13 @@ namespace ProtoHarness.ChainRush.Flow
             if (!enabled || leaving) return;
             if (Locked(page).Length > 0 && Locked(page)[cursor])
             {
-                notice = page == Page.Main ? "멀티는 M7 에서 열립니다." : "다른 속도 단계는 M2-b 에서 열립니다.";
+                notice = page == Page.Main ? "멀티는 M7 에서 열립니다."
+                    : page == Page.Track ? "새 트랙은 이후 마일스톤에서 열립니다." : "다른 속도 단계는 M2-b 에서 열립니다.";
+                UiSound.Play(UiSound.Cue.Denied);
                 return;
             }
             notice = "";
+            UiSound.Play(UiSound.Cue.Confirm);
             switch (page)
             {
                 case Page.Main:
@@ -322,6 +394,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (!enabled || leaving) return;
             notice = "";
+            UiSound.Play(UiSound.Cue.Back);
             switch (page)
             {
                 case Page.Main:
@@ -382,6 +455,9 @@ namespace ProtoHarness.ChainRush.Flow
             of == Page.Main ? MainLocked : of == Page.Settings ? SettingsLocked : of == Page.Track ? trackLocked
             : of == Page.Speed ? SpeedLocked : of == Page.Runner ? runnerLocked : NoLocks;
 
+        private string[] Descriptions(Page of) =>
+            of == Page.Main ? MainDescriptions : of == Page.Track ? trackDescriptions : of == Page.Speed ? SpeedDescriptions : NoOptions;
+
         // A settings row's value: the level, or 켬 / 끔. The keys row has none.
         private string SettingValue(int row) =>
             row == SettingMaster ? LevelTexts[settings.MasterLevel] : row == SettingMusic ? LevelTexts[settings.MusicLevel]
@@ -432,6 +508,13 @@ namespace ProtoHarness.ChainRush.Flow
             enterButton.alignment = TextAnchor.MiddleCenter;
             backButton = Style(22, Color.white, FontStyle.Bold);
             backButton.alignment = TextAnchor.MiddleCenter;
+            infoTitle = Style(38, Color.white, FontStyle.Bold);
+            infoBody = Style(21, Color.white);
+            infoBody.wordWrap = true;
+            lockTag = NightUi.Style(displayFont, 16, NightUi.Action, FontStyle.Bold);
+            lockTag.alignment = TextAnchor.MiddleRight;
+            helpLine = Style(15, Muted);
+            helpLine.alignment = TextAnchor.MiddleRight;
         }
 
         private static void Block(Rect rect, Color color)
@@ -455,14 +538,14 @@ namespace ProtoHarness.ChainRush.Flow
             GUI.Label(new Rect(64, 34, 400, 54), "CHAIN RUSH", brand);
             GUI.Label(new Rect(64, 108, 900, 28), "SINGLE RACE  /  " + PageTitles[(int)page], small);
             GUI.Label(new Rect(61, 145, 1050, 68), page == Page.Runner ? "CHOOSE YOUR RUNNER" : PageTitles[(int)page], pageHeading);
-            var backRect = new Rect(width - 250, 34, 186, 48);
-            NightUi.Surface(backRect);
-            bool back = GUI.Button(backRect, "←  이전   ESC", backButton);
+            // Back sits bottom left, the key help bottom right on its line (user 2026-10-21).
+            var backRect = new Rect(64, height - 84, 186, 48);
+            bool back = NightUi.CardButton(backRect, "←  이전   ESC", backButton);
             pendingRow = -1;
             if (page == Page.Keys) DrawKeys();
             else DrawList(width, height);
-            GUI.Label(new Rect(64, height - 113, 1000, 28), notice, body);
-            GUI.Label(new Rect(64, height - 58, width - 128, 28), page == Page.Settings ? SettingsHelp : page == Page.Runner ? RunnerHelp : Help, small);
+            GUI.Label(new Rect(64, height - 140, 1000, 28), notice, body);
+            GUI.Label(new Rect(width * .5f, height - 74, width * .5f - 64, 28), page == Page.Settings ? SettingsHelp : page == Page.Runner ? RunnerHelp : Help, helpLine);
 
             bool enter = false;
             if (page == Page.Runner)
@@ -470,20 +553,9 @@ namespace ProtoHarness.ChainRush.Flow
                 DrawPreview(width, cursor);
                 DrawRunnerStats(width, cursor);
                 var start = new Rect(width - 484, height - 240, 420, 140);
-                Block(start, NightUi.Action);
-                enter = GUI.Button(start, "레이스 시작   ENTER  →", enterButton);
+                enter = NightUi.CardButton(start, "레이스 시작   ENTER  →", enterButton, NightUi.CardLook.Action);
             }
-            else
-            {
-                NightUi.Portrait(runnerArtwork, runner, new Rect(width * .45f, 238, 340, 425));
-                NightUi.Surface(new Rect(width - 484, 238, 420, 286));
-                Block(new Rect(width - 484, 238, 420, 2), Mint);
-                GUI.Label(new Rect(width - 452, 264, 360, 28), "RACE SETUP", small);
-                GUI.Label(new Rect(width - 452, 313, 360, 34), trackOptions[track], body);
-                GUI.Label(new Rect(width - 452, 367, 360, 34), "속도  /  " + SpeedOptions[speed], body);
-                GUI.Label(new Rect(width - 452, 421, 360, 34), "러너  /  " + runnerOptions[SetupRunner], body);
-                GUI.Label(new Rect(width - 452, 477, 360, 28), "SINGLE RACE  /  STADIUM", small);
-            }
+            else if (Descriptions(page).Length > 0) DrawDescription(width);
             GUI.matrix = previous;
             // Acted on after drawing: either changes the page the rest of this draw would read.
             if (back) Back();
@@ -492,6 +564,26 @@ namespace ProtoHarness.ChainRush.Flow
             {
                 if (page == Page.Runner) Highlight(pendingRow);
                 else { cursor = pendingRow; Confirm(); }
+            }
+        }
+
+        // The highlighted entry: its page's tag, its name, LOCKED when it is, its description and, for a track, its record.
+        private void DrawDescription(float width)
+        {
+            var panel = new Rect(width - 620, 238, 556, 330);
+            NightUi.PanelCard(panel);
+            float left = panel.x + 34, inner = panel.width - 68;
+            GUI.Label(new Rect(left, panel.y + 26, inner, 28), DescriptionTags[(int)page], small);
+            if (Locked(page)[cursor]) GUI.Label(new Rect(left, panel.y + 26, inner, 28), "LOCKED  ·  준비 중", lockTag);
+            GUI.Label(new Rect(left, panel.y + 62, inner, 52), Options(page)[cursor], infoTitle);
+            Block(new Rect(left, panel.y + 126, 48, 3), NightUi.Action);
+            GUI.Label(new Rect(left, panel.y + 148, inner, 120), Descriptions(page)[cursor], infoBody);
+            if (page == Page.Track)
+            {
+                recordLine.normal.textColor = Muted;
+                recordLine.alignment = TextAnchor.MiddleLeft;
+                GUI.Label(new Rect(left, panel.yMax - 54, inner, 28), trackRecords[cursor], recordLine);
+                recordLine.alignment = TextAnchor.MiddleRight;
             }
         }
 
@@ -506,8 +598,7 @@ namespace ProtoHarness.ChainRush.Flow
         // The highlighted runner's stats as bars between StatBarFloor and StatBarCeiling, with their scales.
         private void DrawRunnerStats(float width, int shown)
         {
-            NightUi.Surface(new Rect(width - 484, 238, 420, 382));
-            Block(new Rect(width - 484, 238, 420, 2), Mint);
+            NightUi.PanelCard(new Rect(width - 484, 238, 420, 382));
             GUI.Label(new Rect(width - 452, 261, 360, 28), "RUNNER PROFILE", small);
             GUI.Label(new Rect(width - 452, 298, 360, 62), runnerOptions[shown], heading);
             for (int s = 0; s < StatNames.Length; s++)
@@ -535,16 +626,18 @@ namespace ProtoHarness.ChainRush.Flow
                 float tileWidth = (width - 580) / options.Length;
                 var row = runnerPage ? new Rect(64 + i * tileWidth, height - 240, tileWidth - 12, 140)
                     : new Rect(64, 238 + i * 86, 600, 70);
-                NightUi.Surface(row, i == cursor && !locked[i]);
+                NightUi.CardLook look = locked[i] ? NightUi.CardLook.Locked
+                    : i == cursor ? NightUi.CardLook.Selected : NightUi.CardLook.Plain;
+                // The row's content follows the card's face, which sinks while pressed.
+                row = NightUi.PressableCard(row, look, out bool clicked);
+                if (clicked) pendingRow = i;
                 GUIStyle style = locked[i] ? lockedItem : item;
                 if (runnerPage)
                 {
-                    if (GUI.Button(row, GUIContent.none, GUIStyle.none)) pendingRow = i;
                     NightUi.Portrait(runnerArtwork, i, new Rect(row.center.x - 42, row.y + 1, 84, 105));
                     GUI.Label(new Rect(row.x + 8, row.y + 103, row.width - 16, 34), options[i], tileLabel);
                 }
-                else if (GUI.Button(new Rect(row.x + 26, row.y, row.width - 26, row.height), locked[i] ? options[i] + "   (잠김)" : options[i], style))
-                    pendingRow = i;
+                else GUI.Label(new Rect(row.x + 26, row.y, row.width - 26, row.height), locked[i] ? options[i] + "   (잠김)" : options[i], style);
                 if (page == Page.Track)
                 {
                     recordLine.normal.textColor = Muted;

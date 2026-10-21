@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -184,6 +185,96 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "Very fast is locked (the cursor wrapped to it).");
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "A refused entry is not chosen.");
+        }
+
+        // The tracks still to come are listed after the stadium, locked (user 2026-10-21).
+        [UnityTest]
+        public IEnumerator Lobby_PlaceholderTracks_RefuseWithANoticeAndStay()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+            for (int row = 1; row <= 2; row++)
+            {
+                menu.Highlight(row);
+                Assert.That(menu.TrackRecordText(row), Is.EqualTo("준비 중"));
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), $"Placeholder track {row} is locked.");
+                Assert.That(menu.Notice, Is.Not.Empty);
+            }
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(3), "The stadium and two placeholders.");
+            menu.Move(1);
+            Assert.That(menu.Cursor, Is.EqualTo(0), "The cursor wraps from the last placeholder to the stadium.");
+            Assert.That(menu.BuildSetup().Track, Is.SameAs(Stadium()), "A refused track is not chosen.");
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+        }
+
+        // The lobby tells UiSound each moment once (user 2026-10-21; the sounds come later): a move that moves the highlight,
+        // a choice, a refusal and a step back. A move that lands where it was says nothing.
+        [UnityTest]
+        public IEnumerator Lobby_MovesChoicesRefusalsAndBack_EachPlayTheirCueOnce()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            var heard = new System.Collections.Generic.List<UiSound.Cue>();
+            Action<UiSound.Cue> listen = heard.Add;
+            UiSound.Played += listen;
+            try
+            {
+                menu.Move(1);
+                Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Move }));
+                heard.Clear();
+                menu.Confirm();
+                Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Denied }), "Multi is locked.");
+                heard.Clear();
+                menu.Highlight(1);
+                Assert.That(heard, Is.Empty, "Highlighting the row already highlighted moves nothing.");
+                menu.Highlight(0);
+                menu.Confirm();
+                Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Move, UiSound.Cue.Confirm }));
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+                heard.Clear();
+                menu.Back();
+                Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Back }));
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+            }
+            finally
+            {
+                UiSound.Played -= listen;
+            }
+        }
+
+        // The main, track and speed pages describe every entry, each differently; settings has no description panel.
+        [UnityTest]
+        public IEnumerator Lobby_MainTrackAndSpeedEntries_EachHaveADescription()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Track, LobbyMenu.Page.Speed })
+            {
+                Assert.That(menu.CurrentPage, Is.EqualTo(expected));
+                var seen = new System.Collections.Generic.HashSet<string>();
+                for (int row = 0; row < 3; row++)
+                {
+                    menu.Highlight(row);
+                    Assert.That(menu.Description, Is.Not.Empty, $"{expected} row {row}");
+                    Assert.That(seen.Add(menu.Description), Is.True, $"{expected} row {row} repeats another row's description.");
+                }
+                // Main: single race (0); track: the stadium (0); speed: fast (1), the open ones.
+                menu.Highlight(expected == LobbyMenu.Page.Speed ? 1 : 0);
+                menu.Confirm();
+            }
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            Assert.That(menu.Description, Is.Empty, "The runner page shows its profile, not a description.");
+            menu.Back();
+            menu.Back();
+            menu.Back();
+            menu.Highlight(2);
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+            Assert.That(menu.Description, Is.Empty);
         }
 
         [UnityTest]

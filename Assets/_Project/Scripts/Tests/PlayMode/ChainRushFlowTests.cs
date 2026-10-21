@@ -582,6 +582,35 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
         }
 
+        // The elevated stretch (user 2026-10-22): the road is 30 m across from the wide corner before the long straight to
+        // the one after it, and seven swing poles stand along the straight every 40 m, left first, 11 m off the centerline.
+        [Test]
+        public void Skyway_ElevatedStretch_IsWideWithSevenAlternatingSwingPoles()
+        {
+            TrackDefinition skyway = Skyway();
+            Assert.That(skyway.TryValidate(out string error), Is.True, error);
+            System.Collections.Generic.IReadOnlyList<TrackDefinition.Segment> segments = skyway.Segments;
+            const int straight = 10;
+            Assert.That(segments[straight].IsArc, Is.False);
+            Assert.That(segments[straight].Length, Is.EqualTo(280f));
+            double start = 0d;
+            for (int i = 0; i < straight; i++) start += segments[i].Length;
+            double end = start + segments[straight].Length;
+            double cornerBefore = start - segments[straight - 1].Length, cornerAfter = end + segments[straight + 1].Length;
+            for (double s = cornerBefore; s <= cornerAfter; s += 10d) Assert.That(skyway.HalfWidthAt(s), Is.EqualTo(15f).Within(1e-4f), "at S " + s.ToString("0"));
+            Assert.That(skyway.HalfWidthAt(0d), Is.EqualTo(RoadProfile.DeckHalfWidth), "The start line keeps the usual road.");
+            Assert.That(skyway.WidestHalfWidth, Is.EqualTo(15f));
+            Assert.That(skyway.Poles.Count, Is.EqualTo(7));
+            for (int i = 0; i < skyway.Poles.Count; i++)
+            {
+                TrackDefinition.Pole pole = skyway.Poles[i];
+                Assert.That(pole.S, Is.EqualTo(start + 20d + 40d * i).Within(1e-3d), "pole " + i);
+                Assert.That(pole.Offset, Is.EqualTo(i % 2 == 0 ? -11f : 11f), "pole " + i + " alternates, left first");
+                Assert.That(pole.Reach, Is.EqualTo(10f));
+                Assert.That(pole.S, Is.InRange(start, end), "pole " + i + " is on the straight");
+            }
+        }
+
         // The real lobby setup loads the decoration-only skyway environment, then the bot runs both laps: no fall,
         // no guard touched, each lap close to the lap length at 20 m/s. Returning unloads the decoration too.
         [UnityTest, Timeout(120000)]

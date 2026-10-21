@@ -358,6 +358,59 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f));
         }
 
+        // A pole beside a straight (Centerline.AddPole, user 2026-10-22, the Skyway's wide straight) hooks like a corner pole:
+        // on a road 30 m across, abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
+        // fills the gauge by the distance swung; letting go ends the swing.
+        [UnityTest]
+        public IEnumerator Swing_PoleBesideAStraight_HooksAbeamCirclesTowardItAndFillsTheGauge()
+        {
+            const float sideHalfWidth = 15f, poleOffset = -11f, poleReach = 10f;
+            const double poleS = 50d;
+            var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);
+            line.AppendStraight(120f);
+            Vector3 sidePole = line.FrameAt(poleS).TransformPoint(new Vector3(poleOffset, 0f, 0f));
+            line.AddPole(sidePole, poleReach);
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, sideHalfWidth, true);
+            yield return RunTo(line, poleS - 25d);
+            Assert.That(player.TryFindPole(out _), Is.False, "27 m away the pole is past 10 + 6 m.");
+            yield return RunTo(line, poleS);
+            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "Abeam, 11 m aside, the pole is in reach.");
+            Assert.That(Level(offered - sidePole), Is.LessThan(1e-3f));
+
+            float headingFrom = player.Heading;
+            Vector3 hookedAt = player.transform.position;
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True, "A swing key press with the side pole in reach must hook it.");
+            Assert.That(Level(game.Racer.SwingCenter - sidePole), Is.LessThan(1e-3f), "It hooks the side pole.");
+            Assert.That(game.Racer.SwingRadius, Is.EqualTo(Level(hookedAt - sidePole)).Within(0.5f), "The rope is the distance when it hooked.");
+
+            // Counted from here, as Swing_HookedBeforeTheArc does: the hook's own ticks have swung already.
+            float gaugeFrom = game.Racer.Gauge;
+            float swung = 0f, maxOffset = 0f;
+            Vector3 last = player.transform.position;
+            for (int i = 0; i < 30 && game.IsRunning; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                Assert.That(player.IsSwinging, Is.True, "The swing lasts while the key is held.");
+                swung += Level(player.transform.position - last);
+                last = player.transform.position;
+                maxOffset = Mathf.Max(maxOffset, Mathf.Abs(line.Project(player.transform.position).D));
+            }
+            float turned = Mathf.DeltaAngle(headingFrom, player.Heading);
+            float gained = game.Racer.Gauge - gaugeFrom;
+            Debug.Log("ChainRush side pole swing: rope " + game.Racer.SwingRadius.ToString("0.00") + " m, turned " + turned.ToString("0.0")
+                + " deg, swung " + swung.ToString("0.0") + " m, gauge +" + gained.ToString("0.000") + ", max offset " + maxOffset.ToString("0.00") + " m.");
+            Assert.That(turned, Is.LessThan(-30f), "Circling a pole on the left turns the runner left.");
+            Assert.That(maxOffset, Is.LessThan(sideHalfWidth - 1f), "The circle stays on the wide road.");
+            Assert.That(gained, Is.EqualTo(swung / MetersPerSlot).Within(0.03f), "One gauge slot per 35 m swung.");
+
+            bot.SwingHold = false;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.False, "Letting go of the key ends the swing.");
+        }
+
         // Presses the swing key and keeps it held with a fixed steer (it works the rope while swinging), then waits two
         // ticks for the press to land.
         private static IEnumerator Hook(TrackFollower bot, float steer)

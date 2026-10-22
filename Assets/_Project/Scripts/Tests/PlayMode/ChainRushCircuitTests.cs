@@ -1,6 +1,7 @@
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -190,6 +191,86 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.HasFinished, Is.False);
         }
 
+        // As the player told it (2026-10-19): "hooking the grapple too early makes the rope so long the runner nearly falls".
+        // Measured: hooked far behind the anchor (18 m and more along the track) with little climb left, the long rope is
+        // still slack while the runner flies on at running speed, so it follows its jump down into the gap and is let go at
+        // the bottom. Now an anchor is offered only within its height over the track less standing height (here 10 - 1.05 m),
+        // so the rope can never let the runner's feet below the road (docs/DECISIONS.md 2026-10-19, user "추천대로 ㄱㄱ").
+        // The runner jumps further and further before the grapple gap and presses the grapple on every tick in the air until
+        // it hooks. Up to 14 m before the edge it hooks in that jump, its feet stay above the road while hooked, and it
+        // crosses. From 16 m (about 0.8 s early) the anchor never comes within the rope's reach in that jump: it cannot hook
+        // and falls, and is put back before the gap — a jump made too early fails, as a missed jump does. (Before the air
+        // sped the runner up, same day, the line was between 12 and 14 m.)
+        [UnityTest, Timeout(180000)]
+        public IEnumerator Grapple_JumpedBeforeTheGap_HooksAboveTheRoadOrFromTooEarlyCannotHookAndFalls()
+        {
+            // Every case runs and is logged; the failures are reported together at the end.
+            var failures = new System.Collections.Generic.List<string>();
+            foreach ((double jumpBefore, bool afterPeak, bool tooEarly) in new[]
+            {
+                (4.5d, false, false), (8d, false, false), (10d, false, false), (12d, false, false), (14d, false, false), (16d, false, true), (18d, false, true),
+                (4.5d, true, false), (8d, true, false),
+            })
+            {
+                string mode = $"jump {jumpBefore:0.0} m before the gap{(afterPeak ? ", pressing after the peak" : "")}";
+                var bot = new EarlyHookBot(new CircuitBot(game, player, grapple, circuit), game, player, grapple, circuit, jumpBefore) { AfterPeak = afterPeak };
+                bool wasAttached = false, respawned = false;
+                // Counted in the bot's jump only: after a fall CircuitBot crosses on its own.
+                int hooks = 0;
+                float lowest = float.MaxValue;
+                string hook = "none", release = "none";
+                System.Action<int> onTick = tick =>
+                {
+                    TrackCoord here = game.Track.Project(player.transform.position);
+                    respawned |= player.IsRespawning;
+                    if (grapple.IsAttached && !respawned)
+                    {
+                        if (!wasAttached)
+                        {
+                            hooks++;
+                            Vector3 offset = grapple.AnchorPosition - player.transform.position;
+                            float along = new Vector2(offset.x, offset.z).magnitude;
+                            hook = $"S {here.S:F1} H {here.H:F2} vy {player.Velocity.y:F2}, rope {game.Racer.RopeLength:F2} m, anchor {along:F1} m ahead at {Mathf.Atan2(offset.y, along) * Mathf.Rad2Deg:F1} deg";
+                        }
+                        lowest = Mathf.Min(lowest, here.H);
+                    }
+                    else if (wasAttached && !respawned) release = $"S {here.S:F1} H {here.H:F2}";
+                    wasAttached = grapple.IsAttached;
+                };
+                game.TickCompleted += onTick;
+                try
+                {
+                    game.SetInputSource(bot);
+                    Time.timeScale = 3f;
+                    game.StartRun();
+                    float deadline = Time.realtimeSinceStartup + 40f;
+                    while (game.IsRunning && (bot.GapEnd < 0d || circuit.Laps.Progress < bot.GapEnd + 5d) && Time.realtimeSinceStartup < deadline) yield return null;
+                }
+                finally
+                {
+                    Time.timeScale = timeScale;
+                    game.TickCompleted -= onTick;
+                }
+                Debug.Log($"ChainRush circuit early grapple ({mode}): hooked at {hook}, lowest {(hooks > 0 ? lowest.ToString("F2") + " m" : "-")}, released at {release}, respawned {respawned}.");
+                if (bot.GapEnd < 0d) failures.Add($"{mode}: the bot never reached the grapple gap. " + State());
+                else if (circuit.Laps.Progress < bot.GapEnd) failures.Add($"{mode}: the runner never crossed the gap. " + State());
+                if (tooEarly)
+                {
+                    if (hooks != 0) failures.Add($"{mode}: jumped too early, it must not hook in that jump, but hooked at {hook} (lowest {lowest:F2} m).");
+                    if (!respawned) failures.Add($"{mode}: jumped too early without a hook, it must fall and be put back.");
+                }
+                else
+                {
+                    if (hooks != 1) failures.Add($"{mode}: pressing on every tick in the air must hook once in that jump, hooked {hooks} times.");
+                    if (bot.LandedShort) failures.Add($"{mode}: the jump landed before the gap.");
+                    if (respawned) failures.Add($"{mode}: the runner fell into the gap (hooked at {hook}).");
+                    if (lowest < StandingHeight) failures.Add($"{mode}: hooked at {hook}, the runner hung {lowest:F2} m over the track, its feet below the road.");
+                }
+                game.FailRun();
+            }
+            Assert.That(failures, Is.Empty, string.Join("\n", failures));
+        }
+
         // ---- restart and scene --------------------------------------------------------------------------
 
         [UnityTest, Timeout(60000)]
@@ -308,6 +389,64 @@ namespace ProtoHarness.Tests.PlayMode
             TrackCoord coord = game.Track.Project(player.transform.position);
             return $"S {coord.S:F2}, D {coord.D:F2}, H {coord.H:F2}, position {player.transform.position}, velocity {player.Velocity}, grounded {player.IsGrounded}, " +
                    $"lap {circuit.Laps.CurrentLap}, laps done {circuit.Laps.CompletedLaps}, progress {circuit.Laps.Progress:F1}, failed {game.HasFailed}";
+        }
+
+        // CircuitBot, but at the first grapple gap it jumps jumpBefore metres before the edge and, in the air, presses the
+        // grapple on every tick until it hooks (with AfterPeak, only once the runner is coming down). Landing again before
+        // the gap (the jump fell short) is noted, and the bot goes on as CircuitBot.
+        private sealed class EarlyHookBot : IInputSource
+        {
+            private readonly CircuitBot inner;
+            private readonly ChainRushGame game;
+            private readonly RunnerMotor player;
+            private readonly GrappleController grapple;
+            private readonly CircuitRace circuit;
+            private readonly double jumpBefore;
+            private bool jumped, done;
+            public double GapStart = -1d, GapEnd = -1d;
+            public bool LandedShort;
+            public bool AfterPeak;
+
+            public EarlyHookBot(CircuitBot inner, ChainRushGame game, RunnerMotor player, GrappleController grapple, CircuitRace circuit, double jumpBefore)
+            {
+                this.inner = inner;
+                this.game = game;
+                this.player = player;
+                this.grapple = grapple;
+                this.circuit = circuit;
+                this.jumpBefore = jumpBefore;
+            }
+
+            public void Poll() { }
+            public void Clear() { }
+
+            public TickInput Consume()
+            {
+                TickInput input = inner.Consume();
+                if (done) return input;
+                double s = game.Track.Project(player.transform.position).S;
+                bool primary = false;
+                if (!jumped)
+                {
+                    // Jump gaps before the grapple gap are CircuitBot's.
+                    if (!circuit.TryGetNextGap(s, out double startS, out double endS, out bool hasAnchor) || !hasAnchor) return input;
+                    if (player.IsGrounded && startS - s <= jumpBefore)
+                    {
+                        GapStart = startS;
+                        GapEnd = endS;
+                        jumped = true;
+                        primary = true;
+                    }
+                }
+                else if (grapple.IsAttached) done = true;
+                else if (player.IsGrounded && s > GapStart - jumpBefore + 1d)
+                {
+                    if (s < GapStart) LandedShort = true;
+                    done = true;
+                }
+                else primary = !player.IsGrounded && (!AfterPeak || player.Velocity.y < 0f);
+                return new TickInput(input.Steer, primary, false, false);
+            }
         }
     }
 }

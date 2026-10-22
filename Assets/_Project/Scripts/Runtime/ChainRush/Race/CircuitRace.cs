@@ -10,8 +10,9 @@ namespace ProtoHarness.ChainRush.Race
 {
     // A hand-built circuit race for one runner (COURSE.md T4): builds the closed centerline from a
     // TrackDefinition, lays the road once with RoadPieces (gaps stay empty), hangs the grapple anchors over
-    // the gaps, marks the start line and the checkpoints, stands a corner pole at every arc's center, and
-    // counts laps from the runner's S every tick.
+    // the gaps, marks the start line and the checkpoints, stands a corner pole at every arc's center and the
+    // definition's swing poles beside it, and counts laps from the runner's S every tick. The road's width
+    // follows the definition (TrackDefinition.HalfWidthAt).
     // ChainRushGame takes the centerline from BuildTrack, calls PrepareTick before a tick's input is read
     // (the track then looks for the runner near where it was) and Step after the runner moved. The race
     // starts on tick 0 with the runner on the start line (S 0); lap 1 ends the next time it crosses the line.
@@ -81,6 +82,15 @@ namespace ProtoHarness.ChainRush.Race
         private void OnDestroy()
         {
             for (int i = 0; i < pieces.Count; i++) pieces[i].Destroy();
+        }
+
+        // Races a different track than the one saved in the scene (the lobby's choice, RaceAssembler). The circuit is
+        // built from the definition once, in the first Awake of this or the game, so it must be swapped before that.
+        public void UseDefinition(TrackDefinition replacement)
+        {
+            if (replacement == null) throw new ArgumentNullException(nameof(replacement));
+            if (initialized) throw new InvalidOperationException("CircuitRace: the circuit is already built; set the definition before the scene's Awake.");
+            definition = replacement;
         }
 
         // The game asks for the centerline in its Awake, which can run before this Awake, so the circuit is
@@ -201,36 +211,56 @@ namespace ProtoHarness.ChainRush.Race
             return true;
         }
 
-        // Road over every stretch between gaps, in pieces of at most maxPieceLength.
+        // Road over every stretch between gaps, in pieces of at most maxPieceLength. A stretch of one width is laid in
+        // one go; where the width changes, each piece of the definition that tapers is laid on its own, so a road piece
+        // never spans a bend in the width.
         private void LayRoad()
         {
-            var profile = new RoadProfile(definition.RoadHalfWidth, definition.RoadThickness, true, true);
             IReadOnlyList<TrackDefinition.Segment> segments = definition.Segments;
             double s = 0d;
             double runStart = 0d;
+            float runWidth = definition.StartHalfWidth(0);
             for (int i = 0; i < segments.Count; i++)
             {
                 double next = s + segments[i].Length;
-                if (segments[i].IsGap)
+                float from = definition.StartHalfWidth(i), to = definition.EndHalfWidth(i);
+                // A gap, a taper or a new width ends the stretch of one width laid so far.
+                if (segments[i].IsGap || from != to || from != runWidth)
                 {
-                    if (s > runStart) LayRange(runStart, s, profile);
-                    runStart = next;
+                    if (s > runStart) LayRange(runStart, s, runWidth, runWidth);
+                    if (segments[i].IsGap) runStart = next;
+                    else if (from != to)
+                    {
+                        LayRange(s, next, from, to);
+                        runStart = next;
+                    }
+                    else runStart = s;
+                    runWidth = to;
                 }
                 s = next;
             }
-            if (s > runStart) LayRange(runStart, s, profile);
+            if (s > runStart) LayRange(runStart, s, runWidth, runWidth);
         }
 
-        private void LayRange(double from, double to, RoadProfile profile)
+        // Pieces from from to to, the half width going linearly from fromWidth to toWidth.
+        private void LayRange(double from, double to, float fromWidth, float toWidth)
         {
             int count = Math.Max(1, (int)Math.Ceiling((to - from) / maxPieceLength - 1e-9));
             for (int i = 0; i < count; i++)
             {
+                double start = from + (to - from) * i / count;
+                double end = i == count - 1 ? to : from + (to - from) * (i + 1) / count;
+                RoadProfile profile = fromWidth == toWidth
+                    ? new RoadProfile(fromWidth, definition.RoadThickness, true, true)
+                    : new RoadProfile(WidthBetween(fromWidth, toWidth, (start - from) / (to - from)),
+                        WidthBetween(fromWidth, toWidth, (end - from) / (to - from)), definition.RoadThickness, true, true);
                 var piece = new RoadPiece("Circuit road " + pieces.Count, transform, roadMaterial, railMaterial, lightMaterial);
-                piece.Build(track, from + (to - from) * i / count, i == count - 1 ? to : from + (to - from) * (i + 1) / count, profile);
+                piece.Build(track, start, end, profile);
                 pieces.Add(piece);
             }
         }
+
+        private static float WidthBetween(float from, float to, double t) => from + (to - from) * (float)t;
 
         private void PlaceAnchors()
         {
@@ -266,11 +296,12 @@ namespace ProtoHarness.ChainRush.Race
             marker.GetComponent<Renderer>().sharedMaterial = lightMaterial;
             marker.transform.SetParent(transform, false);
             marker.transform.SetPositionAndRotation(frame.Position + Vector3.up * 0.04f, Quaternion.LookRotation(frame.Forward));
-            marker.transform.localScale = new Vector3(definition.RoadHalfWidth * 2f, 0.06f, length);
+            marker.transform.localScale = new Vector3(definition.HalfWidthAt(s) * 2f, 0.06f, length);
             markers.Add(marker);
         }
 
-        // A corner pole on every arc's center, where the swing hooks (Centerline.TryFindPole): a glowing post from
+        // A corner pole on every arc's center, and the definition's swing poles (TrackDefinition.Poles), where the swing
+        // hooks (Centerline.TryFindPole): a glowing post from
         // SwingLook.PoleDepth below to PoleHeight above it with a cap on top, and a dark band at BiteHeight where the chain
         // bites. Visual only, like the markers.
         private void PlacePoles()

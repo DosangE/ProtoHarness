@@ -213,6 +213,93 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(line.EndS, Is.EqualTo((double)TrackDefinition.Segment.Arc(40f, 180f).Length));
         }
 
+        // ---- road width and swing poles (user 2026-10-22, the Skyway's wide straight) ------------------------------
+
+        [Test]
+        public void HalfWidthAt_Stadium_IsTheRoadsEverywhereAndThereAreNoPoles()
+        {
+            for (double s = 0d; s < StadiumLap; s += 25d) Assert.That(definition.HalfWidthAt(s), Is.EqualTo(RoadProfile.DeckHalfWidth), "at S " + s);
+            Assert.That(definition.WidestHalfWidth, Is.EqualTo(RoadProfile.DeckHalfWidth));
+            Assert.That(definition.Poles, Is.Empty);
+            Assert.That(definition.HalfWidthAt(StadiumLap + 10d), Is.EqualTo(RoadProfile.DeckHalfWidth), "S folds into the lap.");
+        }
+
+        // The 60 m straight B widens 6 -> 12, the next corner stays at 12, and straight C's first 30 m (no width of its own,
+        // so the road's 6) narrows back.
+        [Test]
+        public void HalfWidthAt_ATaperedStretch_GoesLinearlyOverEachPiece()
+        {
+            var segments = Stadium();
+            segments[9] = TrackDefinition.Segment.Straight(60f, 0f, 12f);
+            segments[10] = TrackDefinition.Segment.Arc(22f, 90f, 0f, 12f);
+            SetSegments(segments);
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            double straightB = 140d + 11d * Math.PI;
+            double straightC = straightB + 60d + 11d * Math.PI;
+            Assert.That(definition.HalfWidthAt(straightB - 1d), Is.EqualTo(6f).Within(1e-4f));
+            Assert.That(definition.HalfWidthAt(straightB + 30d), Is.EqualTo(9f).Within(1e-4f));
+            Assert.That(definition.HalfWidthAt(straightB + 60d), Is.EqualTo(12f).Within(1e-4f));
+            Assert.That(definition.HalfWidthAt(straightB + 80d), Is.EqualTo(12f).Within(1e-4f));
+            Assert.That(definition.HalfWidthAt(straightC + 15d), Is.EqualTo(9f).Within(1e-4f));
+            Assert.That(definition.HalfWidthAt(straightC + 31d), Is.EqualTo(6f).Within(1e-4f));
+            Assert.That(definition.WidestHalfWidth, Is.EqualTo(12f));
+            Assert.That(definition.StartHalfWidth(9), Is.EqualTo(6f));
+            Assert.That(definition.EndHalfWidth(11), Is.EqualTo(6f), "A piece naming no width ends at the road's.");
+        }
+
+        [Test]
+        public void TryValidate_WidthChangingTooFastOrOutOfRange_IsRejected()
+        {
+            var segments = Stadium();
+            segments[4] = TrackDefinition.Segment.Straight(9f, 0f, 12f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 4").And.Contain("half width changes"));
+            segments = Stadium();
+            segments[9] = TrackDefinition.Segment.Straight(60f, 0f, TrackDefinition.MaxHalfWidth + 1f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 9").And.Contain("end half width"));
+            segments[9] = TrackDefinition.Segment.Straight(60f, 0f, TrackDefinition.MinHalfWidth - 1f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 9").And.Contain("end half width"));
+        }
+
+        [Test]
+        public void TryValidate_WidthChangingAcrossAGap_IsRejected()
+        {
+            var segments = Stadium();
+            segments[12] = TrackDefinition.Segment.Straight(15f, 0f, 9f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 13").And.Contain("width across a gap"));
+        }
+
+        // A pole stands on the road at its S and offset, and the built centerline offers it like a corner pole.
+        [Test]
+        public void BuildCenterline_APole_StandsBesideTheRoadAndIsOffered()
+        {
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(100f, -4f, 10f) });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            var poles = new List<Vector3>();
+            line.GetPoles(poles);
+            Assert.That(poles.Count, Is.EqualTo(5), "Four corner poles, then the added one.");
+            Assert.That(Vector3.Distance(poles[4], new Vector3(-4f, 0f, 100f)), Is.LessThan(1e-3f), "Straight A runs up +z: 4 m left is -x.");
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 95f), 0f, 95f, 6f, out Vector3 pole), Is.True);
+            Assert.That(Vector3.Distance(pole, poles[4]), Is.LessThan(1e-3f));
+        }
+
+        [Test]
+        public void TryValidate_PoleOffTheRoadOutsideTheLapOrWithABadReach_IsRejected()
+        {
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(100f, 7f, 10f) });
+            Assert.That(Error(), Does.Contain("pole 0").And.Contain("within the road"));
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(100f, 0f, TrackDefinition.MinPoleReach - 1f) });
+            Assert.That(Error(), Does.Contain("pole 0").And.Contain("reach"));
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(-1f, 0f, 10f) });
+            Assert.That(Error(), Does.Contain("pole 0").And.Contain("within the lap"));
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole((float)StadiumLap + 1f, 0f, 10f) });
+            Assert.That(Error(), Does.Contain("pole 0").And.Contain("within the lap"));
+        }
+
         [Test]
         public void CheckpointS_BadIndex_Throws()
         {

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
@@ -38,8 +39,29 @@ namespace ProtoHarness.Tests.PlayMode
         private static readonly double ArcEnd = ArcStart + Radius * Mathf.PI / 2d;
         private static readonly Vector3 Pole = new Vector3(RoadX + Radius, 0f, (float)ArcStart);
 
+        // The throttle on a swing speeds it up (user 2026-10-22), so the tests that measure the rope's own speed rule let go of
+        // it once hooked (LetGo): let go, the hook's speed stays. TrackFollower always holds the throttle.
+        private sealed class Throttle : IInputSource
+        {
+            private readonly IInputSource inner;
+            public bool LetGo;
+
+            public Throttle(IInputSource inner) => this.inner = inner;
+
+            public void Poll() => inner.Poll();
+            public void Clear() => inner.Clear();
+
+            public TickInput Consume()
+            {
+                TickInput input = inner.Consume();
+                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, input.SwingHeld,
+                    input.ChainActionPressed, input.SwingPressed, LetGo);
+            }
+        }
+
         private ChainRushGame game;
         private RunnerMotor player;
+        private Throttle throttle;
         private readonly List<Object> built = new List<Object>();
 
         [UnitySetUp]
@@ -79,6 +101,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return StartOn(line, bot, HalfWidth, true);
             yield return RunTo(line, HookS);
             Vector3 hookedAt = player.transform.position;
+            throttle.LetGo = true;
             yield return Hook(bot, 0f);
             Assert.That(player.IsSwinging, Is.True, "A swing key press with the pole in reach must hook it.");
             Assert.That(game.Racer.Gauge, Is.LessThan(0.05f), "A hook costs nothing (the gauge only gained the first ticks' swing).");
@@ -125,6 +148,7 @@ namespace ProtoHarness.Tests.PlayMode
             var bot = new TrackFollower(line, player);
             yield return StartOn(line, bot, OpenHalfWidth, false);
             yield return RunTo(line, HookS);
+            throttle.LetGo = true;
             yield return Hook(bot, 0f);
             float hookRope = game.Racer.SwingHookRadius;
             float hookSpeed = game.Racer.SwingHookSpeed;
@@ -244,6 +268,9 @@ namespace ProtoHarness.Tests.PlayMode
             var bot = new TrackFollower(line, player);
             yield return StartOn(line, bot, OpenHalfWidth, false);
             yield return RunTo(line, HookS);
+            // The throttle is let go on the swing, so it runs at the rope's speed alone, and taken again with the release:
+            // letting go of it would cut the carry.
+            throttle.LetGo = true;
             yield return Hook(bot, 1f);
             // A rope about 9 m shorter: about 1.4 times the hook's speed, so the carry is still above run speed a second later.
             for (int i = 0; i < 75; i++) yield return new WaitForFixedUpdate();
@@ -252,6 +279,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(swingSpeed, Is.GreaterThan(game.Racer.SwingHookSpeed + 0.5f), "precondition: the shortened rope swings faster than the hook.");
             bot.Override = 0f;
             bot.SwingHold = false;
+            throttle.LetGo = false;
             yield return new WaitForFixedUpdate();
             Assert.That(player.IsSwinging, Is.False, "Letting go of the swing key ends the swing.");
             float heading = player.Heading;
@@ -261,6 +289,67 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Mathf.Abs(Mathf.DeltaAngle(player.Heading, heading)), Is.LessThan(0.5f), "With no steering it goes straight on.");
             Assert.That(player.ForwardSpeed, Is.EqualTo(carried - 50 * CarryFalloff * Ticks.Seconds).Within(0.02f), "The extra speed falls off by 3 m/s a second.");
             Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(10f), "Still above the run speed after a second.");
+        }
+
+        // A booster fired while swinging speeds the swing up like a booster on the ground (user 2026-10-19 "C"): the hook's
+        // speed rises toward the pull's 28 m/s, the rope's ratio still applies on top. Until then the swing ignored it and the
+        // booster's time ran out unused while the key was held.
+        [UnityTest]
+        public IEnumerator Swing_BoosterWhileSwinging_SpeedsTheSwingUp()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True);
+            float hookSpeed = game.Racer.SwingHookSpeed;
+            Assert.That(hookSpeed, Is.LessThan(player.SlingTopSpeed - 4f), "precondition: room below the booster's speed.");
+            game.Racer.AddGauge(1f);
+            float gaugeBefore = game.Racer.Gauge;
+            bot.ChainAction = true;
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.True, "A booster does not end the swing.");
+            // The swing goes on filling the gauge (about 0.3 of a slot in these 0.5 s), so the slot shows as a drop of over half.
+            Assert.That(game.Racer.Gauge, Is.LessThan(gaugeBefore - 0.5f), "The booster spent a slot.");
+            Debug.Log("ChainRush pole swing booster: hook speed " + hookSpeed.ToString("0.00") + " -> " + game.Racer.SwingHookSpeed.ToString("0.00")
+                + " m/s after 0.5 s, swing speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 2f), "Half a second of booster speeds the swing up.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.LessThanOrEqualTo(player.SlingTopSpeed), "No faster than the booster's own speed.");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "boosted");
+        }
+
+        // The throttle held on a swing speeds it up without a booster (user 2026-10-22, "스윙중에도 앞키로 가속"): the hook's
+        // speed rises by the run acceleration up to 1.2 times the run speed, the rope's ratio still applies on top. Let go,
+        // the hook's speed stays (it neither rises nor falls).
+        [UnityTest]
+        public IEnumerator Swing_ThrottleHeld_SpeedsTheSwingUpToOnePointTwoTimesTheRunSpeed_LetGoKeepsIt()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True);
+            float top = player.RunSpeed * 1.2f;
+            float from = game.Racer.SwingHookSpeed;
+            Assert.That(from, Is.LessThan(top - 1f), "precondition: room below the throttle's swing speed.");
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(Mathf.Min(top, from + 2 * player.RunAcceleration * Ticks.Seconds)).Within(1e-3f),
+                "The hook's speed rises by the run acceleration.");
+            for (int i = 0; i < 50; i++) yield return new WaitForFixedUpdate();
+            Debug.Log("ChainRush pole swing throttle: hook speed " + from.ToString("0.00") + " -> " + game.Racer.SwingHookSpeed.ToString("0.00")
+                + " m/s after 1 s, swing speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(top).Within(1e-4f), "No faster than 1.2 times the run speed.");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "throttled");
+
+            throttle.LetGo = true;
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.True, "Letting go of the throttle does not end the swing.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(top).Within(1e-4f), "Let go, the hook's speed stays.");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "let go");
         }
 
         // Held past the arc the runner keeps circling, crosses the straight after it and meets the inside guard there
@@ -274,11 +363,16 @@ namespace ProtoHarness.Tests.PlayMode
             yield return StartOn(line, bot, HalfWidth, true);
             yield return RunTo(line, HookS);
             yield return Hook(bot, 0f);
-            float hookSpeed = game.Racer.SwingHookSpeed;
             yield return RunTo(line, ArcEnd + 2d);
             Assert.That(player.IsSwinging, Is.True, "Leaving the arc does not end a held swing.");
+            // The throttle stays held, so the hook's speed rises (user 2026-10-22): compare with its last value on the swing.
+            float hookSpeed = game.Racer.SwingHookSpeed;
             float deadline = Time.time + 6f;
-            while (game.IsRunning && player.IsSwinging && Time.time < deadline) yield return new WaitForFixedUpdate();
+            while (game.IsRunning && player.IsSwinging && Time.time < deadline)
+            {
+                hookSpeed = game.Racer.SwingHookSpeed;
+                yield return new WaitForFixedUpdate();
+            }
             Assert.That(player.IsSwinging, Is.False, "The circle must reach a guard.");
             Assert.That(bot.SwingHold, Is.True, "The key was still held: the guard ended it.");
             TrackCoord at = line.Project(player.transform.position);
@@ -330,6 +424,59 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f));
         }
 
+        // A pole beside a straight (Centerline.AddPole, user 2026-10-22, the Skyway's wide straight) hooks like a corner pole:
+        // on a road 30 m across, abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
+        // fills the gauge by the distance swung; letting go ends the swing.
+        [UnityTest]
+        public IEnumerator Swing_PoleBesideAStraight_HooksAbeamCirclesTowardItAndFillsTheGauge()
+        {
+            const float sideHalfWidth = 15f, poleOffset = -11f, poleReach = 10f;
+            const double poleS = 50d;
+            var line = new Centerline(new Vector3(RoadX, 0f, 0f), 0f);
+            line.AppendStraight(120f);
+            Vector3 sidePole = line.FrameAt(poleS).TransformPoint(new Vector3(poleOffset, 0f, 0f));
+            line.AddPole(sidePole, poleReach);
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, sideHalfWidth, true);
+            yield return RunTo(line, poleS - 25d);
+            Assert.That(player.TryFindPole(out _), Is.False, "27 m away the pole is past 10 + 6 m.");
+            yield return RunTo(line, poleS);
+            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "Abeam, 11 m aside, the pole is in reach.");
+            Assert.That(Level(offered - sidePole), Is.LessThan(1e-3f));
+
+            float headingFrom = player.Heading;
+            Vector3 hookedAt = player.transform.position;
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True, "A swing key press with the side pole in reach must hook it.");
+            Assert.That(Level(game.Racer.SwingCenter - sidePole), Is.LessThan(1e-3f), "It hooks the side pole.");
+            Assert.That(game.Racer.SwingRadius, Is.EqualTo(Level(hookedAt - sidePole)).Within(0.5f), "The rope is the distance when it hooked.");
+
+            // Counted from here, as Swing_HookedBeforeTheArc does: the hook's own ticks have swung already.
+            float gaugeFrom = game.Racer.Gauge;
+            float swung = 0f, maxOffset = 0f;
+            Vector3 last = player.transform.position;
+            for (int i = 0; i < 30 && game.IsRunning; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                Assert.That(player.IsSwinging, Is.True, "The swing lasts while the key is held.");
+                swung += Level(player.transform.position - last);
+                last = player.transform.position;
+                maxOffset = Mathf.Max(maxOffset, Mathf.Abs(line.Project(player.transform.position).D));
+            }
+            float turned = Mathf.DeltaAngle(headingFrom, player.Heading);
+            float gained = game.Racer.Gauge - gaugeFrom;
+            Debug.Log("ChainRush side pole swing: rope " + game.Racer.SwingRadius.ToString("0.00") + " m, turned " + turned.ToString("0.0")
+                + " deg, swung " + swung.ToString("0.0") + " m, gauge +" + gained.ToString("0.000") + ", max offset " + maxOffset.ToString("0.00") + " m.");
+            Assert.That(turned, Is.LessThan(-30f), "Circling a pole on the left turns the runner left.");
+            Assert.That(maxOffset, Is.LessThan(sideHalfWidth - 1f), "The circle stays on the wide road.");
+            Assert.That(gained, Is.EqualTo(swung / MetersPerSlot).Within(0.03f), "One gauge slot per 35 m swung.");
+
+            bot.SwingHold = false;
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.False, "Letting go of the key ends the swing.");
+        }
+
         // Presses the swing key and keeps it held with a fixed steer (it works the rope while swinging), then waits two
         // ticks for the press to land.
         private static IEnumerator Hook(TrackFollower bot, float steer)
@@ -376,7 +523,8 @@ namespace ProtoHarness.Tests.PlayMode
             bot.SwingPress = false;
             bot.SwingHold = false;
             game.SetTrack(line);
-            game.SetInputSource(bot);
+            throttle = new Throttle(bot);
+            game.SetInputSource(throttle);
             game.StartRun();
             Vector3 start = line.FrameAt(5d).TransformPoint(new Vector3(0f, 1.2f, 0f));
             player.ShiftOrigin(start - player.transform.position);

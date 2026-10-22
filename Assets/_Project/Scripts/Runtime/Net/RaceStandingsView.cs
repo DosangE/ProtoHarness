@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using UnityEngine;
+using ProtoHarness.ChainRush.Visuals;
 using Debug = UnityEngine.Debug;
 
 namespace ProtoHarness.Net
@@ -67,16 +68,7 @@ namespace ProtoHarness.Net
             font.RequestCharactersInTexture(Glyphs, BodySize, FontStyle.Bold);
         }
 
-        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal)
-        {
-            var style = new GUIStyle(GUI.skin.label);
-            style.font = font;
-            style.fontSize = size;
-            style.fontStyle = weight;
-            style.normal.textColor = color;
-            style.padding = new RectOffset(0, 0, 0, 0);
-            return style;
-        }
+        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal) => NightUi.Style(font, size, color, weight);
 
         // GUI.skin can only be read inside OnGUI, so the styles are made on the first draw; the font is already made.
         private void InitializeStyles()
@@ -85,14 +77,6 @@ namespace ProtoHarness.Net
             body = Style(BodySize, Color.white);
             you = Style(BodySize, Mint, FontStyle.Bold);
             fallen = Style(BodySize, Coral);
-        }
-
-        private static void Block(Rect rect, Color color)
-        {
-            Color previous = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = previous;
         }
 
         private void OnGUI()
@@ -126,8 +110,8 @@ namespace ProtoHarness.Net
             Matrix4x4 previous = GUI.matrix;
             GUI.matrix = CanvasMatrix();
             float height = 50f + lines.Length * LineHeight;
-            Block(new Rect(Left, Top, Width, height), Ink);
-            Block(new Rect(Left, Top, 5f, height), Mint);
+            NightUi.Block(new Rect(Left, Top, Width, height), Ink);
+            NightUi.Block(new Rect(Left, Top, 5f, height), Mint);
             GUI.Label(new Rect(Left + 21f, Top + 13f, Width - 40f, 20f), header, small);
             for (int i = 0; i < lines.Length; i++)
             {
@@ -160,7 +144,7 @@ namespace ProtoHarness.Net
             Color previousColor = GUI.color;
             GUI.matrix = CanvasMatrix();
             Color unseen = new Color(1f, 1f, 1f, 0f);
-            Block(new Rect(Left, Top, Width, 80f), unseen);
+            NightUi.Block(new Rect(Left, Top, Width, 80f), unseen);
             GUI.color = unseen;
             GUI.Label(new Rect(Left + 21f, Top + 13f, Width - 40f, 20f), Glyphs, small);
             GUI.Label(new Rect(Left + 21f, Top + 40f, Width - 40f, 26f), Glyphs, body);

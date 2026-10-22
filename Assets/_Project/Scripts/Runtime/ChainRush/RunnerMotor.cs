@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 
@@ -28,9 +29,17 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float runAcceleration = 30f;
         // How fast a grounded runner with the throttle let go slows toward a stop, in m/s a second (2026-10-19).
         [SerializeField] private float coastDeceleration = 6f;
-        // How fast an airborne runner (not on a grapple) moves toward the flat run target, in m/s a second either way.
-        // 0 keeps the takeoff speed through the jump, so jumping neither gains nor loses speed.
-        [SerializeField] private float airAcceleration = 5f;
+        // Down held without the throttle (user 2026-10-22): a grounded runner still moving forward brakes by brakeDeceleration,
+        // then backs up toward reverseSpeed by reverseAcceleration (m/s a second). While it moves backward with the key held,
+        // steering turns the other way, as a car's does. In the air it is only coasting.
+        [SerializeField] private float brakeDeceleration = 20f;
+        [SerializeField] private float reverseSpeed = 6f;
+        [SerializeField] private float reverseAcceleration = 8f;
+        // An airborne runner (not on a grapple) with the throttle held speeds up as on the ground, toward the run target the
+        // road below sets (so not past an uphill's); above it, it slows by airDeceleration in m/s a second. 0 keeps that
+        // speed through the jump. With the throttle let go the air keeps the speed as it is (user 2026-10-19).
+        [FormerlySerializedAs("airAcceleration")]
+        [SerializeField] private float airDeceleration = 5f;
         // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
         [SerializeField] private float sideGrip = 60f;
         [SerializeField] private float airSideGrip = 18f;
@@ -65,7 +74,9 @@ namespace ProtoHarness.ChainRush
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
         // hook's speed times the hooked rope length over the rope length now, kept within minSwingSpeedScale ..
-        // maxSwingSpeedScale of the hook's speed. Every swingMetersPerSlot swung fills one gauge slot. Letting go carries
+        // maxSwingSpeedScale of the hook's speed; a booster while swinging raises the hook's speed toward its own (Step), and
+        // without one the throttle held raises it toward swingThrottleSpeedScale times the run speed by the run acceleration
+        // (user 2026-10-22); let go, the hook's speed stays. Every swingMetersPerSlot swung fills one gauge slot. Letting go carries
         // the runner straight on at that speed, the part above running speed falling off by swingCarryFalloff a second.
         // Touching a guard, or a grapple taking hold, ends the swing; a guard ends it without the carry.
         [SerializeField] private float poleMaxAngle = 95f;
@@ -74,12 +85,18 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float minRopeLength = 2f;
         [SerializeField] private float minSwingSpeedScale = 0.8f;
         [SerializeField] private float maxSwingSpeedScale = 1.5f;
+        [SerializeField] private float swingThrottleSpeedScale = 1.2f;
         [SerializeField] private float swingMetersPerSlot = 35f;
         [SerializeField] private float swingCarryFalloff = 3f;
         // Falling in a circuit race (KartRider style): the runner comes back on the centerline respawnBackoff metres
         // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
         [SerializeField] private float respawnBackoff = 4f;
         [SerializeField] private float respawnHoldTime = 1f;
+        // The runner's character (Configure): scales on the values above, all 1 until a profile is given.
+        private RunnerProfile profile;
+        private float topSpeedScale = 1f;
+        private float accelerationScale = 1f;
+        private float gaugeChargeScale = 1f;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
@@ -109,6 +126,28 @@ namespace ProtoHarness.ChainRush
         public bool IsSwinging => game.Racer.SwingTicks > 0;
         public Vector3 SwingAnchor => swingAnchor;
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
+        // The profile given by Configure; null runs on the scene's values.
+        public RunnerProfile Profile => profile;
+        // The values the simulation runs on: the scene's, scaled by the profile.
+        public float RunSpeed => runSpeed * topSpeedScale;
+        public float RunAcceleration => runAcceleration * accelerationScale;
+        public float SlingTopSpeed => slingTopSpeed * topSpeedScale;
+        public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale;
+        public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale;
+        public float SwingMetersPerSlot => swingMetersPerSlot / gaugeChargeScale;
+
+        // Gives the runner a character for the runs to come (the lobby's choice, RaceAssembler). Not while a run is going:
+        // the run would change halfway.
+        public void Configure(RunnerProfile runner)
+        {
+            if (runner == null) throw new System.ArgumentNullException(nameof(runner));
+            if (!runner.TryValidate(out string error)) throw new System.ArgumentException(error, nameof(runner));
+            if (game.IsRunning || game.IsPaused) throw new System.InvalidOperationException("RunnerMotor: configure the runner before the run, not during it.");
+            profile = runner;
+            topSpeedScale = runner.TopSpeedScale;
+            accelerationScale = runner.AccelerationScale;
+            gaugeChargeScale = runner.GaugeChargeScale;
+        }
 
         private void Awake()
         {
@@ -127,14 +166,16 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
             if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f || minTurnRadius < 0f)
                 Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1], the turn radius not negative.", this);
-            if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f || airAcceleration < 0f)
-                Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive, the air acceleration not negative.", this);
+            if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f || airDeceleration < 0f)
+                Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive, the air deceleration not negative.", this);
             if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f || guardScrapeDecel < 0f)
                 Debug.LogError("RunnerMotor: grips and the guard scrape cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
             if (groundSnapDistance < 0f || overspeedFalloff <= 0f || coastDeceleration <= 0f)
                 Debug.LogError("RunnerMotor: ground snap distance cannot be negative, the overspeed falloff and coast deceleration must be positive.", this);
+            if (brakeDeceleration <= 0f || reverseSpeed <= 0f || reverseAcceleration <= 0f)
+                Debug.LogError("RunnerMotor: the brake deceleration, reverse speed and reverse acceleration must be positive.", this);
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
                 Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
@@ -142,6 +183,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the shortest rope positive.", this);
             if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
                 Debug.LogError("RunnerMotor: the swing speed scale range must be within (0, 1] .. [1, inf), the metres per slot and carry falloff positive.", this);
+            if (swingThrottleSpeedScale < 1f)
+                Debug.LogError("RunnerMotor: the swing throttle speed scale must be at least 1 (the run speed).", this);
             if (respawnBackoff < 0f || respawnHoldTime < 0f)
                 Debug.LogError("RunnerMotor: respawn backoff and hold time cannot be negative.", this);
         }
@@ -201,6 +244,8 @@ namespace ProtoHarness.ChainRush
             // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
             // speed a swing let go with. The speed already gained then falls off like any coasting.
             bool coasting = input.Coasting;
+            // Backing up is coasting with the down arrow, so it cuts a booster too.
+            bool reversing = coasting && input.Reversing;
             if (coasting)
             {
                 slingTicks = 0;
@@ -218,9 +263,29 @@ namespace ProtoHarness.ChainRush
             // (SwingStep), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
             float turnLimit = TurnLimitAt(velocity);
-            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steer * turnLimit * turnScale, turnAcceleration * dt);
+            // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the
+            // down arrow is held: a runner turned round against its velocity some other way steers as it always did.
+            float steerSign = reversing && Vector3.Dot(velocity, FacingOf(heading)) < 0f ? -1f : 1f;
+            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * steer * turnLimit * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
-            if (pulling)
+            // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, which the rope's ratio
+            // multiplies (SwingStep), rises toward the booster's speed by the same push a booster gives on the ground.
+            // The rope keeps the facing, so the pull below does not turn it.
+            if (swinging && (pulling || carrying))
+            {
+                float boostSpeed = pulling ? SlingTopSpeed : SlingCarrySpeed;
+                ref float hookSpeed = ref racer.SwingHookSpeed;
+                if (hookSpeed < boostSpeed) hookSpeed = Mathf.Min(boostSpeed, hookSpeed + BoostAcceleration(hookSpeed, boostSpeed) * dt);
+            }
+            // Without a booster the throttle speeds the swing up too (user 2026-10-22), by the run acceleration and up to
+            // swingThrottleSpeedScale times the run speed. A faster hook (a booster's) is kept; let go, the speed stays.
+            else if (swinging && !coasting)
+            {
+                float throttleSpeed = RunSpeed * swingThrottleSpeedScale;
+                ref float hookSpeed = ref racer.SwingHookSpeed;
+                if (hookSpeed < throttleSpeed) hookSpeed = Mathf.Min(throttleSpeed, hookSpeed + RunAcceleration * dt);
+            }
+            if (pulling && !swinging)
             {
                 // The hook point rides the centerline ahead, so the pull follows curves.
                 slingTarget = game.Track.FrameAt(frame.S + slingLead).Position + Vector3.up * (transform.position.y - frame.Position.y);
@@ -233,13 +298,12 @@ namespace ProtoHarness.ChainRush
             Vector3 right = RightOf(heading);
             float grip = grounded ? sideGrip : airSideGrip;
             float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
-            float runTarget = grounded
-                ? runSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale)
-                : runSpeed;
+            // In the air too the road below sets the target, so jumping off an uphill does not reach for the flat speed.
+            float runTarget = RunSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale);
             if (turnSpeedLoss > 0f && grounded && !swinging && turnLimit > 0f)
                 runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(turnRate) / turnLimit);
             // Without the throttle a grounded runner rolls to a stop; in the air the jump keeps what it took off with.
-            if (coasting && grounded) runTarget = 0f;
+            if (coasting && grounded) runTarget = reversing ? -reverseSpeed : 0f;
             // The speed a swing let go with falls off slowly; once it is down to the running speed it is gone.
             ref float swingCarry = ref racer.SwingCarrySpeed;
             if (swingCarry > 0f)
@@ -248,17 +312,21 @@ namespace ProtoHarness.ChainRush
                 if (swingCarry > runTarget) runTarget = swingCarry;
                 else swingCarry = 0f;
             }
-            if (carrying) runTarget = Mathf.Max(runTarget, slingCarrySpeed);
-            if (pulling) runTarget = Mathf.Max(runTarget, slingTopSpeed);
+            if (carrying) runTarget = Mathf.Max(runTarget, SlingCarrySpeed);
+            if (pulling) runTarget = Mathf.Max(runTarget, SlingTopSpeed);
             float currentForward = Vector3.Dot(velocity, facing);
+            // In the air the throttle speeds the runner up as on the ground, never past the target; let go, the speed stays.
             float acceleration = pulling ? BoostAcceleration(currentForward, runTarget)
-                : !grounded ? (grapple.IsAttached ? 5f : airAcceleration)
-                : currentForward > runTarget ? (coasting ? coastDeceleration : overspeedFalloff)
-                : carrying ? BoostAcceleration(currentForward, runTarget) : runAcceleration;
+                : !grounded && grapple.IsAttached ? 5f
+                : !grounded && coasting ? 0f
+                // Backing up (grounded here): brake while still going forward, then speed up backward.
+                : reversing ? (currentForward > 0f ? brakeDeceleration : reverseAcceleration)
+                : currentForward > runTarget ? (!grounded ? airDeceleration : coasting ? coastDeceleration : overspeedFalloff)
+                : carrying ? BoostAcceleration(currentForward, runTarget) : RunAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
             if (swinging) acceleration = 0f;
             // A grapple reels at 16 m/s, or at running speed when that is faster.
-            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, runSpeed) : runTarget,
+            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, RunSpeed) : runTarget,
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
@@ -402,7 +470,7 @@ namespace ProtoHarness.ChainRush
             next.y = 0f;
             float reach = next.magnitude;
             if (reach > 0.01f) displacement += next / reach * (racer.SwingRadius - reach);
-            racer.AddGauge(speed * dt / swingMetersPerSlot);
+            racer.AddGauge(speed * dt / SwingMetersPerSlot);
         }
 
         // Ends the swing: the runner goes straight on along its facing at the speed it swung with, and what that is above
@@ -454,7 +522,7 @@ namespace ProtoHarness.ChainRush
             float heading = game.Racer.Heading;
             Vector3 facing = FacingOf(heading);
             Vector3 right = RightOf(heading);
-            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? empoweredReleaseSpeed : 13f);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : 13f);
             velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
         }
 

@@ -2,9 +2,10 @@ using System.IO;
 
 namespace ProtoHarness.ChainRush.Control
 {
-    // The seven buttons of a TickInput as one byte, shared by everything that writes a TickInput as bytes (the input
+    // The eight buttons of a TickInput as one byte, shared by everything that writes a TickInput as bytes (the input
     // log file, the network). Steer travels as its own float. A byte with an unknown bit is refused, so a file or a
-    // message from a newer build, or a corrupt one, throws instead of being read as something else.
+    // message from a newer build, or a corrupt one, throws instead of being read as something else. Since reversing
+    // (2026-10-22) all eight bits are known: a ninth button needs a wider format, not just a new bit.
     public static class TickInputCodec
     {
         private const byte Primary = 1;
@@ -15,7 +16,9 @@ namespace ProtoHarness.ChainRush.Control
         private const byte SwingPressed = 32;
         // Set when the throttle is let go, so bytes written before it existed read as full throttle.
         private const byte Coasting = 64;
-        private const byte Known = Primary | Release | Attack | SwingHeld | ChainAction | SwingPressed | Coasting;
+        // Set while backing up; bytes written before it existed read as not reversing.
+        private const byte Reversing = 128;
+        private const byte Known = Primary | Release | Attack | SwingHeld | ChainAction | SwingPressed | Coasting | Reversing;
 
         public static byte ToFlags(in TickInput input)
         {
@@ -27,6 +30,7 @@ namespace ProtoHarness.ChainRush.Control
             if (input.ChainActionPressed) flags |= ChainAction;
             if (input.SwingPressed) flags |= SwingPressed;
             if (input.Coasting) flags |= Coasting;
+            if (input.Reversing) flags |= Reversing;
             return flags;
         }
 
@@ -35,7 +39,7 @@ namespace ProtoHarness.ChainRush.Control
         {
             if ((flags & ~Known) != 0) throw new InvalidDataException($"TickInputCodec: unknown input flags 0x{flags:X2}.");
             return new TickInput(steer, (flags & Primary) != 0, (flags & Release) != 0, (flags & Attack) != 0, (flags & SwingHeld) != 0,
-                (flags & ChainAction) != 0, (flags & SwingPressed) != 0, (flags & Coasting) != 0);
+                (flags & ChainAction) != 0, (flags & SwingPressed) != 0, (flags & Coasting) != 0, (flags & Reversing) != 0);
         }
     }
 }

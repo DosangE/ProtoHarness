@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -18,6 +19,16 @@ namespace ProtoHarness.Tests.PlayMode
     // On the circuit scene (2026-10-18): the endless mode is on hold, and these check presentation the circuit shares.
     public sealed class ChainRushPresentationTests
     {
+        // Holds the throttle and nothing else (as ChainRushTests): running needs the throttle since 2026-10-19, and the
+        // keyboard source reads it as let go when no key is down. With the keyboard the runner moved only on the ticks
+        // before the first frame's poll, so whether it ran at all hung on frame timing (gate 2026-10-19, GaitPhase 0).
+        private sealed class FullThrottleInputSource : IInputSource
+        {
+            public void Poll() { }
+            public TickInput Consume() => new TickInput(0f, false, false, false);
+            public void Clear() { }
+        }
+
         private ChainRushGame game;
         private ChainRushAudio sound;
         private RunnerAnimation animation;
@@ -52,6 +63,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Presentation_RunPauseRestart_SynchronizesAudioAndJoints()
         {
             Assert.That(sound.IsPlaying, Is.False);
+            game.SetInputSource(new FullThrottleInputSource());
             game.StartRun();
             yield return new WaitForSeconds(0.4f);
             Assert.That(sound.IsPlaying, Is.True);
@@ -78,10 +90,13 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Animation_JumpAndGrapple_ChangesArmPoseWithoutMovingMotor()
         {
-            // Four metres before the edge of a grapple gap, as the old deck test stood: jump, then grab the anchor.
+            // 4.5 m before the edge of a grapple gap at the circuit's running speed (20 m/s), where the test bot jumps: jump,
+            // then grab the anchor once it is offered. Since 2026-10-19 an anchor is in reach only within its height over the
+            // track less standing height (about 9 m, was 20 m), so the old jump from rest 4 m before the edge never reaches it.
+            game.SetInputSource(new FullThrottleInputSource());
             double gapStart = FindGrappleGap();
             Assert.That(gapStart, Is.GreaterThan(0d), "The circuit has no grapple gap with an anchor.");
-            TrackFrame frame = game.Track.FrameAt(gapStart - 4d);
+            TrackFrame frame = game.Track.FrameAt(gapStart - 4.5d);
             player.ShiftOrigin(frame.TransformPoint(new Vector3(0f, 1.05f, 0f)) - player.transform.position);
             player.FaceTrack();
             Physics.SyncTransforms();
@@ -89,9 +104,13 @@ namespace ProtoHarness.Tests.PlayMode
             float landed = Time.time + 2f;
             while (!player.IsGrounded && Time.time < landed) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.True, "Runner never landed on the circuit road.");
+            game.Racer.Velocity = frame.Forward * 20f;
             player.PrimaryAction();
-            yield return new WaitForSeconds(0.25f);
-            Assert.That(player.GetComponent<GrappleController>().TryAttach(), Is.True);
+            GrappleController grapple = player.GetComponent<GrappleController>();
+            float deadline = Time.time + 1f;
+            while (grapple.Candidate == null && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(grapple.Candidate, Is.Not.Null, $"No anchor came within the rope's reach: runner at {player.transform.position}.");
+            Assert.That(grapple.TryAttach(), Is.True);
             yield return new WaitForSeconds(0.2f);
             Assert.That(Quaternion.Angle(animation.RightArmPose, Quaternion.identity), Is.GreaterThan(110f));
             Assert.That(player.transform.position.y, Is.GreaterThan(1f));

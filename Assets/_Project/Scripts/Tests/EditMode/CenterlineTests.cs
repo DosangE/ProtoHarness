@@ -434,6 +434,55 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(StraightAlongZ(200f).TryFindPole(new Vector3(0f, 0f, 50f), 0f, 180f, 1000f, out _), Is.False);
         }
 
+        // A pole beside a straight (user 2026-10-22, the Skyway): offered within its own reach plus the extra reach, by the
+        // same angle and nearest rule as a corner pole.
+        [Test]
+        public void AddPole_BesideAStraight_IsFoundWithinItsReachPlusTheExtra()
+        {
+            Centerline line = StraightAlongZ(200f);
+            line.AddPole(new Vector3(-5f, 0f, 50f), 8f);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 45f), 0f, 95f, 2f, out Vector3 pole), Is.True, "7.1 m away, within 8 + 2.");
+            Assert.That(pole, Is.EqualTo(new Vector3(-5f, 0f, 50f)));
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 50f), 0f, 95f, 2f, out _), Is.True, "Abeam it is 90 degrees aside, within 95.");
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 38f), 0f, 95f, 2f, out _), Is.False, "13 m away, past 8 + 2.");
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 38f), 0f, 95f, 6f, out _), Is.True, "Only the distance keeps it out.");
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 60f), 0f, 95f, 6f, out _), Is.False, "Passed: 11.2 m, within 8 + 6, but 117 degrees behind.");
+        }
+
+        [Test]
+        public void AddPole_TheNearestInTheAngleWins_WhetherAnArcsOrAnAddedOne()
+        {
+            Centerline line = QuarterTurn();
+            line.AddPole(new Vector3(10f, 0f, 20f), 30f);
+            line.AddPole(new Vector3(-8f, 0f, 16f), 30f);
+            // From (0, 0, 16) facing +x: the arc's pole (30, 0, 30) is 33.1 m, (10, 0, 20) 10.8 m, (-8, 0, 16) is behind.
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), 90f, 95f, 5f, out Vector3 pole), Is.True);
+            Assert.That(pole, Is.EqualTo(new Vector3(10f, 0f, 20f)));
+            Assert.That(line.TryFindPole(new Vector3(26f, 0f, 30f), 90f, 95f, 5f, out pole), Is.True);
+            Assert.That(Vector3.Distance(pole, new Vector3(30f, 0f, 30f)), Is.LessThan(1e-3f), "4 m ahead, the arc's pole; the added one at (10, 0, 20) is behind.");
+        }
+
+        [Test]
+        public void AddPole_ListedAfterTheArcs_MovesWithTheOrigin_AndClearRemovesIt()
+        {
+            Centerline line = QuarterTurn();
+            line.AddPole(new Vector3(-5f, 0f, 10f), 8f);
+            var poles = new List<Vector3>();
+            line.GetPoles(poles);
+            Assert.That(poles.Count, Is.EqualTo(2));
+            Assert.That(poles[1], Is.EqualTo(new Vector3(-5f, 0f, 10f)), "Added poles come after the arcs' centers.");
+            line.ShiftOrigin(new Vector3(100f, 0f, 0f));
+            poles.Clear();
+            line.GetPoles(poles);
+            Assert.That(poles[1], Is.EqualTo(new Vector3(95f, 0f, 10f)));
+            line.Clear();
+            poles.Clear();
+            line.GetPoles(poles);
+            Assert.That(poles, Is.Empty);
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AddPole(Vector3.zero, 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AddPole(new Vector3(float.NaN, 0f, 0f), 5f));
+        }
+
         [Test]
         public void GetPoles_EveryArcInOrder_StraightsHaveNone()
         {

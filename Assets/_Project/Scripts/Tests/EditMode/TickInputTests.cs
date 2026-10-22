@@ -47,6 +47,13 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Constructor_Reversing_DefaultsFalseAndExposesWhenGiven()
+        {
+            Assert.That(new TickInput(0f, false, false, false).Reversing, Is.False);
+            Assert.That(new TickInput(0f, false, false, false, coasting: true, reversing: true).Reversing, Is.True);
+        }
+
+        [Test]
         public void Default_Value_IsNeutral()
         {
             TickInput input = default;

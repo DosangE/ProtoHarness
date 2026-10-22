@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Flow;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -19,6 +20,14 @@ namespace ProtoHarness.ChainRush.Audio
         private AudioClip wind;
         private bool paused;
         private bool playing;
+        // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
+        private GameSettings settings;
+        // The player's volumes (lobby settings) that scale musicVolume and effectsVolume; a test gives its own.
+        public GameSettings Settings
+        {
+            get => settings;
+            set => settings = value ?? throw new ArgumentNullException(nameof(value));
+        }
         public bool Muted { get; private set; }
         public bool IsPlaying => playing;
         public bool IsPaused => paused;
@@ -27,6 +36,7 @@ namespace ProtoHarness.ChainRush.Audio
 
         private void Awake()
         {
+            if (settings == null) settings = GameSettings.Player;
             if (game == null || player == null || music == null || effects == null || ambience == null)
             {
                 Debug.LogError("ChainRushAudio: game, runner and three audio sources are required.", this);
@@ -64,9 +74,10 @@ namespace ProtoHarness.ChainRush.Audio
             {
                 music.Stop(); ambience.Stop(); playing = false;
             }
-            music.volume = Muted ? 0f : musicVolume;
-            effects.volume = Muted ? 0f : effectsVolume;
-            ambience.volume = Muted ? 0f : Mathf.Lerp(0.08f, 0.2f, Mathf.Clamp01(player.Speed / 20f));
+            // The wind counts as an effect.
+            music.volume = Muted ? 0f : musicVolume * settings.Master * settings.Music;
+            effects.volume = Muted ? 0f : effectsVolume * settings.Master * settings.Effects;
+            ambience.volume = Muted ? 0f : Mathf.Lerp(0.08f, 0.2f, Mathf.Clamp01(player.Speed / 20f)) * settings.Master * settings.Effects;
         }
 
         public void SetMuted(bool muted)

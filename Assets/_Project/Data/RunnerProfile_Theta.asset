@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0d279591d539e145938d91930bf04f2, type: 3}
+  m_Name: RunnerProfile_Theta
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.RunnerProfile
+  displayName: THETA
+  topSpeedScale: 1.03
+  accelerationScale: 0.85
+  gaugeChargeScale: 1
+  weight: 1.1
+  look: {fileID: 2297959042653289946, guid: f3e4369dc77abe14f824eba114623ca4, type: 3}

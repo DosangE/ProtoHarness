@@ -7,6 +7,279 @@
 
 ---
 
+## 2026-10-23 · main v0.3: M2 "게임의 뼈대" — `dev` 를 `main` 에 병합하고 태그 `v0.3`
+
+- **결정 (사용자, 2026-10-23)**: "현재까지 dev 들어간거 main으로 올리고 README도 수정하자" → 아래 "M2 범위 조정" 에서 "M2 범위 조정 후 v0.3" 을 고름 → "진행하라. 다만 README에 프로젝트 느낌을 보여줄 이미지나 gif도 넣어줘". 이 문서 브랜치(`docs/m2-close-v0.3`: 범위 조정 기록, README 재작성과 이미지, 이 기록)를 `dev` 에 병합한 뒤 `dev` 를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.3` 을 단다.
+- **v0.3 에 든 것** (`main` v0.2 뒤): M2-a1 씬 뼈대(타이틀·로비·Additive 장식 씬)·M2-a2 빌드 씬 목록, M2-b 러너 프로필 5명, 로비 최고 기록, 그래플 앵커 높이·공중 가속·스윙 중 부스터, M2-c 설정·러너 디자인 5종·스타디움 장식, 러너 선택창 프리뷰·입장/이전 버튼·일시정지 메뉴, Night Drift UI·금속 체인, 카트라이더풍 타이틀·로비 설명·카드 버튼, SKYWAY LOOP(원작 윤곽 재배치·구간별 도로 폭·직선 스윙 봉), ↓ 후진·스윙 중 ↑ 가속, 리팩토링 RF1. 각각 이 문서의 같은 이름 항목.
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `dev` `1ffeba1` 그대로(이 문서 브랜치는 `Assets/`·`Packages/`·`ProjectSettings/` 에 닿지 않는다), 에디터 **6000.3.25f1**(Unity MCP `Application.unityVersion`), `ProjectSettings/`·`Packages/packages-lock.json`·`ProtoHarness.slnx` 는 넣지 않는다. 시각은 UTC(결과 XML):
+  - 컴파일: `Unity_RunCommand` 컴파일 성공, Console Error 0건 (16:49Z 직전).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="271" result="Passed" passed="271" failed="0" skipped="0"` (16:49:52Z~16:49:54Z). 실행 중 Console Error 2건은 `GameSettingsTests` 가 `LogAssert.Expect` 로 기대한 `GameSettings: … holds 99, outside 0..10` 와 `… holds 7, neither 0 nor 1`.
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (16:50:40Z~16:58:12Z, 452.6초).
+  - PlayMode 게이트 2회차 (같은 코드): `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (16:58:39Z~17:06:12Z, 453.0초). 두 회차 모두 skipped 7 은 `[Explicit]` — `ChainRushProbeTests` 4건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0x18F31E7A2B4F79B3` (기준과 같다).
+  - `Run Device Input Tests` 1회차: `testcasecount="3" result="Failed(Child)" passed="1" failed="2"` (17:06:45Z~17:06:49Z). 실패 `Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts`·`Input_ShiftAndCtrl_SwingsOnThePoleAndFiresChainAction` 모두 `Expected: True  But was:  False`. 실행 직전 `isApplicationActive=False` — 에디터가 앞에 없어 가상 장치 이벤트가 전달되지 않았다(이 문서 2026-10-04 "장치 입력 테스트 분리" 의 원인과 같다).
+  - `Run Device Input Tests` 2회차 (코드 그대로, 에디터를 앞에 둠, `isApplicationActive=True`): `testcasecount="3" result="Passed" passed="3" failed="0"` (17:07:39Z~17:07:55Z).
+  - 사용자 플레이 확인 (바뀐 M2 완료 조건 "러너마다 차이가 느껴진다"): "어 느껴졌어" (2026-10-23).
+  - 하지 않은 것: 네트워크 레이스(M7 부터), `Run Long Tests`·`Run Course Sweep`(무한 모드 보류, §9-2).
+- **README 이미지** (`docs/images/`): 에디터 Play 중 `ScreenCapture.CaptureScreenshot` 으로 찍었다 — 타이틀·로비(2배 해상도), SKYWAY · 빠름 · ALPHA 주행(시험 봇 `TrackFollower` 와 같은 조향 식, 게임 시간 0.1초 간격 35초). 결승 전에 Play 를 꺼 최고 기록은 저장되지 않았다. `race.gif` 는 처음 20초(200프레임, 640px, 6.5 MB). 캡처 코드는 `Unity_RunCommand` 로만 돌렸고 저장소에 남기지 않았다. 캡처 동안 Game 뷰를 잠시 최대화했다가(메인 창이 세로 모니터라 세로로 찍혀 쓰지 않음) 되돌렸다.
+- **찾은 문제 (고치지 않음)**: HUD 왼쪽 위 트랙 이름이 서킷이면 늘 `STADIUM` 이다(`ChainRushHud.cs:184` `game.IsCircuit ? "STADIUM" : "CHAIN RUSH"`). SKYWAY 에서도 STADIUM 으로 보인다 — `docs/images/skyway.png` 에 그대로 찍혔다. `HANDOFF.md` 1절 다음 작업에 넣었다. 타이틀의 버전 표기는 아직 `TitleScreen.Version = "0.0.1"` 이다(태그와 맞출지 사용자 답 없음, 그대로 둠).
+- **v0.3 에 없는 것**: 속도 단계 보통·매우빠름(M3 으로 옮김), 새 서킷(M3), 기록·고스트(M4).
+
+## 2026-10-23 · M2 범위 조정: 속도 단계 보통·매우빠름을 M3 으로 — v0.3 을 지금 닫는다
+
+- **결정 (사용자, 2026-10-23)**: "현재까지 dev 들어간거 main으로 올리고 README도 수정하자" → 지금 `dev` 는 M2 완료 조건(`DESIGN.md` §5-1, "러너마다, 속도 단계마다 차이가 느껴진다")을 채우지 못해 `CLAUDE.md` §9-2 ③ 과 충돌한다고 알리고 세 갈래를 냈다. 사용자가 "M2 범위 조정 후 v0.3" 을 골랐다: 속도 단계 보통·매우빠름을 M3 으로 옮기고, 러너 차이 플레이 확인과 ③ 의 테스트를 거친 뒤 `dev → main` `--no-ff` 로 병합하고 태그 `v0.3` 을 단다. README 도 v0.3 기준으로 다시 쓴다.
+  - **옮긴 것**: `DESIGN.md` §5-1 의 M2 행에서 속도 단계 보통·매우빠름과 완료 조건의 "속도 단계마다"를 빼서 M3 행으로 옮겼다. `NEXT_REQUESTS.md` 의 같은 항목도 M3 칸으로 옮겼다. 로비의 속도 단계 자리(빠름만 열림)는 M2 에 그대로 있다.
+  - **M2 완료 조건 (바뀐 뒤)**: 메뉴로 트랙·러너를 골라 달리고 메뉴로 돌아온다. 러너마다 차이가 느껴진다.
+- **이유**: 속도 단계는 처음부터 후순위였다(사용자 2026-10-19). 그 사이 `dev` 에는 타이틀·로비·설정·러너 5명·일시정지·SKYWAY 트랙·후진 등이 쌓였는데 `main` 은 v0.2 에 머물러 있다. 속도 단계는 트랙마다 봇이 코너를 놓치는지 다시 재야 해서, 새 트랙이 들어오는 M3 에서 같이 하는 편이 일이 한 번으로 끝난다.
+- **버린 대안**: 태그 없이 `main` 에 중간 동기화 — "마일스톤 하나 = 병합 + 태그 하나"(§9-2 ③, `DESIGN.md` §5-1)에 예외를 만들어야 한다. 속도 단계를 먼저 구현하고 v0.3 — `main` 이 더 늦게 올라간다.
+
+## 2026-10-22 · 리팩토링 RF1: IMGUI 헬퍼 4벌을 `NightUi` 하나로 · 리팩토링 묶음 RF
+
+- **결정 (사용자, `feature/refactor-ui-helpers`)**: "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서" → 조사 뒤 낸 4단계 안 중 "R1 ㄱㄱ"(이 문서에서는 R1~R9 와 겹치지 않게 **RF1** 로 부른다).
+  - **RF1**: `ChainRushHud`·`LobbyMenu`·`TitleScreen`·`Net/RaceStandingsView` 에 글자 하나까지 같게 복사돼 있던 private `Block` 4개를 지우고 호출 47곳을 `NightUi.Block` 으로. private `Style` 은 화면 글꼴을 넘기는 한 줄 `NightUi.Style(font, …)` 로 남겼다(화면마다 본문 글꼴이 있어 호출을 그대로 두는 편이 짧다). 설정 값(글꼴·크기·굵기·색·여백 0)이 같아 그리는 결과는 같다. `ProtoHarness.Net` 은 이미 `ProtoHarness.Runtime` 을 참조한다(asmdef 그대로).
+  - **나머지 RF 는 요청서로** (`docs/NEXT_REQUESTS.md` "RF. 리팩토링"): RF3 `RunnerMotor.Step` 분해, RF2 효과음 번호 이름, RF4 `CircuitRace` 깔기 분리. 공통 제약은 동작·지문 불변, MonoBehaviour 이름·직렬화 필드 그대로(씬·프리팹 YAML 을 손으로 고칠 수 없다, `CLAUDE.md` §0). 조사 중 발견: 롤백 재실행 중에도 효과음이 다시 난다(NEXT_REQUESTS 2-1).
+- **검증** (에디터 6000.3.19f1, UTC):
+  - `AssetDatabase.Refresh()` 뒤 Editor.log `*** Tundra build success (4.53 seconds), 16 items updated, 1618 evaluated`, 그 빌드에서 `ProtoHarness.Runtime.dll`·`ProtoHarness.Net.dll` 재빌드. Console Error 0건.
+  - PlayMode — 도구가 고른 클래스 8개(`ChainRushFlowTests`·`ChainRushPresentationTests`·`ChainRushProfileTests`·`NetReconcileTests`·`NetRemoteTests`·`RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests`) + 지문 1건, `!Device !Sweep !Enemy !Endless !NetEndReplay`: `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (05:53:36Z~05:56:04Z). XML 의 클래스 목록이 고른 것과 같고, `ChainRushReplayTests` 는 지문 1건만 돌았다.
+  - EditMode `!Enemy !Endless`: `testcasecount="271" result="Passed" passed="271" failed="0"` (05:56:21Z~05:56:22Z). 실행 뒤 Console Error 4건은 모두 테스트가 `LogAssert.Expect` 로 기대한 로그(`RaceAssembler … cannot be raced yet`, `RunnerProfile '' …`, `GameSettings …` 2건).
+  - **② 병합** (사용자 "다음 해야할 작업 리스트 정리까지도해서 커밋 푸시 병합"): 커밋 `0674719` 에서 `select-tests -Range dev...HEAD` = 바뀐 파일 4개, PlayMode 클래스 8개 + 지문 1건 — 위 PlayMode 실행과 같은 필터다. 그 근거는 위 실행이다: 네 파일의 마지막 수정은 05:51:46Z 로 두 실행보다 앞서고, 커밋 시점 `git diff HEAD -- Assets` 는 비었다. 커밋 뒤 같은 필터로 한 번 더 돌리려 했으나 실행 직후 에디터가 종료돼(Editor.log 마지막 쓰기 05:58:14Z, 정상 종료 순서 `Input System module state changed to: ShutdownInProgress` → `Cleanup mono`, 크래시 표시 없음, 종료 원인은 확인 못 함) MCP 가 `Named pipe socket file not found` 로 실패했다 — 그 재실행 결과는 없다. 그 뒤 바뀐 것은 `docs/` 뿐이다. `Long` 은 Endless 보류로 돌리지 않는다(`CLAUDE.md` §9-2). `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
+  - **눈으로 보는 확인 없음**: 타이틀·로비·HUD 캡처는 하지 않았다(그리는 값이 같다는 것은 코드 비교).
+- **버린 대안**: 호출 47곳을 `NightUi.Style(font, …)` 로 직접 바꾸기(줄만 길어진다). `using static NightUi`(이 코드베이스에 없는 형식). 이번에 RF2~RF4 까지 한 번에(단계마다 게이트로 나눠 동작 불변을 따로 증명한다).
+
+## 2026-10-22 · ↓ 후진 · 스윙 중 ↑ 가속
+
+- **결정 (사용자, `feature/motor-reverse-swing-throttle`)**: "후진도 넣어보자 방향키 뒷키로", "스윙중에도 앞키로 가속하는 것은 되게해줘. 무조건 속도 고정이 아닌(부스터 상황이 아니더라도 가속 받게)" → 제안값(아래)에 "제안대로 진행".
+  - **후진**: `TickInput.Reversing`(누르고 있는 동안 켜짐, ↓ 를 누르고 있고 ↑ 는 안 누름 — 둘 다 누르면 ↑ 가 이긴다). 지면에서 앞으로 가고 있으면 `brakeDeceleration` 20 m/s² 로 감속하고, 멈춘 뒤에는 `reverseAcceleration` 8 m/s² 로 `reverseSpeed` 6 m/s 까지 후진한다. 공중에서는 그냥 ↑ 를 뗀 상태와 같다. ↑ 를 뗀 상태의 한 종류라 부스터·스윙 캐리도 끊는다. ↓ 를 누르는 순간 체인이 풀리는 기존 동작은 그대로 둔다(그래플이 없으면 아무 일도 없다, `GrappleController.Release`).
+  - **후진 조향**: 후진 입력 중 뒤로 움직이면 자동차처럼 조향이 반대로 돈다(← 를 누르면 기수가 오른쪽으로 돌고 몸은 왼쪽 뒤로 간다). **후진 입력이 있을 때만** 반전한다 — 처음에는 속도 방향만 봤는데, 달리는 중 방향을 강제로 돌린 `Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading` 이 `Expected: greater than 90.0f But was: -172.287476f` 로 실패했다. ↓ 를 안 누르는 주행은 이전과 같아야 한다.
+  - **입력 바이트**: `TickInputCodec` 의 마지막 빈 비트(128)를 후진에 썼다. 이전 바이트(기록 파일·네트워크)는 후진 안 함으로 읽힌다. **한 바이트가 꽉 찼다** — 모르는 비트를 거부하는 검사는 남아 있지만 거부할 비트가 없다. 아홉 번째 버튼은 형식을 넓혀야 한다(`InputLogFile` 버전 포함). 그래서 모르는 버튼 비트 거부를 검사하던 단언 셋을 지웠다 — `NetRemoteTests` 의 코덱·입력 기록 파일(0x80, 사용자 선택 "테스트를 8버튼으로 갱신"), 그리고 게이트 1회차에서 같은 원인으로 실패한 `NetReconcileTests.Wire_InputsRoundTripAndCorruptOnesThrow` 의 0xFF(`unknown flag bits Expected: <System.IO.InvalidDataException> But was: null`, 사용자 "진행").
+  - **스윙 중 ↑**: 부스터가 없을 때 ↑ 를 누르고 있으면 스윙의 걸 때 속도(`SwingHookSpeed`)가 달리기 가속(`RunAcceleration`, 캐릭터 배율 포함)으로 `swingThrottleSpeedScale` 1.2 × 달리기 속도(서킷 20 → 24 m/s)까지 오른다. 줄 길이 비율은 그 위에 그대로 곱한다. ↑ 를 떼면 그 속도가 유지된다(오르지도 내리지도 않는다, 사용자 선택 (a)). 부스터가 있으면 기존 부스터 규칙이 우선이고, 이미 더 빠른 걸 때 속도는 깎지 않는다.
+  - **테스트 기준을 바꾼 곳**: 봇(`TrackFollower`)은 ↑ 를 늘 누르고 있으므로 "줄 길이만으로 속도가 정해진다"를 재던 스윙 테스트 3개(걸 때 속도 유지, 줄 줄이기·풀기, 놓을 때 캐리)는 걸고 나서 ↑ 를 떼고 잰다(테스트 파일 안의 `Throttle` 감싸개). 캐리 테스트는 놓는 틱에 ↑ 를 다시 누른다(떼면 캐리가 끊긴다). 가드에서 끝나는 테스트는 걸 때 속도의 마지막 값과 비교한다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리):
+  - `tools/select-tests.ps1` 기본 범위 → "전체"(`RunnerMotor` 코어 시뮬, `TickInput` 표에 없는 경로). 컴파일 후 Console Error 0건.
+  - EditMode `!Enemy !Endless` `testcasecount="271" result="Passed" passed="271" failed="0"` (04:21:27Z~04:21:32Z, 이전 269 + 새 2), 조향 수정 뒤 다시 `testcasecount="271" result="Passed" passed="271" failed="0"` (04:50:22Z~04:50:26Z).
+  - 바뀐 세 클래스(`ChainRushInputSourceTests`·`ChainRushCornerSwingTests`·`NetRemoteTests`) `testcasecount="33" result="Failed(Child)" passed="31" failed="2"` (04:21:57Z~04:22:58Z) — 위 조향 실패와 입력 기록 파일의 0x80 단언. 고친 뒤 `testcasecount="33" result="Passed" passed="33" failed="0"` (04:27:20Z~04:28:20Z).
+  - 메뉴 `Run PlayMode Tests` 1회차 `testcasecount="180" result="Failed(Child)" passed="172" failed="1" skipped="7"` (04:28:41Z~04:36:37Z) — 위 `NetReconcileTests` 0xFF 단언. 지운 뒤 2회차 `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (04:41:55Z~04:49:54Z). 스타디움 지문 그대로 `1700 ticks identical, hash 0x18F31E7A2B4F79B3`, SKYWAY 2랩 86.08 / 84.88 s 그대로(봇이 이 런에서 ↓ 를 쓰지 않고, 바뀐 스윙 가속이 랩에 닿지 않았다). 새 테스트 값: 후진 −6.00 m/s, ← 로 기수 0 → 6.88°; 스윙 ↑ 걸 때 속도 21.20 → 24.00 m/s.
+  - 입력 장치 경로를 바꿔 `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3" failed="0"` (04:52:54Z~04:53:10Z, `isApplicationActive=True`, 사용자가 에디터를 앞에 띄움).
+  - **사용자 플레이 확인: 아직** — 후진 6 m/s 와 스윙 ↑ 상한 24 m/s 의 체감은 플레이해 보고 정한다.
+  - **② 병합** (사용자 "일단 커밋 병합 푸시 진행"): 커밋 `a203930` 에서 `select-tests -Range dev...HEAD` = 전체(바뀐 파일 14개 — `RunnerMotor` 코어 시뮬, `TickInput` 표에 없는 경로, ProjectSettings 0개). 그 근거는 위 EditMode 2회차·PlayMode 2회차·Device 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 뿐이다. `Long` 은 Endless 보류로 돌리지 않았다(`CLAUDE.md` §9-2). `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
+- **버린 대안**: 속도 방향만 보고 조향 반전(위 실패). ↑ 를 떼면 스윙도 지상처럼 감속(사용자가 (a) 유지를 골랐다). 후진 비트를 기록·네트워크에 싣지 않기 — 리플레이·롤백에서 후진이 사라져 결정성이 깨진다.
+
+## 2026-10-22 · SKYWAY 재배치(원작 윤곽) · 구간별 도로 폭 · 직선 스윙 봉
+
+- **결정 (사용자, `feature/skyway-reshape`)**: "빌리지 고가의 질주를 따온건데 생각보다 비슷하지 않다" → 원작 윤곽에 겹친 수정안에 "지우고 트랙 데이터 바꿔라" + "직선이 엄청 긴 구간 … 도로 너비를 많이 넓게 … 좌우에 스윙 걸 수 있는 봉 둬서 직선에도 스윙하며 게이지 채워가는 맵디자인" → 설계안(반폭 15 m, 봉 40 m 간격 7개)에 "작업 해도 좋다".
+  - **배치를 읽은 곳**: 나무위키 "크레이지레이싱 카트라이더/트랙/빌리지" 의 빌리지 고가의 질주 항목 이미지 2장(원작판·러쉬플러스판, 흰 윤곽이 같은 모양). 러쉬플러스판 윤곽(500×256 원본을 6배 확대)을 0.5 m/px 로 따라 그렸다. 같은 문서의 서술 순서 "고가 진입 전 → 까마득한 직선 → 출구 커브 → 깎아지른 내리막 → 마지막 유턴" 과도 맞는다. 겹친 그림은 커밋하지 않았다(대화에 전송).
+  - **이전 배치와 다른 점**: 왼쪽의 Ω 고리(좌90 R26 → 우225 R30 → 좌135 R28)와 왼쪽 위의 높은 구역(위쪽 변의 계단 꺾임)이 생겼고, 골인 직전이 좌90 이 아니라 유턴(좌180 R31)이다. 오른쪽 범프(우180 R28)·오른쪽 변·아래 고가 직선은 그대로 닮았다. 31조각, 한 바퀴 1499.37 m(이전 1482.82), 2랩.
+  - **반지름을 키운 두 곳** (테스트 기준 5.6 m 는 그대로 두고 코스를 고쳤다, 이전 항목의 ① 과 같은 방식): 처음 짠 값으로 봇 2랩 테스트가 `The bot touched a guard at S 256.8 (segment 5). Expected: less than 5.5999999f But was: 5.60866022f` — 오르막 앞 지그(좌90·우90) R22 → **R26**, 앞 직선 64 → 56, 지그 사이 직선 23 → 15, 오르막 26.5 → 24.22, 그 뒤 직선 13.5 → 15.78 로 닫힘·높이를 다시 맞췄다. 다시 돌리자 `at S 1028.1 (segment 19) … But was: 5.61388254f` — Ω 의 마지막 좌135 R22. 테스트는 가장 나쁜 한 곳만 말하므로 Ω 셋을 한 번에 R24/R28/R22 → **R26/R30/R28** 로 키우고 왼쪽 직선 20.22 → 10.56, 위쪽 변 92.72 → 83.06 으로 닫았다(원작 윤곽 위에 다시 겹쳐 확인, Ω 출구가 약 15 m 오른쪽).
+  - **추정한 것**: 높낮이는 윤곽에 없어 이전 항목(영상)의 값을 유지했다 — 오른쪽 변 오르막 0 → 12 m(15%), 출구 내리막 12 → 9 m(−10%), 깎아지른 내리막 9 → 0 m(−20%). 반지름은 윤곽 비율에서 잡되 R22 아래로는 내리지 않았다. 출발선은 이전 항목(영상)의 위치(범프 왼쪽 다리)를 유지했다. 윤곽 위쪽 변에 선이 끊긴 자리가 출발선 표시인지는 확인하지 못했다.
+  - **기록**: 지시대로 `Circuit_Skyway` 의 최고 기록(세 속도 단계)을 지웠다. 이 머신에는 원래 기록이 없었다(`had=False` 셋).
+  - **구간별 도로 폭**: `TrackDefinition.Segment.endHalfWidth`(0 = 트랙의 `roadHalfWidth`). 경사와 같은 방식으로 앞 조각의 끝 폭에서 이 조각의 끝 폭까지 조각 길이를 따라 **직선으로** 바뀐다(첫 조각은 마지막 조각의 끝 폭에서 시작 — 닫힌 랩). 검증: 0 이거나 [3, 20] m, 1 m 당 0.25 m 이하로만 변한다(가드가 트랙에서 최대 14° 틀어진다 — `RunnerMotor` 가 가드로 받는 60° 안), 틈에서는 폭이 그대로. 앵커·봉의 좌우 위치는 그 S 의 폭 안. `HalfWidthAt(s)`, `StartHalfWidth`/`EndHalfWidth(i)`, `WidestHalfWidth` 공개.
+    - 노면: `RoadProfile.EndHalfWidth`(기본 = `HalfWidth`)와 `RoadMeshBuilder` 의 sweep 이 시작 폭 → 끝 폭을 선형 보간한다. `CircuitRace.LayRoad` 는 폭이 일정한 구간을 전처럼 한 번에 깔고, 폭이 변하는 조각만 따로 깐다 — 폭이 6 하나인 스타디움은 조각 나누기·정점이 그대로다(아래 지문 테스트). 출발선·체크포인트 띠도 그 S 의 폭.
+  - **직선 스윙 봉**: `TrackDefinition.Pole`(S, 좌우 위치, reach) 목록. `BuildCenterline` 이 닫은 뒤 `Centerline.AddPole(위치, reach)` 로 넣고, `TryFindPole` 이 원호 중심 봉과 같은 규칙(시선 ±`poleMaxAngle`, 가장 가까운 것)으로 고른다 — 원호는 반지름, 추가 봉은 reach 에 모터의 `poleReach` 를 더한 거리까지. 원호 봉의 계산식·순서는 그대로다(동점은 원호 먼저). `GetPoles` 가 원호 다음에 추가 봉을 돌려줘 `CircuitRace.PlacePoles` 가 같은 모양으로 세운다(충돌체 없음). **스윙 규칙(`RunnerMotor`)은 바꾸지 않았다** — 직선 봉도 돈 거리 35 m 당 게이지 1칸.
+  - **SKYWAY 값**: 오르막 끝 세 조각에서 반폭 6 → 10 → 13 → 15, 넓은 코너 R60 · 고가 직선 280 m · 넓은 코너 R65 는 15(도로 30 m), 출구 내리막 세 조각에서 15 → 12 → 9 → 6. 직선에 봉 7개: 직선 시작 + 20 m 부터 40 m 간격(S 430.39 … 670.39), 왼쪽부터 번갈아 중심선에서 ±11 m(도로 안), reach 10 m(+ `poleReach` 6 = 16 m 에서 걸린다). 원본은 `ChainRushCircuitSceneBuilder` 의 `SkywaySegments`·`SkywayPoles` 와 상수.
+  - **장식 다시 만들기**: `SkywayEnvironmentBuilder` 의 S 범위가 옛 배치에 박혀 있었다(교각 S 410~1250, 마을 건너뜀 S 440~1210). 높이로 바꿨다 — 교각은 노면이 지면에서 충분히 높은 곳 어디나(전부터 있던 높이 조건), 마을은 노면 높이 2 m 넘는 곳 건너뜀. 비울 거리는 그 S 의 반폭 + 7 m, 교각 머리는 그 S 의 도로 폭 − 0.8 m. 새 메뉴 `Rebuild Skyway Exterior` 가 미리보기 씬에서 짓고 같은 경로에 덮어써 프리팹 GUID(장식 씬의 인스턴스)를 지킨다. 결과: 교각 36·마을 22동(이전 42 — 높은 노면 옆과 넓은 구간 옆이 비었다)·가로등 36·충돌체 0, 열린 씬은 dirty 가 되지 않았다(`ChainRushTitle(dirty=False)` 전후).
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리):
+  - `tools/select-tests.ps1` 기본 범위 → "전체"(`Centerline`·SO·씬 빌더). 컴파일 후 Console Error 0건(`Unity_GetConsoleLogs`).
+  - EditMode `!Enemy !Endless` `testcasecount="269" result="Passed" passed="269" failed="0"` (15:07:22Z~15:07:26Z) — 이전 258 + 새 11(`TrackDefinitionTests` 6, `CenterlineTests` 3, `RoadMeshBuilderTests` 2).
+  - 메뉴 `Run PlayMode Tests` 1회차 `testcasecount="178" result="Failed(Child)" passed="170" failed="1" skipped="7"` (15:08:01Z~15:15:36Z) — 실패는 위 "반지름을 키운 두 곳" 의 첫 번째. 지그 R26 뒤 두 테스트만 `testcasecount="2" passed="1" failed="1"` (15:17:02Z~15:17:33Z) — 두 번째(Ω). Ω 를 키우고 장식을 다시 만든 뒤 2회차 `testcasecount="178" result="Passed" passed="171" failed="0" skipped="7"` (15:20:06Z~15:27:39Z). skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3.
+  - 그 실행의 값: SKYWAY 2랩 86.08 / 84.88 s(기준 74.97 s ±20%), 한 바퀴 1499.4 m, 최대 옆 거리 5.04 m(S 1172.7). 직선 봉 테스트 — 줄 11.00 m, 65.2° 왼쪽으로 돌고, 12.0 m 돌아 게이지 +0.343, 최대 옆 거리 6.76 m(반폭 15). **스타디움 지문 그대로** `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3`.
+  - `Long` 은 Endless 보류로 돌리지 않았다(`CLAUDE.md` §9-2). **사용자 플레이 확인: 아직** — 직선 슬라럼의 체감(봉 간격 40 m, 걸리는 거리 16 m, 한 번에 ⅓칸 남짓)은 플레이해 보고 정한다.
+  - **② 병합** (사용자 "괜찮네 푸쉬 병합까지 완료"): 커밋 `e6900ab` 에서 `select-tests -Range dev...HEAD` = 전체(바뀐 파일 17개 — `Centerline`·SO·프리팹·씬 빌더, ProjectSettings 0개). 그 전체 판정의 근거는 위 2회차 EditMode·PlayMode 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 뿐이다. `ProtoHarness.slnx` 는 이 머신의 차이라 넣지 않았다.
+- **버린 대안**: 봉을 가드 밖에 세우기 — 봉을 중심으로 원을 돌면 봉 쪽 가드에 먼저 닿아 스윙이 캐리 없이 끝난다. 폭을 조각 경계에서 계단처럼 바꾸기 — 넓은 쪽 가드의 끝면이 진행 방향을 막는다. 직선 봉을 위한 새 스윙 규칙(예: 직선에서는 앞으로 끌어 주기) — 이번 요청은 "직선에도 스윙하며 게이지 채우기" 이고 규칙 변경은 체감을 본 뒤에 정한다.
+
+## 2026-10-21 · SKYWAY LOOP 외부 장식과 로비 연결
+
+- **결정 (사용자)**: 기존 스타디움처럼 주행 서킷과 무관한 외부 디자인을 추가한다. "computer use 말고 mcp 써라"에 따라 Unity MCP로 진행했다. 현재 브랜치에서 MCP 씬 저장·빌드 목록 등록·로비 연결까지 하는 이번 작업의 예외 승인: "ㄱㄱ". 이후 "일단 커밋 병합 푸쉬 진행"으로 Git 작업을 승인했다.
+- **결과**: `ChainRushTrackSkyway.unity`가 `SkywayExterior.prefab` 하나를 배치하고, 로비 SKYWAY LOOP가 해당 씬을 Additive로 불러온다. 마을 건물 42동·교각 27개·가로등 35개·타워 24동·정원·가로수·입체 간판. 기존 재질을 재사용하며 충돌체·Rigidbody·런타임 스크립트 0개. 실제 서킷 정의·주행 씬·기존 스타디움 씬의 해시는 그대로다.
+- **검증** (UTC, 에디터 6000.3.19f1): EditMode `testcasecount="258" result="Passed" passed="258" failed="0" skipped="0"` (08:28:27Z~08:28:33Z). PlayMode `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (08:30:15Z~08:39:03Z). 제외 7건은 기존 Explicit 측정 4건·네트워크 레이스 3건. Flow 22/22, SKYWAY 장식 로드·물리 분리·2랩 완주·로비 복귀 시 장식 해제 포함. 랩 81.12/79.88초, 최대 옆 거리 1.92m. 실제 야간 Main Camera 화면 확인, 편집 상태 복원 후 Console Error 0건. 상세 로그·선택 도구 출력: `ART_SKYWAY.md`.
+- **커밋 범위**: SKYWAY 트랙·외부 장식·연결·테스트·문서. 기존 머신 차이 `Packages/packages-lock.json`, `ProjectSettings/ProjectSettings.asset`, `ProjectSettings/ProjectVersion.txt`, `ProtoHarness.slnx`는 로컬에 보존하고 제외한다. 빌드 씬 목록 변경은 위 승인 범위에 포함한다. → 병합할 때 §9-2("ProjectSettings 변경은 그것만 담은 브랜치로") 에 따라 `feature/settings-skyway-build-scene`(`7cfabcf`)으로 떼어 `dev` 에 먼저 병합했고, 이 브랜치의 커밋은 같은 트리로 새 `dev` 위에 다시 만들었다(`d65b0bb` → `076ac8e`, 푸시 전, 사용자 "네 추천대로"). 사용자 직접 2랩 플레이는 아직 확인하지 않았으므로 `main` 마일스톤 병합은 하지 않는다.
+
+## 2026-10-21 · SKYWAY LOOP — 빌리지 고가의 질주를 옮긴 두 번째 서킷
+
+- **결정 (사용자, 2026-10-21, "빌리지 고가의 질주를 똑같이" → 합의안 "ㄱㄱ", `feature/track-skyway`)**:
+  - **배치를 읽은 곳**: 사용자가 준 기록 영상(크레이지레이싱 카트라이더 매우빠름 2랩 1:30.42, 1랩 45.61초)을 받아 1랩을 0.5초 간격으로 읽었고, 카운트다운 화면의 트랙 썸네일(흰 윤곽)로 위상을 맞췄다. 웹 문서(나무위키 등)에는 구간 순서가 없었다. 자동 추출 3가지(미니맵 화살표 각도, 하늘 가로 이동량, 지평선 띠 이동량)는 실패해 멈췄다 — 미니맵이 진행 방향 기준으로 돌고, 화면 고정 HUD 가 이동량을 0 쪽으로 끌었다.
+  - **배치** (시계 방향, 출발선에서 북쪽): 출발 직선 71 → ① 우180 R28 고리 → 아치 밑 직선 → ② 좌90 R36 → ③ 우90 R36 → 초반 오르막(15%, 0 → 12 m) → ④ 우90 R27 로 고가 진입 → **고가 서쪽 직선 355.56 m**(한 바퀴에서 가장 긴 직선, 원작 "까마득한 직선") → 완만한 우90 R60 → S자(좌30·우30 R80) → 완만한 우90 R60 → 고가 동쪽 직선 60 → 출구 내리막(−10%, 12 → 9 m) → ⑤ 긴 우90 R40 → ⑥ 좌90 R27 → **깎아자른 내리막**(−20%, 9 → 0 m) → ⑦ 좌90 R25 → 골인. 29조각, 한 바퀴 1482.82 m, 회전 합 +360°.
+  - **축척**: 영상 시간 비례(영상 1초 ≈ 28.5 m). 원작 길이(한 바퀴 3.7 km)는 20 m/s 에서 한 바퀴 3분이 넘어 버렸다. 랩 수는 원작대로 2랩(약 2분 30초, 사용자 기본값 수락).
+  - **추정한 것**: 코너 각도는 썸네일에서, 고가 위 완만한 커브 두 개는 썸네일 + "회전 합 360°" 에서 거꾸로 정했다(시속 300 km 안팎이라 0.5초 간격 화면에 거의 안 보였다). 꼬리(⑤~⑦)는 썸네일과 영상 시간 비율이 맞지 않아 절충했다. 서쪽 직선 길이는 닫힘을 맞추려고 푼 값(오차 4 mm).
+  - **이름**: 원작 이름을 쓰지 않고 로비의 자리표시 `SKYWAY LOOP` 를 채웠다(같은 날 "임시 잠금 트랙" 항목의 두 번째 자리). 에셋 `Circuit_Skyway` — 최고 기록 키가 에셋 이름이다(`BestRecords.cs:63`). ~~장식 씬은 아직 없다(`environmentScene` 빈 값).~~ → 같은 날 다른 세션에서 장식 씬 `ChainRushTrackSkyway` 를 만들어 연결했다(위 "SKYWAY LOOP 외부 장식과 로비 연결").
+  - **만드는 법**: 에디터 메뉴 `ProtoHarness > Chain Rush > Create Skyway Track`(`ChainRushCircuitSceneBuilder.SkywaySegments` 가 원본). 새 인스턴스에 채우고 `TryValidate` 를 통과해야 저장하며, 에셋이 이미 있으면 `CopySerialized` 로 덮어써 GUID(로비 참조)와 기록을 지킨다.
+  - **① R22 → R28**: 처음 R22 180° 에서 봇이 고리 한가운데(S 111.6)에서 5.62 m 밀려 가드에 닿았다(기준 5.6). R22 90° 인 스타디움은 문제가 없었다 — 180° 를 이어 도는 동안 바깥으로 밀리는 양이 커진다. 테스트 기준은 두고 코스를 고쳤다(사용자 "ㄱㄱ"). R28 에서 가드와 가장 가까운 거리는 1.92 m(S 1456.8, ⑦).
+  - **로비 씬**: `LobbyMenu.tracks` 에 항목을 `Unity_RunCommand` 로 넣고, 저장은 사용자가 했다 — §0 이 `Unity_RunCommand` 로 씬 저장을 금지한다. 합의안에는 "RunCommand 로" 라고만 적어 이 금지를 놓쳤고, 실행 전에 알아채 나눴다.
+- **버린 대안**: 원작 길이 그대로(한 바퀴 3분 이상). 첫 초안(웹 문서의 특징만으로 짠 배치) — 영상으로 확인하니 골인 직전 코너가 오른쪽 U자가 아니라 왼쪽 90°였고, 연속 90도 코너가 고가 앞에 있었다. ① 을 R26 으로 — 여유가 적다. 에셋을 지우고 다시 만들기 — 삭제는 §0 승인 대상이고 GUID 가 바뀌어 로비 참조가 끊긴다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리 = 이 머신 버전 차이 파일 제외):
+  - 컴파일 `*** Tundra build success (50.55 seconds), 23 items updated, 1618 evaluated` → 테스트 진단 메시지 `(2.87 seconds), 5 items` → 빌더 덮어쓰기 `(2.52 seconds), 7 items`. `error CS` 0건.
+  - 메뉴 실행: `asset=Circuit_Skyway segments=29 lap=1482.818 laps=2 anchors=0 arc1R=28 valid=True guid same=True (1b518dfd3292dce47904e7b029d0c925)`.
+  - `ChainRushFlowTests` (R22): `testcasecount="22" result="Failed(Child)" passed="21" failed="1"` (07:26:24Z~07:27:37Z) — 실패 `Race_SkywayFromTheLobby_BotFinishesTwoLaps` "The bot touched a guard. Expected: less than 5.5999999f But was: 5.61562395f". 같은 테스트 단독 재실행 `testcasecount="1" passed="0" failed="1"` (07:29:47Z~07:30:16Z), "at S 111.6 (segment 1)", 같은 값.
+  - R28 뒤 단독: `testcasecount="1" result="Passed" passed="1" failed="0"` (07:33:49Z~07:34:18Z), 랩 81.12 s / 79.88 s(기준 74.1 s ±20%), 최대 옆 거리 1.92 m.
+  - ① `tools/select-tests.ps1` 기본 범위 → "전체"(새 SO·씬·에디터 빌더, 그리고 이 머신의 버전 차이 파일). EditMode `!Enemy !Endless` `testcasecount="258" result="Passed" passed="258" failed="0"` (07:34:36Z~07:34:40Z). 메뉴 `Run PlayMode Tests` `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (07:35:07Z~07:44:19Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. 스타디움 지문 테스트 포함. `Long` 은 모두 무한 모드라 Endless 보류 동안 돌리지 않는다(`CLAUDE.md` §9-2).
+  - Console Error 2건은 테스트가 기대하는 로그다: `RaceAssembler: Single at VeryFast cannot be raced yet` (`Race_LockedSpeedClass_…`), `RunnerProfile '': every scale and the weight must be positive.` (`ChainRushProfileTests.cs:138`).
+  - **② 병합 게이트** (에디터 6000.3.19f1, 사용자 "검증해보고 괜찮으면 ㄱㄱ" → "네 추천대로"): 다른 세션의 장식 작업까지 담은 커밋 `d65b0bb` 를 먼저 검증 — EditMode `testcasecount="258" result="Passed" passed="258" failed="0"` (14:02:39Z~14:02:45Z), PlayMode 전체 `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (14:03:27Z~14:12:14Z). 빌드 씬 목록을 §9-2 대로 떼어 낸 `feature/settings-skyway-build-scene`(`7cfabcf`): `select-tests -Range dev...HEAD` = 전체(ProjectSettings 1개), EditMode `258 Passed failed="0"` (14:16:52Z~14:16:58Z), PlayMode `testcasecount="174" result="Passed" passed="167" failed="0" skipped="7"` (14:17:41Z~14:26:00Z, 맵이 없는 브랜치라 스카이웨이 2건 빠짐) → `dev` `c587a7e`. 새 `dev` 위의 `076ac8e`(트리 `765e1fe` = `d65b0bb` 와 같음): `select-tests -Range dev...HEAD` = 전체(바뀐 파일 16개, ProjectSettings 0개), EditMode `258 Passed failed="0"` (14:28:56Z~14:29:03Z), PlayMode `testcasecount="176" result="Passed" passed="169" failed="0" skipped="7"` (14:29:46Z~14:38:36Z) — 스카이웨이 2건 통과, 랩 81.12/79.88 s, 최대 옆 거리 1.92 m. skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. `Long` 은 Endless 보류로 안 돌림.
+
+## 2026-10-21 · 타이틀 카트라이더풍 로고 · 버전/빌드 표기 · 로비 항목 설명 · 임시 잠금 트랙
+
+- **결정 (사용자, 2026-10-21, 요청서 "ㄱㄱ", `feature/ui-title-lobby-info`)**:
+  - **타이틀**: `STADIUM / AFTER DARK`, `ALPHA / ARMORED RUNNER`, `CHAIN RUSH / NIGHT DRIFT`, 러너 초상을 지웠다. 카트라이더(원작·드리프트) 타이틀을 참고해 큰 기울임 로고(그림자, RUSH 를 오른쪽으로 밀어 질주감) 뒤로 사선 스피드 스트라이프 4줄(−9°, 직접 만든 `GUI.matrix`), 체커기 띠, 숨 쉬듯 밝아졌다 어두워지는 시작 버튼 테두리. 오른쪽 가운데는 러너 그림이 정해질 때까지 비운다. `TitleScreen.runnerArtwork` 필드를 지웠다 — 타이틀 씬 YAML 의 참조는 고아로 남고(동작 영향 없음), 에디터에서 씬을 다음에 저장할 때 사라진다.
+  - **버전·빌드**: 오른쪽 위 `v0.0.1 · TEST BUILD`. 버전은 `TitleScreen.Version` 상수(손으로 올린다). Player Settings `bundleVersion`(0.1.0)은 ProjectSettings 금지선(§0)이라 쓰지 않았다. 빌드 이름은 `Debug.isDebugBuild` 로 자동 — 에디터·개발 빌드 `TEST BUILD`, 릴리스 빌드 `RELEASE`.
+  - **로비 설명 패널**: RACE SETUP 패널과 러너 초상을 지우고, 메인·트랙·속도 페이지 오른쪽에 커서가 가리키는 항목의 설명(페이지 태그 · 이름 · 잠김이면 `LOCKED · 준비 중` · 설명 · 트랙이면 최고 기록)을 둔다. 설정·조작 키·러너 페이지에는 없다. `SetupRunner` 는 테스트가 쓰고 있어 남겼다(그리는 곳만 없어짐).
+  - **임시 잠금 트랙**: 씬 트랙 뒤에 `NEON HARBOR`, `SKYWAY LOOP` 를 코드 배열(`PlaceholderTracks`)로 붙였다. 정의가 없어 잠그고, 기록 칸은 "준비 중", 결정하면 "새 트랙은 이후 마일스톤에서 열립니다." 씬은 고치지 않았다. 씬 트랙의 설명은 제목으로 찾고(`TrackDescription`), 없으면 `LogError`(트랙은 그대로 달린다).
+  - **플레이 피드백 반영** ("배경 위아래 절반이 우측 판과 색이 비슷해 판이 잘 안 보인다", "이전 버튼을 좌측 하단에, 키 설명은 우측 하단으로"): 오른쪽 판(설명·러너 프로필)을 `LobbyMenu.Card` 로 — `Surface` 보다 밝은 채움(24,36,54), 민트 35% 테두리 1px, 오른쪽 아래 그림자, 위쪽 민트 3px. 이전 버튼은 왼쪽 아래(높이−84), 키 설명은 같은 줄 오른쪽 정렬, 알림 줄은 버튼 위(높이−140)로.
+  - **카드 확대 · 호버 · 눌림 · UI 사운드 자리** (플레이 피드백 "살짝 띄운 박스 디자인 맘에 든다, 버튼들·선택 요소에도", "호버는 살짝 회색, 클릭은 눌리는 효과", "사운드는 추후에, 세팅만" → 요청서 "진행"): `Card` 를 `NightUi.Card`(모양 `CardLook` Plain/Selected/Locked/Action)로 옮기고, 누를 수 있는 카드 `NightUi.PressableCard`·`CardButton` 을 두었다. 호버는 회색 16% 덮개, 누르는 동안은 면이 그림자 쪽으로 (4,5) 내려앉고 22% 덮개. 눌림 판정은 `GUIUtility.hotControl != 0` 이고 마우스가 그 카드 위일 때(새 입력 의존 없음). 클릭 판정은 원래 칸 전체(`GUI.Button`, 빈 스타일), 글자는 내려앉은 면 위에 그린다. 적용: 로비 목록 칸·러너 칸·이전·레이스 시작, 오른쪽 판(`PanelCard`), 타이틀 시작 버튼·버전 태그, HUD 출발 START RUN·결과 다시 달리기/로비로·일시정지 칸.
+  - **`Audio/UiSound`** (static class, 첫 UI 사운드 사례): `Cue` = Move / Confirm / Back / Denied, `Played` 이벤트, `Play(cue)`. 아직 듣는 쪽이 없어 소리는 안 난다 — 나중에 재생기 하나가 `Played` 를 구독하면 된다. 씬을 고치지 않으려고 직렬화 참조 대신 static 이벤트. 부르는 곳: 로비 `Move`(커서가 실제로 움직일 때만)·`Adjust`·`Confirm`(잠김이면 Denied)·`Back`, 타이틀 `Enter`, HUD `MovePause`·`ChoosePause`(로비로는 Back)·마우스 버튼 클릭, 그리고 마우스가 새 카드에 올라갈 때(`PressableCard`). **키보드 경로인 `ChainRushGame.Update`(Enter 출발·재시작, ESC 일시정지)는 장치 입력 경로라 이번에 건드리지 않아 아직 신호가 없다.**
+  - 이름 충돌: 판 함수를 처음 `NightUi.Panel` 로 지었다가 같은 이름의 색 필드와 겹쳐 `error CS0102` → `PanelCard`.
+- **버린 대안**: UI 사운드를 ScriptableObject 클립 묶음 + 화면별 AudioSource 직렬화로 — 씬 3개를 에디터에서 고쳐야 하고 소리가 아직 없다. 설명을 `TrackChoice` 직렬화 필드로 — 로비 씬을 에디터에서 고쳐야 해서 이번 범위 밖. 버전을 `Application.version` 으로 — ProjectSettings 를 0.0.1 로 바꿔야 한다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리 = 이 머신 버전 차이 파일 제외):
+  - 컴파일 `*** Tundra build success (62.55 seconds - 0:01:02), 29 items updated, 1618 evaluated`, `error CS` 0건, Console Error 0건.
+  - ① 빠른 확인: `tools/select-tests.ps1` 기본 범위는 "전체"(이 머신의 `ProjectSettings`·`packages-lock` 버전 차이 때문). 바뀐 코드가 고르는 `ChainRushFlowTests`·`ChainRushProfileTests` + 서킷 지문으로 돌림 → `testcasecount="27" result="Passed" passed="27" failed="0"` (05:31:08Z~05:33:31Z). 새 테스트 2건(`Lobby_PlaceholderTracks_RefuseWithANoticeAndStay`, `Lobby_MainTrackAndSpeedEntries_EachHaveADescription`) 포함.
+  - 화면: 플레이 모드(시작 씬을 타이틀로 잠시 지정, 끝나고 되돌림)에서 타이틀·메인·트랙(NEON HARBOR 잠김 알림)·속도를 `ScreenCapture` 로 찍어 확인. 그때 Console 에 `Deleting invalid font reference.` 경고 20건(14:34:12, 플레이 모드 진입 시)이 있었다 — 이번 변경 전 세션의 `Editor-prev.log` 에도 745건이 있어 기존 경고다(원인은 조사하지 않음).
+  - 피드백 반영 뒤: 컴파일 `*** Tundra build success (10.39 seconds), 11 items updated, 1618 evaluated`, 같은 27건 `testcasecount="27" result="Passed" passed="27" failed="0"` (05:44:02Z~05:45:57Z), 메인(멀티 잠김 알림)·러너 페이지 캡처로 판 테두리·버튼 위치 확인, Console Error 0건.
+  - 카드·호버·UiSound 뒤: 컴파일 `*** Tundra build success (8.34 seconds), 29 items updated, 1618 evaluated`. `select-tests` "전체"(HUD·NightUi + 버전 차이 파일) → EditMode `testcasecount="258" result="Passed" passed="258" failed="0"` (05:53:32Z~05:53:38Z), 메뉴 `Run PlayMode Tests` `testcasecount="174" result="Passed" passed="167" failed="0" skipped="7"` (05:54:12Z~06:02:57Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3, 새 `Lobby_MovesChoicesRefusalsAndBack_EachPlayTheirCueOnce` 포함. 타이틀·트랙·레이스 일시정지 캡처로 카드 확인, Console Error 0건. **호버 회색·눌림은 실제 마우스가 필요해 캡처로 확인하지 못했다** — 사용자 플레이 확인 대상.
+  - ② 병합 게이트 (커밋 `24e7a22`, 에디터 6000.3.19f1): `tools/select-tests.ps1 -Range dev...HEAD` → 바뀐 파일 7개(UiSound·HUD·LobbyMenu·TitleScreen·NightUi·FlowTests), EditMode 전체, PlayMode 클래스 10개(Combat·Flow·InputSource·Presentation·Profile·NetReconcile·NetRemote·RaceOrder·RaceStandings·RaceStandingsText) + 지문 1건. "전체" 아님 → `Long` 안 돌림. 결과 PlayMode `testcasecount="101" result="Passed" passed="101" failed="0" skipped="0"` (06:10:28Z~06:12:50Z) — XML 클래스 목록은 도구 출력에서 `ChainRushCombatTests` 만 빠졌고, 그 클래스는 통째로 `[Category("Endless")]` 라 `!Endless` 로 제외된 것(`ChainRushCombatTests.cs:21`). EditMode `testcasecount="258" result="Passed" passed="258" failed="0"` (06:13:18Z~06:13:22Z). 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update`)는 안 바꿔 Device 안 돌림. 코스 코드 안 바꿔 Sweep 안 돌림.
+  - 사용자 플레이 확인: "좋다 커밋 병합 푸시 ㄱㄱ" — 2026-10-21.
+
+## 2026-10-20 · 러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴 · R 재시작 제거
+
+- **결정 (사용자, 2026-10-20, `feature/m2-runner-preview` → `feature/m2-lobby-pause-ui`)**:
+  - **러너 프리뷰** (요청서 "ㄱㄱ"): 로비 러너 페이지 가운데 칸(1600 기준 364×540)에 커서가 가리키는 러너의 디자인(`RunnerProfile.Look`)을 보이고, 칸 안에서 누른 마우스 드래그로 좌우 회전(0.45°/px, 처음 −30°, 러너를 바꿔도 각도 유지, 자동 회전 없음). `Flow/RunnerPreview`(sealed class)가 무대(턴테이블·카메라·방향 조명, y −1000)를 실행 중에 만들고 디자인 5개를 Awake 에서 한 번만 복제해 `SetActive` 만 바꾼다 — 로비 씬·프리팹·레이어(ProjectSettings)를 건드리지 않으려고(`RemoteGhost` 와 같은 방식). 로비 OnGUI 가 화면 전체를 불투명하게 덮어 씬 안 모형은 안 보이므로 카메라 → RenderTexture(2배 해상도, MSAA 4) → `GUI.DrawTexture`. 로비 씬에 조명이 없어 무대 조명을 만든다. 디자인이 빈 러너는 "디자인 없음", 그릴 것이 없는 디자인은 `ArgumentException` → 로비가 로그를 남기고 꺼진다. 런타임에서 처음으로 `Application.isPlaying` 에 따라 `Destroy`/`DestroyImmediate` 를 고른다(EditMode 테스트가 정리를 확인하려고).
+  - **입장 버튼** ("잘 보이도록 디자인및크기"): 러너 줄 클릭은 고르기만(`LobbyMenu.Highlight`), 능력치 칸 아래 민트 "입장   ENTER  →"(420×92, 32pt) 또는 Enter 로 레이스. 다른 페이지의 클릭은 그대로 바로 결정.
+  - **RACE SETUP 러너 이름** (플레이 피드백 "러너 이름이 바뀌지않는다"): 입장한 러너만 보여서, 클릭이 고르기만 하게 바뀐 뒤 드러났다. 러너 페이지에서는 커서, 다른 페이지에서는 입장한 러너(`SetupRunner`). 고치기 전 실패 테스트 있음(아래).
+  - **이전 버튼** ("esc 기능도 그대로 두고"): 모든 로비 페이지 제목 칸 오른쪽 "←  이전   ESC" = `Back()`. 클릭은 그리기가 끝난 뒤 처리(입장 버튼도) — 2026-10-20 클릭 버그와 같은 이유.
+  - **일시정지 메뉴** (요청서 "ㄱㄱ", 기본값 ↑/↓·Enter 포함): ESC 가 화면을 50% 어둡게 하고 PAUSED·지금 랩/시간·**계속 / 재시작 / 로비로**(클릭 또는 ↑/↓ + Enter, ESC 는 계속). 재시작은 `ManualStart` 일 때만(네트워크 레이스 숨김), 로비로는 로비에서 온 레이스만(`ChainRushHud.Offers`). 결과 패널에서 떼어 `DrawPause` 로.
+  - **R 재시작 제거** ("인게임에서 r 버튼은 없어져도 되겠다"): `ChainRushGame.Update` 에서 R 을 뺐다. 결과 화면의 재시작은 Enter(원래 동작)·버튼("ENTER / RUN AGAIN"). Device 테스트 `Input_ArrowKeys_…Restarts` 의 R 재시작을 "R 은 아무것도 안 함" + ESC → ↓ → Enter 재시작으로 바꿨다 — 사양 변경으로 사용자 승인. `Input_ManualStartOff_EnterAndRDoNothing` 은 지금 사양에서도 맞아 그대로.
+- **브랜치**: 프리뷰를 커밋하지 않은 채 `feature/m2-lobby-pause-ui` 로 뻗어 한 브랜치로 묶었다(검증 비용 1회, 사용자 기본값 3).
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 `11a72d4` = 이 머신 버전 차이 파일 3개 제외):
+  - 컴파일 `Tundra build success`, `error CS` 0건.
+  - RACE SETUP 고치기 전: `ChainRushFlowTests.Lobby_RunnerPage_HighlightPicksWithoutStarting` `result="Failed"` "RACE SETUP names the runner being picked" `ChainRushFlowTests.cs:152` (07:17:01Z). 고친 뒤 통과.
+  - `tools/select-tests.ps1 -Range dev...HEAD`: "전체"(`ChainRushGame.cs` → 코어 시뮬). `Long` 은 Endless 보류로 돌리지 않음.
+  - EditMode `testcasecount="255" result="Passed" passed="255" failed="0"` (07:29:09Z~07:29:13Z) — 새 `RunnerPreviewTests` 6건.
+  - 게이트 `testcasecount="171" result="Passed" passed="164" failed="0" skipped="7"` (07:29:38Z~07:36:49Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. 새 PlayMode 4건(프리뷰가 RenderTexture 가운데에 실제로 그리는지 픽셀로 확인 포함).
+  - Device (`Run Device Input Tests`, 입력 장치 경로 `ChainRushGame.Update` 를 바꿔서): `testcasecount="3" result="Passed" passed="3" failed="0"` (07:38:06Z~07:38:23Z), 시작 때 `isApplicationActive [True]`. 그 직전 시도는 에디터가 뒤에 있어(`False`) 시작하지 않았다.
+  - 서킷 지문 테스트는 게이트 안에서 통과(시뮬 변경 없음, R 키 한 줄만).
+  - 사용자 플레이 확인: "다 좋다"(프리뷰·입장·일시정지), "확인했다"(이전 버튼) — 2026-10-20.
+
+## 2026-10-20 · M2-c 설정 · 로비 클릭 버그 · 러너 디자인 5종 연결 (아트 AI 병행)
+
+- **결정 (사용자, 2026-10-20, `feature/m2-settings`)**:
+  - M2-c 항목: 추천 1차안 "ㅇㅋ" — 전체·음악·효과음 볼륨(0~10)과 속도 시야 효과(켬/끔), 조작 키는 하위 페이지. 화면(창/전체·해상도·VSync)은 에디터에서 검증할 수 없어 플레이어 빌드 때로, 피격 깜빡임은 서킷에 맞을 대상이 없어 뺐다. 저장은 `PlayerPrefs`(2026-10-19 "저장방식은 그대로").
+  - **손상된 저장값**: "1승인" — 생성 시 키·값을 `Debug.LogError` 로 알리고 그 항목만 기본값, 저장값은 덮어쓰지 않는다(`GameSettings.ReadLevel`·`ReadSwitch`). 이유: 예외를 던지면 `static Player` 초기화가 `TypeInitializationException` 이 되어 로비·오디오·카메라가 함께 깨지고 플레이어가 고칠 길이 없다. 잡아서 삼키는 예외가 없고 로그가 남아 §5 위반이 아니다(리뷰). 버린 대안: 예외(위 이유), 지연 로드 후 예외(컴포넌트 Awake 에서 터져 이후 매 프레임 NullReference).
+  - 리뷰 권고 "2 a,b,c,d ㄱㄱ": 손상값 테스트, 로비 설정 페이지 PlayMode 테스트, 키 문자열을 생성자에서 한 번, 설정 페이지 하단 "← / →  조절" 안내.
+  - `ChainRushFlowTests.Lobby_BackAndSettings_GoPageByPage` 의 설정 페이지 `Confirm()` → `Back()`: 사양 변경(설정에서 Enter 는 항목 선택)으로 사용자 승인.
+  - **로비 마우스 클릭 버그** ("1 브랜치 2 ㄱ"): 메인에서 "싱글 레이스"를 클릭하면 `IndexOutOfRangeException at LobbyMenu.cs:433`. `DrawList` 반복 도중 `GUI.Button` → `Confirm()` 이 페이지를 바꿔 남은 줄이 새 페이지의 배열(`trackRecords`)을 읽었다. `caf9338`(로비 최고 기록) 때부터 있었다. 키보드 Enter 는 `Update` 라 나지 않고, 테스트는 `Confirm()` 을 직접 불러 잡지 못했다. 클릭한 줄만 기억했다가 반복 뒤에 `Confirm()` 한다. 실제 마우스 이벤트가 필요해 고치기 전 실패 테스트는 없다 — 사용자가 수동 클릭 확인으로 받아들였다(VERIFICATION §4-4 예외).
+  - **러너 디자인 연결**: "진행하라 그리고 각 러너 별로 어울릴만한 디자인을 골라서 적용까지". `RunnerProfile.look`(비면 씬 모형 그대로) → `RaceAssembler` 가 능력치 다음 `RunnerLook.Apply` 로 메시·재질만 옮긴다(자식 순서로 전부 검사한 뒤에만 복사, 어긋나면 `ArgumentException` → 레이스를 끔). 매핑은 능력치로 골랐고 같은 이름 디자인이 맞았다: ALPHA(전부 1.0) 청록 표준형, BETA(가속 1.2·무게 0.9) 주황 등 추진기, DELTA(게이지 1.2) 보라 에너지 링, THETA(최고 속도 1.03) 흰색 날개, OMEGA(무게 1.2) 검정 중장형. 연결은 `Unity_RunCommand`(SerializedObject, 다섯 디자인을 `LoadPrefabContents` 복사본에 먼저 적용해 본 뒤) — 에셋마다 `look:` 1줄.
+- **아트 AI 병행** (사용자 "다른 ai 에게 아트적인 요소 작업시킬건데"): 같은 폴더·같은 브랜치에서, 파일 경계(아트 = 장식 씬·`ArmoredRunner`·`Art/`·`docs/ART_UI.md`, 코드 = `Scripts/`)와 에디터 시간 나누기(검증 전 아트가 저장하고 손 뗌, 사용자가 신호 중계)로 진행했다. 다른 브랜치·클론은 §9-2(워크트리 금지)와 Unity MCP 가 어느 에디터에 붙는지 확인 못 한 문제로 쓰지 않았다. 아트의 `Unity_RunCommand` 는 사용자가 코드 전문을 보고 승인했다. 아트가 만든 것: 스타디움 장식(관중석 2,048석·육상 트랙 등, 물리 0), `ArmoredRunner` 모서리 메시, 러너 디자인 5종(`Art/Models/Runner*.prefab`, 계층은 `ArmoredRunner` 와 같음). 커밋은 경로로 나눴다(`47bbe68` 설정, `13c24c5` 아트, `2c2111f` 디자인 연결).
+- **M7 할 일**: `RemoteGhost` 는 로컬 `RunnerTilt.Body` 를 복제하므로 멀티에서 상대가 **내** 디자인으로 보인다(리뷰). 멀티가 잠긴 동안은 닿지 않는다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋한 내용 = 3차 검증 때의 작업 트리 + 이 머신 버전 차이 파일 3개 제외):
+  - 1차(M2-c): EditMode `testcasecount="243" result="Passed" passed="243"` (04:56:21Z), 게이트 `testcasecount="165" result="Passed" passed="158" failed="0" skipped="7"` (04:57:02Z~05:04:24Z).
+  - 2차(클릭 수정 + 장식 씬 확장): EditMode `243 Passed` (05:41:50Z), 게이트 `testcasecount="165" result="Passed" passed="158" failed="0" skipped="7"` (05:42:27Z~05:49:20Z).
+  - 3차(디자인 연결): 컴파일 `Tundra build success`, `error CS` 0건. EditMode `testcasecount="249" result="Passed" passed="249" failed="0"` (06:22:19Z~06:22:23Z). 게이트 `testcasecount="167" result="Passed" passed="160" failed="0" skipped="7"` (06:23:03Z~06:30:07Z) — skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3.
+  - 서킷 지문 세 번 모두 `0x18F31E7A2B4F79B3` 그대로(설정·디자인·장식은 표현만).
+  - 실행 뒤 Console 의 Error 2건은 테스트가 기대한 로그(`cannot be raced yet`, `must be positive`).
+  - `tools/select-tests.ps1 -Range dev...HEAD`: "전체"(프로필 `.asset`·장식 씬·`Prefabs/`). `Long` 은 Endless 보류로 돌리지 않음, 입력 장치 경로를 바꾸지 않아 Device 해당 없음.
+  - 사용자 플레이 확인: "플레이 확인했다"(2026-10-20 — 클릭, 설정, 디자인 5종).
+
+## 2026-10-19 · 그래플: 앵커 높이 안에서만 건다 · 공중 가속 · NetReconcile 1건 M7 까지 보류
+
+- **결정 (사용자, 2026-10-19 새 세션, `fix/swing-boost-grapple`)**:
+  - NetReconcile 1건(아래 항목의 "NetReconcileTests 1건"): B "M7까지 게이트 제외". `NetEndReplay` 카테고리를 붙이고 메뉴 `Run PlayMode Tests`·`tools/select-tests.ps1` 필터·`CLAUDE.md` §9-2·`docs/RULES/VERIFICATION.md` §4-4 의 제외 목록에 넣었다. 같은 파일의 다른 결승 테스트 5개는 게이트에 남는다.
+  - 그래플 낙하(보고 2) — 사용자 보충 "떨어지기보단 그래플을 너무 일찍 걸면 그 줄이 길어져서 떨어질 정도의 길이가 된다는 뜻". 사거리 줄이기·앙각 제한을 거쳐(아래) 추천안 "줄 길이 상한" 에 "추천대로", 그 결과(너무 일찍 뛰면 걸 수 없어 떨어진다)에 "추천대로 ㄱㄱ". 빨리 감기는 "속도 이득이 아닌가"(사용자) — 수평 속도 이득은 없지만 강화 그래플 보상과 겹쳐 버렸다. 그래플 타이밍 보상은 추후 아이디어(NEXT_REQUESTS M6).
+  - 공중 가속 — "점프일때 속도 고정보단 가속은 먹게 해줘 감속은 아니더라도", "공중 가속이더라도 최대속도엔 걸려야한다", "떼고있을땐 당연히 가속 되면 안된다. 떼면 고정으로".
+  - 스윙 순간이동·코너 중간 미걸림(보고 3): "2+3" — 측정은 이 브랜치 밖, 기록만.
+- **그래플 측정** (`ChainRushProbeTests` 에서 시작해 `ChainRushCircuitTests.Grapple_JumpedBeforeTheGap_…` 로 옮김; 서킷 첫 그래플 틈 s 314.1~330.1, 앵커 노면 위 10 m, s 약 322): 틈 앞 4.5/8/10/12/14/16 m 에서 뛰어 걸 수 있게 되자마자 걸면 줄 14.8/17.7/19.4/19.8/19.9/20.0 m, 가장 낮은 높이 1.37/1.37/1.37/1.00/−0.22/−1.67 m(러너 중심, 선 높이 1.05). 위험한 경우는 모두 **올라가는 중**(세로 +5~+9 m/s)에 걸었다 — 처음 추정 "내려가는 중" 은 틀렸다. 그래플 중 앞 속도는 약 20 m/s 로 유지돼(`RunnerMotor.Step` 의 그래플 가속 5, 목표 max(16, 달리기)) 긴 줄은 느슨한 채로 러너가 점프 포물선대로 떨어지고, 앵커를 0.5 m 지나는 바닥에서 놓인다.
+  - **사거리 17 m** (사용자가 씬에서 바꿈, 뒤에 20 으로 되돌림): 16 m 점프가 −1.99 m 로 더 나빠졌다. 거는 지점이 조금 당겨질 뿐.
+  - **앙각 30° 이상만** (코드, 걷어냄): 12/14/16 m 점프가 33° 에서 줄 11.5~12.4 m 로 걸려 0.77/−0.35/−0.90 m. 걸려 있는 동안 러너는 앵커에서 줄 길이보다 멀어질 수 없으므로 가장 낮을 수 있는 높이는 앵커 높이 − 줄 길이다 — 각도로는 보장되지 않는다.
+- **결정한 규칙 (`GrappleController`)**: 새 필드 `minHangHeight` 1.05(선 높이). 앵커까지 거리가 (앵커의 노면 위 높이 − `minHangHeight`) 이하일 때만 후보가 되고 걸린다(`SelectCandidate`, `TryAttach` 의 줄 = 그 거리). 이 서킷은 8.95 m. 씬에 값이 없어 코드 기본값을 쓴다(씬 수정 없음). 사거리 `maxRange` 20 은 그대로.
+  - 결과(같은 테스트, 공중 가속 뒤): 4.5~14 m 점프는 그 점프에서 줄 8.7~8.9 m 로 걸리고 가장 낮은 높이 1.69~3.50 m. 16·18 m(약 0.8초 이상 일찍)는 앵커가 손에 닿지 않아 **걸 수 없고 떨어져 복귀**한다 — 점프 실수와 같은 종류의 벌이고, 후보 표시(이미 있던 걸 수 있을 때의 강조)가 끝내 안 켜진다. 공중 가속 전에는 경계가 12/14 m 사이였다.
+  - 대가: 걸 수 있는 구간이 앵커 앞 약 6 m(s 316~322)로 좁아졌다. 봇의 평소 걸기는 줄 11.5 → 8.6 m.
+  - 버린 대안: 긴 줄 빨리 감기(강화 그래플 보상과 겹치고 일찍 걸기의 대가가 사라짐), 놓는 조건 변경(바닥에서 놓이지 않을 뿐 틈 안으로 내려가는 것은 남음), 사거리·앙각(위 측정).
+- **공중 가속 (`RunnerMotor`)**: 공중(그래플 아님)에서 ↑ 를 누르면 땅과 같은 가속(`RunAcceleration`, 부스터 유지 중이면 `BoostAcceleration`)으로 목표까지만 빨라진다. 목표는 땅처럼 **아래 노면의 경사**를 반영한다 — 오르막에서 뛰어 평지 속도로 빨라지던 꼼수(2026-10-19 "이륙 속력 유지" 의 이유)는 그대로 막힌다. ↑ 를 떼면 공중에서는 오르지도 줄지도 않는다. 목표보다 빠르면 `airDeceleration`(옛 `airAcceleration`, `[FormerlySerializedAs]` 로 세 씬의 0 을 그대로 읽는다 — 씬 수정 없음)로 줄어든다 — 0 이라 버니합(같은 날 "버니합")은 그대로.
+- **테스트**:
+  - 새로: `ChainRushCircuitTests.Grapple_JumpedBeforeTheGap_HooksAboveTheRoadOrFromTooEarlyCannotHookAndFalls` — 고치기 전 실패 `jump 12.0 m before the gap: … the runner hung 1.00 m over the track, its feet below the road. Expected: greater than or equal to 1.04999995f But was: 1.00120199f`. `ChainRushSlopeTests.Jump_FromLowSpeedWithTheThrottle_SpeedsUpInTheAirUpToTheRunSpeed` — 고치기 전 `takeoff 0.600 m/s, after 10 air ticks 0.600 m/s (expected 6.600)`, 뒤 `6.600`. `Jump_WithTheThrottleLetGo_KeepsItsSpeedInTheAir`, `Jump_AboveTheRunSpeed_SlowsOnlyByAirDeceleration(0, 5)` — 고치기 전 `RunnerMotor.airDeceleration is missing.`
+  - 사양 변경으로 고침(사용자 "ㄱㄱ"): `Jump_OffAnUphill_TheAirSpeedMovesByAirAcceleration` → `Jump_OffAnUphill_TheAirKeepsTheUphillRunTarget`(14.000 → 14.000 m/s). 걸 수 있는 거리가 20 → 약 9 m 가 되어, 정지 상태에서 틈 4 m 앞(작업대 z 44)에서 뛰고 0.25초 뒤 걸던 테스트 5개의 배치만 바꿨다 — 틈 1 m 앞(z 47)에서 ↑ 를 누른 채 뛰고 후보가 뜨면 건다(서킷의 팔 자세 테스트는 틈 4.5 m 앞에서 20 m/s): `ChainRushTests.Grapple_JumpAtGap_…`·`Grapple_SecondPressInTheSameAir_…`·`Input_ArrowKeys_…`(Device), `ChainRushDriftTests.Grapple_ChainActionWhileAttached_…`, `ChainRushPresentationTests.Animation_JumpAndGrapple_…`. 단언 값은 그대로. 세 개는 키보드 입력원이라 ↑ 가 없어 제자리에서 뛰었다(예전엔 사거리 20 m 라 그래도 걸렸다).
+  - `ChainRushProbeTests` 의 일찍 걸기 측정은 위 진짜 테스트로 옮기고 지웠다(측정 3개 + 그래플 1개 남음).
+- **검증** (에디터 6000.3.25f1, `fix/swing-boost-grapple` 커밋 전, UTC):
+  - 컴파일: 리로드마다 `error CS` 없음(Editor.log), Console Error 0건.
+  - 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="164" result="Failed(Child)" passed="153" failed="4" skipped="7"` (14:14:40Z~14:21:28Z) — 위 배치 테스트 4개 `Expected: True`(`TryAttach`).
+  - 게이트 2회차 (배치 고친 뒤): `testcasecount="164" result="Passed" passed="157" failed="0" skipped="7"` (14:27:01Z~14:33:50Z). skipped 7 = `[Explicit]` 측정 4 + 네트워크 레이스 3. `ClientEnd_WhenTheServerMissed…` 는 결과에 없음(제외 확인), 다른 `ClientEnd_` 5개는 돌았다.
+  - 서킷 지문 새 기준 `0x18F31E7A2B4F79B3` (`ChainRush replay circuit: 1700 ticks identical`) — 이전 `0xE3744A27006C0BB2`. 그래플·공중 가속 사양 변경.
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="235" result="Passed" passed="235" failed="0"` (14:34:15Z~14:34:18Z).
+  - Device 1회차 `testcasecount="3" result="Failed(Child)" passed="2" failed="1"` (14:34:39Z~14:34:51Z) — `Input_ArrowKeys_…` `ChainRushTests.cs:200` `Expected: True`(`grapple.IsAttached`), 같은 원인. 배치 고친 뒤 2회차 `testcasecount="3" result="Passed" passed="3" failed="0"` (14:35:46Z~14:36:02Z). 이 수정은 Device 테스트 줄만이라 게이트 2회차 뒤에 했다.
+  - `tools/select-tests.ps1` 실행: 기본 범위는 "전체"(씬·코어 시뮬), `-Range 75df74d^..75df74d` 출력의 필터에 `"!NetEndReplay"` 가 들어간 것을 확인.
+- **남은 것**: 사용자 플레이 확인(걸 수 있는 구간이 좁아진 체감). 스윙 순간이동·코너 중간 미걸림은 NEXT_REQUESTS.
+
+## 2026-10-19 · 스윙 중 부스터가 스윙 속도를 올린다(C), 그래플 낙하·스윙 순간이동은 측정만
+
+- **보고 (사용자, 2026-10-19 플레이)**: "1. 스윙 중에 부스터를 사용하면 제대로 가속 적용이 안되는 경우가 있다. 2. 점프 그래플링 … 특정지점 까지 가면 자동으로 튀어오르게 되는 것 같은데 중간에 가속이 되어버리면 위험하게 떨어질뻔한 상황이 연출된다. 3. 코너에 진입할때 스윙들어가면 현재 좌표가 아닌 줄 길이? 로 순간이동 되는 이슈가 있다." 1 의 선택지(A 스윙을 놓고 부스터 / B 놓은 뒤 시작 / C 스윙 속도를 올림)에 "C를 원한다", 진행에 "3은 기억안난다 일단 해봐라 너무 빠르다싶으면 스윙 속도 관련한 로직을 바꿔야겟다".
+- **1 원인**: 스윙 중 Ctrl 은 슬롯을 쓰고 부스터 타이머(당김 0.4초 + 유지 2.6초)를 시작했지만, 스윙 중에는 속도가 "걸 때의 속도 × 줄 비율"로만 정해지고(`SwingStep`) 달리기 가속은 0 이라 부스터가 아무 일도 안 했다. 타이머는 그동안 줄어, 놓을 때까지 남은 만큼만 적용됐다(3초 넘게 잡으면 통째로 사라짐). **고치기 전 재현**: `ChainRushCornerSwingTests.Swing_BoosterWhileSwinging_SpeedsTheSwingUp` 실패 — "hook speed 20.00 -> 20.00 m/s after 0.5 s" (`Expected: greater than 22.0f But was: 20.0f`).
+- **1 결정 (C)**: 스윙 중 부스터가 도는 동안 걸 때의 속도(`RacerState.SwingHookSpeed`, 줄 비율이 곱해지는 값)를 부스터 목표(당김 28 → 유지 26, 러너 배율 적용)로 땅의 부스터와 같은 힘(`BoostAcceleration`)으로 올린다. 목표보다 이미 빠르면 깎지 않는다. 스윙 중에는 부스터 당김이 방향을 돌리지 않는다(줄이 방향을 정한다). 고친 뒤 같은 테스트 "20.00 -> 23.16 m/s after 0.5 s". 부스터 28 에 줄을 끝까지 감으면 최대 42 m/s(28 × 1.5) — 너무 빠르면 스윙 속도 규칙을 다시 본다(사용자).
+- **2 측정** (`ChainRushProbeTests`, `[Explicit]`, 서킷, 시험용 봇): 그래플은 앵커를 0.5 m 지나면 저절로 놓이고 위로 11.5 m/s 를 받는다. 봇 기준 네 경우 모두 가장 낮은 곳이 노면 위 2.76 m, 놓는 높이 3.59~4.11 m — 위험한 낙하는 재현되지 않았다. 평소: 줄 11.47 m, 19.48 m/s 로 걸고 20.00 m/s 로 놓음. 40 m 전 부스터: 줄 10.63 m, 24.65 m/s 로 걸고 22.95 m/s 로 놓음. 15 m 전 부스터: 10.85 m, 22.56 → 20.66. 강화 그래플: 놓을 때 26.00 m/s. 봇은 틈 4.5 m 앞에서 뛰고 노면 위 2.6 m 를 넘으면 건다 — 사람이 더 멀리(줄 최대 20 m)·낮게 걸면 진자의 바닥이 앵커(노면 위 10 m) 아래로 더 내려가 그 바닥에서 놓일 수 있다는 계산은 남는다(재현 안 함).
+- **3 측정** (같은 클래스, 한 바퀴, 봉이 닿는 순간 스윙 0.6초): 8번 걸었고 거는 틱의 줄 길이 = 그 순간 봉까지 거리(오차 0.00 m), 틱 이동량은 속도 범위 안(속도로 설명 안 되는 이동 0.00 m), 카메라와 러너 사이 거리의 프레임 변화 최대 0.39 m(2배속). **위치 순간이동은 재현되지 않았다.** 대신 보인 것: 봉에 닿자마자 걸면 줄이 27.8~28.0 m(코너 반지름 22 + 손 닿는 거리 6)로 걸려 원이 코너 노면의 바깥 가장자리(22 + 6)를 돌고, 거는 틱에 속도·방향이 원의 접선으로 한 번에 바뀐다. 사용자에게 이것이 본 현상인지 묻는다.
+- **3 추가 측정** — 사용자 "인코스쪽에있었는데 shift 거니까 외곽으로 순간이동되었다": ① 안쪽 4 m 라인, 코너 안에서 걸기 4번 — 거는 틱 전후 D 그대로(+3.87 → +3.87 → 5틱 뒤 +3.87), 줄 = 거리, 속도 밖 이동 0.00 m. ② 첫 코너(s 140.5~175.0, 봉은 오른쪽), 안쪽 라인, 거는 시점 3 × 부스터 2 × 조향 3 = 18가지(사용자 "ㄱㄱ"): 걸린 12가지 모두 줄 = 거리, 속도 밖 이동 0.00 m — **순간이동 재현 안 됨**. 조향을 봉 반대쪽으로 누르면 10틱(0.2초)에 바깥으로 1.3 m(줄이 초당 6 m 풀림), 봉 쪽이면 안쪽으로 1.2 m. 부스터 중에는 안쪽 라인까지 못 들어가 D +2.43 에서 걸림. **"코너 중간에 걸기" 6가지는 한 번도 걸리지 않았다** — 원인 미확인. 추정: 최소 회전 반지름 25 m 가 안쪽 라인(봉에서 약 18 m)보다 커서 러너 방향이 커브를 못 따라가고, 봉이 앞 방향에서 95° 를 넘어간다.
+- **NetReconcileTests 1건** (`ClientEnd_WhenTheServerMissedTheInputOfItsLastTick_…`): 이 변경으로 실패. 테스트가 "스윙은 부스터를 무시한다"는 전제로 입력 경우를 찾는데 그 전제가 바뀌었다. 사용자 승인("1 ㅇㅇ")으로 탐색을 두 번 고쳤으나(줄 미세조정을 그 런의 스윙 N번째 틱에 / 미세조정 조향 0.15) 세 번째도 "No case fits"(659가지, 클라 결승선 앞·서버 뒤 경우 0) — §4-5 에 따라 멈췄다. 남은 결정은 `docs/NEXT_REQUESTS.md` "fix/swing-boost-grapple 남은 결정".
+- **Presentation 테스트 1건** (`Presentation_RunPauseRestart_…`): 게이트에서 "걸음 위상 0" 실패. 키보드 입력원으로 출발해 ↑ 를 누르지 않아, 첫 프레임의 입력 읽기 전에 물리 틱이 돌았는지에 따라 움직였다 말았다 했다(`InputLatch.Clear` 는 가속 중으로 둔다). 단독 실행은 통과. 사용자 승인("2 ㅇㅇ")으로 `ChainRushTests` 와 같은 `FullThrottleInputSource` 를 쓰게 고쳤고 통과.
+- **검증** (에디터 6000.3.25f1, `fix/swing-boost-grapple` 커밋 전, 진행 중): 컴파일 성공·Console Error 0건. `ChainRushCornerSwingTests` 10/10(고친 뒤). EditMode `testcasecount="235" result="Passed"` (12:33:50Z). 게이트 1회(고치기 전 테스트들) `testcasecount="159" passed="152" failed="2" skipped="5"` (12:34:11Z~12:40:28Z) — 실패 2건은 위 NetReconcile·Presentation, 서킷 지문 `0xE3744A27006C0BB2` 그대로. 게이트 재실행은 NetReconcile 결정 뒤.
+
+## 2026-10-19 · 점프로 부스터 속도가 이어지는 것(버니합)은 그대로 둔다 — 기록만
+
+- **결정 (사용자, 2026-10-19 플레이 확인 "현재 점프하면 그 속도가 고정이 되는 듯한데 부스터 끝나는 시간에 점프를 하면 조금 더 유지가 된다. 이는 버니합같은 버그 겸 기술 요소로 남길까?", 선택지 A 한계 두기·B 그대로·C 막기 중 "3은 그대로 두고 기록해놓자")**: 바꾸지 않는다.
+- **원인 (코드 읽기, 실측 안 함)**: 서킷 씬 `airAcceleration` 0(2026-10-19 "이륙 속력 유지" 결정) 이라 공중에서는 수평 속력이 오르지도 내리지도 않는다(`RunnerMotor.Step` 의 가속 선택, 공중이면 `airAcceleration`). 땅에서 목표보다 빠르면 `overspeedFalloff` 8 m/s² 로 줄어든다. 그래서 부스터 끝 무렵(26 m/s 근처) 점프하면 그 속력을 착지까지(점프 체공 약 1초 = 2 × 11.5 / 22) 가져가고, 착지 직후 다시 뛰면 땅에 닿은 틱마다 0.16 m/s 정도만 잃으므로 연속 점프로 오래 끌 수 있을 것으로 계산된다. 실제로 몇 초 이어지는지는 재지 않았다.
+- **나중에 다시 볼 때의 후보**: A 공중에서도 목표 초과분을 천천히(예: `swingCarryFalloff` 3 m/s²) 줄인다 — 점프 한 번의 이득은 남고 연속 점프로 끝없이는 못 끈다. C 공중도 땅처럼 8 m/s² — 기술 요소가 없어진다. 어느 쪽이든 시뮬 변경이라 서킷 지문이 바뀐다.
+
+## 2026-10-19 · 로비: 트랙 선택에 최고 기록, 러너 이름 잘림 고침
+
+- **결정 (사용자, 2026-10-19 플레이 확인 "씬 처음부터 들어가서 정상 작동 확인했다", "Runner 고를때 우측에 스탯과 이름이 뜨는데 그 이름 하단이 잘려보인다", "싱글플레이에서 맵을 고를때 최고기록을 남겼으면 좋겠다. 아직 기록이 없다면 존재하지않다고 표기", 추천안(트랙 × 속도 단계별 1개 + 세운 러너, `PlayerPrefs`)에 "1ㄱㄱ 2ㄱㄱ")**:
+  - **최고 기록** (`Flow/BestRecords`): 트랙(정의 에셋 이름, 예 `Circuit_Stadium`) × 속도 단계마다 3랩 총 틱 수(`LapCounter.TotalTicks`)와 세운 러너 이름을 `PlayerPrefs` 에 둔다(키 앞머리 `ChainRush.Best.`). 더 빠를 때만 바꾸고 같으면 옛 기록을 둔다. 로비에서 시작한 레이스(`RaceAssembler`)가 완주할 때마다 낸다(R 로 다시 달려 완주해도 다시 낸다). 씬을 바로 연 런은 내지 않는다. 테스트는 자기 키 앞머리를 쓰고 지운다.
+  - **로비 트랙 페이지**: 줄마다 오른쪽에 `최고 기록  01:19.4  ·  BETA` 또는 `기록 없음`(고른 속도 단계 기준, 지금은 빠름). 트랙 페이지를 열 때 다시 읽는다. 시간 형식은 HUD 와 같다(`ChainRushHud.FormatTime` 을 `internal` 로).
+  - **러너 이름 잘림**: 능력치 패널의 이름 칸 높이가 32 px 굵은 글꼴보다 낮았다(30) — 44 로 늘리고 막대를 내렸다.
+  - 결과 화면에 "새 기록" 표시는 하지 않았다(`RaceAssembler.LastFinishWasBest` 만 있다).
+- **이유**: 기록·고스트(M4)의 저장 키는 트랙과 러너가 정해진 뒤 정하기로 했는데(DESIGN §5-1), 트랙 고를 때 보이는 기록 하나는 지금도 정할 수 있다. 러너별 기록과 고스트는 M4 에서 같은 저장소에 더한다.
+- **버린 대안**: 트랙 × 러너별 — 트랙 화면에 기록 5개가 나온다(M4 로).
+- **검증** (에디터 6000.3.25f1, `feature/lobby-best-record` 커밋 전): 컴파일 성공·Console Error 0건. EditMode `testcasecount="235" result="Passed" passed="235" failed="0"` (12:14:11Z~12:14:14Z, 새 `BestRecordsTests` 5건 포함). `tools/select-tests.ps1`(커밋 전 기본 범위) → 클래스 8개 + 지문 1건(씬·코어 시뮬 변경 없음): `testcasecount="83" result="Passed" passed="83" failed="0" skipped="0"` (12:14:40Z~12:17:04Z, 143.9초 — `ChainRushFlowTests` 11/11 에 새 2건: 트랙 페이지 표시, 봇 3랩 완주가 기록으로 남음), 서킷 지문 `0xE3744A27006C0BB2` 그대로. 테스트 뒤 플레이어 키(`ChainRush.Best.Circuit_Stadium.Fast`)는 비어 있고 테스트 키는 지워져 있음을 확인했다. **검증 안 됨**: 로비 화면 모양(이름 칸·기록 줄), 사용자 플레이.
+
+## 2026-10-19 · M2-b 러너 프로필: ALPHA·BETA·THETA·DELTA·OMEGA, 씬 값에 곱하는 배율
+
+- **결정 (사용자, 2026-10-19 "이름 알파 베타 세타 델타 오메가로 5명 스탯 조금씩 다르게", "속도 배율 밸런스는 1.0(빠름으로 해놓은것) 만 되어있으니 나머지 보통과 매우빠름은 후순위", 추천 배율표에 "네 추천안대로 일단 그렇게 해보자")**:
+  - **`RunnerProfile`**(SO, `Data/RunnerProfile_*.asset`): 이름 + 배율 4개. 씬의 `RunnerMotor` 값에 곱한다 — 최고 속도는 `runSpeed`·부스터(`slingTopSpeed` 28·`slingCarrySpeed` 26·`empoweredReleaseSpeed` 26), 가속은 `runAcceleration`, 게이지 충전은 `swingMetersPerSlot` 를 나눈다. 무게는 저장만(몸싸움 M7 C2 까지 효과 없음). 그래플 최저 16·놓을 때 13 같은 고정값과 점프·중력·조향은 그대로.
+  - **값** (최고 속도 / 가속 / 게이지 충전 / 무게): ALPHA 1/1/1/1(지금 값), BETA 0.97/1.20/1.00/0.90, THETA 1.03/0.85/1.00/1.10, DELTA 0.98/1.00/1.20/0.95, OMEGA 1.02/1.05/0.85/1.20.
+  - **적용**: `RunnerMotor.Configure(RunnerProfile)` — 런 밖에서만(달리는 중·일시정지면 예외), 잘못된 프로필도 예외. 로비 → `RaceSetup.Runner`(이름 → `RunnerProfile`) → `RaceAssembler` 가 출발 전에 부른다. 씬을 바로 연 경우는 프로필 없이 씬 값 그대로.
+  - 로비 러너 페이지에 고른 러너의 능력치 막대 4개(0.7~1.3 범위, 배율 숫자).
+  - 속도 단계 보통·매우빠름은 계속 잠금(후순위).
+- **이유**: 배율이면 ALPHA(모두 1)가 곱해도 비트 단위로 같은 값이라 세 씬의 지문이 그대로이고, 값의 원본이 씬 하나로 남는다. 절대값 프로필은 씬마다 다른 물리값(DECISIONS "다른 씬 서킷 물리값")과 원본이 둘이 된다.
+- **버린 대안**: 부스터 속도를 최고 속도와 따로 두기 — 부스터가 달리기보다 빨라야 한다는 규칙(`RunnerMotor.OnValidate`)이 러너마다 깨질 수 있다.
+- **하지 않은 것**: 네트워크에 프로필 싣기(M7 — 멀티는 잠금이라 지금은 기본값만 돈다), 입력 기록 파일에 프로필 기록(M4 고스트 때), 러너별 모형·색(M6).
+- **씬·에셋 작업**: 프로필 에셋 5개 생성과 씬 편집은 승인받은 `Unity_RunCommand` 로 했다. 첫 실행에서 로비 씬을 연 순간 방금 만든 프로필 객체가 내려가 로비 `runners` 가 빈 연결 5개로 저장됐다(`ChainRushCircuitSceneBuilder` 의 주석과 같은 현상) — 씬을 연 뒤 디스크에서 다시 읽어 넣는 두 번째 실행(승인)으로 고쳤고, 저장된 GUID 5개가 에셋 `.meta` 와 같음을 확인했다.
+- **검증** (에디터 6000.3.25f1, `feature/m2-runner-profile` 커밋 전):
+  - 컴파일: 성공, 새 타입 로드 확인, Console Error 0건(프로필·씬 편집 전). 씬 편집 중 `LobbyMenu.OnValidate` 의 "runner N is missing" 5줄씩 2번은 위 빈 연결과, 두 번째 실행에서 옛 빈 목록이 열릴 때 난 것이다.
+  - `ChainRushProfileTests` 6건: 첫 실행에서 `Configure_NullInvalidOrDuringARun_Throws` 1건 실패 — 테스트가 일부러 넣은 잘못된 값에 `RunnerProfile.OnValidate` 가 `LogError` 를 내고(의도한 동작) 테스트가 그 로그를 예상하지 않았다. 테스트에 `LogAssert.Expect` 를 넣고 다시: `testcasecount="6" result="Passed" passed="6" failed="0"` (11:43:11Z~11:43:39Z). 출발 75틱 거리 BETA 10.94 m > ALPHA 9.12 m > THETA 7.75 m, 700틱 해시 BETA `0xA9251CA0D8EBD1BE`·THETA `0x6761C9D9B6C0C3F0`(각각 두 번 같음, ALPHA 와 다름), ALPHA 는 프로필 없는 씬 값과 비트 단위로 같다.
+  - `ChainRushFlowTests` 9/9 (11:42:02Z~, 같은 실행의 Profile 실패 1건 외).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="230" result="Passed" passed="230" failed="0"` (11:43:45Z~11:43:46Z).
+  - PlayMode 게이트 `Run PlayMode Tests` 1회: `testcasecount="154" result="Passed" passed="151" failed="0" skipped="3"` (11:43:59Z~11:49:52Z, 352.8초). 건너뜀 3 = `[Explicit]` `NetworkRaceTests`. 서킷 지문 `0xE3744A27006C0BB2` 그대로.
+  - `Run Device Input Tests`: `testcasecount="3" result="Passed" passed="3" failed="0"` (11:50:10Z~11:50:26Z, 시작 때 `isApplicationActive=False` 였으나 통과).
+  - **검증 안 됨**: 로비 러너 페이지·능력치 막대의 화면 모양, 사용자 플레이(러너마다 차이가 느껴지는지), 3랩 랩타임 차이(재지 않았다).
+
+## 2026-10-19 · M2-a2 빌드 씬 목록 (`feature/build-scene-list`, `22dd4aa` → `dev` `0432115`)
+
+- **결정 (사용자, 2026-10-19 "씬 목록 정리했다", "커밋 병합 ㄱㄱ")**: 사용자가 에디터 Build Profiles 에서 `ChainRushTitle`(0번)·`ChainRushLobby`·`ChainRushCircuit`·`ChainRushTrackStadium` 을 넣고 템플릿 `SampleScene` 을 껐다. `ProjectSettings/EditorBuildSettings.asset` 만 바뀐 브랜치(§9-2)이고, GUID 4개가 씬 `.meta` 와 같다. 기록은 그 브랜치에 파일 하나만 두려고 이 항목(M2-b 브랜치)에 남긴다.
+- **검증**: `select-tests -Range dev...HEAD` 1개 파일 → "전체". `ChainRushFlowTests` 9/9(`Loop_ByName_…` 첫 실행 통과, 11:24:21Z), 게이트 `testcasecount="148" result="Passed" passed="145" failed="0" skipped="3"` (11:24:49Z~11:30:15Z, 326.5초, 지문 `0xE3744A27006C0BB2`), EditMode 230/230 (11:33:06Z). 게이트는 디스크 저장 전, 에디터에 반영된 목록으로 돌았다(끝난 뒤 같은 내용이 저장돼 있었다).
+
+## 2026-10-19 · M2 씬 구성: 타이틀 → 로비 → 달리는 씬 + 서킷 장식 씬(Additive), 시뮬은 데이터로 (M2-a1)
+
+- **결정 (사용자, 2026-10-19 "addictive 씬 구성으로 하자. 타이틀 입장씬과 로비씬이 따로 있고 실제 달리는 씬을 둔 다음 서킷이나 조건(싱글or멀티, 속도(카트라이더의 보통,빠름,매우빠름 같은)) 불러오며 조립하는 식으로", 트랙 쪽 구성 "A", "M2-a1 ㄱㄱ", 기준 속도 단계 "빠름")**:
+  - **씬**: `ChainRushTitle`(Enter → 로비) → `ChainRushLobby`(싱글 / 멀티 잠금 / 설정 → 트랙 → 속도 단계 → 러너) → 달리는 씬 `ChainRushCircuit`(Single 로드) + 트랙의 장식 씬 `ChainRushTrackStadium`(Additive) → 결과에서 ESC·"로비로" 버튼 → 로비. 결과 화면의 R 다시 달리기는 그대로.
+  - **A안 — 시뮬은 데이터, 장식 씬은 보이는 것만**: 노면·충돌체·앵커·봉은 달리는 씬의 `CircuitRace` 가 `TrackDefinition` 으로 만든다(전과 같다). 로비가 고른 정의는 `RaceAssembler`(실행 순서 -100)가 `CircuitRace.UseDefinition` 으로 회로를 만들기 전에 바꿔 끼운다(만든 뒤에는 `InvalidOperationException`). 장식 씬은 충돌체가 없어야 한다(만들 때 0개 확인). 그래서 `RaceWorld.FromScene`(게임·러너·서킷이 한 씬 루트)과 서버의 `IsolatedLoad` 복사본, 서킷 씬을 통째로 여는 테스트 약 10개 파일이 그대로다.
+  - **조건 전달**: `RaceSetup`(readonly struct: 정의·장식 씬 이름·`RaceMode`·`SpeedClass`·러너 이름)을 로비가 `RaceLaunch`(static, 요청 1개, 받으면 비움, 두 번 요청하면 예외, Play 진입 때 비움)에 두고 달리는 씬을 연다. 요청 없이 연 달리는 씬(테스트·에디터)은 저장된 대로 돌고 `Debug.Log` 한 줄을 남긴다.
+  - **잠금**: 멀티(M7), 속도 단계 보통·매우빠름(M2-b). 로비는 보이되 고르면 안내만 하고 머문다. `RaceAssembler` 는 싱글·빠름이 아닌 요청을 `LogError` 하고 게임을 끈다. **지금 서킷 값 = 빠름**(사용자). 러너는 하나(`ARMORED RUNNER`, 이름만 — M2-b 에서 프로필).
+  - **설정**: 키 안내만(저장 없음, M2-c).
+  - **서킷 씬 정리**: 꺼진 루트 `Skyline Course`(옛 직선 코스 Sector 01~09·타워·결승 게이트, 충돌체 포함) 를 지웠다. 지우기 전에 그 안을 가리키는 바깥 참조가 없음을 확인했다. `ChainRushGame.targets` 는 이미 0개였다(그 안의 표적은 판정에 들어간 적이 없다).
+  - UI 는 기존처럼 OnGUI(`ChainRushHud` 와 같은 1600×900 비율·글꼴). 새 네임스페이스 `ProtoHarness.ChainRush.Flow`.
+- **이유**: 사용자가 씬을 나눠 조립하는 구조를 골랐고, 트랙의 시뮬 부분까지 다른 씬으로 빼면(B안) Additive 씬마다 물리 씬이 따로라 격리 월드·테스트를 고쳐야 하고 멀티가 보류된 지금 네트워크 코드를 건드리게 된다. M3 의 새 트랙은 `TrackDefinition` 1개 + 장식 씬 1개로 늘어난다.
+- **버린 대안**: 씬 하나에 메뉴를 겹쳐 그리기(첫 제안) — 사용자가 Additive 구성을 골랐다. B안(서킷 씬에 `CircuitRace`·노면까지) — 위 이유. 정적 전달 대신 `DontDestroyOnLoad` 세션 오브젝트 — 씬 사이 참조를 직렬화할 수 없어 결국 찾아야 하고(`Find*` 금지), 요청 하나를 넘기는 데는 static 이 짧다.
+- **빌드 씬 목록**: 지금 목록에는 템플릿 `SampleScene` 하나뿐이라 이름으로 씬을 부르는 흐름(타이틀 → 로비 → 레이스, 장식 씬)은 Play 에서 아직 안 된다. `ProjectSettings` 변경이라 따로 브랜치(M2-a2, §9-2)이고, `Unity_RunCommand` 로 바꾸지 않으므로(§0) 사용자가 에디터에서 넣는다. 그 전까지 `ChainRushFlowTests.Loop_ByName_…` 은 무시(Ignored)로 보고된다.
+- **검증** (에디터 6000.3.25f1, `feature/m2-scene-flow` 커밋 전):
+  - 컴파일: `Unity_RunCommand` 컴파일 성공, 새 타입 7개 로드 확인, Console Error 0건(테스트 전·후).
+  - `tools/select-tests.ps1`(커밋 전 기본 범위): 씬·`Flow.meta`(표에 없는 경로) 때문에 **"전체"**. 새 클래스 `ChainRushFlowTests` 를 표에 넣었다(`Flow/`, `Race/`, `ChainRushHud.cs` 줄). Long·Sweep 은 모두 무한 모드라 보류 동안 돌리지 않는다(§9-2).
+  - `ChainRushFlowTests` 단독: `testcasecount="9" result="Skipped:Ignored" passed="8" failed="0" skipped="1"` (10:34:45Z~10:34:49Z). 무시 1건은 `Loop_ByName_…`(빌드 씬 목록 없음, a2 뒤 실행).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="230" result="Passed" passed="230" failed="0" skipped="0"` (10:35:11Z~10:35:12Z).
+  - PlayMode 게이트 `Run PlayMode Tests` 1회: `testcasecount="148" result="Skipped:Ignored" passed="144" failed="0" skipped="4"` (10:35:26Z~10:40:47Z, 320.7초). 건너뜀 4 = `[Explicit]` `NetworkRaceTests` 3건 + `Loop_ByName_…` 1건. 서킷 지문 `0xE3744A27006C0BB2` — v0.2 기준과 같다(옛 직선 코스 제거·조립기 추가가 시뮬을 바꾸지 않았다).
+  - `Run Device Input Tests`: `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"` (10:41:10Z~10:41:26Z, `isApplicationActive=True`).
+  - **검증 안 됨**: 타이틀·로비·로딩·결과 버튼의 화면 모양(OnGUI, 캡처하지 않았다), 이름으로 씬을 부르는 흐름 전체(a2 뒤), 사용자 플레이.
+
 ## 2026-10-19 · main v0.2: M1 "한 판이 끝까지 돈다" — `dev` 를 `main` 에 병합하고 태그 `v0.2`
 
 - **결정 (사용자, 2026-10-19)**: 완료 조건 플레이 확인 "3랩 완주했다, 막히는 곳 없음". 이어서 추천(마일스톤 조건을 돌리고 통과하면 `dev → main` + 태그 `v0.2`)에 "좋다 네 추천대로 진행하겠다". 이 문서 브랜치(로드맵 재배치 + 이 기록, `docs/` 와 `CLAUDE.md` 만)를 `dev` 에 병합한 뒤 `dev` 를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.2` 를 단다.

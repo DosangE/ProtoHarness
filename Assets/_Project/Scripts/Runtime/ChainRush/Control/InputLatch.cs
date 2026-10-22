@@ -14,10 +14,13 @@ namespace ProtoHarness.ChainRush.Control
         private bool chainActionPressed;
         private bool swingPressed;
         private bool coasting;
+        private bool reversing;
 
-        // The held swing key and coasting are levels like steer; the chain action and the swing press are edges like the buttons.
+        // The held swing key, coasting and reversing are levels like steer; the chain action and the swing press are edges like
+        // the buttons.
         public void Record(float steer, bool primaryPressed, bool releasePressed, bool attackPressed,
-            bool swingHeld = false, bool chainActionPressed = false, bool swingPressed = false, bool coasting = false)
+            bool swingHeld = false, bool chainActionPressed = false, bool swingPressed = false, bool coasting = false,
+            bool reversing = false)
         {
             if (!(steer >= -1f && steer <= 1f))
                 throw new ArgumentOutOfRangeException(nameof(steer), steer, "Steer must be within [-1, 1].");
@@ -29,11 +32,13 @@ namespace ProtoHarness.ChainRush.Control
             this.chainActionPressed |= chainActionPressed;
             this.swingPressed |= swingPressed;
             this.coasting = coasting;
+            this.reversing = reversing;
         }
 
         public TickInput Consume()
         {
-            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, swingHeld, chainActionPressed, swingPressed, coasting);
+            var input = new TickInput(steer, primaryPressed, releasePressed, attackPressed, swingHeld, chainActionPressed, swingPressed, coasting,
+                reversing);
             primaryPressed = false;
             releasePressed = false;
             attackPressed = false;
@@ -52,6 +57,7 @@ namespace ProtoHarness.ChainRush.Control
             chainActionPressed = false;
             swingPressed = false;
             coasting = false;
+            reversing = false;
         }
     }
 }

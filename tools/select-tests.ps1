@@ -40,7 +40,7 @@ $course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests',
 
 # 전체 실행에서만 도는 클래스, 이름으로 따로 돌리는 클래스. 표가 모든 클래스를 아는지 확인할 때 쓴다.
 $allOnly      = @('ChainRushTests')
-$explicitOnly = @('NetworkRaceTests')
+$explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 
 # 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Note = 보고에 붙일 말.
 $rules = @(
@@ -59,12 +59,14 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
     @{ Pattern = '^' + $runtime + '(Track/(CourseGenerator|CourseTuning)|Endless/ProceduralCourse)\.cs$'; Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '코스 생성·스트리밍'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
     @{ Pattern = '^' + $runtime + '(Track|Endless)/';               Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '절차 노면·무한 코스' }
-    @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests') + $net; Why = '서킷 레이스·격리 월드' }
+    @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
+    @{ Pattern = '^' + $runtime + 'Flow/';                          Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); Why = '타이틀·로비·레이스 조립 (DECISIONS 2026-10-19 "M2 씬 구성")' }
+    @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
     @{ Pattern = '^' + $runtime + 'Combat/';                        Classes = @('ChainRushCombatTests', 'ChainRushProceduralTests', 'ChainRushReplayTests'); Why = '적 조우' }
     @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
     @{ Pattern = '^' + $runtime + 'Control/(InputLog|InputLogFile|InputRecorder|InputReplay|TickInputCodec)\.cs$'; Classes = @('ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushWorldTests') + $net; Why = '입력 기록·재생' }
     @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushCombatTests', 'ChainRushInputSourceTests'); Why = '표현 (ChainVisual·RunnerTilt 를 쓰는 테스트 포함)' }
-    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests') + $net; Why = 'HUD (RaceStandingsView 가 쓴다)' }
+    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests', 'ChainRushFlowTests') + $net; Why = 'HUD (RaceStandingsView·RaceAssembler 가 쓴다)' }
     @{ Pattern = '^' + $runtime + '(Audio/|FollowCamera\.cs$)';     Classes = @('ChainRushPresentationTests'); Why = '표현' }
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
 )
@@ -164,4 +166,4 @@ $quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
 $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (테스트·Net 만 바뀌어 지문 없음)' }
 Write-Output "  PlayMode: 클래스 $($classes.Count)개$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
-Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless" } }));')
+Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless", "!NetEndReplay" } }));')

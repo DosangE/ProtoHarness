@@ -4,7 +4,8 @@ namespace ProtoHarness.ChainRush.Control
 {
     // Desktop mapping, KartRider style with no mouse (2026-10-18): the up arrow is the throttle (2026-10-19: let go, the
     // runner coasts to a stop and a booster ends), left/right arrows steer, left Alt is the primary
-    // action (jump or grapple), letting go of left Alt or pressing down releases the chain, Space attacks. (Right Alt is
+    // action (jump or grapple), letting go of left Alt or pressing down releases the chain, down held without the throttle
+    // brakes and backs up (user 2026-10-22), Space attacks. (Right Alt is
     // the Korean/English key on Korean keyboards, so it is not used.) Left Shift pressed
     // near a corner pole hooks it and held keeps the swing (the drift of this game, NEXT_REQUESTS.md R4b); left Ctrl
     // fires the chain action.
@@ -23,6 +24,7 @@ namespace ProtoHarness.ChainRush.Control
             bool swingPressed = false;
             // No keyboard means no throttle either.
             bool coasting = true;
+            bool reversing = false;
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null)
             {
@@ -35,8 +37,10 @@ namespace ProtoHarness.ChainRush.Control
                 swingPressed = keyboard.leftShiftKey.wasPressedThisFrame;
                 chainAction = keyboard.leftCtrlKey.wasPressedThisFrame;
                 coasting = !keyboard.upArrowKey.isPressed;
+                // The throttle wins when both arrows are held.
+                reversing = coasting && keyboard.downArrowKey.isPressed;
             }
-            latch.Record(steer, primary, release, attack, swingHeld, chainAction, swingPressed, coasting);
+            latch.Record(steer, primary, release, attack, swingHeld, chainAction, swingPressed, coasting, reversing);
         }
 
         public TickInput Consume() => latch.Consume();

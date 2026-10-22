@@ -33,7 +33,8 @@ namespace ProtoHarness.ChainRush.Track
             List<Vector3> vertices, List<int> triangles)
         {
             Require(line, fromS, toS, profile, vertices, triangles);
-            AppendSweep(line, fromS, toS, -profile.HalfWidth, profile.HalfWidth, -profile.Thickness, 0f, origin, vertices, triangles);
+            AppendSweep(line, fromS, toS, -profile.HalfWidth, profile.HalfWidth, -profile.EndHalfWidth, profile.EndHalfWidth,
+                -profile.Thickness, 0f, origin, vertices, triangles);
         }
 
         // A guard on each guarded edge, just outside the road, from the road top up to height: the visible
@@ -44,10 +45,10 @@ namespace ProtoHarness.ChainRush.Track
             Require(line, fromS, toS, profile, vertices, triangles);
             if (!(height > 0f) || float.IsInfinity(height))
                 throw new ArgumentOutOfRangeException(nameof(height), height, "Guard height must be positive and finite.");
-            float inner = profile.HalfWidth;
-            float outer = profile.HalfWidth + GuardThickness;
-            if (profile.LeftGuard) AppendSweep(line, fromS, toS, -outer, -inner, 0f, height, origin, vertices, triangles);
-            if (profile.RightGuard) AppendSweep(line, fromS, toS, inner, outer, 0f, height, origin, vertices, triangles);
+            float inner = profile.HalfWidth, endInner = profile.EndHalfWidth;
+            float outer = profile.HalfWidth + GuardThickness, endOuter = profile.EndHalfWidth + GuardThickness;
+            if (profile.LeftGuard) AppendSweep(line, fromS, toS, -outer, -inner, -endOuter, -endInner, 0f, height, origin, vertices, triangles);
+            if (profile.RightGuard) AppendSweep(line, fromS, toS, inner, outer, endInner, endOuter, 0f, height, origin, vertices, triangles);
         }
 
         // The light strip along the top of each rail.
@@ -55,30 +56,35 @@ namespace ProtoHarness.ChainRush.Track
             List<Vector3> vertices, List<int> triangles)
         {
             Require(line, fromS, toS, profile, vertices, triangles);
-            float center = profile.HalfWidth + GuardThickness * 0.5f;
+            float center = profile.HalfWidth + GuardThickness * 0.5f, endCenter = profile.EndHalfWidth + GuardThickness * 0.5f;
             float half = GuardLightWidth * 0.5f;
             const float bottom = GuardRailHeight;
             const float top = GuardRailHeight + GuardLightHeight;
-            if (profile.LeftGuard) AppendSweep(line, fromS, toS, -center - half, -center + half, bottom, top, origin, vertices, triangles);
-            if (profile.RightGuard) AppendSweep(line, fromS, toS, center - half, center + half, bottom, top, origin, vertices, triangles);
+            if (profile.LeftGuard)
+                AppendSweep(line, fromS, toS, -center - half, -center + half, -endCenter - half, -endCenter + half, bottom, top, origin, vertices, triangles);
+            if (profile.RightGuard)
+                AppendSweep(line, fromS, toS, center - half, center + half, endCenter - half, endCenter + half, bottom, top, origin, vertices, triangles);
         }
 
         // Corners go clockwise around the section seen looking forward: top-left, top-right, bottom-right,
         // bottom-left. Face f runs from corner f to corner f + 1 (top, right, bottom, left), so with forward as
         // "up" each face's first edge is on its left and triangles wind clockwise seen from outside, Unity's
         // front face. Each face has its own vertices so the normals stay sharp at the corners.
-        private static void AppendSweep(Centerline line, double fromS, double toS, float x0, float x1, float y0, float y1,
-            Vector3 origin, List<Vector3> vertices, List<int> triangles)
+        // The section's sides go linearly from x0 .. x1 at fromS to endX0 .. endX1 at toS; equal ends give exactly x0 .. x1.
+        private static void AppendSweep(Centerline line, double fromS, double toS, float x0, float x1, float endX0, float endX1,
+            float y0, float y1, Vector3 origin, List<Vector3> vertices, List<int> triangles)
         {
             int samples = Samples(fromS, toS);
             int first = vertices.Count;
             for (int i = 0; i <= samples; i++)
             {
                 TrackFrame frame = line.FrameAt(fromS + (toS - fromS) * i / samples);
+                float t = (float)i / samples;
+                float left = x0 + (endX0 - x0) * t, right = x1 + (endX1 - x1) * t;
                 for (int face = 0; face < 4; face++)
                 {
-                    vertices.Add(Corner(frame, face, x0, x1, y0, y1) - origin);
-                    vertices.Add(Corner(frame, (face + 1) & 3, x0, x1, y0, y1) - origin);
+                    vertices.Add(Corner(frame, face, left, right, y0, y1) - origin);
+                    vertices.Add(Corner(frame, (face + 1) & 3, left, right, y0, y1) - origin);
                 }
             }
             for (int i = 0; i < samples; i++)
@@ -94,7 +100,7 @@ namespace ProtoHarness.ChainRush.Track
                     triangles.Add(next + 1);
                 }
             AppendCap(line.FrameAt(fromS), false, x0, x1, y0, y1, origin, vertices, triangles);
-            AppendCap(line.FrameAt(toS), true, x0, x1, y0, y1, origin, vertices, triangles);
+            AppendCap(line.FrameAt(toS), true, endX0, endX1, y0, y1, origin, vertices, triangles);
         }
 
         // The start cap faces back along the track and the end cap forward.

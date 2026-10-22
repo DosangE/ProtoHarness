@@ -20,9 +20,13 @@ namespace ProtoHarness.ChainRush.Control
         // 2026-10-19). Stored inverted so every source that predates it (bots, scripted input, replay logs, the network)
         // keeps reading as full throttle; a source that reads a device must set it.
         public bool Coasting { get; }
+        // Held: the down arrow is, without the throttle. A grounded runner brakes and then backs up (user 2026-10-22).
+        // The throttle wins when both are held, so a source sets it only while Coasting is set.
+        public bool Reversing { get; }
 
         public TickInput(float steer, bool primaryPressed, bool releasePressed, bool attackPressed,
-            bool swingHeld = false, bool chainActionPressed = false, bool swingPressed = false, bool coasting = false)
+            bool swingHeld = false, bool chainActionPressed = false, bool swingPressed = false, bool coasting = false,
+            bool reversing = false)
         {
             // NaN fails both comparisons, so it is rejected here too.
             if (!(steer >= -1f && steer <= 1f))
@@ -35,6 +39,7 @@ namespace ProtoHarness.ChainRush.Control
             ChainActionPressed = chainActionPressed;
             SwingPressed = swingPressed;
             Coasting = coasting;
+            Reversing = reversing;
         }
     }
 }

@@ -185,14 +185,15 @@ namespace ProtoHarness.Tests.PlayMode
 
         // ---- the input codec and the input log file -------------------------------------------
 
-        // Six buttons since the held chain key (2026-10-15, corner pole swing), seven with coasting (2026-10-19, throttle).
+        // Six buttons since the held chain key (2026-10-15, corner pole swing), seven with coasting (2026-10-19, throttle),
+        // eight with reversing (2026-10-22). The byte is full, so no bit is left unknown to refuse.
         [Test]
-        public void InputCodec_EveryCombinationOfTheSevenButtonsRoundTrips_AndAnUnknownBitThrows()
+        public void InputCodec_EveryCombinationOfTheEightButtonsRoundTrips()
         {
-            for (int bits = 0; bits < 128; bits++)
+            for (int bits = 0; bits < 256; bits++)
             {
                 var input = new TickInput(-0.5f, (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0, (bits & 32) != 0,
-                    (bits & 64) != 0);
+                    (bits & 64) != 0, (bits & 128) != 0);
                 byte flags = TickInputCodec.ToFlags(input);
                 Assert.That(flags, Is.EqualTo((byte)bits));
                 TickInput back = TickInputCodec.FromFlags(-0.5f, flags);
@@ -200,7 +201,7 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(back.Steer, Is.EqualTo(-0.5f));
             }
             Assert.That(TickInputCodec.FromFlags(0f, 0).Coasting, Is.False, "Bytes from before coasting existed read as full throttle.");
-            Assert.Throws<InvalidDataException>(() => TickInputCodec.FromFlags(0f, 0x80));
+            Assert.That(TickInputCodec.FromFlags(0f, 64).Reversing, Is.False, "Bytes from before reversing existed read as not backing up.");
             Assert.Throws<ArgumentOutOfRangeException>(() => TickInputCodec.FromFlags(1.5f, 0), "A steer outside [-1, 1] is refused.");
             Assert.Throws<ArgumentOutOfRangeException>(() => TickInputCodec.FromFlags(float.NaN, 0));
         }
@@ -235,9 +236,7 @@ namespace ProtoHarness.Tests.PlayMode
             var padded = new byte[bytes.Length + 1];
             Array.Copy(bytes, padded, bytes.Length);
             Assert.Throws<InvalidDataException>(() => InputLogFile.Decode(padded));
-            byte[] badButton = (byte[])bytes.Clone();
-            badButton[12 + 4] = 0x80;
-            Assert.Throws<InvalidDataException>(() => InputLogFile.Decode(badButton));
+            // No button byte is refused any more: since reversing (2026-10-22) all eight bits are known.
             byte[] nanSteer = (byte[])bytes.Clone();
             BitConverter.GetBytes(float.NaN).CopyTo(nanSteer, 12);
             Assert.Throws<ArgumentOutOfRangeException>(() => InputLogFile.Decode(nanSteer));

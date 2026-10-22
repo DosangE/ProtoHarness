@@ -1,90 +1,98 @@
 # ProtoHarness
 
-AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 프로젝트.
-이전 프로젝트 [Chain Rush](https://github.com/DosangE/Chain-Rush)를 **후방 3인칭 3D 러너로 옮기고**, 그 위에서 추가 개발을 진행하고 있다.
+AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 레이싱 프로토타입.
+이전 프로젝트 [Chain Rush](https://github.com/DosangE/Chain-Rush)를 **후방 3인칭 3D 러너로 옮기고**, 지금은 그 위에 **카트라이더식 서킷 레이스**를 만들고 있다.
 
-> **상태: 개발 중인 프로토타입.** 세부 기획은 아직 확정되지 않았다. 아래 "방향"은 합의 대기 중인 초안이다.
+> **상태: 개발 중인 프로토타입 (v0.3 "게임의 뼈대").** 싱글 레이스가 타이틀 → 로비 → 레이스 → 로비로 한 바퀴 돈다. 멀티는 메뉴에 잠가 두었다.
+
+![SKYWAY LOOP 주행 — 카운트다운, 마을, 고가 진입](docs/images/race.gif)
+
+| 타이틀 | 로비 | SKYWAY 고가 직선의 스윙 봉 |
+|---|---|---|
+| ![타이틀](docs/images/title.png) | ![로비 메인 메뉴](docs/images/lobby.png) | ![SKYWAY 고가 직선](docs/images/skyway.png) |
+
+<sub>화면은 v0.3 에디터 플레이 중 캡처(주행은 테스트 봇). 아트는 기본 도형 위주의 임시 아트다.</sub>
 
 ## 무엇인가
 
-- 자동 전진하는 러너. 지상에서 점프하고, 공중에서 앵커에 **체인을 걸어 스윙**하며 갭을 건넌다. 적을 체인으로 공격한다.
-- 원작의 점프·그래플링·공격 흐름을 3D로 새로 구현했다. 원작의 코드·아트 파일은 복사하지 않았고, 캐릭터·코스는 Unity 기본 도형으로 만든다.
-- 별도 **무한 전투 씬**이 있다. 발판을 재활용하며 끝없이 달리고, 상공·좌·우에서 오는 적을 처치한다. 음악과 효과음은 시작 시 코드로 합성하고, 애니메이션은 Transform 관절 절차 애니메이션이다.
+- 러너가 서킷을 달린다. 방향키로 가속·조향하고, 점프하고, 공중에서 앵커에 **체인을 걸어 스윙**한다. 코너와 직선에 박힌 **봉에 체인을 걸고 돌면** 게이지가 차고, 게이지로 **부스터**를 쓴다.
+- 트랙 2개: **STADIUM**(야간 경기장 서킷, 3랩), **SKYWAY LOOP**(마을을 지나 고가도로를 달리는 2랩 코스, 카트라이더 "빌리지 고가의 질주" 배치를 참고). 러너 5명(ALPHA~OMEGA)은 최고 속도·가속·게이지 충전량이 다르다.
+- 시뮬레이션은 **고정 틱 + 입력 추상화**라 같은 입력이면 같은 런이 비트 단위로 다시 나온다(리플레이·롤백 테스트로 확인). 서버 권위 멀티의 바탕이고, 2인 네트워크 레이스 스파이크까지 해 두었다(멀티 재개는 M7).
+- 원작의 코드·아트 파일은 복사하지 않았다. 음악·효과음은 코드로 합성하고, 애니메이션은 Transform 절차 애니메이션이다.
 
 | 항목 | 값 |
 |---|---|
 | 엔진 | Unity 6000.3.25f1 |
 | 렌더 | URP 17.3.0 |
 | 입력 | Input System 1.20.0 (신 입력 시스템) |
+| 네트워크 | Netcode for GameObjects 2.13.3 (멀티는 M7 까지 보류) |
 | 테스트 | Unity Test Framework 1.6.0 (EditMode / PlayMode) |
 
 ## 진행 상황
 
-`git log` 기준.
+로드맵은 **플레이할 수 있는 단위**로 쌓는다. 마일스톤 하나 = `dev → main` 병합 + 태그 하나, 완료 조건은 사용자가 직접 플레이해서 확인한다. 자세한 내용은 [`docs/DESIGN.md`](docs/DESIGN.md) §5.
 
-| 단계 | 내용 | 상태 |
-|---|---|---|
-| 3D 이식 | 코스·러너·그래플·공격·체력, 무한 전투 모드, 아트·사운드·애니메이션 | 완료 |
-| P0 | 수치를 ScriptableObject로 분리 (`RunRules`, `EncounterTuning`), 첫 EditMode 테스트 | 완료 (dev 병합) |
-| P1-1 | 고정 틱 — 시뮬레이션은 `ChainRushGame.FixedUpdate` 한 곳에서만 진행 | 완료 (dev 병합) |
-| P1-2 | 입력 추상화 — 시뮬레이션이 장치가 아니라 `TickInput`을 받는다 | 완료 (dev 병합) |
-| P1-3a | 레이서 상태 분리 — 레이서 한 명분 상태(체력·적중·쿨다운)를 `RacerState`로 꺼낸다 | 완료 (dev 병합) |
-| P1-3b | 표현 분리 — 몸체 기울이기를 시뮬레이션(`RunnerMotor`)에서 표현 컴포넌트 `RunnerTilt`로 옮긴다 | 완료 (dev 병합) |
-| P1-3c | 운동 상태 분리 — 모터·그래플의 속도·조향·점프·앵커·줄 길이를 `RacerState`로 옮긴다 (위치 제외) | 완료 (dev 병합) |
-| 코스 T0 | 트랙 좌표계 — "앞"을 월드 +z 대신 트랙 중심선 접선으로 (직선만, 보이는 변화 없음). 설계 `docs/COURSE.md` | 완료 (dev 병합) |
-| 코스 T1 | 오르막·내리막 — 종단 곡선, 경사 속도 보정, 내리막 땅 붙잡기. 점프 도달 거리 실측. 씬 코스에는 아직 경사 없음(테스트 도로로 검증) | 완료 (dev 병합) |
-| 코스 T2a | 자유 조향(A/D 가 진행 방향을 돌림)과 발판 양쪽의 보이는 가드 난간. 옆 낙사 없음, 틈 낙사는 유지 | 완료 (dev 병합) |
-| 코스 T2b | 커브(수평 원호)와 그립 한계(카트라이더 방향: 평소 깔끔, 미끄러짐은 드리프트로). 씬 코스는 아직 직선(테스트 도로로 검증) | 완료 (dev 병합) |
-| 코스 T2c | 드리프트(Shift)로 체인 게이지를 모으고 체인 액션(Ctrl)으로 가속: 슬링샷, 그래플 강화 | 완료 (dev 병합) |
-| 코스 T2d | 코너 앵커 스윙: 커브에서 드리프트 중 Ctrl 로 원호 중심에 체인을 걸고 빠르게 돈 뒤 Shift 를 떼면 튀어 나감 | 완료 (dev 병합) |
-| P1 이후 | 코스 T3~T4(시드 생성·곡선 노면, 서킷), 적 다변화, 점수·결과 화면 | 예정 |
+| 태그 | 마일스톤 | 들어간 것 | 상태 |
+|---|---|---|---|
+| v0.1 | 기술 기반 (P0~P3 C1) | 수치 SO 분리, 고정 틱, 입력 추상화, 레이서 상태 분리, 트랙 좌표계·경사·커브·드리프트, 절차 코스·서킷, 입력 기록·재생과 결정성, 롤백, 2인 네트워크 레이스 스파이크(서버 권위 + 클라 예측·보정) | 완료 |
+| v0.2 | M1 한 판이 끝까지 돈다 | 낙하 복귀, 코너 봉 스윙, 체감 튜닝(조향·그래플·부스터 게이지) | 완료 |
+| v0.3 | M2 게임의 뼈대 | 타이틀·로비 씬, 트랙·러너 선택(러너 5명, 선택창 3D 프리뷰), 설정(볼륨·속도 시야 효과·조작 키), 일시정지 메뉴, 트랙별 최고 기록, SKYWAY LOOP 트랙, 직선 스윙 봉, 후진 | 완료 |
+| v0.4 | M3 고를 거리 | 성격이 다른 새 서킷(테크니컬·고저차·고속·종합 맵), 트랙 장식, 속도 단계 보통 / 매우빠름 | 다음 |
+| v0.5~ | M4~M7 | 기록·고스트 → AI 상대 → 폴리시 → 멀티 재개 | 예정 |
 
-## 방향 (초안, 합의 대기)
+## 시작하기
 
-최종 목표 후보는 **카트라이더식 서버 권위 공유 월드 레이스**(최대 8인, PC + 모바일)다. 모드는 쿠키런·카트라이더를 참고해 세 가지를 생각하고 있다.
+1. Unity Hub에서 **6000.3.25f1**으로 이 폴더를 연다.
+2. `Assets/_Project/Scenes/ChainRushTitle` 을 열고 Play. (빌드 씬 목록 0번이다.)
+3. 타이틀에서 Enter → 로비 `싱글 레이스` → 트랙 → 속도 → 러너를 고르고 입장한다. 트랙이 붙으면 3·2·1 카운트다운 뒤 출발한다.
 
-- **무한** — 오래 살아남고 점수를 먹는다
-- **속도전** — 랩타임 경쟁
-- **아이템전** — 아이템을 활용한 경쟁
+**조작** (카트라이더식, 게임 안 `설정 > 조작 키` 와 같다)
 
-세부 규칙(아이템 종류, 점수, 접촉 여부 등)은 **미정**이다. 지금 하는 일은 그 목표를 위한 전제 작업이다: 수치 데이터화 → 고정 틱·입력 추상화 → 결정성(리플레이) 확보 → 이후 네트워크. 네트워크 라이브러리와 서버 방식은 아직 정하지 않았다. 자세한 내용은 [`docs/DESIGN.md`](docs/DESIGN.md).
+| 키 | 동작 |
+|---|---|
+| ↑ | 가속 (스윙 중에도) |
+| ↓ 유지 | 브레이크 · 후진 |
+| ← / → | 조향 |
+| 왼쪽 Alt | 점프 · 공중에서 다시 누르고 유지하면 그래플 (떼거나 ↓ 로 해제) |
+| 왼쪽 Shift 유지 | 봉 스윙 (게이지 충전) |
+| 왼쪽 Ctrl | 부스터 (게이지 1칸) |
+| Space | 공격 |
+| Esc | 일시정지 (계속 · 재시작 · 로비) |
+| M | 음소거 |
 
 ## AI 활용 방식
 
 이 프로젝트의 목적 중 하나는 **AI 에이전트를 규칙 안에서 부리는 하네싱 연습**이다. 에이전트가 쓰는 규칙은 사람에게도 똑같이 적용된다.
 
-- [`CLAUDE.md`](CLAUDE.md) — 구속 규칙. 금지선, 만들기 전 목적·경로·형태 선언, 기존 자산 우선 탐색, 구현 전 합의, 추측 금지·실증 의무, 실패는 시끄럽게. ([`AGENTS.md`](AGENTS.md)는 Codex 진입점이며 규칙 본문은 `CLAUDE.md` 하나만 둔다.)
-- **서브에이전트 5종** — 탐색·구조 분석·리뷰·구현·검증 (`.claude/agents/`). 역할마다 쓰기 권한을 제한한다.
-- **Unity MCP 검증** — 컴파일 상태와 Console 로그 원문을 근거로 "된다"를 말한다.
+- [`CLAUDE.md`](CLAUDE.md) — 구속 규칙. 금지선, 만들기 전 목적·경로·형태 선언, 기존 자산 우선 탐색, 구현 전 합의, 추측 금지·실증 의무, 실패는 시끄럽게. 작업별 세부 규칙은 [`docs/RULES/`](docs/RULES/). ([`AGENTS.md`](AGENTS.md)는 Codex 진입점이며 규칙 본문은 `CLAUDE.md` 하나만 둔다.)
+- **서브에이전트 5종** — 탐색·구조 분석·리뷰·구현·검증 (`.claude/agents/`, Codex 용은 `tools/sync-agents.ps1` 로 생성). 역할마다 쓰기 권한을 제한한다.
+- **훅** — 세션 시작 때 보호 브랜치·낡은 인덱스를 알린다.
+- **Unity MCP 검증** — 컴파일 상태와 Console 로그 원문, 테스트 결과 XML 값을 근거로 "된다"를 말한다.
 - **조회 모드** — 문서 → 심볼 인덱스(`index/`) → 코드 순으로 읽어 토큰을 아낀다.
-- **브랜치 전략** — `main`(마일스톤) ← `dev`(검증 통과분) ← `feature/*`. 병합은 `--no-ff`, 직접 커밋 금지.
+- **브랜치와 테스트 3단** — `main`(마일스톤 태그) ← `dev`(검증 통과분) ← `feature/*`. 병합은 `--no-ff`, 직접 커밋 금지. 작업 중엔 바꾼 부분만, `dev` 병합엔 바뀐 범위로 고른 테스트, `main` 병합엔 전체 2회 + 사용자 플레이 확인.
 
-## 시작하기
+## 테스트
 
-1. Unity Hub에서 **6000.3.25f1**으로 이 폴더를 연다.
-2. 메뉴 `ProtoHarness > Chain Rush`
-   - `Create Test Bench Scene` (Ctrl+Shift+G) — 테스트 작업대 (플레이용 맵이 아니다)
-   - `Create Circuit Scene` — 서킷 씬 (`ChainRushProcedural` 을 원본으로 만든다)
-   - 무한 코스 씬은 `Assets/_Project/Scenes/ChainRushProcedural` 을 연다 (만드는 메뉴는 T3d 에서 지웠다)
-3. Play → Enter 또는 START RUN 버튼.
+메뉴 `ProtoHarness > Chain Rush`
 
-씬(`Assets/_Project/Scenes/`)이 이미 저장소에 있으면 열기만 하면 된다. 기존 씬은 덮어쓰지 않는다.
-
-**조작** (카트라이더식, 마우스 없음, 2026-10-18): ←/→ 로 진행 방향 틀기(자유 조향, 놓으면 그 방향 유지) · 왼쪽 Alt 지상 점프, 공중에서 다시 Alt 그래플(유지하면 스윙, Alt 를 떼거나 ↓ 면 해제) · Space 공격 · 왼쪽 Shift 코너 봉 스윙(누르는 동안, 스윙 중 ←/→ 는 줄 길이, 게이지 충전) · 왼쪽 Ctrl 체인 액션(게이지 1칸: 평소엔 슬링샷 가속, 그래플 중엔 강화) · R 재시작 · Esc 일시정지 · M 음소거
-
-**테스트**: 메뉴 `ProtoHarness > Chain Rush > Run PlayMode Tests` (가상 장치·20 시드 스윕·`Long` 제외), `Run Long Tests` (장거리 4건), `Run Device Input Tests` (가상 키보드 테스트만), `Run Course Sweep` (20 시드 스윕만, 약 16분), 또는 Test Runner 창에서 EditMode / PlayMode 실행. 작업 중에 바꾼 부분만 돌리려면 `tools/select-tests.ps1` 이 고를 테스트를 알려 준다 (병합 근거는 아니다, `CLAUDE.md` §9-2).
+- `Run PlayMode Tests` — 게이트 전체 (`Device`·`Sweep`·`Long`·`Enemy`·`Endless`·`NetEndReplay` 카테고리 제외)
+- `Run Device Input Tests` — 가상 키보드 장치 테스트만
+- `Run Long Tests`, `Run Course Sweep` — 무한 모드 장거리 테스트 (무한 모드 보류 동안 게이트에서 돌리지 않는다)
+- 작업 중에 바꾼 부분만 돌리려면 `tools/select-tests.ps1` 이 고를 테스트를 알려 준다. 언제 무엇을 돌리는지는 `CLAUDE.md` §9-2.
 
 ## 폴더
 
 ```
 Assets/_Project/        우리가 만드는 모든 것
-  Scripts/Runtime/      런타임 코드 (ChainRush/ 아래 Control, Combat, Endless, Visuals, Audio)
-  Scripts/Editor/       씬 생성기 등 에디터 전용 코드
+  Scripts/Runtime/      런타임 코드 — ChainRush/(Control, Track, Race, Flow, Visuals, Audio …), Net/(네트워크)
+  Scripts/Editor/       씬·트랙 생성기, 테스트 메뉴 등 에디터 전용 코드
   Scripts/Tests/        EditMode / PlayMode 테스트
-  Data/                 ScriptableObject 인스턴스
-  Scenes/               ChainRushProcedural(무한), ChainRushCircuit(서킷), ChainRushTestBench(테스트 작업대)
-docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵) · RULES/(작업별 규칙)
-index/, tools/          심볼 인덱스와 재생성 스크립트
+  Data/                 ScriptableObject 인스턴스 (규칙 수치, 러너 프로필, 트랙)
+  Scenes/               ChainRushTitle · ChainRushLobby · ChainRushCircuit(달리는 씬)
+                        ChainRushTrackStadium · ChainRushTrackSkyway(Additive 로 붙는 트랙 장식)
+                        ChainRushProcedural(무한 코스, 보류) · ChainRushTestBench(테스트 작업대)
+docs/                   ARCHITECTURE(구조) · DECISIONS(결정 이력) · DESIGN(로드맵) · HANDOFF(다음 작업) · RULES/(작업별 규칙)
+index/, tools/          심볼 인덱스와 재생성·테스트 선택·에이전트 동기화 스크립트
 ```
 
 ## 문서
@@ -93,7 +101,8 @@ index/, tools/          심볼 인덱스와 재생성 스크립트
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 시스템 지도, 진입점, 검증 기록 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 왜 이렇게 했나 |
-| [`docs/DESIGN.md`](docs/DESIGN.md) | 최종 목표와 단계별 로드맵 (초안) |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 최종 목표와 마일스톤 로드맵 |
+| [`docs/HANDOFF.md`](docs/HANDOFF.md) | 다음 세션이 이어받을 일 |
 | [`CLAUDE.md`](CLAUDE.md) | 작업 규칙 (항상 지킬 것) |
 | [`docs/RULES/`](docs/RULES/) | 작업별 규칙 — 형태·검증·조회·서브에이전트·브랜치. 언제 읽는지는 `CLAUDE.md` 맨 위 표 |
 

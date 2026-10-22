@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-10-22 · ↓ 후진 · 스윙 중 ↑ 가속
+
+- **결정 (사용자, `feature/motor-reverse-swing-throttle`)**: "후진도 넣어보자 방향키 뒷키로", "스윙중에도 앞키로 가속하는 것은 되게해줘. 무조건 속도 고정이 아닌(부스터 상황이 아니더라도 가속 받게)" → 제안값(아래)에 "제안대로 진행".
+  - **후진**: `TickInput.Reversing`(누르고 있는 동안 켜짐, ↓ 를 누르고 있고 ↑ 는 안 누름 — 둘 다 누르면 ↑ 가 이긴다). 지면에서 앞으로 가고 있으면 `brakeDeceleration` 20 m/s² 로 감속하고, 멈춘 뒤에는 `reverseAcceleration` 8 m/s² 로 `reverseSpeed` 6 m/s 까지 후진한다. 공중에서는 그냥 ↑ 를 뗀 상태와 같다. ↑ 를 뗀 상태의 한 종류라 부스터·스윙 캐리도 끊는다. ↓ 를 누르는 순간 체인이 풀리는 기존 동작은 그대로 둔다(그래플이 없으면 아무 일도 없다, `GrappleController.Release`).
+  - **후진 조향**: 후진 입력 중 뒤로 움직이면 자동차처럼 조향이 반대로 돈다(← 를 누르면 기수가 오른쪽으로 돌고 몸은 왼쪽 뒤로 간다). **후진 입력이 있을 때만** 반전한다 — 처음에는 속도 방향만 봤는데, 달리는 중 방향을 강제로 돌린 `Tilt_ScriptedSteerLeft_TurnsBodyToFaceHeading` 이 `Expected: greater than 90.0f But was: -172.287476f` 로 실패했다. ↓ 를 안 누르는 주행은 이전과 같아야 한다.
+  - **입력 바이트**: `TickInputCodec` 의 마지막 빈 비트(128)를 후진에 썼다. 이전 바이트(기록 파일·네트워크)는 후진 안 함으로 읽힌다. **한 바이트가 꽉 찼다** — 모르는 비트를 거부하는 검사는 남아 있지만 거부할 비트가 없다. 아홉 번째 버튼은 형식을 넓혀야 한다(`InputLogFile` 버전 포함). 그래서 모르는 버튼 비트 거부를 검사하던 단언 셋을 지웠다 — `NetRemoteTests` 의 코덱·입력 기록 파일(0x80, 사용자 선택 "테스트를 8버튼으로 갱신"), 그리고 게이트 1회차에서 같은 원인으로 실패한 `NetReconcileTests.Wire_InputsRoundTripAndCorruptOnesThrow` 의 0xFF(`unknown flag bits Expected: <System.IO.InvalidDataException> But was: null`, 사용자 "진행").
+  - **스윙 중 ↑**: 부스터가 없을 때 ↑ 를 누르고 있으면 스윙의 걸 때 속도(`SwingHookSpeed`)가 달리기 가속(`RunAcceleration`, 캐릭터 배율 포함)으로 `swingThrottleSpeedScale` 1.2 × 달리기 속도(서킷 20 → 24 m/s)까지 오른다. 줄 길이 비율은 그 위에 그대로 곱한다. ↑ 를 떼면 그 속도가 유지된다(오르지도 내리지도 않는다, 사용자 선택 (a)). 부스터가 있으면 기존 부스터 규칙이 우선이고, 이미 더 빠른 걸 때 속도는 깎지 않는다.
+  - **테스트 기준을 바꾼 곳**: 봇(`TrackFollower`)은 ↑ 를 늘 누르고 있으므로 "줄 길이만으로 속도가 정해진다"를 재던 스윙 테스트 3개(걸 때 속도 유지, 줄 줄이기·풀기, 놓을 때 캐리)는 걸고 나서 ↑ 를 떼고 잰다(테스트 파일 안의 `Throttle` 감싸개). 캐리 테스트는 놓는 틱에 ↑ 를 다시 누른다(떼면 캐리가 끊긴다). 가드에서 끝나는 테스트는 걸 때 속도의 마지막 값과 비교한다.
+- **검증** (에디터 6000.3.19f1, UTC, 커밋 전 작업 트리):
+  - `tools/select-tests.ps1` 기본 범위 → "전체"(`RunnerMotor` 코어 시뮬, `TickInput` 표에 없는 경로). 컴파일 후 Console Error 0건.
+  - EditMode `!Enemy !Endless` `testcasecount="271" result="Passed" passed="271" failed="0"` (04:21:27Z~04:21:32Z, 이전 269 + 새 2), 조향 수정 뒤 다시 `testcasecount="271" result="Passed" passed="271" failed="0"` (04:50:22Z~04:50:26Z).
+  - 바뀐 세 클래스(`ChainRushInputSourceTests`·`ChainRushCornerSwingTests`·`NetRemoteTests`) `testcasecount="33" result="Failed(Child)" passed="31" failed="2"` (04:21:57Z~04:22:58Z) — 위 조향 실패와 입력 기록 파일의 0x80 단언. 고친 뒤 `testcasecount="33" result="Passed" passed="33" failed="0"` (04:27:20Z~04:28:20Z).
+  - 메뉴 `Run PlayMode Tests` 1회차 `testcasecount="180" result="Failed(Child)" passed="172" failed="1" skipped="7"` (04:28:41Z~04:36:37Z) — 위 `NetReconcileTests` 0xFF 단언. 지운 뒤 2회차 `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (04:41:55Z~04:49:54Z). 스타디움 지문 그대로 `1700 ticks identical, hash 0x18F31E7A2B4F79B3`, SKYWAY 2랩 86.08 / 84.88 s 그대로(봇이 이 런에서 ↓ 를 쓰지 않고, 바뀐 스윙 가속이 랩에 닿지 않았다). 새 테스트 값: 후진 −6.00 m/s, ← 로 기수 0 → 6.88°; 스윙 ↑ 걸 때 속도 21.20 → 24.00 m/s.
+  - 입력 장치 경로를 바꿔 `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3" failed="0"` (04:52:54Z~04:53:10Z, `isApplicationActive=True`, 사용자가 에디터를 앞에 띄움).
+  - **사용자 플레이 확인: 아직** — 후진 6 m/s 와 스윙 ↑ 상한 24 m/s 의 체감은 플레이해 보고 정한다.
+  - **② 병합** (사용자 "일단 커밋 병합 푸시 진행"): 커밋 `a203930` 에서 `select-tests -Range dev...HEAD` = 전체(바뀐 파일 14개 — `RunnerMotor` 코어 시뮬, `TickInput` 표에 없는 경로, ProjectSettings 0개). 그 근거는 위 EditMode 2회차·PlayMode 2회차·Device 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 뿐이다. `Long` 은 Endless 보류로 돌리지 않았다(`CLAUDE.md` §9-2). `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
+- **버린 대안**: 속도 방향만 보고 조향 반전(위 실패). ↑ 를 떼면 스윙도 지상처럼 감속(사용자가 (a) 유지를 골랐다). 후진 비트를 기록·네트워크에 싣지 않기 — 리플레이·롤백에서 후진이 사라져 결정성이 깨진다.
+
 ## 2026-10-22 · SKYWAY 재배치(원작 윤곽) · 구간별 도로 폭 · 직선 스윙 봉
 
 - **결정 (사용자, `feature/skyway-reshape`)**: "빌리지 고가의 질주를 따온건데 생각보다 비슷하지 않다" → 원작 윤곽에 겹친 수정안에 "지우고 트랙 데이터 바꿔라" + "직선이 엄청 긴 구간 … 도로 너비를 많이 넓게 … 좌우에 스윙 걸 수 있는 봉 둬서 직선에도 스윙하며 게이지 채워가는 맵디자인" → 설계안(반폭 15 m, 봉 40 m 간격 7개)에 "작업 해도 좋다".

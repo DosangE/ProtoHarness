@@ -89,6 +89,20 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void Consume_ReversingLevel_KeepsLatestAndClearResetsIt()
+        {
+            Assert.That(latch.Consume().Reversing, Is.False, "Nothing recorded reads as not backing up, like every older source.");
+            latch.Record(0f, false, false, false, coasting: true, reversing: true);
+            Assert.That(latch.Consume().Reversing, Is.True);
+            Assert.That(latch.Consume().Reversing, Is.True, "Holding the down arrow is a level, not an edge.");
+            latch.Record(0f, false, false, false, coasting: true, reversing: false);
+            Assert.That(latch.Consume().Reversing, Is.False);
+            latch.Record(0f, false, false, false, coasting: true, reversing: true);
+            latch.Clear();
+            Assert.That(latch.Consume().Reversing, Is.False);
+        }
+
+        [Test]
         public void Consume_EdgeThenQuietFrame_KeepsEdgeUntilConsumed()
         {
             latch.Record(0f, false, true, false);

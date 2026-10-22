@@ -231,8 +231,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(tick, Is.EqualTo(1234));
             Assert.That(back.Steer, Is.EqualTo(-0.375f));
             Assert.That((back.PrimaryPressed, back.ReleasePressed, back.AttackPressed, back.SwingHeld, back.ChainActionPressed), Is.EqualTo((true, false, true, true, false)));
-            bytes[bytes.Length - 1] = 0xFF;
-            Assert.Throws<InvalidDataException>(() => RaceWire.DecodeInput(bytes, out _), "unknown flag bits");
+            // No flag byte is refused any more: since reversing (2026-10-22) all eight bits are known.
             byte[] nan = RaceWire.EncodeInput(1, default);
             BitConverter.GetBytes(float.NaN).CopyTo(nan, 4);
             Assert.Throws<ArgumentOutOfRangeException>(() => RaceWire.DecodeInput(nan, out _), "NaN steer");

@@ -52,6 +52,9 @@ namespace ProtoHarness.ChainRush
         // The highlighted pause entry; back on Continue whenever the game is not paused.
         public PauseChoice PauseCursor => (PauseChoice)pauseCursor;
 
+        // The title at the top left: the lobby's track name, or what the scene is when it was opened directly.
+        public string Heading => FromLobby ? assembler.Setup.Title : game.IsCircuit ? "CIRCUIT" : "CHAIN RUSH";
+
         private void Awake()
         {
             if (game == null || player == null || grapple == null || viewCamera == null)
@@ -181,7 +184,7 @@ namespace ProtoHarness.ChainRush
 
         private void DrawHeader(float width)
         {
-            NightUi.ShadowLabel(new Rect(64, 38, 410, 54), game.IsCircuit ? "STADIUM" : "CHAIN RUSH", heading);
+            NightUi.ShadowLabel(new Rect(64, 38, 410, 54), Heading, heading);
             GUI.Label(new Rect(66, 97, 350, 28), game.IsEndless ? "ENDLESS PURSUIT" : game.IsCircuit ? "SINGLE RACE / CIRCUIT" : "SKYLINE TRIAL", small);
             for (int i = 0; i < 3; i++)
                 NightUi.Block(new Rect(66 + i * 39, 138, 30, 5), i < game.Health ? Mint : Row);

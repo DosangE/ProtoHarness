@@ -10,20 +10,24 @@ namespace ProtoHarness.ChainRush.Flow
     public readonly struct RaceSetup
     {
         public TrackDefinition Track { get; }
+        // The track's name as the lobby lists it, shown on the race's HUD.
+        public string Title { get; }
         // Scene name, loaded additively; empty for none.
         public string EnvironmentScene { get; }
         public RaceMode Mode { get; }
         public SpeedClass Speed { get; }
         public RunnerProfile Runner { get; }
 
-        public RaceSetup(TrackDefinition track, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner)
+        public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
+            if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A race needs the track's title for the HUD.", nameof(title));
             if (environmentScene == null) throw new ArgumentNullException(nameof(environmentScene), "Pass an empty string for no environment scene.");
             if (!Enum.IsDefined(typeof(RaceMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown race mode.");
             if (!Enum.IsDefined(typeof(SpeedClass), speed)) throw new ArgumentOutOfRangeException(nameof(speed), speed, "Unknown speed class.");
             if (runner == null) throw new ArgumentNullException(nameof(runner));
             Track = track;
+            Title = title;
             EnvironmentScene = environmentScene;
             Mode = mode;
             Speed = speed;

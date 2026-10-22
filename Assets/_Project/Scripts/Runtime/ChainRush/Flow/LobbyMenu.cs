@@ -411,7 +411,7 @@ namespace ProtoHarness.ChainRush.Flow
 
         // The race the current choices make (track, speed class and runner as last confirmed).
         public RaceSetup BuildSetup() =>
-            new RaceSetup(tracks[track].Definition, tracks[track].EnvironmentScene, RaceMode.Single, Speeds[speed], runners[runner]);
+            new RaceSetup(tracks[track].Definition, tracks[track].Title, tracks[track].EnvironmentScene, RaceMode.Single, Speeds[speed], runners[runner]);
 
         private void Launch()
         {

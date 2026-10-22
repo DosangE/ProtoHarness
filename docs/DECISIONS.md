@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-10-23 · HUD 트랙 이름: 로비에서 고른 트랙의 제목을 보인다 (`fix/hud-track-name`)
+
+- **결정 (사용자)**: v0.3 기록에서 알린 버그(서킷이면 HUD 왼쪽 위가 늘 `STADIUM`, `ChainRushHud.cs:184`)에 "고쳐봐" → 합의 요청서(`RaceSetup` 에 제목, 파일 4개)에 "ㄱㄱ".
+  - `RaceSetup` 에 `Title`(로비 `TrackChoice.title` 그대로)을 넣었다. 생성자 두 번째 인자이고 비었거나 공백이면 `ArgumentException`. `LobbyMenu.BuildSetup` 이 넘긴다.
+  - HUD 는 `ChainRushHud.Heading` 을 그린다 — 로비에서 왔으면(`FromLobby`) `assembler.Setup.Title`, 씬을 직접 열었으면 서킷은 `CIRCUIT`, 아니면 `CHAIN RUSH`. HUD 의 `assembler` 참조는 서킷 씬에 이미 연결돼 있어 씬은 고치지 않았다.
+- **이유**: 트랙 이름은 로비의 `TrackChoice` 에만 있고 레이스로 가는 길(`RaceSetup`)에 없었다. `TrackDefinition` 에 이름을 두면 두 트랙 에셋을 에디터에서 고쳐야 하고 로비 제목과 두 군데가 된다.
+- **검증** (에디터 6000.3.25f1, UTC, 커밋 전 작업 트리):
+  - `AssetDatabase.Refresh()` 뒤 Editor.log `*** Tundra build success (3.48 seconds), 29 items updated, 1618 evaluated`, Console Error 0건.
+  - EditMode `!Enemy !Endless`: `testcasecount="271" result="Passed" passed="271" failed="0"` (17:22:50Z~17:22:54Z).
+  - `tools/select-tests.ps1` (기본 범위) = 바뀐 파일 4개 + `ProtoHarness.slnx`(Unity 가 읽지 않음), PlayMode 클래스 8개(`ChainRushFlowTests`·`ChainRushPresentationTests`·`ChainRushProfileTests`·`NetReconcileTests`·`NetRemoteTests`·`RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests`) + 지문 1건 → 그대로 실행 `testcasecount="96" result="Passed" passed="96" failed="0" skipped="0"` (17:23:16Z~17:25:42Z). XML 의 클래스가 도구 출력과 같다(RF1 의 95 + 새 테스트 1). 서킷 지문 `hash 0x18F31E7A2B4F79B3` 그대로.
+  - 새·바뀐 단언: `RaceSetup_MissingTitle_Throws`(null·빈·공백 거부), 로비가 고른 제목 `STADIUM`·`SKYWAY LOOP`, 로비 경로의 HUD 제목(시험 트랙·`Race_SkywayFromTheLobby_BotFinishesTwoLaps` 의 `SKYWAY LOOP`), 직접 연 씬의 `CIRCUIT`.
+  - **고치기 전 실패**: `Heading` 은 이번에 생긴 속성이라 고치기 전 코드로 그 테스트를 돌릴 수는 없다. 고치기 전의 틀린 화면은 v0.3 README 캡처 `docs/images/skyway.png`(SKYWAY 주행에 `STADIUM`)가 근거다.
+  - 화면: Play 에서 로비 메뉴를 넘겨(싱글 → SKYWAY → 빠름 → ALPHA) 출발 3초 뒤 캡처 — 왼쪽 위 `SKYWAY LOOP`. 로그 `HudShot: setup title = SKYWAY LOOP`, `HudShot: heading = SKYWAY LOOP`.
+- **README 이미지 다시 찍기** (사용자 "셋다 ㄱㄱ" — 커밋·병합, 다시 찍기, 푸시): `race.gif`·`skyway.png` 에도 `STADIUM` 이 찍혀 있어 둘 다 바꿨다. 같은 방식(시험 봇, 게임 시간 0.1초 간격 35초)으로 이번에는 로비 메뉴를 넘겨 들어갔고(`Shots: setup title = SKYWAY LOOP`), 351프레임 모두 왼쪽 위가 `SKYWAY LOOP` 다. GIF 는 처음 200프레임·640px(6.5 MB), 정지 화면은 300번째 프레임. `main` 의 v0.3 이미지는 그대로다(다음 마일스톤에 함께 간다).
+- **버린 대안**: `TrackDefinition` 에 표시 이름 필드(위 이유). HUD 에서 트랙 에셋 이름(`Circuit_Skyway`)을 보이기 — 로비 제목과 다르다. 직접 연 씬에서도 `STADIUM` 유지 — 저장된 정의가 바뀌면 다시 틀린다.
+
 ## 2026-10-23 · main v0.3: M2 "게임의 뼈대" — `dev` 를 `main` 에 병합하고 태그 `v0.3`
 
 - **결정 (사용자, 2026-10-23)**: "현재까지 dev 들어간거 main으로 올리고 README도 수정하자" → 아래 "M2 범위 조정" 에서 "M2 범위 조정 후 v0.3" 을 고름 → "진행하라. 다만 README에 프로젝트 느낌을 보여줄 이미지나 gif도 넣어줘". 이 문서 브랜치(`docs/m2-close-v0.3`: 범위 조정 기록, README 재작성과 이미지, 이 기록)를 `dev` 에 병합한 뒤 `dev` 를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.3` 을 단다.

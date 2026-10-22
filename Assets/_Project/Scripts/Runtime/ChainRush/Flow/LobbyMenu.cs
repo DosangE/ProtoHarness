@@ -83,7 +83,7 @@ namespace ProtoHarness.ChainRush.Flow
         private const int PreviewTextureScale = 2;
         private static readonly string[] Keys =
         {
-            "↑   가속",
+            "↑   가속 (스윙 중에도)      ↓ 유지   브레이크 · 후진",
             "← / →   조향",
             "왼쪽 ALT   점프 · 공중에서 다시 누르고 유지하면 그래플",
             "ALT 떼기 / ↓   그래플 해제",

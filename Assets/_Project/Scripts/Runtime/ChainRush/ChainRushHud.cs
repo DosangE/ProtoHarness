@@ -212,8 +212,8 @@ namespace ProtoHarness.ChainRush
         {
             Block(new Rect(0, height - 72, width, 72), new Color(.025f, .04f, .065f, .85f));
             GUI.Label(new Rect(64, height - 48, width - 128, 30), game.HasPresentation
-                ? "↑ 가속   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지     M 음소거"
-                : "↑ 가속   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지", small);
+                ? "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지     M 음소거"
+                : "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지", small);
         }
 
         private void DrawReady(float width, float height)

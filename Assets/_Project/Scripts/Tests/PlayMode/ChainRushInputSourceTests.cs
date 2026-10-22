@@ -23,6 +23,7 @@ namespace ProtoHarness.Tests.PlayMode
             public bool Release;
             public bool Attack;
             public bool Coasting;
+            public bool Reversing;
             public int PollCount;
             public int ClearCount;
 
@@ -30,7 +31,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             public TickInput Consume()
             {
-                var input = new TickInput(Steer, Primary, Release, Attack, coasting: Coasting);
+                var input = new TickInput(Steer, Primary, Release, Attack, coasting: Coasting, reversing: Reversing);
                 Primary = false;
                 Release = false;
                 Attack = false;
@@ -152,6 +153,36 @@ namespace ProtoHarness.Tests.PlayMode
             source.Coasting = true;
             yield return WaitTicks(Ticks.FromSeconds(1f));
             Assert.That(HorizontalSpeed(), Is.EqualTo(running - 6f).Within(0.5f), "Coasting for 1 s takes off the coast deceleration, 6 m/s.");
+            Assert.That(game.IsRunning, Is.True);
+        }
+
+        [UnityTest]
+        // Reverse (user 2026-10-22): the down arrow held without the throttle brakes by 20 m/s a second, then backs up to
+        // 6 m/s by 8 m/s a second (the code defaults the bench keeps). Backing up, steering turns the facing the other
+        // way, as a car's does: the left key swings the nose right and the runner goes back toward its left.
+        public IEnumerator Reverse_ScriptedDownArrow_BrakesThenBacksUp_AndSteersLikeACar()
+        {
+            game.StartRun();
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            float running = player.ForwardSpeed;
+            Assert.That(running, Is.EqualTo(20f).Within(0.5f), "precondition: the bench runner is at its run speed.");
+            source.Coasting = true;
+            source.Reversing = true;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            Assert.That(player.ForwardSpeed, Is.EqualTo(running - 10f).Within(0.5f), "Half a second of braking takes off 10 m/s.");
+            yield return WaitTicks(Ticks.FromSeconds(1.5f));
+            Assert.That(player.ForwardSpeed, Is.EqualTo(-6f).Within(0.1f), "Stopped after 1 s, then 6 m/s backward 0.75 s later, no faster.");
+            float heading = player.Heading;
+            float x = player.transform.position.x;
+            source.Steer = -1f;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            Debug.Log("ChainRush reverse: heading " + heading.ToString("0.00") + " -> " + player.Heading.ToString("0.00") + ", x " + x.ToString("0.000")
+                + " -> " + player.transform.position.x.ToString("0.000") + ", speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
+            Assert.That(player.Heading, Is.GreaterThan(heading + 3f), "Backing up with the left key turns the nose right.");
+            Assert.That(player.transform.position.x, Is.LessThan(x), "...so the runner goes back toward its left.");
+            source.Reversing = false;
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            Assert.That(player.ForwardSpeed, Is.EqualTo(0f).Within(0.1f), "Let go of both arrows, a runner backing up rolls to a stop.");
             Assert.That(game.IsRunning, Is.True);
         }
 

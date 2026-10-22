@@ -470,16 +470,7 @@ namespace ProtoHarness.ChainRush.Flow
             return texts;
         }
 
-        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal)
-        {
-            var style = new GUIStyle(GUI.skin.label);
-            style.font = font;
-            style.fontSize = size;
-            style.fontStyle = weight;
-            style.normal.textColor = color;
-            style.padding = new RectOffset(0, 0, 0, 0);
-            return style;
-        }
+        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal) => NightUi.Style(font, size, color, weight);
 
         private void InitializeStyles()
         {
@@ -515,14 +506,6 @@ namespace ProtoHarness.ChainRush.Flow
             lockTag.alignment = TextAnchor.MiddleRight;
             helpLine = Style(15, Muted);
             helpLine.alignment = TextAnchor.MiddleRight;
-        }
-
-        private static void Block(Rect rect, Color color)
-        {
-            Color previous = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = previous;
         }
 
         private void OnGUI()
@@ -576,7 +559,7 @@ namespace ProtoHarness.ChainRush.Flow
             GUI.Label(new Rect(left, panel.y + 26, inner, 28), DescriptionTags[(int)page], small);
             if (Locked(page)[cursor]) GUI.Label(new Rect(left, panel.y + 26, inner, 28), "LOCKED  ·  준비 중", lockTag);
             GUI.Label(new Rect(left, panel.y + 62, inner, 52), Options(page)[cursor], infoTitle);
-            Block(new Rect(left, panel.y + 126, 48, 3), NightUi.Action);
+            NightUi.Block(new Rect(left, panel.y + 126, 48, 3), NightUi.Action);
             GUI.Label(new Rect(left, panel.y + 148, inner, 120), Descriptions(page)[cursor], infoBody);
             if (page == Page.Track)
             {
@@ -606,9 +589,9 @@ namespace ProtoHarness.ChainRush.Flow
                 float y = 390 + s * 43;
                 GUI.Label(new Rect(width - 452, y, 120, 28), StatNames[s], small);
                 var bar = new Rect(width - 308, y + 9, 150, 6);
-                Block(bar, Slate);
+                NightUi.Block(bar, Slate);
                 bar.width *= Mathf.InverseLerp(StatBarFloor, StatBarCeiling, runnerStats[shown, s]);
-                Block(bar, Mint);
+                NightUi.Block(bar, Mint);
                 GUI.Label(new Rect(width - 135, y, 65, 28), runnerStatText[shown, s], small);
             }
             GUI.Label(new Rect(width - 452, 574, 360, 28), trackOptions[track] + "  /  " + SpeedOptions[speed], small);
@@ -650,7 +633,7 @@ namespace ProtoHarness.ChainRush.Flow
                     {
                         int level = i == SettingMaster ? settings.MasterLevel : i == SettingMusic ? settings.MusicLevel : settings.EffectsLevel;
                         var bar = new Rect(row.x + 283, row.y + 33, 180, 5);
-                        Block(bar, Slate); bar.width *= (float)level / GameSettings.MaxLevel; Block(bar, Mint);
+                        NightUi.Block(bar, Slate); bar.width *= (float)level / GameSettings.MaxLevel; NightUi.Block(bar, Mint);
                     }
                     GUI.Label(new Rect(row.x + 485, row.y, 88, row.height), SettingValue(i), recordLine);
                 }

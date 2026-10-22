@@ -53,16 +53,7 @@ namespace ProtoHarness.ChainRush.Flow
             SceneManager.LoadScene(RaceLaunch.LobbyScene);
         }
 
-        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal)
-        {
-            var style = new GUIStyle(GUI.skin.label);
-            style.font = font;
-            style.fontSize = size;
-            style.fontStyle = weight;
-            style.normal.textColor = color;
-            style.padding = new RectOffset(0, 0, 0, 0);
-            return style;
-        }
+        private GUIStyle Style(int size, Color color, FontStyle weight = FontStyle.Normal) => NightUi.Style(font, size, color, weight);
 
         private void InitializeStyles()
         {
@@ -94,7 +85,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             GUI.matrix = canvas * Matrix4x4.TRS(pivot, Quaternion.Euler(0, 0, StripeAngle), Vector3.one)
                 * Matrix4x4.TRS(-pivot, Quaternion.identity, Vector3.one);
-            Block(rect, color);
+            NightUi.Block(rect, color);
             GUI.matrix = canvas;
         }
 
@@ -103,16 +94,8 @@ namespace ProtoHarness.ChainRush.Flow
         {
             for (int row = 0; row < 2; row++)
                 for (int column = 0; column < CheckerColumns; column++)
-                    Block(new Rect(x + column * CheckerSize, y + row * CheckerSize, CheckerSize, CheckerSize),
+                    NightUi.Block(new Rect(x + column * CheckerSize, y + row * CheckerSize, CheckerSize, CheckerSize),
                         (row + column) % 2 == 0 ? new Color(1, 1, 1, .85f) : new Color(1, 1, 1, .08f));
-        }
-
-        private static void Block(Rect rect, Color color)
-        {
-            Color previous = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = previous;
         }
 
         private void OnGUI()
@@ -131,7 +114,7 @@ namespace ProtoHarness.ChainRush.Flow
             // Version and build, top right.
             var tag = new Rect(width - 324, 40, 260, 44);
             NightUi.Card(tag);
-            Block(new Rect(tag.x, tag.y, 4, tag.height), Mint);
+            NightUi.Block(new Rect(tag.x, tag.y, 4, tag.height), Mint);
             GUI.Label(new Rect(tag.x + 20, tag.y, 110, tag.height), versionText, versionLabel);
             GUI.Label(new Rect(tag.x + 110, tag.y, tag.width - 128, tag.height), buildText, buildLabel);
 
@@ -151,7 +134,7 @@ namespace ProtoHarness.ChainRush.Flow
             // The start button, its glow breathing so the eye finds it.
             Rect enter = new Rect(100, height - 190, 450, 84);
             float glow = Mathf.PingPong(Time.unscaledTime * 0.8f, 1f);
-            Block(new Rect(enter.x - 6, enter.y - 6, enter.width + 12, enter.height + 12),
+            NightUi.Block(new Rect(enter.x - 6, enter.y - 6, enter.width + 12, enter.height + 12),
                 new Color(NightUi.Action.r, NightUi.Action.g, NightUi.Action.b, .12f + .3f * glow));
             bool start = NightUi.CardButton(enter, "레이스 시작     ENTER   →", button, NightUi.CardLook.Action);
             GUI.Label(new Rect(64, height - 60, 700, 24), "ENTER 시작", small);

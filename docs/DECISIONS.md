@@ -7,6 +7,19 @@
 
 ---
 
+## 2026-10-22 · 리팩토링 RF1: IMGUI 헬퍼 4벌을 `NightUi` 하나로 · 리팩토링 묶음 RF
+
+- **결정 (사용자, `feature/refactor-ui-helpers`)**: "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서" → 조사 뒤 낸 4단계 안 중 "R1 ㄱㄱ"(이 문서에서는 R1~R9 와 겹치지 않게 **RF1** 로 부른다).
+  - **RF1**: `ChainRushHud`·`LobbyMenu`·`TitleScreen`·`Net/RaceStandingsView` 에 글자 하나까지 같게 복사돼 있던 private `Block` 4개를 지우고 호출 47곳을 `NightUi.Block` 으로. private `Style` 은 화면 글꼴을 넘기는 한 줄 `NightUi.Style(font, …)` 로 남겼다(화면마다 본문 글꼴이 있어 호출을 그대로 두는 편이 짧다). 설정 값(글꼴·크기·굵기·색·여백 0)이 같아 그리는 결과는 같다. `ProtoHarness.Net` 은 이미 `ProtoHarness.Runtime` 을 참조한다(asmdef 그대로).
+  - **나머지 RF 는 요청서로** (`docs/NEXT_REQUESTS.md` "RF. 리팩토링"): RF3 `RunnerMotor.Step` 분해, RF2 효과음 번호 이름, RF4 `CircuitRace` 깔기 분리. 공통 제약은 동작·지문 불변, MonoBehaviour 이름·직렬화 필드 그대로(씬·프리팹 YAML 을 손으로 고칠 수 없다, `CLAUDE.md` §0). 조사 중 발견: 롤백 재실행 중에도 효과음이 다시 난다(NEXT_REQUESTS 2-1).
+- **검증** (에디터 6000.3.19f1, UTC):
+  - `AssetDatabase.Refresh()` 뒤 Editor.log `*** Tundra build success (4.53 seconds), 16 items updated, 1618 evaluated`, 그 빌드에서 `ProtoHarness.Runtime.dll`·`ProtoHarness.Net.dll` 재빌드. Console Error 0건.
+  - PlayMode — 도구가 고른 클래스 8개(`ChainRushFlowTests`·`ChainRushPresentationTests`·`ChainRushProfileTests`·`NetReconcileTests`·`NetRemoteTests`·`RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests`) + 지문 1건, `!Device !Sweep !Enemy !Endless !NetEndReplay`: `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (05:53:36Z~05:56:04Z). XML 의 클래스 목록이 고른 것과 같고, `ChainRushReplayTests` 는 지문 1건만 돌았다.
+  - EditMode `!Enemy !Endless`: `testcasecount="271" result="Passed" passed="271" failed="0"` (05:56:21Z~05:56:22Z). 실행 뒤 Console Error 4건은 모두 테스트가 `LogAssert.Expect` 로 기대한 로그(`RaceAssembler … cannot be raced yet`, `RunnerProfile '' …`, `GameSettings …` 2건).
+  - **② 병합** (사용자 "다음 해야할 작업 리스트 정리까지도해서 커밋 푸시 병합"): 커밋 `0674719` 에서 `select-tests -Range dev...HEAD` = 바뀐 파일 4개, PlayMode 클래스 8개 + 지문 1건 — 위 PlayMode 실행과 같은 필터다. 그 근거는 위 실행이다: 네 파일의 마지막 수정은 05:51:46Z 로 두 실행보다 앞서고, 커밋 시점 `git diff HEAD -- Assets` 는 비었다. 커밋 뒤 같은 필터로 한 번 더 돌리려 했으나 실행 직후 에디터가 종료돼(Editor.log 마지막 쓰기 05:58:14Z, 정상 종료 순서 `Input System module state changed to: ShutdownInProgress` → `Cleanup mono`, 크래시 표시 없음, 종료 원인은 확인 못 함) MCP 가 `Named pipe socket file not found` 로 실패했다 — 그 재실행 결과는 없다. 그 뒤 바뀐 것은 `docs/` 뿐이다. `Long` 은 Endless 보류로 돌리지 않는다(`CLAUDE.md` §9-2). `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
+  - **눈으로 보는 확인 없음**: 타이틀·로비·HUD 캡처는 하지 않았다(그리는 값이 같다는 것은 코드 비교).
+- **버린 대안**: 호출 47곳을 `NightUi.Style(font, …)` 로 직접 바꾸기(줄만 길어진다). `using static NightUi`(이 코드베이스에 없는 형식). 이번에 RF2~RF4 까지 한 번에(단계마다 게이트로 나눠 동작 불변을 따로 증명한다).
+
 ## 2026-10-22 · ↓ 후진 · 스윙 중 ↑ 가속
 
 - **결정 (사용자, `feature/motor-reverse-swing-throttle`)**: "후진도 넣어보자 방향키 뒷키로", "스윙중에도 앞키로 가속하는 것은 되게해줘. 무조건 속도 고정이 아닌(부스터 상황이 아니더라도 가속 받게)" → 제안값(아래)에 "제안대로 진행".

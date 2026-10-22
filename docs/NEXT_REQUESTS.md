@@ -15,6 +15,14 @@
 | ~~R7~~ | ~~공격 판정 방향~~ **보류** (서킷 집중, 서킷에는 표적이 없다) | `fix/attack-facing` | 약 11분 | — | 7-1 (설계) |
 | R8 | 기존 착지 확인 테스트 수정 | `fix/test-landing-check` | 약 11분 | — | — |
 | M1-T | **M1** 체감 튜닝 1회 | `feature/tuning-m1` | 사용자 플레이 | R4c | 2026-10-18 에 속력·회전·부스터(앞당김 1)와 조향·감속(R4c)을 했다. 남은 것은 아래 "M1-T 에 넘긴 플레이 피드백", 순서는 `docs/HANDOFF.md` 1절 |
+| ~~RF1~~ | ~~리팩토링: IMGUI 헬퍼 통합~~ **끝** (2026-10-22, DECISIONS "리팩토링 RF1") | `feature/refactor-ui-helpers` | 약 3분 | — | 사용자 "R1 ㄱㄱ" |
+| RF3 | 리팩토링: `RunnerMotor.Step` 분해 + 이름 없는 숫자 상수화 (권장 다음) | `feature/refactor-motor-step` | select-tests 판정(코어 시뮬 → 전체 예상) | — | — |
+| RF2 | 리팩토링: 효과음 번호에 이름(`Cue` enum) | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
+| RF4 | 리팩토링: `CircuitRace` 깔기 코드 분리(`CircuitScenery`) | `feature/refactor-circuit-scenery` | select-tests 판정(`Race/`) | — | — |
+| ~~RF5~~ | ~~모드 분기 추상화~~ **보류** (무한 모드 존속 결정 뒤) | — | — | M3 뒤 무한 모드 판단 | — |
+| ~~RF6~~ | ~~여러 레이서 구조~~ **보류** (M5 AI 상대 때) | — | — | M5 | — |
+
+**2026-10-22 리팩토링 RF** (아래 "RF. 리팩토링" 절): 사용자 "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서". 모든 RF 는 **동작·결정성 지문을 바꾸지 않고**, MonoBehaviour 이름·직렬화 필드를 그대로 둬 **씬·프리팹을 건드리지 않는다**(§0 YAML 수정 금지). 권장 순서 RF3 → RF2 → RF4. 승인은 항목마다 따로.
 
 **2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다.
 
@@ -137,6 +145,55 @@
 검증 방법:  게이트 1회 + Long
 안 하는 것:  단언 값 변경
 ```
+
+---
+
+## RF. 리팩토링 (2026-10-22 조사, 승인 대기)
+
+조사 근거(2026-10-22, `dev` `092d828`): `ChainRushGame`(363줄)이 직선·무한·서킷 세 모드를 플래그·null 분기로 나르고(`ChainRushGame.cs:55,67,126-136,212-230,308`, 그 밖에 `IsEndless`/`IsCircuit` 23곳), `RunnerMotor.Step` 이 160줄(`RunnerMotor.cs:201-364`), 시뮬이 효과음을 정수 번호로 직접 울리고(`RunnerMotor.cs:230,403,408,438`, `GrappleController.cs:165`), `CircuitRace` 가 랩 판정과 노면·표지·봉 깔기(`CircuitRace.cs:214-341`)를 같이 한다. RF1(IMGUI 헬퍼 4벌)은 끝났다.
+
+**공통 제약**: 동작 변경 없음. MonoBehaviour 클래스 이름·직렬화 필드를 바꾸지 않는다(씬·프리팹 참조, §0). 새 타입은 MonoBehaviour 가 아닌 것만. 시뮬을 건드리는 RF2·RF3 은 서킷 지문(`ChainRushReplayTests.Replay_CircuitBotRun_RepeatsEveryTickBitForBit`)과 롤백 테스트가 그대로 통과하는 것을 "동작 불변" 의 증거로 삼는다.
+
+### RF3. `RunnerMotor.Step` 분해 (권장 다음)
+
+```
+목표:      160줄 Step 을 읽을 수 있는 단계(스로틀·부스터, 조향, 달리기 목표, 가속, 이동·가드, 낙하)로 나눈다
+건드릴 것:  Runtime/ChainRush/RunnerMotor.cs:201-364 (같은 파일 안의 private 메서드로), 이름 없는 숫자
+           (:222 코요테 0.1, :320 그래플 중 공중 가속 5, :329 감기 16, :332 낙하 상한 -28, :357 낙하 -12, :525 놓기 13)
+           → private const (직렬화하지 않음 → 씬 영향 없음). GrappleController.cs:159 빗나감 0.75 도 같은 식
+새로 만들 것: 없음
+검증 방법:  컴파일 → EditMode → select-tests -Range dev...HEAD (코어 시뮬 → 전체 예상). 지문 해시 그대로
+안 하는 것:  튜닝 값 SO 이전(직렬화 값이 씬에 있어 씬 수정이 필요하다 — 따로 합의), 연산 순서 변경
+```
+
+### RF2. 효과음 번호에 이름
+
+```
+목표:      PlayCue(int) 의 0~8 을 이름 있는 enum 으로 바꾼다
+건드릴 것:  ChainRushGame.cs:345-355, RunnerMotor.cs(4곳), GrappleController.cs:165, Combat/EnemyDirector.cs(4곳),
+           Audio/ChainRushAudio.cs:95, Visuals/RunnerAnimation.cs:55,60, PlayCue 를 부르는 테스트(시작 전에 grep)
+새로 만들 것: 목적: 효과음 번호에 이름을 붙이기 위해 / 경로: Runtime/ChainRush/Audio/Cue.cs / 형태: enum
+검증 방법:  RF3 과 같다
+안 하는 것:  아래 2-1 (동작이 바뀐다)
+```
+
+**2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:317` `game.StepTick` → `ChainRushGame.cs:215` `player.Step` → `RunnerMotor.cs:230` `game.PlayCue(0)`. 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
+
+### RF4. `CircuitRace` 깔기 코드 분리
+
+```
+목표:      랩 판정과 서킷 장면 만들기(노면·표지·봉)를 떼어 M3 트랙 장식(T3e)이 붙을 자리를 만든다
+건드릴 것:  Race/CircuitRace.cs:214-341 (LayRoad·LayRange·PlaceAnchors·PlaceMarkers·AddMarker·PlacePoles·VisualPart)
+새로 만들 것: 목적: 서킷의 노면·표지·봉 생성을 랩 판정과 떼어 놓기 위해 / 경로: Runtime/ChainRush/Race/CircuitScenery.cs
+           / 형태: 일반 C# 클래스 (MonoBehaviour 아님 → 씬 수정 없음)
+검증 방법:  select-tests -Range dev...HEAD (`Race/` 줄)
+안 하는 것:  CircuitRace 의 직렬화 필드 이동
+```
+
+### 보류
+
+- **RF5 모드 분기 추상화** (`IRaceMode` 류): 무한 모드는 동결이고 M3 뒤에 존속을 판단한다(`docs/DESIGN.md` §5-1). 버릴 수 있는 모드를 추상화하지 않는다 — 존속이 정해지면 "분리" 와 "삭제" 중 고른다.
+- **RF6 여러 레이서 구조**: `RunnerMotor`·`GrappleController` 가 상태를 `game.Racer` 하나로 읽는다(`RunnerMotor.cs:109-128`, `GrappleController.cs:33-40`). M5 AI 상대에서 지금 멀티처럼 레이서마다 격리 월드(`RaceWorld`)를 쓸지, 한 월드에 여러 러너를 둘지 정할 때 같이 본다(C2 충돌·추월은 공유 월드가 필요 — HANDOFF 2절).
 
 ---
 

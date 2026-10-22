@@ -20,7 +20,7 @@
   - 새·바뀐 단언: `RaceSetup_MissingTitle_Throws`(null·빈·공백 거부), 로비가 고른 제목 `STADIUM`·`SKYWAY LOOP`, 로비 경로의 HUD 제목(시험 트랙·`Race_SkywayFromTheLobby_BotFinishesTwoLaps` 의 `SKYWAY LOOP`), 직접 연 씬의 `CIRCUIT`.
   - **고치기 전 실패**: `Heading` 은 이번에 생긴 속성이라 고치기 전 코드로 그 테스트를 돌릴 수는 없다. 고치기 전의 틀린 화면은 v0.3 README 캡처 `docs/images/skyway.png`(SKYWAY 주행에 `STADIUM`)가 근거다.
   - 화면: Play 에서 로비 메뉴를 넘겨(싱글 → SKYWAY → 빠름 → ALPHA) 출발 3초 뒤 캡처 — 왼쪽 위 `SKYWAY LOOP`. 로그 `HudShot: setup title = SKYWAY LOOP`, `HudShot: heading = SKYWAY LOOP`.
-- **남은 것**: README 의 `docs/images/skyway.png` 는 고치기 전 화면(`STADIUM`)이다 — 다시 찍을지는 사용자에게 묻는다.
+- **README 이미지 다시 찍기** (사용자 "셋다 ㄱㄱ" — 커밋·병합, 다시 찍기, 푸시): `race.gif`·`skyway.png` 에도 `STADIUM` 이 찍혀 있어 둘 다 바꿨다. 같은 방식(시험 봇, 게임 시간 0.1초 간격 35초)으로 이번에는 로비 메뉴를 넘겨 들어갔고(`Shots: setup title = SKYWAY LOOP`), 351프레임 모두 왼쪽 위가 `SKYWAY LOOP` 다. GIF 는 처음 200프레임·640px(6.5 MB), 정지 화면은 300번째 프레임. `main` 의 v0.3 이미지는 그대로다(다음 마일스톤에 함께 간다).
 - **버린 대안**: `TrackDefinition` 에 표시 이름 필드(위 이유). HUD 에서 트랙 에셋 이름(`Circuit_Skyway`)을 보이기 — 로비 제목과 다르다. 직접 연 씬에서도 `STADIUM` 유지 — 저장된 정의가 바뀌면 다시 틀린다.
 
 ## 2026-10-23 · main v0.3: M2 "게임의 뼈대" — `dev` 를 `main` 에 병합하고 태그 `v0.3`

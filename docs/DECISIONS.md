@@ -22,6 +22,7 @@
   - 메뉴 `Run PlayMode Tests` 1회차 `testcasecount="180" result="Failed(Child)" passed="172" failed="1" skipped="7"` (04:28:41Z~04:36:37Z) — 위 `NetReconcileTests` 0xFF 단언. 지운 뒤 2회차 `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (04:41:55Z~04:49:54Z). 스타디움 지문 그대로 `1700 ticks identical, hash 0x18F31E7A2B4F79B3`, SKYWAY 2랩 86.08 / 84.88 s 그대로(봇이 이 런에서 ↓ 를 쓰지 않고, 바뀐 스윙 가속이 랩에 닿지 않았다). 새 테스트 값: 후진 −6.00 m/s, ← 로 기수 0 → 6.88°; 스윙 ↑ 걸 때 속도 21.20 → 24.00 m/s.
   - 입력 장치 경로를 바꿔 `Run Device Input Tests` `testcasecount="3" result="Passed" passed="3" failed="0"` (04:52:54Z~04:53:10Z, `isApplicationActive=True`, 사용자가 에디터를 앞에 띄움).
   - **사용자 플레이 확인: 아직** — 후진 6 m/s 와 스윙 ↑ 상한 24 m/s 의 체감은 플레이해 보고 정한다.
+  - **② 병합** (사용자 "일단 커밋 병합 푸시 진행"): 커밋 `a203930` 에서 `select-tests -Range dev...HEAD` = 전체(바뀐 파일 14개 — `RunnerMotor` 코어 시뮬, `TickInput` 표에 없는 경로, ProjectSettings 0개). 그 근거는 위 EditMode 2회차·PlayMode 2회차·Device 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 뿐이다. `Long` 은 Endless 보류로 돌리지 않았다(`CLAUDE.md` §9-2). `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
 - **버린 대안**: 속도 방향만 보고 조향 반전(위 실패). ↑ 를 떼면 스윙도 지상처럼 감속(사용자가 (a) 유지를 골랐다). 후진 비트를 기록·네트워크에 싣지 않기 — 리플레이·롤백에서 후진이 사라져 결정성이 깨진다.
 
 ## 2026-10-22 · SKYWAY 재배치(원작 윤곽) · 구간별 도로 폭 · 직선 스윙 봉

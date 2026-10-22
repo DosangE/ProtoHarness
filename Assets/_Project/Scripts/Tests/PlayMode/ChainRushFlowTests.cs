@@ -31,6 +31,8 @@ namespace ProtoHarness.Tests.PlayMode
         private const string SkywayPath = "Assets/_Project/Data/Circuit_Skyway.asset";
         private const string SkywayEnvironmentScene = "ChainRushTrackSkyway";
 
+        private const string TestTitle = "TEST TRACK";
+
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
@@ -61,18 +63,28 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTrackOrRunner_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
-            Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, "", RaceMode.Single, SpeedClass.Fast, runner));
-            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, null, RaceMode.Single, SpeedClass.Fast, runner));
-            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, null));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", (RaceMode)7, SpeedClass.Fast, runner));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, "", RaceMode.Single, (SpeedClass)7, runner));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, null, RaceMode.Single, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, TestTitle, "", (RaceMode)7, SpeedClass.Fast, runner));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RaceSetup(made, TestTitle, "", RaceMode.Single, (SpeedClass)7, runner));
+        }
+
+        // The HUD names the track by this title (it was "STADIUM" on every circuit, SKYWAY included, until 2026-10-23).
+        [Test]
+        public void RaceSetup_MissingTitle_Throws()
+        {
+            made = ScriptableObject.CreateInstance<TrackDefinition>();
+            foreach (string title in new[] { null, "", "  " })
+                Assert.Throws<ArgumentException>(() => new RaceSetup(made, title, "", RaceMode.Single, SpeedClass.Fast, runner), "title '" + title + "'");
+            Assert.That(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner).Title, Is.EqualTo(TestTitle));
         }
 
         [Test]
         public void RaceLaunch_SecondRequestBeforeTaking_ThrowsAndTakingEmptiesIt()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
-            var setup = new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner);
+            var setup = new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner);
             RaceLaunch.Request(setup);
             Assert.Throws<InvalidOperationException>(() => RaceLaunch.Request(setup));
             Assert.That(RaceLaunch.TryTake(out RaceSetup taken), Is.True);
@@ -99,6 +111,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             RaceSetup setup = menu.BuildSetup();
             Assert.That(setup.Track, Is.SameAs(Stadium()));
+            Assert.That(setup.Title, Is.EqualTo("STADIUM"));
             Assert.That(setup.EnvironmentScene, Is.EqualTo(EnvironmentScene));
             Assert.That(setup.Mode, Is.EqualTo(RaceMode.Single));
             Assert.That(setup.Speed, Is.EqualTo(SpeedClass.Fast));
@@ -368,7 +381,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
             Assert.That(made.TryValidate(out string error), Is.True, error);
-            RaceLaunch.Request(new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
@@ -379,6 +392,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Find<RunnerMotor>(assembler.gameObject.scene).Profile, Is.SameAs(runner), "The runner races the lobby's profile.");
             Assert.That(assembler.IsAssembling, Is.False, "No environment scene: it counts in at once.");
             Assert.That(game.IsCountingDown, Is.True);
+            Assert.That(Find<ChainRushHud>(assembler.gameObject.scene).Heading, Is.EqualTo(TestTitle), "The HUD names the lobby's track.");
         }
 
         // ESC's pause menu in a race from the lobby (user 2026-10-20): continue, restart and back to the lobby, the
@@ -388,7 +402,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
             Assert.That(made.TryValidate(out string error), Is.True, error);
-            RaceLaunch.Request(new RaceSetup(made, "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
@@ -468,7 +482,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             RunnerProfile beta = Beta();
             Assert.That(beta.Look, Is.Not.Null, "BETA has no look.");
-            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.Fast, beta));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, beta));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             Assert.That(assembler.IsLaunched, Is.True);
@@ -495,6 +509,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(assembler.IsLaunched, Is.False);
             Assert.That(circuit.Definition, Is.SameAs(Stadium()));
             Assert.That(game.IsReady, Is.True);
+            Assert.That(Find<ChainRushHud>(assembler.gameObject.scene).Heading, Is.EqualTo("CIRCUIT"), "No lobby: no track name to show.");
             Assert.Throws<InvalidOperationException>(assembler.ReturnToLobby, "A scene opened directly has no lobby.");
             made = ScriptableObject.CreateInstance<TrackDefinition>();
             Assert.Throws<InvalidOperationException>(() => circuit.UseDefinition(made), "The circuit is already built.");
@@ -504,7 +519,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Race_LockedSpeedClass_IsRefusedLoudlyAndDoesNotRun()
         {
-            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.VeryFast, runner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.VeryFast, runner));
             LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("cannot be raced yet"));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -535,7 +550,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecord()
         {
             var store = TestRecords();
-            RaceLaunch.Request(new RaceSetup(Stadium(), "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
@@ -579,6 +594,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "The skyway can be raced.");
             RaceSetup setup = menu.BuildSetup();
             Assert.That(setup.Track, Is.SameAs(Skyway()));
+            Assert.That(setup.Title, Is.EqualTo("SKYWAY LOOP"));
             Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
         }
 
@@ -633,6 +649,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
             Scene scene = assembler.gameObject.scene;
+            Assert.That(Find<ChainRushHud>(scene).Heading, Is.EqualTo("SKYWAY LOOP"), "Not the stadium's name on the skyway.");
             ChainRushGame game = Find<ChainRushGame>(scene);
             RunnerMotor player = Find<RunnerMotor>(scene);
             CircuitRace circuit = Find<CircuitRace>(scene);
@@ -703,7 +720,7 @@ namespace ProtoHarness.Tests.PlayMode
             foreach (string path in new[] { TitlePath, LobbyPath, RacePath, EnvironmentPath })
                 if (SceneUtility.GetBuildIndexByScenePath(path) < 0)
                     Assert.Ignore("Not in the build's scene list yet (M2-a2): " + path);
-            RaceLaunch.Request(new RaceSetup(Stadium(), EnvironmentScene, RaceMode.Single, SpeedClass.Fast, runner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", EnvironmentScene, RaceMode.Single, SpeedClass.Fast, runner));
             SceneManager.LoadScene(RaceLaunch.RaceScene);
             yield return null;
             RaceAssembler assembler = Find<RaceAssembler>(SceneManager.GetActiveScene());

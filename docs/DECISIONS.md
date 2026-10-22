@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-10-23 · main v0.3: M2 "게임의 뼈대" — `dev` 를 `main` 에 병합하고 태그 `v0.3`
+
+- **결정 (사용자, 2026-10-23)**: "현재까지 dev 들어간거 main으로 올리고 README도 수정하자" → 아래 "M2 범위 조정" 에서 "M2 범위 조정 후 v0.3" 을 고름 → "진행하라. 다만 README에 프로젝트 느낌을 보여줄 이미지나 gif도 넣어줘". 이 문서 브랜치(`docs/m2-close-v0.3`: 범위 조정 기록, README 재작성과 이미지, 이 기록)를 `dev` 에 병합한 뒤 `dev` 를 `main` 에 `--no-ff` 로 병합하고 주석 태그 `v0.3` 을 단다.
+- **v0.3 에 든 것** (`main` v0.2 뒤): M2-a1 씬 뼈대(타이틀·로비·Additive 장식 씬)·M2-a2 빌드 씬 목록, M2-b 러너 프로필 5명, 로비 최고 기록, 그래플 앵커 높이·공중 가속·스윙 중 부스터, M2-c 설정·러너 디자인 5종·스타디움 장식, 러너 선택창 프리뷰·입장/이전 버튼·일시정지 메뉴, Night Drift UI·금속 체인, 카트라이더풍 타이틀·로비 설명·카드 버튼, SKYWAY LOOP(원작 윤곽 재배치·구간별 도로 폭·직선 스윙 봉), ↓ 후진·스윙 중 ↑ 가속, 리팩토링 RF1. 각각 이 문서의 같은 이름 항목.
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `dev` `1ffeba1` 그대로(이 문서 브랜치는 `Assets/`·`Packages/`·`ProjectSettings/` 에 닿지 않는다), 에디터 **6000.3.25f1**(Unity MCP `Application.unityVersion`), `ProjectSettings/`·`Packages/packages-lock.json`·`ProtoHarness.slnx` 는 넣지 않는다. 시각은 UTC(결과 XML):
+  - 컴파일: `Unity_RunCommand` 컴파일 성공, Console Error 0건 (16:49Z 직전).
+  - EditMode (`!Enemy`·`!Endless`): `testcasecount="271" result="Passed" passed="271" failed="0" skipped="0"` (16:49:52Z~16:49:54Z). 실행 중 Console Error 2건은 `GameSettingsTests` 가 `LogAssert.Expect` 로 기대한 `GameSettings: … holds 99, outside 0..10` 와 `… holds 7, neither 0 nor 1`.
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (16:50:40Z~16:58:12Z, 452.6초).
+  - PlayMode 게이트 2회차 (같은 코드): `testcasecount="180" result="Passed" passed="173" failed="0" skipped="7"` (16:58:39Z~17:06:12Z, 453.0초). 두 회차 모두 skipped 7 은 `[Explicit]` — `ChainRushProbeTests` 4건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0x18F31E7A2B4F79B3` (기준과 같다).
+  - `Run Device Input Tests` 1회차: `testcasecount="3" result="Failed(Child)" passed="1" failed="2"` (17:06:45Z~17:06:49Z). 실패 `Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts`·`Input_ShiftAndCtrl_SwingsOnThePoleAndFiresChainAction` 모두 `Expected: True  But was:  False`. 실행 직전 `isApplicationActive=False` — 에디터가 앞에 없어 가상 장치 이벤트가 전달되지 않았다(이 문서 2026-10-04 "장치 입력 테스트 분리" 의 원인과 같다).
+  - `Run Device Input Tests` 2회차 (코드 그대로, 에디터를 앞에 둠, `isApplicationActive=True`): `testcasecount="3" result="Passed" passed="3" failed="0"` (17:07:39Z~17:07:55Z).
+  - 사용자 플레이 확인 (바뀐 M2 완료 조건 "러너마다 차이가 느껴진다"): "어 느껴졌어" (2026-10-23).
+  - 하지 않은 것: 네트워크 레이스(M7 부터), `Run Long Tests`·`Run Course Sweep`(무한 모드 보류, §9-2).
+- **README 이미지** (`docs/images/`): 에디터 Play 중 `ScreenCapture.CaptureScreenshot` 으로 찍었다 — 타이틀·로비(2배 해상도), SKYWAY · 빠름 · ALPHA 주행(시험 봇 `TrackFollower` 와 같은 조향 식, 게임 시간 0.1초 간격 35초). 결승 전에 Play 를 꺼 최고 기록은 저장되지 않았다. `race.gif` 는 처음 20초(200프레임, 640px, 6.5 MB). 캡처 코드는 `Unity_RunCommand` 로만 돌렸고 저장소에 남기지 않았다. 캡처 동안 Game 뷰를 잠시 최대화했다가(메인 창이 세로 모니터라 세로로 찍혀 쓰지 않음) 되돌렸다.
+- **찾은 문제 (고치지 않음)**: HUD 왼쪽 위 트랙 이름이 서킷이면 늘 `STADIUM` 이다(`ChainRushHud.cs:184` `game.IsCircuit ? "STADIUM" : "CHAIN RUSH"`). SKYWAY 에서도 STADIUM 으로 보인다 — `docs/images/skyway.png` 에 그대로 찍혔다. `HANDOFF.md` 1절 다음 작업에 넣었다. 타이틀의 버전 표기는 아직 `TitleScreen.Version = "0.0.1"` 이다(태그와 맞출지 사용자 답 없음, 그대로 둠).
+- **v0.3 에 없는 것**: 속도 단계 보통·매우빠름(M3 으로 옮김), 새 서킷(M3), 기록·고스트(M4).
+
+## 2026-10-23 · M2 범위 조정: 속도 단계 보통·매우빠름을 M3 으로 — v0.3 을 지금 닫는다
+
+- **결정 (사용자, 2026-10-23)**: "현재까지 dev 들어간거 main으로 올리고 README도 수정하자" → 지금 `dev` 는 M2 완료 조건(`DESIGN.md` §5-1, "러너마다, 속도 단계마다 차이가 느껴진다")을 채우지 못해 `CLAUDE.md` §9-2 ③ 과 충돌한다고 알리고 세 갈래를 냈다. 사용자가 "M2 범위 조정 후 v0.3" 을 골랐다: 속도 단계 보통·매우빠름을 M3 으로 옮기고, 러너 차이 플레이 확인과 ③ 의 테스트를 거친 뒤 `dev → main` `--no-ff` 로 병합하고 태그 `v0.3` 을 단다. README 도 v0.3 기준으로 다시 쓴다.
+  - **옮긴 것**: `DESIGN.md` §5-1 의 M2 행에서 속도 단계 보통·매우빠름과 완료 조건의 "속도 단계마다"를 빼서 M3 행으로 옮겼다. `NEXT_REQUESTS.md` 의 같은 항목도 M3 칸으로 옮겼다. 로비의 속도 단계 자리(빠름만 열림)는 M2 에 그대로 있다.
+  - **M2 완료 조건 (바뀐 뒤)**: 메뉴로 트랙·러너를 골라 달리고 메뉴로 돌아온다. 러너마다 차이가 느껴진다.
+- **이유**: 속도 단계는 처음부터 후순위였다(사용자 2026-10-19). 그 사이 `dev` 에는 타이틀·로비·설정·러너 5명·일시정지·SKYWAY 트랙·후진 등이 쌓였는데 `main` 은 v0.2 에 머물러 있다. 속도 단계는 트랙마다 봇이 코너를 놓치는지 다시 재야 해서, 새 트랙이 들어오는 M3 에서 같이 하는 편이 일이 한 번으로 끝난다.
+- **버린 대안**: 태그 없이 `main` 에 중간 동기화 — "마일스톤 하나 = 병합 + 태그 하나"(§9-2 ③, `DESIGN.md` §5-1)에 예외를 만들어야 한다. 속도 단계를 먼저 구현하고 v0.3 — `main` 이 더 늦게 올라간다.
+
 ## 2026-10-22 · 리팩토링 RF1: IMGUI 헬퍼 4벌을 `NightUi` 하나로 · 리팩토링 묶음 RF
 
 - **결정 (사용자, `feature/refactor-ui-helpers`)**: "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서" → 조사 뒤 낸 4단계 안 중 "R1 ㄱㄱ"(이 문서에서는 R1~R9 와 겹치지 않게 **RF1** 로 부른다).

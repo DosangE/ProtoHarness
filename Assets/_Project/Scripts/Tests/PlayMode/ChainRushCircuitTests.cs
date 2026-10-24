@@ -304,8 +304,6 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Track.EndS, Is.EqualTo(definition.LapLength).Within(1e-9));
             Assert.That(circuit.PieceCount, Is.GreaterThanOrEqualTo(8));
             Assert.That(game.IsCircuit, Is.True);
-            Assert.That(game.IsEndless, Is.False);
-            Assert.That(game.Enemies, Is.Null);
             yield return null;
         }
 

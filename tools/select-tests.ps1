@@ -36,7 +36,7 @@ $namespace = 'ProtoHarness.Tests.PlayMode'
 $fingerprint = 'ChainRushReplayTests.Replay_CircuitBotRun_RepeatsEveryTickBitForBit'
 
 $net     = @('NetReconcileTests', 'NetRemoteTests', 'RaceOrderTests', 'RaceStandingsTests', 'RaceStandingsTextTests')
-$course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests', 'ChainRushSteeringTests', 'ChainRushProceduralTests', 'ChainRushDriftTests', 'ChainRushCornerSwingTests')
+$course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests', 'ChainRushSteeringTests', 'ChainRushDriftTests', 'ChainRushCornerSwingTests')
 
 # 전체 실행에서만 도는 클래스, 이름으로 따로 돌리는 클래스. 표가 모든 클래스를 아는지 확인할 때 쓴다.
 $allOnly      = @('ChainRushTests')
@@ -48,24 +48,22 @@ $rules = @(
     @{ Pattern = '^Assets/_Project/(Data|Scenes)/';                 All = $true;  Why = 'SO 값·씬은 시뮬에 들어간다' }
     @{ Pattern = '^' + $scripts + 'Editor/';                        All = $true;  Why = '씬 빌더·테스트 메뉴' }
     @{ Pattern = '\.asmdef$';                                       All = $true;  Why = '어셈블리 정의' }
-    @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(CourseBot|CircuitBot|TestRoad|TrackFollower|StateTrace)\.cs$'; All = $true; Why = '테스트 보조 파일' }
+    @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(CircuitBot|TestRoad|TrackFollower|StateTrace)\.cs$'; All = $true; Why = '테스트 보조 파일' }
     @{ Pattern = '^' + $scripts + 'Tests/EditMode/';                Classes = @(); Why = 'EditMode 만 (EditMode 전체는 늘 돈다)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/NetworkRaceTests\.cs$'; Classes = @(); Why = '네트워크 레이스'; Note = 'NetworkRaceTests 는 [Explicit] 이라 여기서 고르지 않는다. 플레이어 빌드 뒤 이름으로 따로 돌린다 (HANDOFF 1절)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(\w+)\.cs$';      Own = $true;  Why = '테스트 클래스 파일' }
     @{ Pattern = '^' + $scripts + 'Runtime/Net/';                   Classes = $net; Why = 'ProtoHarness.Net (다른 런타임·에디터 어셈블리가 참조하지 않는다)' }
     @{ Pattern = '^' + $runtime + '(RunnerMotor|GrappleController|ChainRushGame|RacerState|Ticks|SimSnapshot|RunRules|CourseTarget)\.cs$'; All = $true; Why = '코어 시뮬' }
-    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true;  Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
+    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true;  Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
     @{ Pattern = '^' + $runtime + 'Track/(TrackFrame|TrackCoord)\.cs$'; All = $true; Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
     @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
-    @{ Pattern = '^' + $runtime + '(Track/(CourseGenerator|CourseTuning)|Endless/ProceduralCourse)\.cs$'; Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '코스 생성·스트리밍'; Note = '②에서 Run Course Sweep 도 1회 (§9-2, 무한 모드 보류 중에는 돌리지 않는다)' }
-    @{ Pattern = '^' + $runtime + '(Track|Endless)/';               Classes = $course + @('ChainRushCombatTests', 'ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '절차 노면·무한 코스' }
+    @{ Pattern = '^' + $runtime + 'Track/';                         Classes = $course + @('ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '노면·트랙 조각' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
     @{ Pattern = '^' + $runtime + 'Flow/';                          Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); Why = '타이틀·로비·레이스 조립 (DECISIONS 2026-10-19 "M2 씬 구성")' }
     @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
-    @{ Pattern = '^' + $runtime + 'Combat/';                        Classes = @('ChainRushCombatTests', 'ChainRushProceduralTests', 'ChainRushReplayTests'); Why = '적 조우' }
     @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
     @{ Pattern = '^' + $runtime + 'Control/(InputLog|InputLogFile|InputRecorder|InputReplay|TickInputCodec)\.cs$'; Classes = @('ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushWorldTests') + $net; Why = '입력 기록·재생' }
-    @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushCombatTests', 'ChainRushInputSourceTests'); Why = '표현 (ChainVisual·RunnerTilt 를 쓰는 테스트 포함)' }
+    @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushInputSourceTests'); Why = '표현 (RunnerTilt 를 쓰는 테스트 포함)' }
     @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests', 'ChainRushFlowTests') + $net; Why = 'HUD (RaceStandingsView·RaceAssembler 가 쓴다)' }
     @{ Pattern = '^' + $runtime + '(Audio/|FollowCamera\.cs$)';     Classes = @('ChainRushPresentationTests'); Why = '표현' }
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
@@ -142,11 +140,10 @@ foreach ($n in ($notes | Sort-Object -Unique)) { Write-Output "참고: $n" }
 # 4. 결과
 Write-Output ''
 Write-Output '고른 테스트 (① 빠른 확인 / ② 병합은 -Range dev...HEAD 로):'
-Write-Output '  EditMode: 전체 (Enemy·Endless 카테고리 제외: categoryNames = { "!Enemy", "!Endless" })'
+Write-Output '  EditMode: 전체 (Enemy 카테고리 제외: categoryNames = { "!Enemy" })'
 
 if ($all) {
-    Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests + Run Long Tests'
-    Write-Output '② 병합: 이 브랜치는 Long 도 돈다 (Run Long Tests, CLAUDE.md §9-2). 단 무한 모드 보류 중에는 Long 이 모두 Endless 라 돌리지 않는다'
+    Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests'
     exit 0
 }
 if (-not $touchesAssets) {
@@ -166,4 +163,4 @@ $quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
 $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (테스트·Net 만 바뀌어 지문 없음)' }
 Write-Output "  PlayMode: 클래스 $($classes.Count)개$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
-Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Sweep", "!Enemy", "!Endless", "!NetEndReplay" } }));')
+Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Enemy", "!NetEndReplay" } }));')

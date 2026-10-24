@@ -229,6 +229,10 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 안 하는 것:  CircuitRace 의 직렬화 필드 이동
 ```
 
+### RF7. `LobbyMenu` 페이지 객체화 — 끝남 (2026-10-25, `feature/refactor-lobby`, DECISIONS "리팩토링 RF7")
+
+페이지마다 `LobbyPage` 하위 클래스 하나(`Flow/Lobby/`). 새 페이지는 하위 클래스 + `LobbyMenu.Page` 값 + `Awake` 의 목록 한 줄. 남은 것: 속도 잠금 안내의 "M2-b" 문구, 러너 검사의 `error` 버림 — 보이는 글자·로그가 바뀌어 따로 승인(M3 속도 단계 때 같이 볼 수 있다).
+
 ### 보류
 
 - ~~**RF5 모드 분기 추상화** (`IRaceMode` 류): 무한 모드는 동결이고 M3 뒤에 존속을 판단한다(`docs/DESIGN.md` §5-1). 버릴 수 있는 모드를 추상화하지 않는다 — 존속이 정해지면 "분리" 와 "삭제" 중 고른다.~~ 2026-10-25 "삭제" 로 정해져 무한 모드를 지웠다(DECISIONS "무한 모드 삭제"). `ChainRushGame` 에는 직선(테스트 벤치)·서킷 두 갈래만 남았다.

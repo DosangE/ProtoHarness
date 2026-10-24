@@ -7,10 +7,30 @@
 
 ---
 
+## 2026-10-25 · 리팩토링 RF7: `LobbyMenu` 를 페이지 객체로 (`feature/refactor-lobby`)
+
+- **결정 (사용자)**: RF4 뒤 "다음 작업" → `LobbyMenu`(664줄) 조사 보고. 처음 요청서(그리기만 `LobbyView` 하나로 떼기)에 "ㄱㄱ" 한 뒤 "구조에 대해 확장성과 객체화를 생각해서 리팩토링 진행" 으로 범위를 넓혀, 바뀐 요청서(페이지 객체 + 새 네임스페이스 + 파일 9개)에 다시 "ㄱㄱ".
+- **왜**: 페이지 6개의 내용이 나란한 배열 6벌(이름·잠금·설명·제목·태그·도움말)과 `Confirm`·`Back` 의 `switch`, `OnGUI`·`DrawList` 의 페이지 분기에 흩어져 있어, 페이지 하나를 늘리면 약 10곳을 순서까지 맞춰 고쳐야 했다. M3 에서 로비를 고친다(속도 단계 잠금 풀기, 새 트랙).
+- **한 것** (`Runtime/ChainRush/Flow/Lobby/`, 네임스페이스 `ProtoHarness.ChainRush.Flow.Lobby` — `Flow/` 가 19개가 되어 CONVENTIONS §1-2 하위 분리, 형식 기준 RF3b `Motion/`·RF4 `CircuitScenery` 의 일반 클래스):
+  - `LobbyPage`(abstract): 줄 수·이름·잠금·잠금 안내·설명 태그·설명·설명 아래 줄, `Confirm`/`Back` → `Step`(Stay·Open(page, highlight)·Launch·Title), `Adjust`, `Opened`/`Closed`/`Highlighted`, `Point`(마우스), `RowRect`·`DrawRow`·`DrawBody`·`DrawSide`. 잠금 안내 없이 줄을 잠근 페이지는 `LockedNotice` 에서 던진다.
+  - 페이지 6개: `MainPage`·`SettingsPage`(←/→, 볼륨 막대·값)·`KeysPage`(목록 대신 글자)·`TrackPage`(준비 중 트랙, 최고 기록, `DescriptionOf`)·`SpeedPage`(`ClassAt`·`LabelAt`)·`RunnerPage`(타일·프리뷰·드래그·스탯·시작 버튼, `MakePreview`).
+  - `LobbyContext`: 트랙·러너·프리뷰·설정·기록과 고른 트랙/속도/러너. 테스트가 `Awake` 뒤에 `Settings`·`Records` 를 바꾸므로 페이지는 매번 여기서 읽는다.
+  - `LobbyView`: 글꼴·스타일, 공통 틀(배경·브랜드·제목·이전 버튼·안내·도움말), 목록, 설명 패널. 한 스타일(`recordLine`)을 그리는 중에 색·정렬을 바꿔 쓰던 것을 같은 값의 스타일 3개로 나눴다.
+  - `LobbyMenu`: 664 → 304줄. 입력·커서·효과음·`Step` 처리·씬 이동·`Awake` 검사·공개 API.
+  - 바꾸지 않은 것: 클래스 이름·직렬화 필드·중첩 `TrackChoice`·`Page` enum·공개 API, 씬·프리팹·테스트, 보이는 글자(속도 잠금 안내의 "M2-b" 는 그대로 — 아래 남은 것).
+  - 계획 밖 작은 변경 3개 (사용자 "ㅇㅋ"): ① `PreviewBackground` 주석을 값(투명)에 맞춤 ② 트랙 설명이 빠졌을 때의 에러 문구 위치 `TrackDescription` → `TrackPage.DescriptionOf` ③ `Awake` 가 실패해 꺼진 로비에서 `CurrentPage` 등을 부르면 이제 NullReference(전에는 값이 나왔다, 실패 경로만).
+- **검증** (에디터 6000.3.25f1, 2026-10-25):
+  - 화면이 같다는 근거: `Unity_RunCommand` 로 Play 에 들어가 로비 씬을 열고 공개 API 로 6페이지(메인·설정·키·트랙·속도·러너)를 차례로 `ScreenCapture` 했다. 바꾸기 전 두 번(6장 모두 SHA256 같음 → 캡처가 결정적) → 바꾼 뒤 6장 모두 바꾸기 전과 SHA256 같음. 바꾼 뒤 첫 회는 에디터가 뒤에 있던 동안(`isApplicationActive=False`) 찍혀 속도 페이지가 빠지고 러너 페이지가 13086 px 달랐다(프리뷰 빈칸 + 포커스 클릭 때의 타일 호버) — 포커스를 준 뒤 다시 찍어 같음.
+  - 컴파일: Console Error 0 (경고는 바꾸기 전에도 있던 `Deleting invalid font reference.` 만).
+  - EditMode `!Enemy` (커밋 `428f984`): `testcasecount="271" result="Passed" passed="271" failed="0"` (19:47:52Z~19:47:56Z).
+  - `tools/select-tests.ps1 -Range dev...HEAD` (커밋 `428f984`): 바뀐 파일 20개 모두 `Flow/` 줄 → PlayMode `ChainRushFlowTests`·`ChainRushProfileTests` + 지문 1건. 도구가 출력한 필터를 그대로 `Unity_RunCommand` 로 실행했다.
+  - 고른 PlayMode: `testcasecount="32" result="Passed" passed="32" failed="0" skipped="0"` (19:48:16Z~19:50:21Z, 124.5초). XML 의 클래스 3개(`ChainRushFlowTests` 24·`ChainRushProfileTests` 7·`ChainRushReplayTests` 1 = 서킷 지문)가 도구 출력과 같다. 커밋 전 작업 트리로도 같은 범위를 한 번 돌려 32 통과(19:43:56Z~19:46:00Z).
+- **남은 것**: 속도 잠금 안내 "다른 속도 단계는 M2-b 에서 열립니다." (`SpeedPage.LockedNotice`, 속도 단계는 M3 으로 옮겨졌다 — DECISIONS "M2 범위 조정"), 러너 검사에서 `TryValidate` 의 `error` 를 버림(`LobbyMenu.Awake`). 보이는 글자·로그가 바뀌므로 따로 승인.
+
 ## 2026-10-25 · 리팩토링 RF4: `CircuitRace` 의 장면 만들기를 `CircuitScenery` 로 (`feature/refactor-circuit-scenery`)
 
 - **결정 (사용자)**: RF3b 병합 뒤 "다음 작업 ㄱㄱ" → 줄 번호를 다시 확인한 요청서(`docs/NEXT_REQUESTS.md` RF4, 2026-10-22 와 줄 번호 같음)에 "ㄱㄱ 결과 나오면 커밋 병합 푸시까지".
-- **한 것**: 노면(`LayRoad`·`LayRange`·`WidthBetween`), 출발선·체크포인트 띠(`PlaceMarkers`·`AddMarker`), 코너·스윙 봉(`PlacePoles`·`VisualPart`)과 그 리스트 셋을 일반 클래스 `Race/CircuitScenery.cs`(176줄)로 옮겼다. 형식 기준은 `Track/RoadPiece.cs`(생성자에서 부모·머티리얼을 받아 null 이면 예외, `Destroy()`). `CircuitRace` 는 343 → 222줄로 랩 판정(`LapCounter`)·앵커(`PlaceAnchors` — 그래플 시뮬이 쓰는 위치라 레이스 쪽에 둠)·스냅샷·틈 조회만 든다.
+- **한 것**: 노면(`LayRoad`·`LayRange`·`WidthBetween`), 출발선·체크포인트 띠(`PlaceMarkers`·`AddMarker`), 코너·스윙 봉(`PlacePoles`·`VisualPart`)과 그 리스트 셋을 일반 클래스 `Race/CircuitScenery.cs`(172줄)로 옮겼다. 형식 기준은 `Track/RoadPiece.cs`(생성자에서 부모·머티리얼을 받아 null 이면 예외, `Destroy()`). `CircuitRace` 는 343 → 222줄로 랩 판정(`LapCounter`)·앵커(`PlaceAnchors` — 그래플 시뮬이 쓰는 위치라 레이스 쪽에 둠)·스냅샷·틈 조회만 든다.
   - 바꾸지 않은 것: 직렬화 필드(`maxPieceLength`·머티리얼 포함, 씬 참조), 생성 순서(노면 → 앵커 → 표지 → 봉 — `CircuitScenery` 가 세 단계를 따로 내줘 `Initialize` 의 순서를 그대로 둠), 오브젝트 이름과 부모(`CircuitRace` 의 Transform), `PieceCount`·`PoleCount`(새 클래스에 위임, 만들기 전에는 0).
   - 새로 더한 것: 생성자의 인자 검사(`maxPieceLength` 가 양수가 아니면 `ArgumentOutOfRangeException` — 15 m 하한은 그대로 `CircuitRace.OnValidate` 가 알린다).
 - **검증** (에디터 6000.3.25f1, 2026-10-25):

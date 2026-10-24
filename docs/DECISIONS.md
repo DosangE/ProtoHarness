@@ -30,7 +30,7 @@
 ## 2026-10-25 · 리팩토링 RF4: `CircuitRace` 의 장면 만들기를 `CircuitScenery` 로 (`feature/refactor-circuit-scenery`)
 
 - **결정 (사용자)**: RF3b 병합 뒤 "다음 작업 ㄱㄱ" → 줄 번호를 다시 확인한 요청서(`docs/NEXT_REQUESTS.md` RF4, 2026-10-22 와 줄 번호 같음)에 "ㄱㄱ 결과 나오면 커밋 병합 푸시까지".
-- **한 것**: 노면(`LayRoad`·`LayRange`·`WidthBetween`), 출발선·체크포인트 띠(`PlaceMarkers`·`AddMarker`), 코너·스윙 봉(`PlacePoles`·`VisualPart`)과 그 리스트 셋을 일반 클래스 `Race/CircuitScenery.cs`(176줄)로 옮겼다. 형식 기준은 `Track/RoadPiece.cs`(생성자에서 부모·머티리얼을 받아 null 이면 예외, `Destroy()`). `CircuitRace` 는 343 → 222줄로 랩 판정(`LapCounter`)·앵커(`PlaceAnchors` — 그래플 시뮬이 쓰는 위치라 레이스 쪽에 둠)·스냅샷·틈 조회만 든다.
+- **한 것**: 노면(`LayRoad`·`LayRange`·`WidthBetween`), 출발선·체크포인트 띠(`PlaceMarkers`·`AddMarker`), 코너·스윙 봉(`PlacePoles`·`VisualPart`)과 그 리스트 셋을 일반 클래스 `Race/CircuitScenery.cs`(172줄)로 옮겼다. 형식 기준은 `Track/RoadPiece.cs`(생성자에서 부모·머티리얼을 받아 null 이면 예외, `Destroy()`). `CircuitRace` 는 343 → 222줄로 랩 판정(`LapCounter`)·앵커(`PlaceAnchors` — 그래플 시뮬이 쓰는 위치라 레이스 쪽에 둠)·스냅샷·틈 조회만 든다.
   - 바꾸지 않은 것: 직렬화 필드(`maxPieceLength`·머티리얼 포함, 씬 참조), 생성 순서(노면 → 앵커 → 표지 → 봉 — `CircuitScenery` 가 세 단계를 따로 내줘 `Initialize` 의 순서를 그대로 둠), 오브젝트 이름과 부모(`CircuitRace` 의 Transform), `PieceCount`·`PoleCount`(새 클래스에 위임, 만들기 전에는 0).
   - 새로 더한 것: 생성자의 인자 검사(`maxPieceLength` 가 양수가 아니면 `ArgumentOutOfRangeException` — 15 m 하한은 그대로 `CircuitRace.OnValidate` 가 알린다).
 - **검증** (에디터 6000.3.25f1, 2026-10-25):

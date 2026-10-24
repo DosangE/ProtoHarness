@@ -1,6 +1,5 @@
 using UnityEngine;
 using ProtoHarness.ChainRush.Audio;
-using ProtoHarness.ChainRush.Combat;
 
 namespace ProtoHarness.ChainRush.Visuals
 {
@@ -65,12 +64,6 @@ namespace ProtoHarness.ChainRush.Visuals
             float legRight = ground ? -stride : 18f;
             float lean = ground ? 8f : -5f;
             if (grapple.IsAttached) { armRight = -155f; armLeft = -75f; legLeft = -35f; legRight = 28f; lean = -12f; }
-            // A circuit race has no enemy director.
-            var encounter = game.Enemies != null ? game.Enemies.State : EnemyDirector.EncounterState.Idle;
-            if (encounter == EnemyDirector.EncounterState.Firing || encounter == EnemyDirector.EncounterState.Retracting)
-            {
-                armRight = -95f; armLeft = -40f; lean = encounter == EnemyDirector.EncounterState.Firing ? 16f : -12f;
-            }
             float blend = 1f - Mathf.Exp(-dt * 18f);
             Pose(leftArm, armLeft, -7f, blend); Pose(rightArm, armRight, 7f, blend);
             Pose(leftLeg, legLeft + landing * 22f, 0f, blend); Pose(rightLeg, legRight + landing * 22f, 0f, blend);

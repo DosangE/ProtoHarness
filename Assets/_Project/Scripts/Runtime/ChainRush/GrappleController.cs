@@ -21,9 +21,6 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float retractSpeed = 3f;
         // Reel speed once a chain action has empowered the current grapple.
         [SerializeField] private float empoweredRetractSpeed = 12f;
-        [SerializeField] private ChainVisual chainVisual;
-        private float visualExtension;
-        private Vector3 lastAnchor;
         private Transform candidate;
         private bool hasPoleCandidate;
         private Vector3 poleCandidate;
@@ -54,20 +51,11 @@ namespace ProtoHarness.ChainRush
                     enabled = false;
                     return;
                 }
-            if (game.IsEndless && chainVisual == null)
-            {
-                Debug.LogError("GrappleController: endless mode requires a chain visual.", this);
-                enabled = false;
-                return;
-            }
             rope.positionCount = 2;
             rope.enabled = false;
-            if (!game.IsEndless)
-            {
-                steelChain = new MetalChain(rope.transform);
-                // Keep the endpoint line as a presentation probe; the visible connection is the steel mesh.
-                rope.widthMultiplier = 0.001f;
-            }
+            steelChain = new MetalChain(rope.transform);
+            // Keep the endpoint line as a presentation probe; the visible connection is the steel mesh.
+            rope.widthMultiplier = 0.001f;
         }
 
         private void OnValidate()
@@ -78,8 +66,7 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("GrappleController: the lowest hanging height cannot be negative.", this);
         }
 
-        // The chain shows for a grapple and for the motor's slingshot pull: the chain visual in endless
-        // mode, the rope line otherwise.
+        // The chain shows for a grapple, a swing and the motor's slingshot pull.
         private void LateUpdate()
         {
             if (game.IsPaused) return;
@@ -88,32 +75,14 @@ namespace ProtoHarness.ChainRush
             bool swinging = game.IsRunning && !IsAttached && motor.IsSwinging;
             bool slinging = game.IsRunning && !IsAttached && !swinging && motor.IsSlingPulling;
             bool linked = IsAttached || swinging || slinging;
-            // Endless mode has no pole models yet (R6), so a pole is only offered where it is drawn.
-            hasPoleCandidate = game.IsRunning && !game.IsEndless && !IsAttached && !swinging && motor.TryFindPole(out poleCandidate);
-            Vector3 target = IsAttached ? AnchorPosition : swinging ? SwingBite() : motor.SlingTarget;
-            if (game.IsEndless)
-            {
-                if (linked) lastAnchor = target;
-                visualExtension = Mathf.MoveTowards(visualExtension, linked ? 1f : 0f, Time.deltaTime * 8f);
-                if (visualExtension > 0f) chainVisual.Present(lastAnchor, visualExtension);
-                else chainVisual.Hide();
-                return;
-            }
+            hasPoleCandidate = game.IsRunning && !IsAttached && !swinging && motor.TryFindPole(out poleCandidate);
+            // A corner swing's chain bites the band on the pole it circles (R5).
+            Vector3 target = IsAttached ? AnchorPosition : swinging ? SwingLook.PoleBite(game.Racer.SwingCenter) : motor.SlingTarget;
             rope.enabled = linked;
             if (!linked) { steelChain.Hide(); return; }
             rope.SetPosition(0, ropeOrigin.position);
             rope.SetPosition(1, target);
             steelChain.Present(ropeOrigin.position, target);
-        }
-
-        // A corner swing's chain bites the band on the pole it circles (R5). Endless mode shows no poles yet (R6), so there
-        // it still bites the inside rail beside the runner (SwingLook S1), and past the arc's end, where the frame is
-        // straight, the motor's swing anchor.
-        private Vector3 SwingBite()
-        {
-            if (!game.IsEndless) return SwingLook.PoleBite(game.Racer.SwingCenter);
-            TrackFrame frame = game.Track.Frame(transform.position);
-            return frame.Curvature != 0f ? SwingLook.RailPoint(frame, RoadProfile.DeckHalfWidth) : motor.SwingAnchor;
         }
 
         private Transform AnchorAt(int index) => index == RacerState.NoAnchor ? null : anchors[index];
@@ -160,7 +129,7 @@ namespace ProtoHarness.ChainRush
                 return false;
             }
             game.Racer.Attach(index, Mathf.Max(5f, Vector3.Distance(transform.position, anchors[index].position)));
-            rope.enabled = !game.IsEndless;
+            rope.enabled = true;
             game.RegisterGrapple();
             game.PlayCue(1);
             return true;
@@ -182,11 +151,6 @@ namespace ProtoHarness.ChainRush
 
         public void Release(bool boost)
         {
-            if (!boost && game.IsEndless)
-            {
-                visualExtension = 0f;
-                chainVisual.Hide();
-            }
             if (!IsAttached) return;
             // Detach clears the empowered flag, so read it first.
             bool empowered = game.Racer.GrappleEmpowered;
@@ -198,12 +162,6 @@ namespace ProtoHarness.ChainRush
 
         // Ticks restart at zero with each run, so a stale miss deadline must not carry over.
         public void ClearMiss() => game.Racer.ClearMiss();
-
-        public void ShiftOrigin(Vector3 offset)
-        {
-            lastAnchor += offset;
-            if (game.IsEndless) chainVisual.ShiftOrigin(offset);
-        }
 
         private void OnDestroy() => steelChain?.Dispose();
     }

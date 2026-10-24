@@ -2,7 +2,6 @@ using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
-using ProtoHarness.ChainRush.Endless;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -25,7 +24,6 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private const string TestBenchScene = "Assets/_Project/Scenes/ChainRushTestBench.unity";
-        private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
         // Deck half width 6 m (ChainRushSceneBuilder) minus the runner's 0.38 m capsule radius.
         private const float InnerEdge = 6f - 0.38f;
 
@@ -100,37 +98,6 @@ namespace ProtoHarness.Tests.PlayMode
         {
             AssertDecksGuarded();
             yield return null;
-        }
-
-        // The endless mode is on hold while the circuit comes first (2026-10-18).
-        [UnityTest, Category("Endless")]
-        public IEnumerator Guards_ProceduralRoad_AreGuarded()
-        {
-            yield return Load(ProceduralScene);
-            AssertRoadGuarded();
-        }
-
-        // Every road piece laid at the start has its guard wall: the procedural road's version of "a guard on
-        // each side of every deck" (the first 300 m have no open edge).
-        private static void AssertRoadGuarded()
-        {
-            int pieces = 0;
-            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
-            {
-                if (!root.TryGetComponent(out ProceduralCourse _)) continue;
-                foreach (Transform piece in root.transform)
-                {
-                    if (!piece.gameObject.activeSelf || !piece.name.StartsWith("Road piece")) continue;
-                    pieces++;
-                    Transform road = piece.Find("Road collider");
-                    Transform wall = piece.Find("Guard wall");
-                    Assert.That(road, Is.Not.Null, piece.name + " has no road collider.");
-                    Assert.That(wall != null && wall.gameObject.activeSelf, Is.True, piece.name + " has no guard wall.");
-                    Assert.That(wall.GetComponent<MeshCollider>().sharedMesh, Is.Not.Null, piece.name + " guard wall has no mesh.");
-                    Assert.That(road.GetComponent<MeshCollider>().sharedMesh, Is.Not.Null, piece.name + " road has no mesh.");
-                }
-            }
-            Assert.That(pieces, Is.GreaterThanOrEqualTo(6), "The procedural road should be laid at the start.");
         }
 
         private static void AssertDecksGuarded()

@@ -596,7 +596,6 @@ namespace ProtoHarness.ChainRush
             SyncGrounded();
             // A swing's pole is a world position like the track it came from (Centerline.ShiftOrigin moves that).
             if (game.Racer.SwingTicks > 0) game.Racer.SwingCenter += offset;
-            grapple.ShiftOrigin(offset);
         }
 
         // Puts the runner at a position without moving it through the world (a rollback, a test). The grounded

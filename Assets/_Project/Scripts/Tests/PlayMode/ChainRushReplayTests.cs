@@ -1,11 +1,8 @@
-using System;
 using System.Collections;
 using System.Text;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
-using ProtoHarness.ChainRush.Combat;
 using ProtoHarness.ChainRush.Control;
-using ProtoHarness.ChainRush.Endless;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
@@ -24,17 +21,12 @@ namespace ProtoHarness.Tests.PlayMode
     public sealed class ChainRushReplayTests
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
-        private const string ProceduralScene = "Assets/_Project/Scenes/ChainRushProcedural.unity";
         private const int CircuitTicks = 1700;
-        private const int ProceduralTicks = 2500;
-        private const ulong ProceduralSeed = 7UL;
 
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
         private CircuitRace circuit;
-        private ProceduralCourse course;
-        private EnemyDirector enemies;
         private float timeScale;
 
         [UnitySetUp]
@@ -60,48 +52,22 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(CircuitScene);
             var log = new InputLog();
             StateTrace recorded = CircuitTrace(new InputRecorder(new CircuitBot(game, player, grapple, circuit), log));
-            yield return Run(recorded, CircuitTicks, 3f, null);
+            yield return Run(recorded, CircuitTicks, 3f);
             Assert.That(log.Count, Is.GreaterThanOrEqualTo(CircuitTicks));
             Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "At 20 m/s (M1-T, 2026-10-18) 1700 ticks are one whole lap, with its checkpoints and grapple gap, and the start of the next.");
 
             // The same session, six times as fast: ticks per frame differ, ticks do not.
             StateTrace sameSession = CircuitTrace(new InputReplay(log));
-            yield return Run(sameSession, CircuitTicks, 6f, null);
+            yield return Run(sameSession, CircuitTicks, 6f);
             AssertSame("circuit, same session at 6x", recorded, sameSession, CircuitTicks);
 
             // A freshly loaded scene, slower: nothing the first run left behind may matter.
             yield return Load(CircuitScene);
             StateTrace reloaded = CircuitTrace(new InputReplay(log));
-            yield return Run(reloaded, CircuitTicks, 2f, null);
+            yield return Run(reloaded, CircuitTicks, 2f);
             AssertSame("circuit, reloaded scene at 2x", recorded, reloaded, CircuitTicks);
             Debug.Log($"ChainRush replay circuit: {CircuitTicks} ticks identical, hash 0x{recorded.Hash(CircuitTicks):X16}, " +
                       $"{log.Count} recorded ticks, grapples {game.Grapples}.");
-        }
-
-        // ---- procedural course ---------------------------------------------------------------------
-
-        // Long (CLAUDE.md §9-2): out of the merge gate unless the branch changes core code.
-        [UnityTest, Category("Long"), Category("Endless"), Timeout(300000)]
-        public IEnumerator Replay_ProceduralCourseRun_RepeatsCourseAndEncountersBitForBit()
-        {
-            yield return Load(ProceduralScene);
-            var log = new InputLog();
-            StateTrace recorded = ProceduralTrace(new InputRecorder(new CourseBot(game, player, grapple, enemies, course), log));
-            yield return Run(recorded, ProceduralTicks, 3f, () => course.SetSeed(ProceduralSeed));
-            Assert.That(log.Count, Is.GreaterThanOrEqualTo(ProceduralTicks));
-            Assert.That(course.Seed, Is.EqualTo(ProceduralSeed));
-            Assert.That(game.Hits, Is.GreaterThan(3), "Encounters must really happen in the recorded run.");
-
-            StateTrace sameSession = ProceduralTrace(new InputReplay(log));
-            yield return Run(sameSession, ProceduralTicks, 6f, () => course.SetSeed(ProceduralSeed));
-            AssertSame("procedural seed 7, same session at 6x", recorded, sameSession, ProceduralTicks);
-
-            yield return Load(ProceduralScene);
-            StateTrace reloaded = ProceduralTrace(new InputReplay(log));
-            yield return Run(reloaded, ProceduralTicks, 2f, () => course.SetSeed(ProceduralSeed));
-            AssertSame("procedural seed 7, reloaded scene at 2x", recorded, reloaded, ProceduralTicks);
-            Debug.Log($"ChainRush replay procedural: {ProceduralTicks} ticks identical, hash 0x{recorded.Hash(ProceduralTicks):X16}, " +
-                      $"hits {game.Hits}, rebases {course.RebaseCount}, modules {course.Modules.Count}.");
         }
 
         // ---- the comparison can tell ----------------------------------------------------------------
@@ -114,14 +80,14 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(CircuitScene);
             var log = new InputLog();
             StateTrace recorded = CircuitTrace(new InputRecorder(new CircuitBot(game, player, grapple, circuit), log));
-            yield return Run(recorded, ticks, 3f, null);
+            yield return Run(recorded, ticks, 3f);
 
             // Same log with the steering of one tick forced to full right.
             TickInput original = log[changed];
             InputLog tampered = log.CopyWith(changed, new TickInput(1f, original.PrimaryPressed, original.ReleasePressed, original.AttackPressed, original.SwingHeld, original.ChainActionPressed, original.SwingPressed));
             Assert.That(original.Steer, Is.LessThan(1f), "The bot must not already steer full right on that tick.");
             StateTrace diverged = CircuitTrace(new InputReplay(tampered));
-            yield return Run(diverged, ticks, 6f, null);
+            yield return Run(diverged, ticks, 6f);
 
             // Input index 300 is consumed as tick 301; its effect shows in the sample after that tick, sample 301.
             int first = StateTrace.FirstDifferentSample(recorded, diverged, ticks);
@@ -129,7 +95,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             // And the untouched log still replays identically (the control for the control).
             StateTrace untouched = CircuitTrace(new InputReplay(log));
-            yield return Run(untouched, ticks, 6f, null);
+            yield return Run(untouched, ticks, 6f);
             AssertSame("circuit, untouched log", recorded, untouched, ticks);
         }
 
@@ -146,16 +112,13 @@ namespace ProtoHarness.Tests.PlayMode
             game = null;
             player = null;
             circuit = null;
-            course = null;
             foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
             {
                 if (root.TryGetComponent(out ChainRushGame g)) game = g;
                 if (root.TryGetComponent(out RunnerMotor p)) { player = p; grapple = p.GetComponent<GrappleController>(); }
                 if (root.TryGetComponent(out CircuitRace c)) circuit = c;
-                if (root.TryGetComponent(out ProceduralCourse pc)) course = pc;
             }
             Assert.That(game, Is.Not.Null);
-            enemies = game.Enemies;
             yield return null;
         }
 
@@ -164,18 +127,10 @@ namespace ProtoHarness.Tests.PlayMode
             ("checkpoints", () => circuit.Laps.CheckpointsPassed),
             ("laps", () => circuit.Laps.CompletedLaps));
 
-        private StateTrace ProceduralTrace(IInputSource inner) => new StateTrace(game, player, inner,
-            ("modules", () => course.Modules.Count),
-            ("rebases", () => course.RebaseCount),
-            ("builtPieces", () => course.BuiltPieces),
-            ("activeAnchors", () => course.ActiveAnchors),
-            ("encounter", () => (double)enemies.State));
-
         // Starts a run on `source` and lets it go on until the game has taken at least `ticks` ticks.
-        private IEnumerator Run(IInputSource source, int ticks, float scale, Action beforeStart)
+        private IEnumerator Run(IInputSource source, int ticks, float scale)
         {
             game.SetInputSource(source);
-            beforeStart?.Invoke();
             Time.timeScale = scale;
             game.StartRun();
             float deadline = Time.realtimeSinceStartup + 200f;

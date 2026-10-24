@@ -218,7 +218,7 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 
 **2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:317` `game.StepTick` → `ChainRushGame.cs:215` `player.Step` → `RunnerMotor.cs:230` `game.PlayCue(0)`. 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
 
-### RF4. `CircuitRace` 깔기 코드 분리
+### RF4. `CircuitRace` 깔기 코드 분리 — 끝남 (2026-10-25, `feature/refactor-circuit-scenery`, DECISIONS "리팩토링 RF4")
 
 ```
 목표:      랩 판정과 서킷 장면 만들기(노면·표지·봉)를 떼어 M3 트랙 장식(T3e)이 붙을 자리를 만든다

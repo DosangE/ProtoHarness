@@ -7,6 +7,27 @@
 
 ---
 
+## 2026-10-25 · 리팩토링 RF3b: `RunnerMotor` 의 이동 규칙을 `Motion/` 의 상태 없는 클래스로 (`feature/refactor-motor-rules`)
+
+- **결정 (사용자)**: RF3 뒤 "다음 작업 ㄱㄱ" → 요청서의 두 안 중 "A안으로 ㄱㄱ". A = 규칙을 static 클래스로 떼고 `RunnerMotor` 가 직렬화 값으로 `Settings` 를 틱마다 채워 넘긴다. B = 튜닝 필드를 `[Serializable]` 묶음으로 옮긴다(두 씬 `ChainRushCircuit`·`ChainRushTestBench` 에 직렬화된 값 약 45개씩을 옮겨야 해 버림 — SO 이전과 함께 따로 본다).
+- **왜 상태 없는 클래스인가**: 시뮬 상태는 롤백 스냅샷(`RacerState.Snapshot`)에 있어야 하므로 규칙 쪽에 상태를 두면 스냅샷에서 빠진다. 튜닝 값을 `Awake` 에서 복사해 두면 `ChainRushCurveTests.cs:182-186`(실행 중 `sideGrip` 변경)과 인스펙터 실시간 조정이 깨지므로, `Settings` 는 매번 직렬화 필드에서 새로 채운다. 규칙이 `RacerState` 를 인자로 받으니 `game.Racer` 에 묶이지 않는다(RF6 여러 레이서의 준비).
+- **나눈 것** (`Runtime/ChainRush/Motion/`, 네임스페이스 `ProtoHarness.ChainRush.Motion`, 형식 기준 `Track/LapCounter.cs` 의 머리 주석·중첩 public struct):
+  - `RunDrive` (147줄): `FacingOf`/`RightOf`, `TurnLimit`, `Turn`, `Drive`(옆 그립·목표 속력·가속·속도 합성·중력), 중첩 `Settings`(20개)·`Conditions`(그 틱의 플래그 7개). 상수 `GrappleAirAcceleration`·`GrappleReelSpeed`·`MaxFallSpeed` 가 `RunnerMotor` 에서 옮겨 왔다.
+  - `Slingshot` (70줄): `IsPulling`, `TryFire`, `Cut`, `SteerToward`(당김점을 돌려줌), `BoostAcceleration`, `RaiseTarget`(옛 `RunTarget` 끝의 carrying → pulling 두 줄, 같은 순서), 중첩 `Settings`.
+  - `PoleSwing` (101줄): `Hook`, `SpeedUp`, `Step`(줄 끝 `anchor` 를 out 으로), `End`, 중첩 `Settings`.
+  - `GuardContact` (37줄): `Glance`, `Scrape`.
+  - `RunnerMotor` 697 → 537줄: 직렬화 필드·`OnValidate`, HUD·봇이 읽는 프로퍼티(시그니처 그대로), `Step` 의 순서, `CharacterController` 처리(`MoveAndCollide`·`SnapToGround`·리스폰·위치 지정·`OnControllerColliderHit`), 효과음, `Settings` 를 채우는 `DriveSettings`·`SlingSettings`·`SwingSettings`.
+  - `tools/select-tests.ps1` 표에 `Motion/` 을 "코어 시뮬"(전체)로 넣었다.
+  - 새 파일과 폴더의 `.meta` 는 Unity 가 만들었다.
+- **동작 불변을 지킨 방법**: 식과 연산 순서를 그대로 옮겼다. `Settings` 에 담긴 값은 옛 코드가 읽던 프로퍼티(`RunSpeed` = `runSpeed * topSpeedScale` 등)의 같은 값이다. 틱 안에서 튜닝이 바뀌는 일은 없으므로 `Step` 머리에서 한 번 채워도 같다. `Conditions.GrappleAttached` 는 옛 코드가 `grapple.IsAttached` 를 읽던 바로 그 자리(`Drive` 직전)에서 채운다.
+- **검증** (에디터 6000.3.25f1, 2026-10-25):
+  - 컴파일: `isCompiling=False scriptCompilationFailed=False`, Console Error 0.
+  - EditMode `!Enemy`: `testcasecount="271" result="Passed" passed="271" failed="0"` (19:06:12Z~19:06:16Z).
+  - `tools/select-tests.ps1 -Range dev...HEAD` (커밋 `686269b`): 바뀐 파일 11개 — `Motion/` 8개(코어 시뮬)·`Motion.meta`(표에 없는 경로)·`RunnerMotor.cs`(코어 시뮬) 는 "전체", `tools/select-tests.ps1` 은 "없음" → 게이트 전체.
+  - PlayMode 게이트 (`Run PlayMode Tests`): `testcasecount="181" result="Passed" passed="174" failed="0" skipped="7"` (19:06:48Z~19:14:21Z, 453.1초, skipped 7 은 `ChainRushProbeTests` 4·`NetworkRaceTests` 3 의 `[Explicit]`).
+  - 동작 불변의 증거: 서킷 지문 `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3` 그대로, `ChainRushRollbackTests` 9건 모두 통과.
+- **남은 것**: 규칙 단위 EditMode 테스트(씬 없이 `RunDrive`·`PoleSwing` 을 시험할 수 있게 됐다)는 요청서에서 뺐다 — 원하면 다음 작업. `Motion.meta` 가 선택 도구에서 "표에 없는 경로"로 잡히는 것은 결과가 같아(전체) 두었다.
+
 ## 2026-10-25 · 리팩토링 RF3: `RunnerMotor.Step` 을 단계 메서드로 · 이름 없는 숫자를 상수로 (`feature/refactor-motor-step`)
 
 - **결정 (사용자)**: 무한 모드 삭제 뒤 "다음 ㄱㄱ" — `docs/NEXT_REQUESTS.md` RF3 요청서(단계 11개·상수 8종, 줄 최소 길이 5 추가) 승인. 같은 날 사용자 "확장만 하다보니 꽤 지저분하다" 에서 정한 순서 RF3 → RF3b(객체 분리) → RF4 → `LobbyMenu` 조사의 첫 단계다.

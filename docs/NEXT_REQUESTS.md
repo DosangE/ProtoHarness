@@ -199,7 +199,9 @@
 | `GrappleController.cs:128` `0.75f` | `MissSeconds` |
 | `GrappleController.cs:131`·`:142` `5f` | `MinRopeLength` |
 
-### RF3b. 객체 분리 (2026-10-25 추가, 요청서는 RF3 뒤에)
+### RF3b. 객체 분리 — 끝남 (2026-10-25, `feature/refactor-motor-rules`, DECISIONS "리팩토링 RF3b")
+
+A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 상태 없는 static 클래스 4개(`RunDrive`·`Slingshot`·`PoleSwing`·`GuardContact`)로 떼고, `RunnerMotor` 가 직렬화 값으로 각 `Settings` 를 틱마다 채워 넘긴다. 버린 B 안(튜닝 필드를 `[Serializable]` 묶음으로 옮기기)은 두 씬의 값 이전이 필요해 SO 이전과 함께 따로 본다. 아래는 착수 전 메모다.
 
 사용자 "확장만 하다보니 꽤 지저분하다" (2026-10-25). RF3 에서 드러난 경계(같은 상태를 함께 쓰는 단계 묶음)대로 `RunnerMotor` 의 책임을 MonoBehaviour 가 아닌 C# 클래스로 뗀다. 후보: 봉 스윙(`TryHookPole`·`SwingStep`·`EndSwing`), 새총·부스터, 목표 속력·가속도 계산. `RunnerMotor` 는 직렬화 필드를 든 껍데기로 남겨 씬 참조가 끊기지 않게 한다. 새 파일이 생기므로 RF3 을 병합한 뒤 줄 번호를 붙여 §3-2 요청서로 올린다.
 

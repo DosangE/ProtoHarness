@@ -7,6 +7,10 @@ namespace ProtoHarness.ChainRush
     [DefaultExecutionOrder(150)]
     public sealed class GrappleController : MonoBehaviour
     {
+        // How long the HUD shows a press that found no anchor.
+        private const float MissSeconds = 0.75f;
+        // The shortest a grapple rope gets, when hooked and while reeling in.
+        private const float MinRopeLength = 5f;
         [SerializeField] private ChainRushGame game;
         [SerializeField] private RunnerMotor motor;
         [SerializeField] private LineRenderer rope;
@@ -125,10 +129,10 @@ namespace ProtoHarness.ChainRush
             candidate = AnchorAt(index);
             if (index == RacerState.NoAnchor)
             {
-                game.Racer.MarkMiss(game.Tick + Ticks.FromSeconds(0.75f));
+                game.Racer.MarkMiss(game.Tick + Ticks.FromSeconds(MissSeconds));
                 return false;
             }
-            game.Racer.Attach(index, Mathf.Max(5f, Vector3.Distance(transform.position, anchors[index].position)));
+            game.Racer.Attach(index, Mathf.Max(MinRopeLength, Vector3.Distance(transform.position, anchors[index].position)));
             rope.enabled = true;
             game.RegisterGrapple();
             game.PlayCue(1);
@@ -139,7 +143,7 @@ namespace ProtoHarness.ChainRush
         {
             if (!IsAttached) return;
             ref float ropeLength = ref game.Racer.RopeLength;
-            ropeLength = Mathf.Max(5f, ropeLength - (game.Racer.GrappleEmpowered ? empoweredRetractSpeed : retractSpeed) * dt);
+            ropeLength = Mathf.Max(MinRopeLength, ropeLength - (game.Racer.GrappleEmpowered ? empoweredRetractSpeed : retractSpeed) * dt);
             Vector3 anchor = AnchorPosition;
             Vector3 radial = position + displacement - anchor;
             if (radial.sqrMagnitude <= ropeLength * ropeLength) return;

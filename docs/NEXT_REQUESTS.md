@@ -153,7 +153,9 @@
 
 **공통 제약**: 동작 변경 없음. MonoBehaviour 클래스 이름·직렬화 필드를 바꾸지 않는다(씬·프리팹 참조, §0). 새 타입은 MonoBehaviour 가 아닌 것만. 시뮬을 건드리는 RF2·RF3 은 서킷 지문(`ChainRushReplayTests.Replay_CircuitBotRun_RepeatsEveryTickBitForBit`)과 롤백 테스트가 그대로 통과하는 것을 "동작 불변" 의 증거로 삼는다.
 
-### RF3. `RunnerMotor.Step` 분해 (권장 다음, 2026-10-25 무한 모드 삭제 뒤 줄 번호 다시 확인)
+### RF3. `RunnerMotor.Step` 분해 — 끝남 (2026-10-25, `feature/refactor-motor-step`, DECISIONS "리팩토링 RF3")
+
+> 아래 줄 번호는 착수 때(`dev` `acd5681`) 값이다. 나눈 뒤 이름은 표와 같고, `Drive` 가 `RunTarget`·`ForwardAcceleration` 을 부른다(목표 속력·가속·속도 합성·중력을 한 단계로 묶었다).
 
 ```
 목표:      160줄 Step 을 연산 순서 그대로 private 메서드 단계로 나누고, 이름 없는 숫자를 private const 로 바꾼다

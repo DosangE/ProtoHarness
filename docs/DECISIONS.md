@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-25 · 리팩토링 RF3: `RunnerMotor.Step` 을 단계 메서드로 · 이름 없는 숫자를 상수로 (`feature/refactor-motor-step`)
+
+- **결정 (사용자)**: 무한 모드 삭제 뒤 "다음 ㄱㄱ" — `docs/NEXT_REQUESTS.md` RF3 요청서(단계 11개·상수 8종, 줄 최소 길이 5 추가) 승인. 같은 날 사용자 "확장만 하다보니 꽤 지저분하다" 에서 정한 순서 RF3 → RF3b(객체 분리) → RF4 → `LobbyMenu` 조사의 첫 단계다.
+- **한 것**: 160줄 `Step` 을 연산 순서 그대로 `ApplyJump`(코요테·점프) → `CutBoost`(스로틀을 놓으면 부스터 끊기) → `Turn`(조향, 회전 한계를 돌려줌) → `SpeedUpSwing` → `SteerTowardSling` → `Drive`(옆 그립·`RunTarget`·`ForwardAcceleration`·속도 합성·중력) → `MoveAndCollide`(이동·천장·가드·착지·그래플 놓기) → `CountDownAndCheckFall` 로 나눴다. `Step` 에는 리스폰 대기, 입력(조향·주 동작·놓기·체인 액션·봉 걸기·스윙 끝내기), 그 틱의 플래그(`swinging`·`pulling`·`carrying`)만 남았다. 요청서의 11단계 중 "체인 액션·봉 걸기·스윙 끝내기" 는 세 줄이라 `Step` 에 두었고, 목표 속력·가속도·속도 합성은 `Drive` 하나가 부른다.
+  - 상수: `RunnerMotor` 의 `CoyoteSeconds` 0.1·`GrappleAirAcceleration` 5·`GrappleReelSpeed` 16·`MaxFallSpeed` 28·`FallDepth` 12·`ReleaseSpeed` 13(놓기와 `OnValidate` 의 `empoweredReleaseSpeed` 하한·로그 문구가 함께 쓴다), `GrappleController` 의 `MissSeconds` 0.75·`MinRopeLength` 5(걸 때와 감을 때 두 곳). 직렬화하지 않으므로 씬 영향이 없다. `RunnerMotor` 에는 이미 직렬화 필드 `minRopeLength`(봉 스윙 줄, 2 m)가 있어 이름이 비슷하지만 클래스가 다르다.
+  - 바꾸지 않은 것: 직렬화 필드, public 시그니처, 연산 순서, 단계 사이에 넘기는 값은 매개변수로(새 타입 없음 — 매개변수가 10개인 `Drive`·`RunTarget` 은 RF3b 에서 객체로 묶는다).
+- **검증** (에디터 6000.3.25f1, 2026-10-25):
+  - 컴파일: `isCompiling=False scriptCompilationFailed=False`, Console Error 0.
+  - EditMode `!Enemy`: `testcasecount="271" result="Passed" passed="271" failed="0"` (18:51:14Z~18:51:18Z).
+  - `tools/select-tests.ps1 -Range dev...HEAD` (커밋 `e33bca5`): 바뀐 파일 2개(`GrappleController.cs`·`RunnerMotor.cs`) 모두 "전체 (코어 시뮬)" → 게이트 전체.
+  - PlayMode 게이트 (`Run PlayMode Tests`): `testcasecount="181" result="Passed" passed="174" failed="0" skipped="7"` (18:51:47Z~18:59:20Z, 453.0초, skipped 7 은 `ChainRushProbeTests` 4·`NetworkRaceTests` 3 의 `[Explicit]`).
+  - 동작 불변의 증거: 서킷 지문 `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3` — 기준 그대로. 롤백 테스트 10건(`Rollback_*`·`StepTick_ByHand_IsTheSameRunAsFixedUpdate`·`Snapshot_OutsideACircuitRaceOrRun_ThrowsLoudly`) 모두 통과.
+  - 사용자 플레이 확인: 없다(동작 불변이라 지문으로 갈음).
+- **검토했으나 버린 대안**: 단계 사이 값을 묶는 private struct(요청서의 "새 타입 없음" 밖 — RF3b 에서), 틱 플래그를 인스턴스 필드에 두기(롤백 스냅샷에 없는 상태가 늘어난다).
+
 ## 2026-10-25 · 무한 모드 삭제: 절차 코스·적 조우를 지우고 아이디어로만 남긴다 (`feature/remove-endless`)
 
 - **결정 (사용자)**: 리팩토링 이야기 중 사용자 "현재 코드도 확장만 하다보니 꽤 지저분하다" → 추천(동결된 무한 모드의 존속 결정을 앞당기면 `ChainRushGame` 분기가 가장 많이 줄어든다)에 "무한모드 삭제하자 추후에 추가해볼 컨텐츠 아이디어로만 남기자". 적도 같이 지울지는 합의 요청서의 추천(같이 지운다)에 "네 추천대로 진행". 2026-10-15 "서킷 집중" 의 동결, RF5 보류("존속이 정해지면 분리와 삭제 중 고른다")가 여기서 "삭제" 로 정해졌다. 처음 목표(2026-10-01)의 ① 무한(쿠키런식) 모드도 지웠다 — `DESIGN.md` §1·§6 에 취소선, 아이디어는 §10.

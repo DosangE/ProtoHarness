@@ -8,6 +8,18 @@ namespace ProtoHarness.ChainRush
     [RequireComponent(typeof(CharacterController))]
     public sealed class RunnerMotor : MonoBehaviour
     {
+        // Fixed rules of the motion, the same for every runner and scene (not serialized).
+        // How long after leaving the ground a jump still counts.
+        private const float CoyoteSeconds = 0.1f;
+        // Forward acceleration while hanging from a grapple in the air.
+        private const float GrappleAirAcceleration = 5f;
+        // How fast a grapple reels the runner in, unless running is faster.
+        private const float GrappleReelSpeed = 16f;
+        private const float MaxFallSpeed = 28f;
+        // How far below the track surface a runner has fallen.
+        private const float FallDepth = 12f;
+        // The least forward speed a grapple release throws the runner with; an empowered one uses EmpoweredReleaseSpeed.
+        private const float ReleaseSpeed = 13f;
         [SerializeField] private CharacterController controller;
         [SerializeField] private ChainRushGame game;
         [SerializeField] private GrappleController grapple;
@@ -177,8 +189,8 @@ namespace ProtoHarness.ChainRush
             if (brakeDeceleration <= 0f || reverseSpeed <= 0f || reverseAcceleration <= 0f)
                 Debug.LogError("RunnerMotor: the brake deceleration, reverse speed and reverse acceleration must be positive.", this);
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
-                || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < 13f)
-                Debug.LogError("RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal 13.", this);
+                || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < ReleaseSpeed)
+                Debug.LogError($"RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal {ReleaseSpeed}.", this);
             if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || ropeRate < 0f || minRopeLength <= 0f)
                 Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the shortest rope positive.", this);
             if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
@@ -197,7 +209,8 @@ namespace ProtoHarness.ChainRush
             else grapple.TryAttach();
         }
 
-        // One simulation tick, called only by ChainRushGame.FixedUpdate.
+        // One simulation tick, called only by ChainRushGame.FixedUpdate. The stages run in the order below, each on what
+        // the ones before it left in the racer's state; the order is part of the replay fingerprint.
         public void Step(in TickInput input)
         {
             if (!game.IsRunning) return;
@@ -210,98 +223,140 @@ namespace ProtoHarness.ChainRush
                 racer.Steer = 0f;
                 return;
             }
-            ref Vector3 velocity = ref racer.Velocity;
-            ref float steer = ref racer.Steer;
-            ref bool jumpQueued = ref racer.JumpQueued;
-            ref float coyoteTime = ref racer.CoyoteTime;
-            steer = input.Steer;
+            racer.Steer = input.Steer;
             if (input.PrimaryPressed) PrimaryAction();
             if (input.ReleasePressed) grapple.Release(true);
             float dt = Ticks.Seconds;
             bool grounded = racer.Grounded;
-            coyoteTime = grounded ? 0.1f : Mathf.Max(0f, coyoteTime - dt);
-            if (grounded && velocity.y < 0f) velocity.y = -2f;
-            if (jumpQueued)
-            {
-                if (coyoteTime > 0f)
-                {
-                    velocity.y = jumpSpeed;
-                    coyoteTime = 0f;
-                    game.PlayCue(0);
-                }
-                jumpQueued = false;
-            }
-            ref float heading = ref racer.Heading;
+            ApplyJump(racer, grounded, dt);
             TrackFrame frame = game.Track.Frame(transform.position);
-            ref int slingTicks = ref racer.SlingTicks;
-            ref int swingTicks = ref racer.SwingTicks;
             if (input.ChainActionPressed) ChainAction(input.Coasting);
             if (input.SwingPressed) TryHookPole();
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
-            if (swingTicks > 0 && (!swingHeld || grapple.IsAttached)) EndSwing(velocity, heading);
-            // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
-            // speed a swing let go with. The speed already gained then falls off like any coasting.
+            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) EndSwing(racer.Velocity, racer.Heading);
             bool coasting = input.Coasting;
             // Backing up is coasting with the down arrow, so it cuts a booster too.
             bool reversing = coasting && input.Reversing;
-            if (coasting)
-            {
-                slingTicks = 0;
-                racer.SwingCarrySpeed = 0f;
-            }
-            bool swinging = swingTicks > 0;
+            if (coasting) CutBoost(racer);
+            bool swinging = racer.SwingTicks > 0;
             int carryTicks = Ticks.FromSeconds(slingCarryTime);
-            bool pulling = slingTicks > carryTicks;
-            bool carrying = slingTicks > 0 && !pulling;
-            // Free steering: input turns the facing, and running and grip act along the facing. The track
-            // only supplies the grade here; it no longer decides which way is ahead.
+            bool pulling = racer.SlingTicks > carryTicks;
+            bool carrying = racer.SlingTicks > 0 && !pulling;
+            float turnLimit = Turn(racer, grounded, swinging, reversing, dt);
+            SpeedUpSwing(racer, swinging, coasting, pulling, carrying, dt);
+            if (pulling && !swinging) SteerTowardSling(racer, frame, dt);
+            Drive(racer, frame, grounded, swinging, coasting, reversing, pulling, carrying, turnLimit, dt);
+            MoveAndCollide(racer, frame, grounded, swinging, dt);
+            CountDownAndCheckFall(racer);
+        }
+
+        // Coyote time, then a queued jump if it still counts.
+        private void ApplyJump(RacerState racer, bool grounded, float dt)
+        {
+            ref Vector3 velocity = ref racer.Velocity;
+            ref float coyoteTime = ref racer.CoyoteTime;
+            coyoteTime = grounded ? CoyoteSeconds : Mathf.Max(0f, coyoteTime - dt);
+            if (grounded && velocity.y < 0f) velocity.y = -2f;
+            if (!racer.JumpQueued) return;
+            if (coyoteTime > 0f)
+            {
+                velocity.y = jumpSpeed;
+                coyoteTime = 0f;
+                game.PlayCue(0);
+            }
+            racer.JumpQueued = false;
+        }
+
+        // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
+        // speed a swing let go with. The speed already gained then falls off like any coasting.
+        private static void CutBoost(RacerState racer)
+        {
+            racer.SlingTicks = 0;
+            racer.SwingCarrySpeed = 0f;
+        }
+
+        // Free steering: input turns the facing, and running and grip act along the facing. The track only supplies the
+        // grade; it no longer decides which way is ahead. Returns the turn rate limit at the current speed.
+        private float Turn(RacerState racer, bool grounded, bool swinging, bool reversing, float dt)
+        {
             ref float turnRate = ref racer.TurnRate;
+            ref float heading = ref racer.Heading;
             float turnScale = grounded ? 1f : airTurnScale;
             // A swing ignores steering for the facing (steering works the rope there): the rope sets the facing
             // (SwingStep), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
-            float turnLimit = TurnLimitAt(velocity);
+            float turnLimit = TurnLimitAt(racer.Velocity);
             // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the
             // down arrow is held: a runner turned round against its velocity some other way steers as it always did.
-            float steerSign = reversing && Vector3.Dot(velocity, FacingOf(heading)) < 0f ? -1f : 1f;
-            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * steer * turnLimit * turnScale, turnAcceleration * dt);
+            float steerSign = reversing && Vector3.Dot(racer.Velocity, FacingOf(heading)) < 0f ? -1f : 1f;
+            turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * racer.Steer * turnLimit * turnScale, turnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
+            return turnLimit;
+        }
+
+        private void SpeedUpSwing(RacerState racer, bool swinging, bool coasting, bool pulling, bool carrying, float dt)
+        {
+            if (!swinging) return;
+            ref float hookSpeed = ref racer.SwingHookSpeed;
             // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, which the rope's ratio
             // multiplies (SwingStep), rises toward the booster's speed by the same push a booster gives on the ground.
             // The rope keeps the facing, so the pull below does not turn it.
-            if (swinging && (pulling || carrying))
+            if (pulling || carrying)
             {
                 float boostSpeed = pulling ? SlingTopSpeed : SlingCarrySpeed;
-                ref float hookSpeed = ref racer.SwingHookSpeed;
                 if (hookSpeed < boostSpeed) hookSpeed = Mathf.Min(boostSpeed, hookSpeed + BoostAcceleration(hookSpeed, boostSpeed) * dt);
             }
             // Without a booster the throttle speeds the swing up too (user 2026-10-22), by the run acceleration and up to
             // swingThrottleSpeedScale times the run speed. A faster hook (a booster's) is kept; let go, the speed stays.
-            else if (swinging && !coasting)
+            else if (!coasting)
             {
                 float throttleSpeed = RunSpeed * swingThrottleSpeedScale;
-                ref float hookSpeed = ref racer.SwingHookSpeed;
                 if (hookSpeed < throttleSpeed) hookSpeed = Mathf.Min(throttleSpeed, hookSpeed + RunAcceleration * dt);
             }
-            if (pulling && !swinging)
-            {
-                // The hook point rides the centerline ahead, so the pull follows curves.
-                slingTarget = game.Track.FrameAt(frame.S + slingLead).Position + Vector3.up * (transform.position.y - frame.Position.y);
-                Vector3 toward = slingTarget - transform.position;
-                toward.y = 0f;
-                if (toward.sqrMagnitude > 0.01f)
-                    heading = Mathf.Repeat(Mathf.MoveTowardsAngle(heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, slingTurnRate * dt) + 180f, 360f) - 180f;
-            }
-            Vector3 facing = FacingOf(heading);
-            Vector3 right = RightOf(heading);
+        }
+
+        // While the slingshot pulls, the facing turns toward the hook point, which rides the centerline ahead so the pull
+        // follows curves.
+        private void SteerTowardSling(RacerState racer, TrackFrame frame, float dt)
+        {
+            ref float heading = ref racer.Heading;
+            slingTarget = game.Track.FrameAt(frame.S + slingLead).Position + Vector3.up * (transform.position.y - frame.Position.y);
+            Vector3 toward = slingTarget - transform.position;
+            toward.y = 0f;
+            if (toward.sqrMagnitude > 0.01f)
+                heading = Mathf.Repeat(Mathf.MoveTowardsAngle(heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, slingTurnRate * dt) + 180f, 360f) - 180f;
+        }
+
+        // The running force: grip takes out the side speed, the forward speed moves toward the target at the chosen
+        // acceleration, and gravity pulls the vertical speed down.
+        private void Drive(RacerState racer, TrackFrame frame, bool grounded, bool swinging, bool coasting, bool reversing,
+            bool pulling, bool carrying, float turnLimit, float dt)
+        {
+            ref Vector3 velocity = ref racer.Velocity;
+            Vector3 facing = FacingOf(racer.Heading);
+            Vector3 right = RightOf(racer.Heading);
             float grip = grounded ? sideGrip : airSideGrip;
             float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
+            float runTarget = RunTarget(racer, frame, grounded, swinging, coasting, reversing, pulling, carrying, turnLimit, dt);
+            float currentForward = Vector3.Dot(velocity, facing);
+            float acceleration = ForwardAcceleration(currentForward, runTarget, grounded, swinging, coasting, reversing, pulling, carrying);
+            // A grapple reels at GrappleReelSpeed, or at running speed when that is faster.
+            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(GrappleReelSpeed, RunSpeed) : runTarget,
+                acceleration * dt);
+            velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
+            velocity.y = Mathf.Max(velocity.y - gravity * dt, -MaxFallSpeed);
+        }
+
+        // The forward speed the runner heads for this tick.
+        private float RunTarget(RacerState racer, TrackFrame frame, bool grounded, bool swinging, bool coasting, bool reversing,
+            bool pulling, bool carrying, float turnLimit, float dt)
+        {
             // In the air too the road below sets the target, so jumping off an uphill does not reach for the flat speed.
             float runTarget = RunSpeed * Mathf.Clamp(1f - slopeSpeedFactor * frame.Grade, minSlopeSpeedScale, maxSlopeSpeedScale);
             if (turnSpeedLoss > 0f && grounded && !swinging && turnLimit > 0f)
-                runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(turnRate) / turnLimit);
+                runTarget *= 1f - turnSpeedLoss * Mathf.Min(1f, Mathf.Abs(racer.TurnRate) / turnLimit);
             // Without the throttle a grounded runner rolls to a stop; in the air the jump keeps what it took off with.
             if (coasting && grounded) runTarget = reversing ? -reverseSpeed : 0f;
             // The speed a swing let go with falls off slowly; once it is down to the running speed it is gone.
@@ -314,22 +369,31 @@ namespace ProtoHarness.ChainRush
             }
             if (carrying) runTarget = Mathf.Max(runTarget, SlingCarrySpeed);
             if (pulling) runTarget = Mathf.Max(runTarget, SlingTopSpeed);
-            float currentForward = Vector3.Dot(velocity, facing);
+            return runTarget;
+        }
+
+        // How fast the forward speed moves toward the target this tick.
+        private float ForwardAcceleration(float currentForward, float runTarget, bool grounded, bool swinging, bool coasting,
+            bool reversing, bool pulling, bool carrying)
+        {
             // In the air the throttle speeds the runner up as on the ground, never past the target; let go, the speed stays.
             float acceleration = pulling ? BoostAcceleration(currentForward, runTarget)
-                : !grounded && grapple.IsAttached ? 5f
+                : !grounded && grapple.IsAttached ? GrappleAirAcceleration
                 : !grounded && coasting ? 0f
                 // Backing up (grounded here): brake while still going forward, then speed up backward.
                 : reversing ? (currentForward > 0f ? brakeDeceleration : reverseAcceleration)
                 : currentForward > runTarget ? (!grounded ? airDeceleration : coasting ? coastDeceleration : overspeedFalloff)
                 : carrying ? BoostAcceleration(currentForward, runTarget) : RunAcceleration;
             // The swing sets its own speed (SwingStep): no running force acts on it.
-            if (swinging) acceleration = 0f;
-            // A grapple reels at 16 m/s, or at running speed when that is faster.
-            float forwardSpeed = Mathf.MoveTowards(currentForward, grapple.IsAttached ? Mathf.Max(16f, RunSpeed) : runTarget,
-                acceleration * dt);
-            velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
-            velocity.y = Mathf.Max(velocity.y - gravity * dt, -28f);
+            return swinging ? 0f : acceleration;
+        }
+
+        // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
+        // the ceiling, a guard, the ground and the grapple.
+        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float dt)
+        {
+            ref Vector3 velocity = ref racer.Velocity;
+            ref float heading = ref racer.Heading;
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
             if (swinging) SwingStep(ref velocity, ref heading, ref displacement, dt);
@@ -340,7 +404,7 @@ namespace ProtoHarness.ChainRush
             if (hitGuard)
             {
                 // A swing that carries the runner into a guard snaps there, without the carry.
-                swingTicks = 0;
+                racer.SwingTicks = 0;
                 GlanceOffGuard(ref velocity, ref heading, frame.Forward);
                 if (guardScrapeDecel > 0f) ScrapeAlongGuard(ref velocity, dt);
             }
@@ -349,12 +413,16 @@ namespace ProtoHarness.ChainRush
             if (racer.Grounded) racer.ClearAirGrapple();
             if (grapple.IsAttached && Vector3.Dot(transform.position - grapple.AnchorPosition, frame.Forward) > 0.5f)
                 grapple.Release(true);
-            if (slingTicks > 0) slingTicks--;
-            if (swingTicks > 0) swingTicks++;
-            // Falling is measured from the track surface, so a long downhill is not a fall. A circuit race puts the runner
-            // back on the track; the other courses end the run.
+        }
+
+        // Counts the slingshot down and the swing up, then checks for a fall. Falling is measured from the track surface,
+        // so a long downhill is not a fall. A circuit race puts the runner back on the track; the other courses end the run.
+        private void CountDownAndCheckFall(RacerState racer)
+        {
+            if (racer.SlingTicks > 0) racer.SlingTicks--;
+            if (racer.SwingTicks > 0) racer.SwingTicks++;
             TrackCoord here = game.Track.Project(transform.position);
-            if (here.H < -12f)
+            if (here.H < -FallDepth)
             {
                 if (game.IsCircuit) RespawnOnTrack();
                 else game.FailRun();
@@ -522,7 +590,7 @@ namespace ProtoHarness.ChainRush
             float heading = game.Racer.Heading;
             Vector3 facing = FacingOf(heading);
             Vector3 right = RightOf(heading);
-            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : 13f);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : ReleaseSpeed);
             velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
         }
 

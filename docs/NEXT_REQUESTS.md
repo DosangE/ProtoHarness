@@ -17,7 +17,7 @@
 | M1-T | **M1** 체감 튜닝 1회 | `feature/tuning-m1` | 사용자 플레이 | R4c | 2026-10-18 에 속력·회전·부스터(앞당김 1)와 조향·감속(R4c)을 했다. 남은 것은 아래 "M1-T 에 넘긴 플레이 피드백", 순서는 `docs/HANDOFF.md` 1절 |
 | ~~RF1~~ | ~~리팩토링: IMGUI 헬퍼 통합~~ **끝** (2026-10-22, DECISIONS "리팩토링 RF1") | `feature/refactor-ui-helpers` | 약 3분 | — | 사용자 "R1 ㄱㄱ" |
 | RF3 | 리팩토링: `RunnerMotor.Step` 분해 + 이름 없는 숫자 상수화 (권장 다음) | `feature/refactor-motor-step` | select-tests 판정(코어 시뮬 → 전체 예상) | — | — |
-| RF2 | 리팩토링: 효과음 번호에 이름(`Cue` enum) | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
+| ~~RF2~~ | ~~리팩토링: 효과음 번호에 이름(`RaceCue` enum)~~ **끝** (2026-10-25, DECISIONS "리팩토링 RF2") | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
 | RF4 | 리팩토링: `CircuitRace` 깔기 코드 분리(`CircuitScenery`) | `feature/refactor-circuit-scenery` | select-tests 판정(`Race/`) | — | — |
 | ~~RF5~~ | ~~모드 분기 추상화~~ **없앰** (2026-10-25 무한 모드를 지워 "삭제" 로 정해졌다) | — | — | — | — |
 | ~~RF6~~ | ~~여러 레이서 구조~~ **보류** (M5 AI 상대 때) | — | — | M5 | — |
@@ -205,18 +205,20 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 
 사용자 "확장만 하다보니 꽤 지저분하다" (2026-10-25). RF3 에서 드러난 경계(같은 상태를 함께 쓰는 단계 묶음)대로 `RunnerMotor` 의 책임을 MonoBehaviour 가 아닌 C# 클래스로 뗀다. 후보: 봉 스윙(`TryHookPole`·`SwingStep`·`EndSwing`), 새총·부스터, 목표 속력·가속도 계산. `RunnerMotor` 는 직렬화 필드를 든 껍데기로 남겨 씬 참조가 끊기지 않게 한다. 새 파일이 생기므로 RF3 을 병합한 뒤 줄 번호를 붙여 §3-2 요청서로 올린다.
 
-### RF2. 효과음 번호에 이름
+### RF2. 효과음 번호에 이름 — 끝남 (2026-10-25, `feature/refactor-cues`, DECISIONS "리팩토링 RF2")
 
 ```
-목표:      PlayCue(int) 의 0~8 을 이름 있는 enum 으로 바꾼다
-건드릴 것:  ChainRushGame.cs:345-355, RunnerMotor.cs(4곳), GrappleController.cs:165, Combat/EnemyDirector.cs(4곳),
-           Audio/ChainRushAudio.cs:95, Visuals/RunnerAnimation.cs:55,60, PlayCue 를 부르는 테스트(시작 전에 grep)
-새로 만들 것: 목적: 효과음 번호에 이름을 붙이기 위해 / 경로: Runtime/ChainRush/Audio/Cue.cs / 형태: enum
-검증 방법:  RF3 과 같다
-안 하는 것:  아래 2-1 (동작이 바뀐다)
+목표:      PlayCue(int) 의 0~8 을 이름 있는 enum 으로 바꾼다 (동작·지문 불변)
+건드릴 것:  ChainRushGame.cs:282,290,308,311-316, RunnerMotor.cs:276,411,414,426, GrappleController.cs:138,
+           Audio/ChainRushAudio.cs:46-47,95-100,115-141, Visuals/RunnerAnimation.cs:54,59
+           (2026-10-25 다시 확인: EnemyDirector 는 무한 모드 삭제로 없고, 테스트는 GetCue(int)·CueCount 만 불러 고치지 않는다)
+새로 만들 것: 목적: 레이스 효과음 번호에 이름을 붙이기 위해 / 경로: Runtime/ChainRush/Audio/RaceCue.cs / 형태: enum
+           (UiSound.Cue 와 헷갈리지 않게 Cue 대신 RaceCue)
+검증 방법:  select-tests (시뮬 파일 → 전체)
+안 하는 것:  아래 2-1 (동작이 바뀐다), 안 쓰는 4·5·6(Beeps·Crash·Buzz) 삭제, GetCue(int)/CueCount
 ```
 
-**2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:317` `game.StepTick` → `ChainRushGame.cs:215` `player.Step` → `RunnerMotor.cs:230` `game.PlayCue(0)`. 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
+**2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:318` `game.StepTick`(`ReplayTo`) → `ChainRushGame.cs:195` `player.Step` → `RunnerMotor.cs:277` `game.PlayCue(RaceCue.Jump)` (줄 번호 2026-10-25 RF2 뒤). 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
 
 ### RF4. `CircuitRace` 깔기 코드 분리 — 끝남 (2026-10-25, `feature/refactor-circuit-scenery`, DECISIONS "리팩토링 RF4")
 

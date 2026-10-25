@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -279,7 +280,7 @@ namespace ProtoHarness.ChainRush
             if (!IsRunning || !racer.CanAttack(tick)) return;
             racer.ShowAttack(tick);
             racer.BeginAttackCooldown(tick);
-            PlayCue(2);
+            PlayCue(RaceCue.Attack);
             for (int i = 0; i < targets.Length; i++)
                 if (targets[i].TryHit(player.transform.position)) racer.AddHit();
         }
@@ -287,7 +288,7 @@ namespace ProtoHarness.ChainRush
         public void TakeDamage()
         {
             if (!IsRunning || !racer.TryTakeDamage(tick)) return;
-            PlayCue(3);
+            PlayCue(RaceCue.Damage);
             if (racer.IsDown) FailRun();
         }
 
@@ -305,14 +306,15 @@ namespace ProtoHarness.ChainRush
             phase = Phase.Complete;
             grapple.Release(false);
             attackVisual.gameObject.SetActive(false);
-            PlayCue(1);
+            PlayCue(RaceCue.Action);
         }
 
-        public void PlayCue(int index)
+        // Only the first four cues (Jump..Damage) have a plain fallback clip; any later one is refused here too.
+        public void PlayCue(RaceCue cue)
         {
-            if (index < 0 || index >= cues.Length) throw new System.ArgumentOutOfRangeException(nameof(index));
-            if (enhancedPresentation) { presentationAudio.PlayCue(index); return; }
-            audioSource.PlayOneShot(cues[index]);
+            if (cue < RaceCue.Jump || (int)cue >= cues.Length) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            if (enhancedPresentation) { presentationAudio.PlayCue(cue); return; }
+            audioSource.PlayOneShot(cues[(int)cue]);
         }
 
         private void OnDestroy()

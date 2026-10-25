@@ -3,6 +3,7 @@ using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
@@ -152,6 +153,35 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.DoesNotThrow(() => player.Configure(Load("Beta")), "After the run it may change.");
         }
 
+        // The speed class (DECISIONS 2026-10-25 "M3 속도 단계") goes on top of the profile: speeds and the run acceleration
+        // times its scale, the gauge charge as the profile says.
+        [Test]
+        public void Configure_SpeedClass_ScalesSpeedsAndAccelerationOnTopOfTheProfile()
+        {
+            float run = player.RunSpeed, accel = player.RunAcceleration, top = player.SlingTopSpeed, carry = player.SlingCarrySpeed;
+            float empowered = player.EmpoweredReleaseSpeed, meters = player.SwingMetersPerSlot;
+            RunnerProfile delta = Load("Delta");
+            player.Configure(delta, SpeedScale.VeryFast);
+            Assert.That(player.SpeedClassScale, Is.EqualTo(SpeedScale.VeryFast));
+            Assert.That(player.RunSpeed, Is.EqualTo(run * delta.TopSpeedScale * SpeedScale.VeryFast));
+            Assert.That(player.SlingTopSpeed, Is.EqualTo(top * delta.TopSpeedScale * SpeedScale.VeryFast));
+            Assert.That(player.SlingCarrySpeed, Is.EqualTo(carry * delta.TopSpeedScale * SpeedScale.VeryFast));
+            Assert.That(player.EmpoweredReleaseSpeed, Is.EqualTo(empowered * delta.TopSpeedScale * SpeedScale.VeryFast));
+            Assert.That(player.RunAcceleration, Is.EqualTo(accel * delta.AccelerationScale * SpeedScale.VeryFast));
+            Assert.That(player.SwingMetersPerSlot, Is.EqualTo(meters / delta.GaugeChargeScale), "The speed class does not charge the gauge.");
+            player.Configure(Load("Alpha"));
+            Assert.That(player.SpeedClassScale, Is.EqualTo(1f), "Configure without a speed class is the scene's speeds.");
+            Assert.That(player.RunSpeed, Is.EqualTo(run));
+            player.Configure(Load("Alpha"), SpeedScale.Fast);
+            Assert.That(player.RunSpeed, Is.EqualTo(run), "Fast is the scene's speeds exactly.");
+            foreach (float bad in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+                Assert.Throws<ArgumentOutOfRangeException>(() => player.Configure(Load("Alpha"), bad), bad.ToString());
+            Assert.That(SpeedScale.Of(SpeedClass.Normal), Is.EqualTo(0.8f));
+            Assert.That(SpeedScale.Of(SpeedClass.Fast), Is.EqualTo(1f));
+            Assert.That(SpeedScale.Of(SpeedClass.VeryFast), Is.EqualTo(1.2f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => SpeedScale.Of((SpeedClass)7));
+        }
+
         // ALPHA must not change a single bit: the same bot inputs on the scene's values and on ALPHA trace the same run.
         [UnityTest, Timeout(120000)]
         public IEnumerator Alpha_RacesBitForBitAsTheScene()
@@ -186,6 +216,28 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(second.Hash(ticks), Is.EqualTo(first.Hash(ticks)), name + " twice");
                 Assert.That(first.Hash(ticks), Is.Not.EqualTo(alpha.Hash(ticks)), name + " must race differently from ALPHA.");
                 Debug.Log($"ChainRush profile {name}: {ticks} ticks repeat, hash 0x{first.Hash(ticks):X16}.");
+            }
+        }
+
+        // A speed class's run repeats bit for bit, and Normal and VeryFast each race differently from Fast (the scene).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator OtherSpeedClasses_RepeatBitForBit_AndDifferFromFast()
+        {
+            const int ticks = 700;
+            var log = new InputLog();
+            StateTrace fast = Trace(new InputRecorder(new CircuitBot(game, player, grapple, circuit), log));
+            yield return Run(fast, ticks, 3f);
+            foreach (SpeedClass speed in new[] { SpeedClass.Normal, SpeedClass.VeryFast })
+            {
+                player.Configure(Load("Alpha"), SpeedScale.Of(speed));
+                StateTrace first = Trace(new InputReplay(log));
+                yield return Run(first, ticks, 6f);
+                StateTrace second = Trace(new InputReplay(log));
+                yield return Run(second, ticks, 6f);
+                Assert.That(StateTrace.Compare(first, second, ticks), Is.Null, speed + " twice");
+                Assert.That(second.Hash(ticks), Is.EqualTo(first.Hash(ticks)), speed + " twice");
+                Assert.That(first.Hash(ticks), Is.Not.EqualTo(fast.Hash(ticks)), speed + " must race differently from Fast.");
+                Debug.Log($"ChainRush speed class {speed}: {ticks} ticks repeat, hash 0x{first.Hash(ticks):X16}.");
             }
         }
 

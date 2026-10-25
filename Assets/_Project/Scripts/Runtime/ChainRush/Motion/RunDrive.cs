@@ -9,15 +9,15 @@ namespace ProtoHarness.ChainRush.Motion
     {
         // Forward acceleration while hanging from a grapple in the air.
         private const float GrappleAirAcceleration = 5f;
-        // How fast a grapple reels the runner in, unless running is faster.
-        private const float GrappleReelSpeed = 16f;
         private const float MaxFallSpeed = 28f;
 
-        // The values the rules run on (RunnerMotor's, the speeds already scaled by the runner's profile). Treat it as
-        // read-only.
+        // The values the rules run on (RunnerMotor's, the speeds already scaled by the runner's profile and the speed
+        // class). Treat it as read-only.
         public struct Settings
         {
             public float RunSpeed;
+            // How fast a grapple reels the runner in, unless running is faster.
+            public float GrappleReelSpeed;
             public float RunAcceleration;
             public float MaxTurnRate;
             public float TurnAcceleration;
@@ -102,7 +102,7 @@ namespace ProtoHarness.ChainRush.Motion
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = ForwardAcceleration(currentForward, runTarget, now, settings, sling);
             // A grapple reels at GrappleReelSpeed, or at running speed when that is faster.
-            float forwardSpeed = Mathf.MoveTowards(currentForward, now.GrappleAttached ? Mathf.Max(GrappleReelSpeed, settings.RunSpeed) : runTarget,
+            float forwardSpeed = Mathf.MoveTowards(currentForward, now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) : runTarget,
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - settings.Gravity * dt, -MaxFallSpeed);

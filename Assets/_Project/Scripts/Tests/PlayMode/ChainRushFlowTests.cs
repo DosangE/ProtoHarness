@@ -189,17 +189,29 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.Notice, Is.Not.Empty);
             menu.Move(-1);
             Assert.That(menu.Notice, Is.Empty, "Moving clears the notice.");
+        }
+
+        // The speed classes opened with M3 (DECISIONS 2026-10-25 "M3 속도 단계"): each one goes on to the runner page and into the setup.
+        [UnityTest]
+        public IEnumerator Lobby_SpeedClasses_AreAllOpen_AndTheChosenOneGoesIntoTheSetup()
+        {
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "Fast until another is chosen.");
             menu.Move(-1);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "Normal is locked.");
-            Assert.That(menu.Notice, Is.Not.Empty);
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Normal is open.");
+            Assert.That(menu.Notice, Is.Empty);
+            Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Normal));
+            menu.Back();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             menu.Move(2);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "Very fast is locked (the cursor wrapped to it).");
-            Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "A refused entry is not chosen.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Very fast is open.");
+            Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.VeryFast));
         }
 
         // The tracks still to come are listed after the scene's tracks, locked (user 2026-10-21; the skyway took the
@@ -517,9 +529,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Race_LockedSpeedClass_IsRefusedLoudlyAndDoesNotRun()
+        public IEnumerator Race_Multi_IsRefusedLoudlyAndDoesNotRun()
         {
-            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.VeryFast, runner));
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Multi, SpeedClass.Fast, runner));
             LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("cannot be raced yet"));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -527,6 +539,20 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(assembler.IsLaunched, Is.False);
             Assert.That(game.enabled, Is.False);
             Assert.That(game.IsCountingDown, Is.False);
+        }
+
+        // The lobby's speed class reaches the runner (SpeedScale, DECISIONS 2026-10-25 "M3 속도 단계").
+        [UnityTest]
+        public IEnumerator Race_VeryFastFromTheLobby_ScalesTheRunnersSpeeds()
+        {
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.VeryFast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            Assert.That(assembler.IsLaunched, Is.True);
+            RunnerMotor player = Find<RunnerMotor>(assembler.gameObject.scene);
+            Assert.That(player.SpeedClassScale, Is.EqualTo(SpeedScale.VeryFast));
+            // ChainRushCircuit.unity's runner runs at 20 m/s (M1-T, 2026-10-18); the test runner's profile is all 1s.
+            Assert.That(player.RunSpeed, Is.EqualTo(20f * SpeedScale.VeryFast).Within(1e-4f));
         }
 
         // ---- best records (user 2026-10-19) ----------------------------------------------------------------
@@ -708,6 +734,74 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 Time.timeScale = scale;
                 store.Clear(skyway.name, SpeedClass.Fast);
+            }
+        }
+
+        // The other speed classes finish every track too (M3 완료 조건 "트랙마다 완주", DECISIONS 2026-10-25 "M3 속도 단계"):
+        // the bot runs the whole race without a fall, each lap close to the lap length at 20 m/s times the class's scale.
+        // At Normal it touches no guard either; at VeryFast it brushes the guard coming out of the R22 corners (the turn
+        // radius of 25 m stays while the speed goes up; tight corners are for the pole swing), which is allowed and logged
+        // (user 2026-10-25). No decoration: it does not touch the run.
+        [UnityTest, Timeout(180000)]
+        public IEnumerator Race_OtherSpeedClasses_BotFinishesEveryTrack([Values(SpeedClass.Normal, SpeedClass.VeryFast)] SpeedClass speed,
+            [Values("STADIUM", "SKYWAY LOOP")] string title)
+        {
+            var store = TestRecords();
+            TrackDefinition track = title == "STADIUM" ? Stadium() : Skyway();
+            store.Clear(track.name, speed);
+            RaceLaunch.Request(new RaceSetup(track, title, "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene raceScene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(raceScene);
+            RunnerMotor player = Find<RunnerMotor>(raceScene);
+            CircuitRace circuit = Find<CircuitRace>(raceScene);
+            Assert.That(circuit.Definition, Is.SameAs(track));
+            Assert.That(player.SpeedClassScale, Is.EqualTo(SpeedScale.Of(speed)));
+            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            float scale = Time.timeScale;
+            try
+            {
+                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
+                Time.timeScale = 6f;
+                game.StartRun();
+                float deadline = Time.realtimeSinceStartup + 150f;
+                float maxOffset = 0f;
+                double maxOffsetS = 0d;
+                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
+                {
+                    TrackCoord coord = game.Track.Project(player.transform.position);
+                    if (Mathf.Abs(coord.D) > maxOffset)
+                    {
+                        maxOffset = Mathf.Abs(coord.D);
+                        maxOffsetS = coord.S;
+                    }
+                    yield return null;
+                }
+                Time.timeScale = scale;
+                LapCounter laps = circuit.Laps;
+                string where = $"{title} at {speed}: tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, " +
+                               $"max offset {maxOffset:F2} m at S {maxOffsetS:F1} (segment {SegmentAt(track, maxOffsetS)})";
+                Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + where);
+                Assert.That(game.HasFinished, Is.True, "The bot did not finish. " + where);
+                double lapSeconds = track.LapLength / (20d * SpeedScale.Of(speed));
+                for (int lap = 1; lap <= laps.CompletedLaps; lap++)
+                {
+                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
+                    Debug.Log($"ChainRush {title} at {speed} lap {lap}: {seconds:F2} s (lap length at the class's run speed: {lapSeconds:F2} s)");
+                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
+                }
+                if (speed != SpeedClass.VeryFast)
+                    Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), "The bot touched a guard. " + where);
+                Debug.Log($"ChainRush {title} at {speed}: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(track.name, speed);
             }
         }
 

@@ -30,6 +30,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
         private const string SkywayPath = "Assets/_Project/Data/Circuit_Skyway.asset";
         private const string SkywayEnvironmentScene = "ChainRushTrackSkyway";
+        private const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
 
         private const string TestTitle = "TEST TRACK";
 
@@ -215,7 +216,8 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // The tracks still to come are listed after the scene's tracks, locked (user 2026-10-21; the skyway took the
-        // second placeholder's place the same day, DECISIONS "SKYWAY LOOP").
+        // second placeholder's place the same day, DECISIONS "SKYWAY LOOP"; Finger Lanes came before the last one,
+        // DECISIONS 2026-10-25 "FINGER LANES").
         [UnityTest]
         public IEnumerator Lobby_PlaceholderTracks_RefuseWithANoticeAndStay()
         {
@@ -223,12 +225,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
-            menu.Highlight(2);
-            Assert.That(menu.TrackRecordText(2), Is.EqualTo("준비 중"));
+            menu.Highlight(3);
+            Assert.That(menu.TrackRecordText(3), Is.EqualTo("준비 중"));
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), "The placeholder track is locked.");
             Assert.That(menu.Notice, Is.Not.Empty);
-            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(3), "The stadium, the skyway and one placeholder.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(4), "The stadium, the skyway, Finger Lanes and one placeholder.");
             menu.Move(1);
             Assert.That(menu.Cursor, Is.EqualTo(0), "The cursor wraps from the last placeholder to the stadium.");
             Assert.That(menu.BuildSetup().Track, Is.SameAs(Stadium()), "A refused track is not chosen.");
@@ -744,10 +746,10 @@ namespace ProtoHarness.Tests.PlayMode
         // (user 2026-10-25). No decoration: it does not touch the run.
         [UnityTest, Timeout(180000)]
         public IEnumerator Race_OtherSpeedClasses_BotFinishesEveryTrack([Values(SpeedClass.Normal, SpeedClass.VeryFast)] SpeedClass speed,
-            [Values("STADIUM", "SKYWAY LOOP")] string title)
+            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES")] string title)
         {
             var store = TestRecords();
-            TrackDefinition track = title == "STADIUM" ? Stadium() : Skyway();
+            TrackDefinition track = title == "STADIUM" ? Stadium() : title == "SKYWAY LOOP" ? Skyway() : FingerLanes();
             store.Clear(track.name, speed);
             RaceLaunch.Request(new RaceSetup(track, title, "", RaceMode.Single, speed, runner));
             RaceAssembler assembler = null;
@@ -794,14 +796,161 @@ namespace ProtoHarness.Tests.PlayMode
                     Debug.Log($"ChainRush {title} at {speed} lap {lap}: {seconds:F2} s (lap length at the class's run speed: {lapSeconds:F2} s)");
                     Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
                 }
+                // The guard stands at the track's own road half width (the usual 6 m but Finger Lanes' 7.2 m).
                 if (speed != SpeedClass.VeryFast)
-                    Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), "The bot touched a guard. " + where);
+                    Assert.That(maxOffset, Is.LessThan(track.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
                 Debug.Log($"ChainRush {title} at {speed}: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
             }
             finally
             {
                 Time.timeScale = scale;
                 store.Clear(track.name, speed);
+            }
+        }
+
+        // ---- Finger Lanes (DECISIONS 2026-10-25 "FINGER LANES") ------------------------------------------------
+
+        // Village Finger's outline: seven fingers joined by half turns of R25 (user 2026-10-25: tighter than the first R28),
+        // right at the tips and left at the turn column, then two right corners of R30 round the left edge, where the clock
+        // tower narrows the road to 8 m. The road is 1.2 times the usual; two bumps 0.5 m high (user 2026-10-25: a bump, not
+        // a climb) whose tops are kickers throwing by speed, the stone bridge's (lip 0.3) then the clock tower exit's (lip
+        // 0.35). No gaps, no anchors, no extra poles; two laps of 1466 m (plan A, user 2026-10-25).
+        [Test]
+        public void FingerLanes_Layout_IsSevenHalfTurnFingersAWideRoadAndTwoKickers()
+        {
+            TrackDefinition finger = FingerLanes();
+            Assert.That(finger.TryValidate(out string error), Is.True, error);
+            Assert.That(finger.LapCount, Is.EqualTo(2));
+            Assert.That(finger.LapLength, Is.EqualTo(822d + 7d * Math.PI * 25d + Math.PI * 30d).Within(0.01d));
+            var turns = new System.Collections.Generic.List<TrackDefinition.Segment>();
+            float total = 0f;
+            foreach (TrackDefinition.Segment segment in finger.Segments)
+            {
+                if (!segment.IsArc) continue;
+                turns.Add(segment);
+                total += segment.Degrees;
+            }
+            Assert.That(turns.Count, Is.EqualTo(9));
+            for (int i = 0; i < 7; i++)
+            {
+                Assert.That(turns[i].Radius, Is.EqualTo(25f), "finger turn " + i);
+                Assert.That(turns[i].Degrees, Is.EqualTo(i % 2 == 0 ? 180f : -180f), "finger turn " + i + " alternates, right first");
+            }
+            for (int i = 7; i < 9; i++)
+            {
+                Assert.That(turns[i].Radius, Is.EqualTo(30f), "corner " + i);
+                Assert.That(turns[i].Degrees, Is.EqualTo(90f), "corner " + i);
+            }
+            Assert.That(total, Is.EqualTo(360f));
+            float narrowest = float.MaxValue;
+            for (double s = 0d; s < finger.LapLength; s += 1d) narrowest = Mathf.Min(narrowest, finger.HalfWidthAt(s));
+            Assert.That(narrowest, Is.EqualTo(4f).Within(1e-4f), "The clock tower's entrance.");
+            Assert.That(finger.RoadHalfWidth, Is.EqualTo(RoadProfile.DeckHalfWidth * 1.2f).Within(1e-4f));
+            Assert.That(finger.HalfWidthAt(0d), Is.EqualTo(finger.RoadHalfWidth), "The start line has the track's road.");
+            var launches = new System.Collections.Generic.List<float>();
+            foreach (TrackDefinition.Segment segment in finger.Segments)
+                if (segment.Launch > 0f) launches.Add(segment.Launch);
+            Assert.That(launches, Is.EqualTo(new[] { 0.3f, 0.35f }), "The bridge, then the clock tower.");
+            Centerline line = finger.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.LaunchCount, Is.EqualTo(2));
+            float highest = 0f;
+            for (double s = 0d; s < finger.LapLength; s += 0.5d) highest = Mathf.Max(highest, line.FrameAt(s).Position.y);
+            Assert.That(highest, Is.EqualTo(0.5f).Within(0.02f), "The bumps' tops, where they kick.");
+            Assert.That(finger.Gaps(), Is.Empty);
+            Assert.That(finger.Anchors, Is.Empty);
+            Assert.That(finger.Poles, Is.Empty);
+        }
+
+        // The real lobby setup (the third track, no decoration yet), then the bot runs both laps at Fast: no fall, no guard
+        // touched through the seven half turns, each lap close to the lap length at 20 m/s, and off the road for a moment
+        // past each kicker's crest (user 2026-10-25): the bot only steers, so the kickers alone lift it.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_FingerLanesFromTheLobby_BotFinishesTwoLaps()
+        {
+            var store = TestRecords();
+            TrackDefinition finger = FingerLanes();
+            store.Clear(finger.name, SpeedClass.Fast);
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
+            menu.Confirm();
+            menu.Highlight(2);
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "Finger Lanes can be raced.");
+            RaceSetup setup = menu.BuildSetup();
+            Assert.That(setup.Track, Is.SameAs(finger));
+            Assert.That(setup.Title, Is.EqualTo("FINGER LANES"));
+            Assert.That(setup.EnvironmentScene, Is.Empty, "No decoration yet (T3e).");
+            RaceLaunch.Request(setup);
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene raceScene = assembler.gameObject.scene;
+            Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("FINGER LANES"));
+            ChainRushGame game = Find<ChainRushGame>(raceScene);
+            RunnerMotor player = Find<RunnerMotor>(raceScene);
+            CircuitRace circuit = Find<CircuitRace>(raceScene);
+            Assert.That(circuit.Definition, Is.SameAs(finger));
+            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            // Each kicker's crest S, and the most the runner rose above its height on the flat start line within 25 m past it.
+            var crests = new System.Collections.Generic.List<double>();
+            double crestS = 0d;
+            foreach (TrackDefinition.Segment segment in finger.Segments)
+            {
+                crestS += segment.Length;
+                if (segment.Launch > 0f) crests.Add(crestS);
+            }
+            var lift = new float[crests.Count];
+            float scale = Time.timeScale;
+            try
+            {
+                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
+                Time.timeScale = 6f;
+                game.StartRun();
+                float standing = game.Track.Project(player.transform.position).H;
+                float deadline = Time.realtimeSinceStartup + 90f;
+                float maxOffset = 0f;
+                double maxOffsetS = 0d;
+                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
+                {
+                    TrackCoord coord = game.Track.Project(player.transform.position);
+                    if (Mathf.Abs(coord.D) > maxOffset)
+                    {
+                        maxOffset = Mathf.Abs(coord.D);
+                        maxOffsetS = coord.S;
+                    }
+                    for (int k = 0; k < crests.Count; k++)
+                        if (coord.S > crests[k] && coord.S < crests[k] + 25d) lift[k] = Mathf.Max(lift[k], coord.H - standing);
+                    yield return null;
+                }
+                Time.timeScale = scale;
+                LapCounter laps = circuit.Laps;
+                string where = $"tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, " +
+                               $"max offset {maxOffset:F2} m at S {maxOffsetS:F1} (segment {SegmentAt(finger, maxOffsetS)})";
+                for (int k = 0; k < crests.Count; k++)
+                {
+                    Debug.Log($"ChainRush Finger Lanes kicker {k} at S {crests[k]:F1}: rose {lift[k]:F2} m above the road");
+                    Assert.That(lift[k], Is.GreaterThan(0.5f), $"The bot was not thrown up past the kicker at S {crests[k]:F1}. " + where);
+                }
+                Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + where);
+                Assert.That(game.HasFinished, Is.True, "The bot did not finish two laps. " + where);
+                Assert.That(laps.CompletedLaps, Is.EqualTo(2));
+                double lapSeconds = finger.LapLength / 20d;
+                for (int lap = 1; lap <= 2; lap++)
+                {
+                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
+                    Debug.Log($"ChainRush Finger Lanes lap {lap}: {seconds:F2} s");
+                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
+                }
+                // The guard stands at the track's own road half width (1.2 times the usual here).
+                Assert.That(maxOffset, Is.LessThan(finger.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
+                Debug.Log($"ChainRush Finger Lanes race: {finger.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(finger.name, SpeedClass.Fast);
             }
         }
 
@@ -932,6 +1081,18 @@ namespace ProtoHarness.Tests.PlayMode
             var skyway = AssetDatabase.LoadAssetAtPath<TrackDefinition>(SkywayPath);
             Assert.That(skyway, Is.Not.Null, SkywayPath + " (menu: Create Skyway Track)");
             return skyway;
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            return null;
+#endif
+        }
+
+        private static TrackDefinition FingerLanes()
+        {
+#if UNITY_EDITOR
+            var finger = AssetDatabase.LoadAssetAtPath<TrackDefinition>(FingerLanesPath);
+            Assert.That(finger, Is.Not.Null, FingerLanesPath + " (menu: Create Finger Lanes Track)");
+            return finger;
 #else
             Assert.Fail("Flow tests require the Unity Editor.");
             return null;

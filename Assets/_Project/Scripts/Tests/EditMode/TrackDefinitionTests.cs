@@ -300,6 +300,42 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(Error(), Does.Contain("pole 0").And.Contain("within the lap"));
         }
 
+        // A kicker's lip is the end of its piece (user 2026-10-25, Finger Lanes): the built centerline offers it, with its
+        // lift, to a runner crossing it forward, not backward, not short of it, and across the lap's seam too.
+        [Test]
+        public void BuildCenterline_AKicker_OffersItsLipToARunnerCrossingItForward()
+        {
+            var segments = Stadium();
+            segments[0] = TrackDefinition.Segment.Kicker(15f, 0f, 0.3f);
+            SetSegments(segments);
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.LaunchCount, Is.EqualTo(1));
+            Assert.That(line.TryLaunchBetween(14.6d, 15.0d, out float lift), Is.True);
+            Assert.That(lift, Is.EqualTo(0.3f));
+            Assert.That(line.TryLaunchBetween(14.0d, 14.9d, out _), Is.False, "Short of the lip.");
+            Assert.That(line.TryLaunchBetween(15.0d, 15.4d, out _), Is.False, "Already past it.");
+            Assert.That(line.TryLaunchBetween(15.4d, 14.6d, out _), Is.False, "Backward.");
+            line.AddLaunch(StadiumLap - 0.2d, 0.25f);
+            Assert.That(line.TryLaunchBetween(StadiumLap - 0.5d, 0.3d, out lift), Is.True, "Across the seam.");
+            Assert.That(lift, Is.EqualTo(0.25f));
+        }
+
+        [Test]
+        public void TryValidate_LaunchOutOfRange_IsRejected()
+        {
+            var segments = Stadium();
+            segments[0] = TrackDefinition.Segment.Kicker(15f, 0f, TrackDefinition.MaxLaunch + 1f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("launch"));
+            segments[0] = TrackDefinition.Segment.Kicker(15f, 0f, -1f);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("launch"));
+            segments[0] = TrackDefinition.Segment.Kicker(15f, 0f, float.NaN);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("launch"));
+        }
+
         [Test]
         public void CheckpointS_BadIndex_Throws()
         {

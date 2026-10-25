@@ -7,6 +7,33 @@
 
 ---
 
+## 2026-10-25 · FINGER LANES — 빌리지 손가락을 옮긴 세 번째 서킷 · 도약대(속도로 뜨는 턱) (`feature/m3-track-village-finger`)
+
+- **결정 (사용자)**: M3 새 서킷 — 처음 "고저차인데 점프 구간이 있는" → "테크니컬로" → "빌리지 손가락이라는 맵 레퍼런스로". 요청서(안 A·이름·`NEON HARBOR` 유지)에 "ㄱㄱ 추천대로", 지름길은 두 단계로 나눔("길게 뻗은 두 구역엔 지름길이 있어" → 이번은 본선만). 플레이 피드백 세 번으로 고쳤다(아래).
+  - **배치를 읽은 곳**: 나무위키 "크레이지레이싱 카트라이더/트랙/빌리지" 의 빌리지 손가락 항목(손가락 모양, 연속 U턴, 손톱 지름길 2개, 엄지 로터리, 시계탑 통로, 시계방향 3바퀴 6.0 km)과 러쉬플러스판 윤곽 이미지(500×256)를 픽셀로 읽었다 — 도로 중심 줄 간격 15 px, U턴 열 83, 손가락 끝 126/154/130/154, 왼쪽 변 19, 출발 표시 81, 시계탑 상자 행 141~166. 높낮이와 다리는 사용자가 준 기록 영상(`youtu.be/S3YvC_eKXeo`, 3랩 약 87초)의 24.5~28.4초를 0.1~0.5초 간격으로 읽었다 — 아랫변 끝의 돌난간 아치 다리(방지턱)를 넘으며 약 0.4~0.5초 뜨고 자갈 광장에 내려 우회전, 자갈길 끝 시계탑의 좁은 아치로 들어가 출구에서 다시 뜬다.
+  - **축척**: 세로는 U턴이 정한다(줄 간격 = 2 × U턴 반지름). 가로(손가락 길이)는 1 m/px — 안 A(1:1 은 한 바퀴 3.2 km 라 뺐다). 2랩.
+  - **배치** (시계방향, 윗변 출발 표시에서 동쪽): 손가락 7개 — U턴 180° 우·좌·우·좌·우·좌·우 R25, 긴 손가락(조각 4·12)은 71 m, 짧은 것 43~47 m → 아랫변 서쪽(끝 쪽에 다리 턱) → 좌하 우90 R30 → 왼쪽 변 북쪽(시계탑: 좁은 입구 반폭 4·통로 30 m·출구 턱) → 좌상 우90 R30 → 출발선. 32조각, 한 바퀴 1466.03 m, 평지(턱 두 곳만 0.5 m), 틈·앵커 없음. 도로 반폭 7.2(보통의 1.2배). 원본은 `ChainRushCircuitSceneBuilder.FingerLanesSegments` 와 상수, 메뉴 `Create Finger Lanes Track`.
+  - **이름**: 원작 이름을 쓰지 않는다(SKYWAY 와 같다). 후보 중 첫 것 `FINGER LANES`, 에셋 `Circuit_FingerLanes`(최고 기록 키). 로비 세 번째 트랙(장식 씬 없음, T3e 때), `NEON HARBOR` 자리표시는 그 뒤에 잠긴 채 남김. 로비 씬 항목은 `Unity_RunCommand` 로 넣고 저장은 사용자가 했다(§0).
+  - **지름길 자리**: 긴 손가락 두 곳의 손톱(윤곽 열 132, 128)에서 나가 다음 줄로 돌아오는 S 구간 약 [294.1, 416.6]·[840.2, 970.8](R25, 빌더 `FingerShortcutStretches` 가 계산)에는 체크포인트를 두지 않는다 — 체크포인트 0.15/0.5/0.75 = S 219.9 / 733.0 / 1099.5. 빌더가 체크포인트가 구간 안이면 저장 전에 던진다. 지름길 자체는 다음 단계.
+- **도약대 (새 기능, 사용자 "급한 경사로 떠오르는 지역 … 다리로 중간에 붕 뜨는 것" → "속도에 의해 그 방지턱에서 붕 뜨는 거다" → "오르막이 아니라 턱이라고 생각해라")**: 러너는 떨어지는 중이면 매 틱 0.3 m 안의 땅으로 다시 붙는다(`RunnerMotor.SnapToGround`) — 20 m/s 에서 20% 내리막도 한 틱에 0.08 m 라 어떤 언덕에서도 뜨지 않았다. 그래서:
+  - `TrackDefinition.Segment.Kicker(length, endGrade, launch, endHalfWidth)` — 직선 조각의 끝이 턱(lip)이다. `launch` 는 기울기(0, `MaxLaunch` 0.5]: 땅에 붙은 러너가 그 S 를 앞으로 지나는 틱에 `velocity.y = max(velocity.y, launch × 앞쪽 수평 속도)` — 빠를수록 높고 멀리 난다. 그 위로 속도가 있으니 스냅도 건너뛴다. 스윙·그래플 중에는 없다.
+  - `Centerline.AddLaunch(s, lift)`·`TryLaunchBetween(fromS, toS, out lift)`(랩 이음매를 넘는 이동도). `TrackDefinition.BuildCenterline` 이 넣는다. 지났는지는 그 틱의 이동 전후 S(`frame.S` + 이동 · `frame.Forward`)로 정해 **틱 사이에 새로 저장하는 상태가 없다** — 롤백·리플레이 그대로. 도약대가 없는 트랙은 목록이 비어 바로 거짓 — 스타디움 지문 그대로(아래).
+  - **턱 모양**: 2.5 m 씩 네 조각(0 → +20% → 0 → −20% → 0), 높이 0.5 m, 길이 10 m. 도약은 꼭대기(경사 0, 그 뒤 도로가 내려간다). 다리 턱은 아랫변 끝에서 착지 20 m 앞, `launch` 0.3. 시계탑 출구 턱은 좁은 통로 안, `launch` 0.35.
+- **플레이 피드백으로 바꾼 것**:
+  - ① (2026-10-25 "너비가 1.2배 … 시계탑 좁은 입구와 급한 경사 … 다리로 붕") 반폭 6 → 7.2, 시계탑·다리를 고정 세기 도약(8·6 m/s)으로 처음 만들었다. 첫 시도에서 도약을 오르막 끝(+20%)에 두었더니 그 뒤 도로가 0.5 m 더 올라가 다리에서 0.31 m 만 떴다(테스트 실패: 기준 0.5 m 초과) → 꼭대기로 옮김.
+  - ② ("헤어핀이 길다 … 조금 더 꺾여야", "속도에 의해 방지턱에서 붕") U턴 R28 → R22 → **R25**: R22 에서 조향만 하는 봇이 U턴마다 가드(7.2) 앞 6.6~6.8 m 까지 밀려 랩 시간이 기준(길이 ÷ 속도 ±20%)보다 약 22% 느렸다 — `lap 1 time … Expected: 67.90 +/- 13.58  But was: 82.88`(빠름), 보통 102.78(84.88±16.98), 매우빠름 69.50(56.59±11.32). 사용자 "추천대로" 로 R25(러너 최소 회전 반지름과 같다). 도약은 고정 세기 → 속도 비례(위).
+  - ③ ("오르막이 아니라 턱이라고") 시계탑 안 4.1 m 오르막과 다리 1.3 m 아치를 0.5 m 턱으로.
+- **테스트 기준 하나**: 봇의 가드 판정 `RoadProfile.DeckHalfWidth − 0.4`(5.6 m 고정)를 **그 트랙의 `RoadHalfWidth − 0.4`** 로 — FINGER LANES 의 가드는 7.2 m 에 있다. 스타디움·SKYWAY 는 `roadHalfWidth` 6 이라 값이 같다(`Race_OtherSpeedClasses_BotFinishesEveryTrack`, 새 `Race_FingerLanesFromTheLobby_BotFinishesTwoLaps`). 자리표시 테스트의 행 번호 2 → 3(트랙이 하나 늘었다).
+- **빌더 정리**: SKYWAY 와 FINGER LANES 가 저장 본문 `SaveTrack` 을 같이 쓴다. SKYWAY 메뉴를 다시 돌려 `Circuit_Skyway.asset` 에 diff 가 없음을 확인했다.
+- **버린 대안**: 오르막 끝에 틈(Gap) 두기 — 틈 앞뒤는 평지 15 m 규칙(`TrackDefinition` `MinGapRunway`). 모든 언덕에서 속도로 뜨게 하는 일반 물리 — 스타디움 언덕도 바뀌어 지문이 깨진다. 원작 비율 1:1(한 바퀴 3.2 km). U턴 R22 + 봇 랩 시간 기준 완화 — 테스트를 바꿔야 하고 가드 여유 0.16 m 로 흔들린다. 지름길을 이번에 같이 — 갈림길·가드 구멍·좌표가 새 시스템이라 따로 합의.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리):
+  - 메뉴: `segments=32 lap=1466.027 highest=0.50 narrowest=4 launches: S1024.8 lip 0.3 hw=7.2, S1271.2 lip 0.35 hw=4.0 valid=True`, GUID `b7b22479ac1b36b4380d58c44abcb726` 그대로(덮어쓰기).
+  - EditMode `!Enemy`: `testcasecount="273" result="Passed" passed="273" failed="0"` (10:54:59Z~10:55:00Z) — 새 2건(`TrackDefinitionTests` 도약대 판정·검증).
+  - FINGER LANES 4건(모양·로비 레이스·보통·매우빠름): `testcasecount="4" result="Passed" passed="4" failed="0"` (11:37:43Z~11:39:12Z). 다리에서 도로보다 1.15 m, 시계탑 출구 1.38 m 떴다. 빠름 랩 84.06 / 82.82 s(기준 73.30 s ±20%), 최대 옆 거리 1.98 m. 보통 104.04 / 102.84 s, 매우빠름 70.84 / 69.64 s.
+  - 게이트 전체(R25·속도 비례 도약, 턱으로 바꾸기 전 — 그 뒤는 이 트랙의 데이터·빌더·테스트만 바뀜): `testcasecount="195" result="Passed" passed="187" failed="0" skipped="8"` (11:16:35Z~11:27:29Z). skipped 8 = `[Explicit]` 측정 5 + 네트워크 레이스 3. **스타디움 지문 그대로** `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3`.
+  - **② 병합** (사용자 "일단 작업마무리하자 커밋푸시병합하고 지름길 작업 진행", 에디터 6000.3.25f1): 커밋 `1d6ada0` 에서 `tools/select-tests.ps1 -Range dev...HEAD` = 전체(바뀐 파일 13개 — `RunnerMotor`·`Centerline`·SO·씬·씬 빌더, ProjectSettings 0개). EditMode `!Enemy` `testcasecount="273" result="Passed" passed="273" failed="0"` (11:43:35Z~11:43:36Z). 메뉴 `Run PlayMode Tests` `testcasecount="195" result="Passed" passed="187" failed="0" skipped="8"` (11:43:51Z~11:54:45Z, 654.0초) — skipped 8 = `ChainRushProbeTests` 5·`NetworkRaceTests` 3(`[Explicit]`). 서킷 지문 `0x18F31E7A2B4F79B3` 그대로, FINGER LANES 다리 1.15 m·시계탑 1.38 m·최대 옆 거리 1.98 m. `ProtoHarness.slnx` 는 이 머신의 차이라 넣지 않았다.
+- **남은 것**: 사용자 플레이 확인(턱에서 뜨는 느낌, 헤어핀 R25). 지름길 2곳(다음 단계). 장식(T3e).
+
 ## 2026-10-25 · 봉 각도는 트랙 진행 방향에서 잰다 — 코너 중간에도 봉이 걸린다 (`fix/corner-pole-angle`)
 
 - **결정 (사용자)**: 아래 측정 뒤 후보 3개 중 추천안 ① "각도를 트랙 진행 방향에서 잰다"에 "ㄱㄱ 추천대로". 측정 브랜치 `feature/probe-corner-pole-reach`(로컬, 푸시 안 함)를 `fix/corner-pole-angle` 로 이름을 바꿔 측정과 수정을 한 브랜치에 묶었다.

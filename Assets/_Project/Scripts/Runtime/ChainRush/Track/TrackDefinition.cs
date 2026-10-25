@@ -25,11 +25,16 @@ namespace ProtoHarness.ChainRush.Track
         public const float MaxWidthChange = 0.25f;
         public const float MinPoleReach = 2f;
         public const float MaxPoleReach = 40f;
+        // The steepest lip a kicker has: the runner leaves it climbing at this times its forward speed.
+        public const float MaxLaunch = 0.5f;
 
         // One piece of the circuit. A straight (Radius 0) keeps its Length; an arc turns Degrees (positive
         // right) at Radius and its length follows from those. EndGrade is where the grade eases to over the piece.
         // EndHalfWidth is where the road's half width goes to over it; 0 means the track's roadHalfWidth.
-        // A gap is a flat straight with no road surface.
+        // A gap is a flat straight with no road surface. A kicker is a straight whose end is a lip: a runner on the road
+        // leaves it climbing at Launch times its forward speed, so the faster it comes the farther it flies (user
+        // 2026-10-25, Finger Lanes: the bridge and the clock tower throw a kart by its speed). Without it the ground snap
+        // holds a runner to any crest (RunnerMotor).
         [Serializable]
         public struct Segment
         {
@@ -39,8 +44,9 @@ namespace ProtoHarness.ChainRush.Track
             [SerializeField] private float endGrade;
             [SerializeField] private float endHalfWidth;
             [SerializeField] private bool gap;
+            [SerializeField] private float launch;
 
-            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap)
+            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap, float launch)
             {
                 this.length = length;
                 this.radius = radius;
@@ -48,11 +54,13 @@ namespace ProtoHarness.ChainRush.Track
                 this.endGrade = endGrade;
                 this.endHalfWidth = endHalfWidth;
                 this.gap = gap;
+                this.launch = launch;
             }
 
-            public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false);
-            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true);
-            public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false);
+            public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, 0f);
+            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true, 0f);
+            public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false, 0f);
+            public static Segment Kicker(float length, float endGrade, float launch, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, launch);
 
             public bool IsArc => radius != 0f;
             public bool IsGap => gap;
@@ -60,6 +68,7 @@ namespace ProtoHarness.ChainRush.Track
             public float Degrees => degrees;
             public float EndGrade => endGrade;
             public float EndHalfWidth => endHalfWidth;
+            public float Launch => launch;
 
             // The same float expression as Centerline.AppendArc, so the S values match exactly.
             public float Length => IsArc ? radius * Mathf.Abs(degrees) * Mathf.Deg2Rad : length;
@@ -185,7 +194,8 @@ namespace ProtoHarness.ChainRush.Track
             return gaps;
         }
 
-        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles added.
+        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles and the
+        // kickers' crests added.
         public Centerline BuildCenterline(Vector3 origin, float yawDegrees)
         {
             if (!TryValidate(out string error)) throw new InvalidOperationException(error);
@@ -194,6 +204,12 @@ namespace ProtoHarness.ChainRush.Track
             line.Close();
             for (int i = 0; i < poles.Count; i++)
                 line.AddPole(line.FrameAt(poles[i].S).TransformPoint(new Vector3(poles[i].Offset, 0f, 0f)), poles[i].Reach);
+            double s = 0d;
+            for (int i = 0; i < segments.Count; i++)
+            {
+                s += segments[i].Length;
+                if (segments[i].Launch > 0f) line.AddLaunch(s, segments[i].Launch);
+            }
             return line;
         }
 
@@ -250,6 +266,8 @@ namespace ProtoHarness.ChainRush.Track
                 Segment segment = segments[i];
                 startGrades[i] = grade;
                 if (float.IsNaN(segment.EndGrade) || Mathf.Abs(segment.EndGrade) > MaxGrade) return Fail($"segment {i}: the end grade {segment.EndGrade} must be within +-{MaxGrade}.", out error);
+                if (segment.Launch != 0f && (segment.IsArc || segment.IsGap || !(segment.Launch > 0f && segment.Launch <= MaxLaunch)))
+                    return Fail($"segment {i}: a launch ({segment.Launch}) must be on a road straight and within (0, {MaxLaunch}].", out error);
                 if (segment.IsArc)
                 {
                     if (segment.IsGap) return Fail($"segment {i}: a gap must be a straight.", out error);

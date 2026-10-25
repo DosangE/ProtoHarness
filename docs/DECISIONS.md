@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-10-25 · M3 속도 단계: 보통 0.8 · 빠름 1.0 · 매우빠름 1.2 (`feature/m3-speed-classes`)
+
+- **결정 (사용자)**: RF2 병합 뒤 "다음작업 ㄱㄱ" → 요청서(배율 0.8/1.0/1.2, 곱하는 범위는 러너 프로필과 같게 + 그래플 고정값 13·16)에 "ㄱㄱ". 빠른 확인에서 매우빠름 봇이 가드를 스쳐 멈추고 보고 → 후보 3개 중 추천안 "가드 스침을 테스트에서 허용"에 "추천대로 ㄱㄱ".
+- **한 것**:
+  - `Flow/SpeedScale.cs`(static class): `Normal 0.8`·`Fast 1`·`VeryFast 1.2`, `Of(SpeedClass)`(없는 값은 `ArgumentOutOfRangeException`).
+  - `RunnerMotor.Configure(runner, speedScale)`: 단계 배율을 프로필 배율과 따로 들고 값을 읽을 때 곱한다 — `RunSpeed`·`SlingTopSpeed`·`SlingCarrySpeed`·`EmpoweredReleaseSpeed`(프로필 최고 속도 × 단계), `RunAcceleration`(프로필 가속 × 단계), 그래플 놓을 때 최저 13·끌어당김 16(× 단계). 16 은 `RunDrive` 의 상수에서 `RunDrive.Settings.GrappleReelSpeed` 로 옮겼다(상수는 `RunnerMotor` 로). 기존 `Configure(runner)` 는 배율 1. 배율이 0 이하·NaN·무한이면 `ArgumentOutOfRangeException`.
+  - 곱하지 않는 것: 감속(타력·브레이크·초과 속도·스윙 뒤·공중), 그래플 공중 가속 5, 후진, 점프·중력, 최소 회전 반지름 25 m(→ 빠를수록 회전 각속도 상한 `speed / minTurnRadius` 가 저절로 오른다), 게이지 충전.
+  - `RaceAssembler`: 멀티만 거부(문구 "(multi: M7)", 낡은 "M2-b" 삭제), 고른 단계의 배율로 `Configure`. 로비 `SpeedPage`: 잠금·잠금 안내(낡은 "M2-b 에서 열립니다") 삭제, 설명에서 "아직 열리지 않았습니다"·"지금 달릴 수 있는 단계입니다" 삭제.
+  - 테스트(사양이 바뀌어 고침): `Lobby_LockedEntries_RefuseWithANoticeAndStay` 에서 속도 잠금 부분을 떼어 `Lobby_SpeedClasses_AreAllOpen_AndTheChosenOneGoesIntoTheSetup` 로, `Race_LockedSpeedClass_IsRefusedLoudlyAndDoesNotRun`(매우빠름 거부) → `Race_Multi_IsRefusedLoudlyAndDoesNotRun`(멀티 거부를 시험하는 테스트가 따로 없었다). 새로: `Race_VeryFastFromTheLobby_ScalesTheRunnersSpeeds`, `Race_OtherSpeedClasses_BotFinishesEveryTrack`(보통·매우빠름 × STADIUM·SKYWAY, 장식 씬 없이), `Configure_SpeedClass_ScalesSpeedsAndAccelerationOnTopOfTheProfile`, `OtherSpeedClasses_RepeatBitForBit_AndDifferFromFast`.
+- **매우빠름의 가드 스침 (측정, 허용)**: 봇(`CircuitBot`)은 매우빠름에서도 넘어지지 않고 완주하지만 R22 코너 출구에서 중심선에서 5.62 m 까지 밀린다 — 노면 반폭 6 m − 캡슐 반지름 0.38 m(씬 grep, 러너 캡슐인지는 미확인)라 가드를 스친 값이다. STADIUM S 174.5(8번 구간 = 첫 코너 끝), SKYWAY S 1343.4(R22 코너 바로 뒤). 최소 회전 반지름 25 m 가 코너 22 m 보다 커서 빠를수록 바깥으로 밀린다고 보고(봇 조향 지연 몫은 따로 재지 않음), 코너는 봉 스윙으로 도는 설계(DECISIONS "조향 2차")라 매우빠름만 봇 테스트의 가드 기준(`DeckHalfWidth − 0.4`)을 빼고 로그로 남긴다(사용자 2026-10-25). 보통은 가드 기준을 그대로 지킨다.
+  - 버린 대안: 봇이 속도에 맞춰 앞을 보는 거리·코너 감속을 바꾸게(테스트 도구 변경, 범위가 커짐), 매우빠름 배율을 1.15 등으로 낮추기(설계값 변경, 다시 측정).
+- **검증** (에디터 6000.3.25f1, 2026-10-25, 커밋 전 작업 트리):
+  - 컴파일: `scriptCompilationFailed=False`, `SpeedScale`·`Configure(RunnerProfile, float)` 로드, `SpeedScale.cs.meta` 는 Unity 가 만듦. Console Error 0. 마지막 테스트 수정(16:59:16 로컬) 뒤 Editor.log `*** Tundra build success (0.86 seconds), 5 items updated`.
+  - `tools/select-tests.ps1`(커밋 전 변경): `RunnerMotor.cs`·`Motion/RunDrive.cs` → "전체 (코어 시뮬)".
+  - 빠른 확인 ①(Profile + Flow, 가드 허용 전): `testcasecount="39" result="Failed(Child)" passed="37" failed="2"` (07:52:13Z~07:55:31Z). 실패 2건은 위 매우빠름 가드 스침(`Expected: less than 5.5999999f  But was: 5.61738062f` STADIUM, `5.6170578f` SKYWAY) — 이 결과로 멈추고 보고했다.
+  - EditMode `!Enemy`(가드 허용 뒤): `testcasecount="271" result="Passed" passed="271" failed="0"` (07:59:40Z~07:59:43Z).
+  - PlayMode 게이트 (`Run PlayMode Tests`, 가드 허용 뒤): `testcasecount="189" result="Passed" passed="182" failed="0" skipped="7"` (08:00:11Z~08:09:42Z, 571.6초). 181 → 189 는 새 테스트 8건(Flow 6·Profile 2). skipped 7 은 `ChainRushProbeTests` 4·`NetworkRaceTests` 3 의 `[Explicit]`.
+  - 동작 불변(빠름): 서킷 지문 `hash 0x18F31E7A2B4F79B3`, 격리 월드 같은 값, 프로필 BETA `0xA9251CA0D8EBD1BE`·THETA `0x6761C9D9B6C0C3F0` 모두 전과 같다.
+  - 새 단계: 700틱 비트 단위 반복 — 보통 `0xFEF4A3B5DBC515F3`, 매우빠름 `0xC057CFF7FA2D1088`(빠름과 다름).
+  - 봇 랩 시간(랩 길이 ÷ 단계 달리기 속도 대비): STADIUM 보통 38.40·37.38·37.38 s(33.64), 매우빠름 26.22·25.16·25.16 s(22.43); SKYWAY 보통 106.48·105.18 s(93.71), 매우빠름 72.42·71.18 s(62.47). 보통의 최대 거리 STADIUM 4.52 m·SKYWAY 4.36 m.
+  - 실행 뒤 Console Error 2건은 거부 시험이 일부러 낸 것(`RaceAssembler.cs:58` "Multi at Fast cannot be raced yet (multi: M7)", `RunnerProfile.cs:44` ← `ChainRushProfileTests.cs:139`).
+- **남은 것**: 사용자 플레이 확인 "속도 단계마다 차이가 느껴진다"(M3 완료 조건), 매우빠름에서 사람이 R22 코너를 봉 스윙 없이 돌 때 가드 스침이 거슬리는지. 네트워크는 단계를 싣지 않는다(M7). 입력 기록 파일에 단계 기록은 M4 고스트 때.
+
 ## 2026-10-25 · 리팩토링 RF2: 레이스 효과음 번호에 이름 — `RaceCue` (`feature/refactor-cues`)
 
 - **결정 (사용자)**: RF7 뒤 "다음 작업" 후보 중 "A RF2 ㄱㄱ" → 다시 확인한 요청서(`docs/NEXT_REQUESTS.md` RF2)에 "rr"(ㄱㄱ).

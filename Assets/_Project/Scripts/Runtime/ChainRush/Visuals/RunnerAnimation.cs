@@ -51,12 +51,12 @@ namespace ProtoHarness.ChainRush.Visuals
             }
             bool ground = player.IsGrounded;
             float dt = Time.deltaTime;
-            if (ground && !wasGrounded && game.Elapsed > 0.2f) { landing = 1f; sound.PlayCue(8); }
+            if (ground && !wasGrounded && game.Elapsed > 0.2f) { landing = 1f; sound.PlayCue(RaceCue.Land); }
             wasGrounded = ground;
             landing = Mathf.MoveTowards(landing, 0f, dt * 5f);
             if (ground) phase += dt * Mathf.Max(0f, player.ForwardSpeed) * 1.65f;
             int step = Mathf.FloorToInt(phase / Mathf.PI);
-            if (ground && step != lastStep) { sound.PlayCue(7); lastStep = step; }
+            if (ground && step != lastStep) { sound.PlayCue(RaceCue.Footstep); lastStep = step; }
             float stride = Mathf.Sin(phase) * 38f;
             float armLeft = ground ? -stride * 0.8f - 12f : -35f;
             float armRight = ground ? stride * 0.8f - 12f : -35f;

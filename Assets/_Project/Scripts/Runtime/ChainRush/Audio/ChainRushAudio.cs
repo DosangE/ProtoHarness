@@ -44,7 +44,7 @@ namespace ProtoHarness.ChainRush.Audio
                 return;
             }
             cues = new AudioClip[9];
-            for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue(cue);
+            for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
             score = MakeScore();
             wind = MakeWind();
             music.clip = score; music.loop = true;
@@ -92,11 +92,11 @@ namespace ProtoHarness.ChainRush.Audio
             playing = false; paused = false;
         }
 
-        public void PlayCue(int index)
+        public void PlayCue(RaceCue cue)
         {
-            if (index < 0 || index >= cues.Length) throw new ArgumentOutOfRangeException(nameof(index));
+            if (cue < RaceCue.Jump || (int)cue >= cues.Length) throw new ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushAudio: no such cue.");
             if (game.IsPaused) return;
-            effects.PlayOneShot(cues[index]);
+            effects.PlayOneShot(cues[(int)cue]);
         }
 
         public AudioClip GetCue(int index)
@@ -112,9 +112,10 @@ namespace ProtoHarness.ChainRush.Audio
             return clip;
         }
 
-        private static AudioClip MakeCue(int index)
+        private static AudioClip MakeCue(RaceCue cue)
         {
-            float duration = index == 4 ? 0.48f : index == 7 ? 0.09f : 0.32f;
+            int index = (int)cue;
+            float duration = cue == RaceCue.Beeps ? 0.48f : cue == RaceCue.Footstep ? 0.09f : 0.32f;
             var samples = new float[Mathf.RoundToInt(SampleRate * duration)];
             var random = new System.Random(702 + index);
             for (int i = 0; i < samples.Length; i++)
@@ -123,16 +124,16 @@ namespace ProtoHarness.ChainRush.Audio
                 float noise = (float)random.NextDouble() * 2f - 1f;
                 float envelope = Mathf.Min(t * 250f, 1f) * Mathf.Pow(1f - t / duration, 2f);
                 float value;
-                switch (index)
+                switch (cue)
                 {
-                    case 0: value = Mathf.Sin(2f * Mathf.PI * (160f * t + 700f * t * t)) * 0.4f + noise * 0.12f; break;
-                    case 1: value = (Mathf.Sin(t * 3500f) + Mathf.Sin(t * 5179f) * 0.45f) * Mathf.Exp(-t * 12f) * 0.45f; break;
-                    case 2: value = noise * 0.55f * Mathf.Exp(-t * 8f) + Mathf.Sin(2f * Mathf.PI * (800f * t - 900f * t * t)) * 0.25f; break;
-                    case 3: value = noise * 0.38f + Mathf.Sin(t * 510f) * 0.45f; break;
-                    case 4: value = Mathf.Sin(t * 2f * Mathf.PI * 880f) * (Mathf.Repeat(t, 0.16f) < 0.08f ? 0.5f : 0f); break;
-                    case 5: value = noise * 0.6f * Mathf.Exp(-t * 7f) + Mathf.Sin(t * 2100f) * 0.22f + Mathf.Sin(t * 3559f) * 0.13f; break;
-                    case 6: value = (Mathf.Sin(t * 4600f) * 0.25f + noise * 0.28f) * (0.65f + 0.35f * Mathf.Sin(t * 145f)); break;
-                    case 7: value = noise * 0.35f * Mathf.Exp(-t * 25f) + Mathf.Sin(t * 800f) * 0.22f; break;
+                    case RaceCue.Jump: value = Mathf.Sin(2f * Mathf.PI * (160f * t + 700f * t * t)) * 0.4f + noise * 0.12f; break;
+                    case RaceCue.Action: value = (Mathf.Sin(t * 3500f) + Mathf.Sin(t * 5179f) * 0.45f) * Mathf.Exp(-t * 12f) * 0.45f; break;
+                    case RaceCue.Attack: value = noise * 0.55f * Mathf.Exp(-t * 8f) + Mathf.Sin(2f * Mathf.PI * (800f * t - 900f * t * t)) * 0.25f; break;
+                    case RaceCue.Damage: value = noise * 0.38f + Mathf.Sin(t * 510f) * 0.45f; break;
+                    case RaceCue.Beeps: value = Mathf.Sin(t * 2f * Mathf.PI * 880f) * (Mathf.Repeat(t, 0.16f) < 0.08f ? 0.5f : 0f); break;
+                    case RaceCue.Crash: value = noise * 0.6f * Mathf.Exp(-t * 7f) + Mathf.Sin(t * 2100f) * 0.22f + Mathf.Sin(t * 3559f) * 0.13f; break;
+                    case RaceCue.Buzz: value = (Mathf.Sin(t * 4600f) * 0.25f + noise * 0.28f) * (0.65f + 0.35f * Mathf.Sin(t * 145f)); break;
+                    case RaceCue.Footstep: value = noise * 0.35f * Mathf.Exp(-t * 25f) + Mathf.Sin(t * 800f) * 0.22f; break;
                     default: value = noise * 0.3f * Mathf.Exp(-t * 15f) + Mathf.Sin(t * 420f) * 0.35f; break;
                 }
                 samples[i] = value * envelope * 0.8f;

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Serialization;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Motion;
 using ProtoHarness.ChainRush.Track;
@@ -273,7 +274,7 @@ namespace ProtoHarness.ChainRush
             {
                 velocity.y = jumpSpeed;
                 coyoteTime = 0f;
-                game.PlayCue(0);
+                game.PlayCue(RaceCue.Jump);
             }
             racer.JumpQueued = false;
         }
@@ -408,10 +409,10 @@ namespace ProtoHarness.ChainRush
             {
                 if (racer.GrappleEmpowered || !racer.TrySpendGaugeSlot()) return;
                 racer.EmpowerGrapple();
-                game.PlayCue(1);
+                game.PlayCue(RaceCue.Action);
                 return;
             }
-            if (Slingshot.TryFire(racer, coasting, SlingSettings())) game.PlayCue(1);
+            if (Slingshot.TryFire(racer, coasting, SlingSettings())) game.PlayCue(RaceCue.Action);
         }
 
         // A swing key press hooks the corner pole in reach, if there is one, at the rope length and speed of this moment.
@@ -423,7 +424,7 @@ namespace ProtoHarness.ChainRush
             RacerState racer = game.Racer;
             if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || !TryFindPole(out Vector3 pole)) return;
             PoleSwing.Hook(racer, transform.position, pole);
-            game.PlayCue(1);
+            game.PlayCue(RaceCue.Action);
         }
 
         // The corner pole a swing key press would hook from here and now, if any (see poleMaxAngle and poleReach). The

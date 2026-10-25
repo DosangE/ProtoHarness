@@ -1,4 +1,5 @@
 using UnityEngine;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 
@@ -135,7 +136,7 @@ namespace ProtoHarness.ChainRush
             game.Racer.Attach(index, Mathf.Max(MinRopeLength, Vector3.Distance(transform.position, anchors[index].position)));
             rope.enabled = true;
             game.RegisterGrapple();
-            game.PlayCue(1);
+            game.PlayCue(RaceCue.Action);
             return true;
         }
 

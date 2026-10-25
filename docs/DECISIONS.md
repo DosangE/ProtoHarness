@@ -31,6 +31,7 @@
   - EditMode `!Enemy`: `testcasecount="273" result="Passed" passed="273" failed="0"` (10:54:59Z~10:55:00Z) — 새 2건(`TrackDefinitionTests` 도약대 판정·검증).
   - FINGER LANES 4건(모양·로비 레이스·보통·매우빠름): `testcasecount="4" result="Passed" passed="4" failed="0"` (11:37:43Z~11:39:12Z). 다리에서 도로보다 1.15 m, 시계탑 출구 1.38 m 떴다. 빠름 랩 84.06 / 82.82 s(기준 73.30 s ±20%), 최대 옆 거리 1.98 m. 보통 104.04 / 102.84 s, 매우빠름 70.84 / 69.64 s.
   - 게이트 전체(R25·속도 비례 도약, 턱으로 바꾸기 전 — 그 뒤는 이 트랙의 데이터·빌더·테스트만 바뀜): `testcasecount="195" result="Passed" passed="187" failed="0" skipped="8"` (11:16:35Z~11:27:29Z). skipped 8 = `[Explicit]` 측정 5 + 네트워크 레이스 3. **스타디움 지문 그대로** `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3`.
+  - **② 병합** (사용자 "일단 작업마무리하자 커밋푸시병합하고 지름길 작업 진행", 에디터 6000.3.25f1): 커밋 `1d6ada0` 에서 `tools/select-tests.ps1 -Range dev...HEAD` = 전체(바뀐 파일 13개 — `RunnerMotor`·`Centerline`·SO·씬·씬 빌더, ProjectSettings 0개). EditMode `!Enemy` `testcasecount="273" result="Passed" passed="273" failed="0"` (11:43:35Z~11:43:36Z). 메뉴 `Run PlayMode Tests` `testcasecount="195" result="Passed" passed="187" failed="0" skipped="8"` (11:43:51Z~11:54:45Z, 654.0초) — skipped 8 = `ChainRushProbeTests` 5·`NetworkRaceTests` 3(`[Explicit]`). 서킷 지문 `0x18F31E7A2B4F79B3` 그대로, FINGER LANES 다리 1.15 m·시계탑 1.38 m·최대 옆 거리 1.98 m. `ProtoHarness.slnx` 는 이 머신의 차이라 넣지 않았다.
 - **남은 것**: 사용자 플레이 확인(턱에서 뜨는 느낌, 헤어핀 R25). 지름길 2곳(다음 단계). 장식(T3e).
 
 ## 2026-10-25 · 봉 각도는 트랙 진행 방향에서 잰다 — 코너 중간에도 봉이 걸린다 (`fix/corner-pole-angle`)

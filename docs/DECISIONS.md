@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-10-25 · 리팩토링 RF2: 레이스 효과음 번호에 이름 — `RaceCue` (`feature/refactor-cues`)
+
+- **결정 (사용자)**: RF7 뒤 "다음 작업" 후보 중 "A RF2 ㄱㄱ" → 다시 확인한 요청서(`docs/NEXT_REQUESTS.md` RF2)에 "rr"(ㄱㄱ).
+- **한 것**: `PlayCue(int)` 의 0~8 을 enum `Audio/RaceCue.cs` 로 바꿨다. 형식 기준은 `UiSound.Cue`(값마다 순간 한 줄 주석, 범위 밖은 `ArgumentOutOfRangeException(nameof(cue), cue, "…: no such cue.")`). 이름은 같은 네임스페이스의 `UiSound.Cue` 와 헷갈리지 않게 `Cue` 가 아니라 `RaceCue`.
+  - 값: `Jump`(0)·`Action`(1: 그래플 걸림·강화, 부스터, 봉 걸림, 완주 — 5곳 같은 소리)·`Attack`(2)·`Damage`(3)·`Beeps`·`Crash`·`Buzz`(4~6)·`Footstep`(7)·`Land`(8). 값 = 클립 번호.
+  - 4~6 은 표가 생긴 `4e6f12b` 부터 지금까지 부른 곳이 없다(`git log -G 'PlayCue\('` 로 더해진 호출을 모두 봄 — 지운 `EnemyDirector` 도 1·2 만 썼다). 소리 모양으로 이름만 붙이고 지우지 않았다(클립 수 9 와 `ChainRushPresentationTests` 의 `CueCount == 9` 가 바뀐다).
+  - 바뀐 곳: `ChainRushGame.PlayCue`(범위 검사는 그대로 자기 대체 클립 4개 기준 — 그래서 `Footstep`·`Land` 는 지금처럼 `ChainRushAudio` 로 직접 부른다), `ChainRushAudio.PlayCue`·`MakeCue`(switch 를 이름으로, 시드 `702 + 번호`·클립 이름·길이 그대로), `RunnerMotor` 4곳, `GrappleController` 1곳, `RunnerAnimation` 2곳.
+  - 바꾸지 않은 것: `GetCue(int)`·`CueCount`(테스트가 번호로 클립 표를 훑는다 — 테스트 수정 0), 직렬화 필드·MonoBehaviour 이름(씬·프리팹 수정 없음), 2-1(롤백 재실행 중 효과음, M7 전에 따로).
+- **검증** (에디터 6000.3.25f1, 2026-10-25, 커밋 전 작업 트리):
+  - 컴파일: `Unity_RunCommand` 로 `scriptCompilationFailed=False isCompiling=False`, `ChainRushGame.PlayCue` 인자 `ProtoHarness.ChainRush.Audio.RaceCue`, `RaceCue.cs.meta` 는 Unity 가 만듦. Console Error 0.
+  - `tools/select-tests.ps1`(커밋 전 변경): `ChainRushGame.cs`·`GrappleController.cs`·`RunnerMotor.cs` → "전체 (코어 시뮬)". 그래서 게이트 전체.
+  - EditMode `!Enemy`: `testcasecount="271" result="Passed" passed="271" failed="0"` (07:08:20Z~07:08:24Z).
+  - PlayMode 게이트 (`Run PlayMode Tests`): `testcasecount="181" result="Passed" passed="174" failed="0" skipped="7"` (07:08:45Z~07:16:16Z, 451.7초, skipped 7 은 `ChainRushProbeTests` 4·`NetworkRaceTests` 3 의 `[Explicit]`). RF3~RF7 때와 수가 같다.
+  - 동작 불변의 증거: 서킷 지문 `hash 0x18F31E7A2B4F79B3` 그대로, 롤백 테스트(`ChainRushRollbackTests`) 통과.
+  - 실행 뒤 Console Error 2건은 거부 시험이 일부러 낸 것(`RaceAssembler.cs:58` 매우빠름 거부, `RunnerProfile.cs:44` ← `ChainRushProfileTests.cs:138`).
+- **남은 것**: 위 `RaceAssembler` 거부 문구에도 "other speed classes: M2-b" 가 남아 있다(RF7 의 속도 잠금 안내와 같은 낡은 마일스톤 이름, 속도 단계는 M3) — M3 속도 단계 때 같이 고친다.
+
 ## 2026-10-25 · 리팩토링 RF7: `LobbyMenu` 를 페이지 객체로 (`feature/refactor-lobby`)
 
 - **결정 (사용자)**: RF4 뒤 "다음 작업" → `LobbyMenu`(664줄) 조사 보고. 처음 요청서(그리기만 `LobbyView` 하나로 떼기)에 "ㄱㄱ" 한 뒤 "구조에 대해 확장성과 객체화를 생각해서 리팩토링 진행" 으로 범위를 넓혀, 바뀐 요청서(페이지 객체 + 새 네임스페이스 + 파일 9개)에 다시 "ㄱㄱ".

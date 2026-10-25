@@ -336,6 +336,72 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(Error(), Does.Contain("segment 0").And.Contain("launch"));
         }
 
+        // A shortcut across the stadium's infield (user 2026-10-25, Finger Lanes' nails): off straight A at S 96 (flat, after
+        // the hill) a right quarter turn of R15, 74 m east, another one onto straight C at the same height (z 96), 44 m into
+        // C. C starts at 140 + pi x 11 + 60 + pi x 11.
+        private static readonly double InfieldShortcutTo = 244d + 22d * Math.PI;
+
+        private void SetInfieldShortcut(float fromS = 96f, double toS = 0d)
+        {
+            SetField("shortcuts", new List<TrackDefinition.Shortcut>
+            {
+                new TrackDefinition.Shortcut(fromS, (float)(toS > 0d ? toS : InfieldShortcutTo), 15f, 74f, 3.6f),
+            });
+        }
+
+        // Off the main road the shortcut's road takes over: its S runs from where it leaves to where it comes back in
+        // proportion along it, and its frame faces along it. On the main road, even beside the junction, the loop answers.
+        [Test]
+        public void BuildCenterline_AShortcut_IsTheTrackOffTheMainRoadAndCarriesSAcross()
+        {
+            SetInfieldShortcut();
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.BranchCount, Is.EqualTo(1));
+            // Halfway along the shortcut's straight: x 15 + 37, z 96 + 15.
+            double along = Math.PI * 15d / 2d + 37d, length = Math.PI * 15d + 74d;
+            TrackCoord middle = line.Project(new Vector3(52f, 0f, 111f));
+            Assert.That(middle.S, Is.EqualTo(96d + along / length * (InfieldShortcutTo - 96d)).Within(0.01d));
+            Assert.That(middle.D, Is.EqualTo(0f).Within(0.01f));
+            Assert.That(Vector3.Distance(line.Frame(new Vector3(52f, 0f, 111f)).Forward, Vector3.right), Is.LessThan(1e-4f), "East along the straight.");
+            TrackCoord beside = line.Project(new Vector3(5f, 0f, 104f));
+            Assert.That(beside.S, Is.EqualTo(104d).Within(0.01d), "On the main road beside the junction: the loop's S.");
+            Assert.That(beside.D, Is.EqualTo(5f).Within(0.01f));
+            Assert.That(Vector3.Distance(line.Frame(new Vector3(5f, 0f, 104f)).Forward, Vector3.forward), Is.LessThan(1e-4f));
+            var poles = new List<Vector3>();
+            line.GetPoles(poles);
+            Assert.That(poles.Count, Is.EqualTo(6), "Four corner poles, then the shortcut's two.");
+            Assert.That(Vector3.Distance(poles[4], new Vector3(15f, 0f, 96f)), Is.LessThan(1e-3f));
+            Assert.That(Vector3.Distance(poles[5], new Vector3(89f, 0f, 96f)), Is.LessThan(1e-3f));
+        }
+
+        // The main road's right guard opens over each crossing: there the shortcut's inner (R15 - 3.6) and outer (R15 + 3.6)
+        // edge cross the main road's edge (6 m off its centerline, 9 m from the corner pole), widened by a guard either side.
+        [Test]
+        public void ShortcutGuardGaps_AreTheCrossingsOfTheTwoRoads()
+        {
+            SetInfieldShortcut();
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            List<(double From, double To)> gaps = definition.ShortcutGuardGaps();
+            double inner = Math.Sqrt(11.4d * 11.4d - 81d), outer = Math.Sqrt(18.6d * 18.6d - 81d);
+            Assert.That(gaps.Count, Is.EqualTo(2));
+            Assert.That(gaps[0].From, Is.EqualTo(96d + inner - 0.3d).Within(1e-3d));
+            Assert.That(gaps[0].To, Is.EqualTo(96d + outer + 0.3d).Within(1e-3d));
+            Assert.That(gaps[1].From, Is.EqualTo(InfieldShortcutTo - outer - 0.3d).Within(1e-3d));
+            Assert.That(gaps[1].To, Is.EqualTo(InfieldShortcutTo - inner + 0.3d).Within(1e-3d));
+        }
+
+        [Test]
+        public void TryValidate_ShortcutMissingTheRoadOrLeavingOverAHill_IsRejected()
+        {
+            SetInfieldShortcut(96f, InfieldShortcutTo - 3d);
+            Assert.That(Error(), Does.Contain("shortcut 0").And.Contain("away from the main road"));
+            SetInfieldShortcut(10f, InfieldShortcutTo - 86d);
+            Assert.That(Error(), Does.Contain("shortcut 0").And.Contain("flat straight where it leaves"));
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(96f, (float)InfieldShortcutTo, 15f, 74f, 6f) });
+            Assert.That(Error(), Does.Contain("shortcut 0").And.Contain("half width"));
+        }
+
         [Test]
         public void CheckpointS_BadIndex_Throws()
         {

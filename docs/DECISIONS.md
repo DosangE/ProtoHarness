@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-10-25 · 봉 각도는 트랙 진행 방향에서 잰다 — 코너 중간에도 봉이 걸린다 (`fix/corner-pole-angle`)
+
+- **결정 (사용자)**: 아래 측정 뒤 후보 3개 중 추천안 ① "각도를 트랙 진행 방향에서 잰다"에 "ㄱㄱ 추천대로". 측정 브랜치 `feature/probe-corner-pole-reach`(로컬, 푸시 안 함)를 `fix/corner-pole-angle` 로 이름을 바꿔 측정과 수정을 한 브랜치에 묶었다.
+- **한 것**: `RunnerMotor.TryFindPole` 이 `Centerline.TryFindPole` 에 러너 방향(`Racer.Heading`) 대신 그 자리의 트랙 방향(`Track.Frame(position).Forward` 의 yaw)을 넘긴다. 코너 안에서는 봉이 늘 트랙 방향의 옆(90°)이라 95° 안이다. 바뀌는 것: 스윙 키를 눌렀을 때 걸리는지(`TryHookPole`)와 HUD 의 봉 후보(`GrappleController.HasPoleCandidate`). 거리 규칙·가장 가까운 봉 고르기·지면 조건은 그대로.
+  - 알아둘 것: 이제 러너가 어느 쪽을 보든(후진 포함) 트랙 기준 95° 안의 봉을 건다. 연속 코너에서 지나온 봉은 트랙 기준으로도 뒤라 그대로 안 걸린다(가장 가까운 봉 규칙도 같다).
+- **실패 → 통과 테스트**: `ChainRushCircuitTests.Swing_RoundTheFirstCorner_ItsPoleIsOfferedThroughTheWholeArc` — 봇(`CircuitBot`, 중심선)이 STADIUM 첫 코너를 도는 동안 지면의 모든 틱에서 그 코너의 봉이 걸릴 수 있어야 한다.
+  - 고치기 전 (09:11:44Z): `testcasecount="1" result="Failed(Child)" failed="1"` — `First tick without the corner's pole: tick 421 S 143.1 (8% of the arc), D -0.16, 22.16 m and 95.3 degrees off the facing  Expected: 115  But was: 6`.
+  - 고친 뒤 (게이트 안): `its pole offered on 115 of 115 grounded ticks in the arc`.
+- **검증** (에디터 6000.3.25f1, 2026-10-25, 커밋 전 작업 트리):
+  - 컴파일: 에디터가 뒤에 있어 `AssetDatabase.Refresh()` 로 가져옴 → Editor.log `*** Tundra build success (1.07 seconds), 11 items updated`, `scriptCompilationFailed=False`, Console Error 0.
+  - `tools/select-tests.ps1`: `RunnerMotor.cs` → "전체 (코어 시뮬)".
+  - EditMode `!Enemy`: `testcasecount="271" result="Passed" passed="271" failed="0"` (09:13:24Z~09:13:28Z).
+  - PlayMode 게이트 (`Run PlayMode Tests`): `testcasecount="191" result="Passed" passed="183" failed="0" skipped="8"` (09:13:49Z~09:23:17Z, 568.2초). 189 → 191 은 위 테스트 1건(통과)과 측정 테스트 1건(`[Explicit]`, skipped 8 = `ChainRushProbeTests` 5·`NetworkRaceTests` 3).
+  - 그대로인 것: 서킷 지문 `0x18F31E7A2B4F79B3`(지문 봇은 스윙하지 않는다 — `CircuitBot` 은 스윙 입력을 보내지 않음), 격리 월드, BETA `0xA9251CA0D8EBD1BE`·THETA `0x6761C9D9B6C0C3F0`, 보통 `0xFEF4A3B5DBC515F3`·매우빠름 `0xC057CFF7FA2D1088`. 봉 스윙 테스트(`ChainRushCornerSwingTests`, 작업대 R30 도로) 모두 통과(로그: 로프 33.05 m·훅 속도 20.00 m/s, 측면 봉 로프 11.00 m — 고치기 전 값과는 비교하지 않았다).
+  - 실행 뒤 Console Error 2건은 거부 시험이 일부러 낸 것(`RaceAssembler.cs:58` 멀티 거부, `RunnerProfile.cs:44` ← `ChainRushProfileTests.cs:139`).
+- **남은 것**: 사용자 플레이 확인 — 코너 중간에 Shift 로 봉이 걸리는지, 후진 중에도 걸리는 것이 어색하지 않은지.
+
+## 2026-10-25 · 측정: 코너 중간에 봉이 안 걸리는 원인은 각도(95°)다 — 거리가 아니다 (`feature/probe-corner-pole-reach` → `fix/corner-pole-angle`)
+
+- **결정 (사용자)**: M3 속도 단계 병합 뒤 다음 작업 후보 중 "코너 봉 미걸림 측정". 코드 수정 없이 측정만(`[Explicit]` 측정 테스트 `ChainRushProbeTests.Probe_PoleReach_RoundTheFirstCorner` 추가).
+- **잰 것**: STADIUM 첫 코너(s 140.5~175.0, R22 90°, 봉은 코너 중심과 0.00 m)를 봇이 스윙 없이 돈다 — 안쪽 4 m 라인(`ProbeBot.InsideLine`)과 중심선(`CircuitBot`). 코너 20 m 앞부터 끝까지 틱마다 `Centerline.TryFindPole` 이 따지는 두 값(수평 거리 ≤ 반지름 22 + `poleReach` 6 = 28 m, 바라보는 방향에서 봉까지 각도 ≤ `poleMaxAngle` 95° — 씬 값, grep)과 지면(코요테 시간), `TryFindPole` 의 답. 빠름(씬 값), 2026-10-25 08:53Z, `testcasecount="1" result="Passed"`.
+- **결과**:
+  - 지면에서 이 봉을 걸 수 있었던 구간: 안쪽 라인 13틱(s 139.1~144.6, 코너의 −4%~12%), 중심선 9틱(s 139.7~142.8, −2%~7%). 그 뒤 코너 끝까지 **모두 "angle"** 로 거절된다. 거리는 한 번도 걸림돌이 아니었다(코너 안 18.1~26.4 m < 28 m).
+  - 각도: 안쪽 라인은 코너 13% 에서 95.4°, 47% 에서 102.7°, 92% 에서 106.8°. 중심선은 8% 95.3°, 48% 98.1°, 96% 97.5°.
+  - 까닭: 러너 방향이 트랙 방향보다 덜 돈다 — "heading off the track" 가 코너 안에서 안쪽 라인 −5.4° → −16.8°, 중심선 −5.3° → −8.4°. 코너 안 속도 16.0 m/s(조향 감속)에서 회전 상한은 `speed / minTurnRadius` = 36.7°/s 인데, R22 중심선을 따라가려면 16/22 rad/s = 41.7°/s, 안쪽 라인(봉에서 약 18 m)은 약 50.9°/s 가 든다. 봉은 트랙 방향의 옆(90°)에 있으므로, 방향이 바깥으로 5° 넘게 처지면 봉이 95° 밖으로 넘어간다.
+  - 덧붙여: 첫 코너 바로 앞은 점프 틈(s 119~125)이라 s 120.6~139 는 공중이었다(그동안은 거리·각도가 맞아도 지면이 아니라 못 건다). 코너 중간 문제와는 별개.
+- **2026-10-19 추정과의 관계**: "최소 회전 반지름 25 m 가 안쪽 라인보다 커서 방향이 커브를 못 따라가고 봉이 95° 를 넘는다" — 숫자로 맞았다. 매우빠름 봇의 R22 출구 가드 스침(위 "M3 속도 단계")도 같은 회전 상한에서 온다.
+- **후보 3개**: ① 각도를 러너 방향 대신 트랙 진행 방향에서 잰다(`RunnerMotor.TryFindPole`) ② `poleMaxAngle` 를 넓힌다(씬 값, 에디터에서) ③ `minTurnRadius` 를 코너 반지름 이하로(조향 전체가 바뀐다, DECISIONS "조향 2차"). 사용자가 ① 을 골랐다 — 위 "봉 각도는 트랙 진행 방향에서 잰다". 버린 ②: 연속 코너에서 지나온 봉이 잡히는지 다시 재야 한다. 버린 ③: M1-T 의 조향 느낌이 바뀐다.
+
 ## 2026-10-25 · M3 속도 단계: 보통 0.8 · 빠름 1.0 · 매우빠름 1.2 (`feature/m3-speed-classes`)
 
 - **결정 (사용자)**: RF2 병합 뒤 "다음작업 ㄱㄱ" → 요청서(배율 0.8/1.0/1.2, 곱하는 범위는 러너 프로필과 같게 + 그래플 고정값 13·16)에 "ㄱㄱ". 빠른 확인에서 매우빠름 봇이 가드를 스쳐 멈추고 보고 → 후보 3개 중 추천안 "가드 스침을 테스트에서 허용"에 "추천대로 ㄱㄱ".

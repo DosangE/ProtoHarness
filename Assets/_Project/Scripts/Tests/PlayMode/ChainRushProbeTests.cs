@@ -18,6 +18,7 @@ namespace ProtoHarness.Tests.PlayMode
     // run went as planned. Explicit: run by name, not in the gate. A finding becomes a real test with its fix.
     //   Grapple dip: "a grapple gets released by itself at some point; if the runner sped up on the way it nearly fell".
     //   Swing hook jump: "entering a corner with a swing, the runner jumps to the rope's length, not where it was".
+    //   Pole reach: "halfway round the corner the pole never hooks" (2026-10-25: the angle, DECISIONS "측정: 코너 중간에 …").
     [Explicit]
     public sealed class ChainRushProbeTests
     {
@@ -272,6 +273,81 @@ namespace ProtoHarness.Tests.PlayMode
                 game.FailRun();
             }
         }
+
+        // "Halfway round the corner the pole never hooks" (Probe_SwingHook_EveryCombination, 2026-10-19; HANDOFF 2절 3번).
+        // The bot drives the first corner without swinging, on the inside line and on the centerline. Per tick from 20 m
+        // before the arc to its end: what Centerline.TryFindPole weighs for the corner's pole (level distance against the
+        // arc radius plus poleReach, the angle off the heading against poleMaxAngle) and whether the runner is grounded
+        // (TryHookPole needs the coyote time), next to what TryFindPole answers. Logs every 10th tick and every change.
+        [UnityTest, Timeout(180000)]
+        public IEnumerator Probe_PoleReach_RoundTheFirstCorner()
+        {
+            // The circuit scene's runner (ChainRushCircuit.unity, grep 2026-10-25): poleMaxAngle 95, poleReach 6.
+            const float MaxAngle = 95f, Reach = 6f;
+            double arcStart = -1d;
+            for (double s = 100d; s < 250d && arcStart < 0d; s += 0.5d)
+                if (game.Track.FrameAt(s).Curvature != 0f) arcStart = s;
+            Assert.That(arcStart, Is.GreaterThan(0d), "No corner found.");
+            double arcEnd = arcStart;
+            while (game.Track.FrameAt(arcEnd).Curvature != 0f) arcEnd += 0.5d;
+            TrackFrame mid = game.Track.FrameAt((arcStart + arcEnd) / 2d);
+            float radius = 1f / Mathf.Abs(mid.Curvature);
+            Vector3 center = mid.Position + mid.Right * (Mathf.Sign(mid.Curvature) * radius);
+            var poles = new System.Collections.Generic.List<Vector3>();
+            game.Track.GetPoles(poles);
+            Vector3 pole = poles[0];
+            for (int i = 1; i < poles.Count; i++)
+                if (Level(poles[i] - center) < Level(pole - center)) pole = poles[i];
+            Debug.Log($"ChainRush probe reach: first corner s {arcStart:0.0}..{arcEnd:0.0}, radius {radius:0.0} m, its pole {Level(pole - center):0.00} m from the arc center; limits: distance {radius + Reach:0.0} m, angle {MaxAngle:0} deg.");
+            foreach (bool inside in new[] { true, false })
+            {
+                string line = inside ? "inside line" : "centerline";
+                IInputSource bot = inside
+                    ? new ProbeBot(new CircuitBot(game, player, grapple, circuit), game, player, circuit) { InsideLine = true }
+                    : (IInputSource)new CircuitBot(game, player, grapple, circuit);
+                string lastKey = null;
+                int offered = 0, sampled = 0, firstOffered = -1, lastOffered = -1;
+                double firstOfferedS = 0d, lastOfferedS = 0d;
+                Action<int> sample = tick =>
+                {
+                    Vector3 now = player.transform.position;
+                    TrackCoord here = game.Track.Project(now);
+                    if (here.S < arcStart - 20d || here.S > arcEnd) return;
+                    Vector3 toward = pole - now;
+                    float distance = Level(toward);
+                    float angle = Mathf.Abs(Mathf.DeltaAngle(player.Heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg));
+                    TrackFrame frame = game.Track.FrameAt(here.S);
+                    float headingOff = Mathf.DeltaAngle(Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg, player.Heading);
+                    bool grounded = game.Racer.CoyoteTime > 0f;
+                    bool found = player.TryFindPole(out Vector3 got);
+                    bool isThis = found && Level(got - pole) < 0.01f;
+                    sampled++;
+                    if (isThis && grounded)
+                    {
+                        offered++;
+                        if (firstOffered < 0) { firstOffered = tick; firstOfferedS = here.S; }
+                        lastOffered = tick;
+                        lastOfferedS = here.S;
+                    }
+                    string why = !found ? (distance > radius + Reach ? "too far" : angle > MaxAngle ? "angle" : "other") : isThis ? "this pole" : "another pole";
+                    string key = why + (grounded ? "" : " airborne");
+                    if (key != lastKey || sampled % 10 == 1)
+                        Debug.Log($"ChainRush probe reach [{line}] tick {tick} s {here.S:0.0} ({(here.S - arcStart) / (arcEnd - arcStart) * 100d:0}% of the arc) D {here.D:+0.00;-0.00}: " +
+                                  $"distance {distance:0.00} m, angle {angle:0.0} deg, heading off the track {headingOff:+0.0;-0.0} deg, speed {player.HorizontalSpeed:0.0}, turn limit {player.TurnLimit:0.0} deg/s, " +
+                                  $"grounded {grounded} -> TryFindPole: {why}.");
+                    lastKey = key;
+                };
+                game.TickCompleted += sample;
+                yield return RunUntil(bot, () => circuit.Laps.Progress > arcEnd + 2d || game.HasFailed, 60f, () => { });
+                game.TickCompleted -= sample;
+                Debug.Log($"ChainRush probe reach [{line}]: {sampled} ticks sampled, this pole offered on the ground for {offered}" +
+                          (offered > 0 ? $", from tick {firstOffered} s {firstOfferedS:0.0} ({(firstOfferedS - arcStart) / (arcEnd - arcStart) * 100d:0}%) to tick {lastOffered} s {lastOfferedS:0.0} ({(lastOfferedS - arcStart) / (arcEnd - arcStart) * 100d:0}%)." : "."));
+                Assert.That(sampled, Is.GreaterThan(0), "The bot did not reach the corner.");
+                game.FailRun();
+            }
+        }
+
+        private static float Level(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
         // ProbeBot's inside line, with one swing: pressed at the first tick past hookAt (0: as soon as a pole is in reach)
         // with a pole in reach, held 10 ticks with a fixed steer, then let go; a booster fired at boostAt (negative: none).

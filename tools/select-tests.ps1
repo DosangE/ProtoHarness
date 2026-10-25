@@ -48,7 +48,7 @@ $rules = @(
     @{ Pattern = '^Assets/_Project/(Data|Scenes)/';                 All = $true;  Why = 'SO 값·씬은 시뮬에 들어간다' }
     @{ Pattern = '^' + $scripts + 'Editor/';                        All = $true;  Why = '씬 빌더·테스트 메뉴' }
     @{ Pattern = '\.asmdef$';                                       All = $true;  Why = '어셈블리 정의' }
-    @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(CircuitBot|TestRoad|TrackFollower|StateTrace)\.cs$'; All = $true; Why = '테스트 보조 파일' }
+    @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(CircuitBot|ShortcutBot|TestRoad|TrackFollower|StateTrace)\.cs$'; All = $true; Why = '테스트 보조 파일' }
     @{ Pattern = '^' + $scripts + 'Tests/EditMode/';                Classes = @(); Why = 'EditMode 만 (EditMode 전체는 늘 돈다)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/NetworkRaceTests\.cs$'; Classes = @(); Why = '네트워크 레이스'; Note = 'NetworkRaceTests 는 [Explicit] 이라 여기서 고르지 않는다. 플레이어 빌드 뒤 이름으로 따로 돌린다 (HANDOFF 1절)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(\w+)\.cs$';      Own = $true;  Why = '테스트 클래스 파일' }

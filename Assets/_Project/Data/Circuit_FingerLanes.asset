@@ -239,6 +239,17 @@ MonoBehaviour:
     launch: 0
   anchors: []
   poles: []
+  shortcuts:
+  - fromS: 294.07965
+    toS: 416.61945
+    radius: 15
+    straight: 20
+    halfWidth: 3.6000001
+  - fromS: 840.2389
+    toS: 970.77875
+    radius: 15
+    straight: 20
+    halfWidth: 3.6000001
   checkpointFractions:
   - 0.15
   - 0.5

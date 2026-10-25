@@ -859,6 +859,64 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(finger.Gaps(), Is.Empty);
             Assert.That(finger.Anchors, Is.Empty);
             Assert.That(finger.Poles, Is.Empty);
+            // The nails of the two long fingers (user 2026-10-25): R15 quarter turns, 20 m across, a road half as wide.
+            Assert.That(finger.Shortcuts.Count, Is.EqualTo(2));
+            foreach (TrackDefinition.Shortcut shortcut in finger.Shortcuts)
+            {
+                Assert.That(shortcut.Radius, Is.EqualTo(15f));
+                Assert.That(shortcut.Straight, Is.EqualTo(20f));
+                Assert.That(shortcut.HalfWidth, Is.EqualTo(finger.RoadHalfWidth * 0.5f).Within(1e-4f));
+                for (int i = 0; i < finger.CheckpointCount; i++)
+                    Assert.That(finger.CheckpointS(i), Is.Not.InRange((double)shortcut.FromS, (double)shortcut.ToS), "No checkpoint where a shortcut skips.");
+            }
+            Assert.That(line.BranchCount, Is.EqualTo(2));
+        }
+
+        // A runner that swings round the nails' corner poles takes both shortcuts on each lap (user 2026-10-25): the laps
+        // count across them and the race finishes. The bot hooks at the junction, lets go a quarter turn on, and again at
+        // the straight's end (ShortcutBot); the R15 turns are tighter than the runner's own 25 m, so only a swing makes them.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_FingerLanesShortcuts_ASwingingRunnerTakesBothEachLap()
+        {
+            var store = TestRecords();
+            TrackDefinition finger = FingerLanes();
+            store.Clear(finger.name, SpeedClass.Fast);
+            RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene raceScene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(raceScene);
+            RunnerMotor player = Find<RunnerMotor>(raceScene);
+            CircuitRace circuit = Find<CircuitRace>(raceScene);
+            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            Assert.That(game.Track.BranchCount, Is.EqualTo(2));
+            float scale = Time.timeScale;
+            var bot = new ShortcutBot(game, player, finger);
+            try
+            {
+                game.SetInputSource(bot);
+                Time.timeScale = 6f;
+                game.StartRun();
+                float deadline = Time.realtimeSinceStartup + 90f;
+                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
+                Time.timeScale = scale;
+                LapCounter laps = circuit.Laps;
+                string where = $"tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}";
+                Assert.That(game.HasFailed, Is.False, "The runner fell or died. " + where);
+                Assert.That(game.HasFinished, Is.True, "The runner did not finish two laps. " + where);
+                Assert.That(bot.Missed, Is.EqualTo(0), "A hook found no pole. " + where);
+                Assert.That(bot.Taken, Is.EqualTo(4), "Both shortcuts on both laps. " + where);
+                for (int lap = 1; lap <= 2; lap++)
+                    Debug.Log($"ChainRush Finger Lanes with shortcuts lap {lap}: {Ticks.ToSeconds(laps.LapTicks(lap)):F2} s");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(finger.name, SpeedClass.Fast);
+            }
         }
 
         // The real lobby setup (the third track, no decoration yet), then the bot runs both laps at Fast: no fall, no guard

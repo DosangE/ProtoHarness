@@ -36,9 +36,13 @@ namespace ProtoHarness.Editor.ChainRush
         private const float FingerTopRow = 107f;
         private const float FingerTowerBottomRow = 166f;
         private const float FingerRowPixels = 15f;
-        // Where the nail shortcuts leave the two long fingers (DECISIONS 2026-10-25 "FINGER LANES", built in a second step).
+        // Where the nail shortcuts leave the two long fingers (DECISIONS 2026-10-25 "FINGER LANES"): through a narrow gap in
+        // the right guard, a tight right quarter turn of FingerNailRadius, across the island, another one onto the next row
+        // (user 2026-10-25, the record video at 12.2-13.1 s; tighter than the runner's own 25 m turn, so it takes the swing).
         private const int FingerNailColumn = 132;
         private const int FingerLastNailColumn = 128;
+        private const float FingerNailRadius = 15f;
+        private const float FingerNailHalfWidth = FingerRoadHalfWidth * 0.5f;
         private const float FingerMetresPerPixel = 1f;
         // The half turns at the runner's own tightest turn (user 2026-10-25: R28 dragged on; still 180). At R22 the bot,
         // which only steers, ran out to 6.6-6.8 m of the 7.2 m road and lost a fifth of its lap time; tighter than this is
@@ -92,7 +96,7 @@ namespace ProtoHarness.Editor.ChainRush
         // stone bridge's bump, the left edge north through the clock tower's narrow entrance and over the bump at its exit,
         // the top-left corner to the line. The road is 1.2 times the usual width; both bumps are kickers that throw a runner
         // by its speed. No gaps, two laps.
-        // The nail shortcuts of the two long fingers are not built yet (a second step); their stretches hold no checkpoint.
+        // The nail shortcuts of the two long fingers cut across to the next row; their stretches hold no checkpoint.
         [MenuItem("ProtoHarness/Chain Rush/Create Finger Lanes Track")]
         public static void CreateFingerLanesTrack()
         {
@@ -102,14 +106,19 @@ namespace ProtoHarness.Editor.ChainRush
                 foreach ((double from, double to) in FingerShortcutStretches(segments))
                     if (FingerCheckpoints[c] * lap >= from && FingerCheckpoints[c] * lap <= to)
                         throw new InvalidOperationException($"Finger Lanes checkpoint {c} (S {FingerCheckpoints[c] * lap:F1}) is inside a shortcut's stretch [{from:F1}, {to:F1}].");
-            SaveTrack(FingerLanesPath, "Finger Lanes", segments, Array.Empty<TrackDefinition.Pole>(), FingerCheckpoints, 2, FingerRoadHalfWidth);
+            (double From, double To)[] stretches = FingerShortcutStretches(segments);
+            var shortcuts = new TrackDefinition.Shortcut[stretches.Length];
+            for (int i = 0; i < stretches.Length; i++)
+                shortcuts[i] = new TrackDefinition.Shortcut((float)stretches[i].From, (float)stretches[i].To, FingerNailRadius,
+                    2f * FingerUTurnRadius - 2f * FingerNailRadius, FingerNailHalfWidth);
+            SaveTrack(FingerLanesPath, "Finger Lanes", segments, Array.Empty<TrackDefinition.Pole>(), FingerCheckpoints, 2, FingerRoadHalfWidth, shortcuts);
         }
 
         // Builds the definition on a new instance, checks it (TryValidate) and only then writes it to path: a new asset, or
         // over the existing one in place so its GUID (the lobby's reference) and best records stay. Null checkpoints and a
-        // road half width of 0 keep the definition's defaults.
+        // road half width of 0 keep the definition's defaults; no shortcuts leaves none.
         private static void SaveTrack(string path, string label, TrackDefinition.Segment[] segments, TrackDefinition.Pole[] poles,
-            float[] checkpoints, int lapCount, float roadHalfWidth = 0f)
+            float[] checkpoints, int lapCount, float roadHalfWidth = 0f, TrackDefinition.Shortcut[] shortcuts = null)
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before creating the track.");
 
@@ -140,6 +149,17 @@ namespace ProtoHarness.Editor.ChainRush
                 element.FindPropertyRelative("s").floatValue = poles[i].S;
                 element.FindPropertyRelative("offset").floatValue = poles[i].Offset;
                 element.FindPropertyRelative("reach").floatValue = poles[i].Reach;
+            }
+            SerializedProperty shortcutList = data.FindProperty("shortcuts");
+            shortcutList.arraySize = shortcuts == null ? 0 : shortcuts.Length;
+            for (int i = 0; i < shortcutList.arraySize; i++)
+            {
+                SerializedProperty element = shortcutList.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("fromS").floatValue = shortcuts[i].FromS;
+                element.FindPropertyRelative("toS").floatValue = shortcuts[i].ToS;
+                element.FindPropertyRelative("radius").floatValue = shortcuts[i].Radius;
+                element.FindPropertyRelative("straight").floatValue = shortcuts[i].Straight;
+                element.FindPropertyRelative("halfWidth").floatValue = shortcuts[i].HalfWidth;
             }
             if (checkpoints != null)
             {

@@ -24,6 +24,7 @@
   - EditMode `!Enemy`: `testcasecount="276" result="Passed" passed="276" failed="0"` (12:16:10Z~12:16:11Z) — 새 3건(`TrackDefinitionTests`: 스타디움 안쪽을 가로지르는 지름길의 S 비례·프레임·본선 위 그대로·봉 순서, 가드 틈 값, 검증 거절).
   - FINGER LANES 5건: `testcasecount="5" result="Passed" passed="5" failed="0"` (12:16:29Z~12:18:23Z). 지름길 봇 두 랩 모두 두 지름길(`Taken` 4, `Missed` 0), 랩 **74.50 / 73.26 s** — 본선 봇 84.06 / 82.82 s 보다 랩마다 약 9.6 s 빠르다. 본선 봇 값(랩·최대 옆 거리 1.98 m·턱 1.15/1.38 m)은 지름길 전과 같다.
   - 게이트 전체 `Run PlayMode Tests`: `testcasecount="196" result="Passed" passed="188" failed="0" skipped="8"` (12:18:50Z~12:30:12Z, 682.1초). skipped 8 = `[Explicit]` 측정 5 + 네트워크 레이스 3. **스타디움 지문 그대로** `0x18F31E7A2B4F79B3`.
+  - **② 병합** (사용자 "커밋병합푸시하고 브랜치 제거"): 커밋 `3b5a72f` 에서 `tools/select-tests.ps1 -Range dev...HEAD` = 전체(바뀐 파일 13개 — `Centerline`·SO·씬 빌더·테스트 보조 파일, ProjectSettings 0개). 그 근거는 위 EditMode 276·게이트 196 실행이다 — 그 뒤 커밋까지 바뀐 것은 `docs/` 와 `tools/select-tests.ps1`(Unity 가 읽지 않는다)뿐이다. `ProtoHarness.slnx` 는 넣지 않았다. 병합 뒤 `feature/m3-track-village-finger`·`feature/m3-finger-shortcuts` 로컬 브랜치를 지웠다(원격에는 올리지 않았던 브랜치).
 - **남은 것**: 사용자 플레이 확인(틈의 폭, Shift 로 연결로 봉이 잘 걸리는지, 본선을 지날 때 연결로 봉이 먼저 걸려 거슬리지 않는지). 분리대 돌담 같은 장식(T3e).
 
 ## 2026-10-25 · FINGER LANES — 빌리지 손가락을 옮긴 세 번째 서킷 · 도약대(속도로 뜨는 턱) (`feature/m3-track-village-finger`)

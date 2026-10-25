@@ -24,6 +24,53 @@ namespace ProtoHarness.Editor.ChainRush
         private const float SkywayPoleOffset = 11f;
         private const float SkywayPoleReach = 10f;
 
+        public const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
+        // Finger Lanes from the Village Finger outline (rush.webp, 500x256 pixels): the columns where the road's centre
+        // runs, the top row's and the clock tower's pixel rows, and the 15 px between rows.
+        private const int FingerLeftEdgeColumn = 19;
+        private const int FingerStartColumn = 81;
+        private const int FingerTurnColumn = 83;
+        private const int FingerFirstTipColumn = 126;
+        private const int FingerLongTipColumn = 154;
+        private const int FingerShortTipColumn = 130;
+        private const float FingerTopRow = 107f;
+        private const float FingerTowerBottomRow = 166f;
+        private const float FingerRowPixels = 15f;
+        // Where the nail shortcuts leave the two long fingers (DECISIONS 2026-10-25 "FINGER LANES", built in a second step).
+        private const int FingerNailColumn = 132;
+        private const int FingerLastNailColumn = 128;
+        private const float FingerMetresPerPixel = 1f;
+        // The half turns at the runner's own tightest turn (user 2026-10-25: R28 dragged on; still 180). At R22 the bot,
+        // which only steers, ran out to 6.6-6.8 m of the 7.2 m road and lost a fifth of its lap time; tighter than this is
+        // for the pole swing.
+        private const float FingerUTurnRadius = 25f;
+        private const float FingerCornerRadius = 30f;
+        // 1.2 times the usual road (user 2026-10-25).
+        private const float FingerRoadHalfWidth = RoadProfile.DeckHalfWidth * 1.2f;
+        // Both jumps are a bump, not a climb (user 2026-10-25, the record video at 24.5-28.4 s): four pieces of FingerBump
+        // at the steepest grade a track allows, 0.5 m up and down over 10 m, the kicker's lip on its top (grade to flat,
+        // where the road starts to fall away: kicking on a climb, the road still rose and held the runner down). The bump
+        // throws the runner by its speed.
+        private const float FingerSteepGrade = TrackDefinition.MaxGrade;
+        private const float FingerBump = 2.5f;
+        // The bump of the stone bridge near the bottom edge's end, then a flat landing before the corner into the square.
+        private const float FingerBridgeLanding = 20f;
+        private const float FingerBridgeLaunch = 0.3f;
+        // The clock tower where the outline draws it: the road narrows to FingerTowerHalfWidth over FingerTowerTaper
+        // (0.2 m a metre, inside TrackDefinition.MaxWidthChange) into its entrance, runs FingerTowerInside through it, throws
+        // the runner off the bump at its exit and widens back over the landing.
+        private const float FingerTowerHalfWidth = 4f;
+        private const float FingerTowerTaper = 16f;
+        private const float FingerTowerInside = 30f;
+        private const float FingerTowerLaunch = 0.35f;
+        // The long fingers and the pieces their shortcuts come back to, in FingerLanesSegments.
+        private const int FingerLongIndex = 4;
+        private const int FingerLongReturnIndex = 6;
+        private const int FingerLastLongIndex = 12;
+        private const int FingerLastLongReturnIndex = 14;
+        // One checkpoint before, between and after the two shortcut stretches.
+        private static readonly float[] FingerCheckpoints = { 0.15f, 0.5f, 0.75f };
+
         // Makes the Skyway Loop definition (DECISIONS 2026-10-21 "SKYWAY LOOP", reshaped 2026-10-22): the layout of
         // KartRider's Village Highway traced from its track outline at 0.5 m a pixel, heights from a record run.
         // Clockwise from the start line heading north: the bump's half turn, a jog and the climb (0 -> 12 m), the elevated
@@ -33,14 +80,44 @@ namespace ProtoHarness.Editor.ChainRush
         [MenuItem("ProtoHarness/Chain Rush/Create Skyway Track")]
         public static void CreateSkywayTrack()
         {
+            TrackDefinition.Segment[] segments = SkywaySegments();
+            SaveTrack(SkywayPath, "Skyway", segments, SkywayPoles(segments), null, 2);
+        }
+
+        // Makes the Finger Lanes definition (DECISIONS 2026-10-25 "FINGER LANES"): KartRider's Village Finger traced from
+        // its Rush+ track outline (500x256), the road's centre rows 15 px apart. The U-turns set the scale across the rows
+        // (two FingerUTurnRadius a row, R28 being the half turn the bot holds, DECISIONS 2026-10-21 "SKYWAY LOOP"), and the
+        // rows' lengths are FingerMetresPerPixel of the outline's (user 2026-10-25, plan A). Clockwise from the start mark on
+        // the top row heading east: seven fingers joined by half turns (right, left, ... right), the bottom edge west over a
+        // stone bridge's bump, the left edge north through the clock tower's narrow entrance and over the bump at its exit,
+        // the top-left corner to the line. The road is 1.2 times the usual width; both bumps are kickers that throw a runner
+        // by its speed. No gaps, two laps.
+        // The nail shortcuts of the two long fingers are not built yet (a second step); their stretches hold no checkpoint.
+        [MenuItem("ProtoHarness/Chain Rush/Create Finger Lanes Track")]
+        public static void CreateFingerLanesTrack()
+        {
+            TrackDefinition.Segment[] segments = FingerLanesSegments();
+            double lap = StartOf(segments, segments.Length);
+            for (int c = 0; c < FingerCheckpoints.Length; c++)
+                foreach ((double from, double to) in FingerShortcutStretches(segments))
+                    if (FingerCheckpoints[c] * lap >= from && FingerCheckpoints[c] * lap <= to)
+                        throw new InvalidOperationException($"Finger Lanes checkpoint {c} (S {FingerCheckpoints[c] * lap:F1}) is inside a shortcut's stretch [{from:F1}, {to:F1}].");
+            SaveTrack(FingerLanesPath, "Finger Lanes", segments, Array.Empty<TrackDefinition.Pole>(), FingerCheckpoints, 2, FingerRoadHalfWidth);
+        }
+
+        // Builds the definition on a new instance, checks it (TryValidate) and only then writes it to path: a new asset, or
+        // over the existing one in place so its GUID (the lobby's reference) and best records stay. Null checkpoints and a
+        // road half width of 0 keep the definition's defaults.
+        private static void SaveTrack(string path, string label, TrackDefinition.Segment[] segments, TrackDefinition.Pole[] poles,
+            float[] checkpoints, int lapCount, float roadHalfWidth = 0f)
+        {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before creating the track.");
 
-            var existing = AssetDatabase.LoadAssetAtPath<TrackDefinition>(SkywayPath);
-            if (existing == null && File.Exists(SkywayPath)) throw new InvalidOperationException("The file at " + SkywayPath + " is not a TrackDefinition.");
+            var existing = AssetDatabase.LoadAssetAtPath<TrackDefinition>(path);
+            if (existing == null && File.Exists(path)) throw new InvalidOperationException("The file at " + path + " is not a TrackDefinition.");
             // Built and checked on a new instance first, so a bad layout never reaches the asset.
             var definition = ScriptableObject.CreateInstance<TrackDefinition>();
             var data = new SerializedObject(definition);
-            TrackDefinition.Segment[] segments = SkywaySegments();
             SerializedProperty list = data.FindProperty("segments");
             list.arraySize = segments.Length;
             for (int i = 0; i < segments.Length; i++)
@@ -52,9 +129,9 @@ namespace ProtoHarness.Editor.ChainRush
                 element.FindPropertyRelative("endGrade").floatValue = segments[i].EndGrade;
                 element.FindPropertyRelative("endHalfWidth").floatValue = segments[i].EndHalfWidth;
                 element.FindPropertyRelative("gap").boolValue = segments[i].IsGap;
+                element.FindPropertyRelative("launch").floatValue = segments[i].Launch;
             }
             data.FindProperty("anchors").arraySize = 0;
-            TrackDefinition.Pole[] poles = SkywayPoles(segments);
             SerializedProperty poleList = data.FindProperty("poles");
             poleList.arraySize = poles.Length;
             for (int i = 0; i < poles.Length; i++)
@@ -64,14 +141,21 @@ namespace ProtoHarness.Editor.ChainRush
                 element.FindPropertyRelative("offset").floatValue = poles[i].Offset;
                 element.FindPropertyRelative("reach").floatValue = poles[i].Reach;
             }
-            data.FindProperty("lapCount").intValue = 2;
+            if (checkpoints != null)
+            {
+                SerializedProperty checkpointList = data.FindProperty("checkpointFractions");
+                checkpointList.arraySize = checkpoints.Length;
+                for (int i = 0; i < checkpoints.Length; i++) checkpointList.GetArrayElementAtIndex(i).floatValue = checkpoints[i];
+            }
+            data.FindProperty("lapCount").intValue = lapCount;
+            if (roadHalfWidth > 0f) data.FindProperty("roadHalfWidth").floatValue = roadHalfWidth;
             data.ApplyModifiedPropertiesWithoutUndo();
             if (!definition.TryValidate(out string error))
             {
                 UnityEngine.Object.DestroyImmediate(definition);
                 throw new InvalidOperationException(error);
             }
-            if (existing == null) AssetDatabase.CreateAsset(definition, SkywayPath);
+            if (existing == null) AssetDatabase.CreateAsset(definition, path);
             else
             {
                 definition.name = existing.name;
@@ -81,7 +165,7 @@ namespace ProtoHarness.Editor.ChainRush
                 EditorUtility.SetDirty(definition);
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("ChainRush: Skyway track saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.", definition);
+            Debug.Log("ChainRush: " + label + " track saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.", definition);
         }
 
         private static TrackDefinition.Segment[] SkywaySegments() => new[]
@@ -126,6 +210,73 @@ namespace ProtoHarness.Editor.ChainRush
             for (int i = 0; i < poles.Length; i++)
                 poles[i] = new TrackDefinition.Pole((float)(start + SkywayPoleFirst + SkywayPoleSpacing * i), i % 2 == 0 ? -SkywayPoleOffset : SkywayPoleOffset, SkywayPoleReach);
             return poles;
+        }
+
+        private static TrackDefinition.Segment[] FingerLanesSegments()
+        {
+            const float u = FingerUTurnRadius, corner = FingerCornerRadius;
+            float rows = 7f * 2f * u;
+            float towerBottom = (FingerTowerBottomRow - FingerTopRow) / FingerRowPixels * 2f * u;
+            float longFinger = FingerX(FingerLongTipColumn) - FingerX(FingerTurnColumn);
+            float shortFinger = FingerX(FingerShortTipColumn) - FingerX(FingerTurnColumn);
+            const float g = FingerSteepGrade, narrow = FingerTowerHalfWidth;
+            float bottom = FingerX(FingerLongTipColumn) - corner;
+            float bump = 4f * FingerBump;
+            float tower = 2f * FingerTowerTaper + FingerTowerInside + bump;
+            return new[]
+            {
+                // The top row east from the start mark to the first fingertip, and the seven fingers: half turns right at
+                // the tips, left at the turn column; the second and the fourth finger (pieces 4 and 12) are the long ones.
+                TrackDefinition.Segment.Straight(FingerX(FingerFirstTipColumn) - FingerX(FingerStartColumn)), TrackDefinition.Segment.Arc(u, 180f),
+                TrackDefinition.Segment.Straight(FingerX(FingerFirstTipColumn) - FingerX(FingerTurnColumn)), TrackDefinition.Segment.Arc(u, -180f),
+                TrackDefinition.Segment.Straight(longFinger), TrackDefinition.Segment.Arc(u, 180f),
+                TrackDefinition.Segment.Straight(longFinger), TrackDefinition.Segment.Arc(u, -180f),
+                TrackDefinition.Segment.Straight(shortFinger), TrackDefinition.Segment.Arc(u, 180f),
+                TrackDefinition.Segment.Straight(shortFinger), TrackDefinition.Segment.Arc(u, -180f),
+                TrackDefinition.Segment.Straight(longFinger), TrackDefinition.Segment.Arc(u, 180f),
+                // The bottom edge west to the stone bridge's bump near its end, thrown off it by speed, landing before the
+                // corner into the square.
+                TrackDefinition.Segment.Straight(bottom - bump - FingerBridgeLanding),
+                TrackDefinition.Segment.Straight(FingerBump, g), TrackDefinition.Segment.Kicker(FingerBump, 0f, FingerBridgeLaunch),
+                TrackDefinition.Segment.Straight(FingerBump, -g), TrackDefinition.Segment.Straight(FingerBump, 0f),
+                TrackDefinition.Segment.Straight(FingerBridgeLanding),
+                // Up the left edge to the clock tower: the narrow entrance and the way through, the bump at its exit that throws
+                // the runner by speed, wide again over the landing, and on to the top-left corner.
+                TrackDefinition.Segment.Arc(corner, 90f),
+                TrackDefinition.Segment.Straight(rows - corner - towerBottom),
+                TrackDefinition.Segment.Straight(FingerTowerTaper, 0f, narrow), TrackDefinition.Segment.Straight(FingerTowerInside, 0f, narrow),
+                TrackDefinition.Segment.Straight(FingerBump, g, narrow), TrackDefinition.Segment.Kicker(FingerBump, 0f, FingerTowerLaunch, narrow),
+                TrackDefinition.Segment.Straight(FingerBump, -g, narrow), TrackDefinition.Segment.Straight(FingerBump, 0f, narrow),
+                TrackDefinition.Segment.Straight(FingerTowerTaper),
+                TrackDefinition.Segment.Straight(towerBottom - corner - tower),
+                // The top-left corner and the top row east to the line.
+                TrackDefinition.Segment.Arc(corner, 90f), TrackDefinition.Segment.Straight(FingerX(FingerStartColumn) - corner),
+            };
+        }
+
+        // Metres east of the left edge's centreline for an outline column.
+        private static float FingerX(int column) => (column - FingerLeftEdgeColumn) * FingerMetresPerPixel;
+
+        // The S stretches the two nail shortcuts will skip: from where one leaves a long finger to where it comes back
+        // on the row after the fingertip.
+        private static (double From, double To)[] FingerShortcutStretches(TrackDefinition.Segment[] segments)
+        {
+            foreach (int index in new[] { FingerLongIndex, FingerLongReturnIndex, FingerLastLongIndex, FingerLastLongReturnIndex })
+                if (segments[index].IsArc) throw new InvalidOperationException($"Finger Lanes piece {index} is no longer a straight; move the shortcut indices.");
+            return new[]
+            {
+                (StartOf(segments, FingerLongIndex) + (FingerX(FingerNailColumn) - FingerX(FingerTurnColumn)),
+                    StartOf(segments, FingerLongReturnIndex) + (FingerX(FingerLongTipColumn) - FingerX(FingerNailColumn))),
+                (StartOf(segments, FingerLastLongIndex) + (FingerX(FingerLastNailColumn) - FingerX(FingerTurnColumn)),
+                    StartOf(segments, FingerLastLongReturnIndex) + (FingerX(FingerLongTipColumn) - FingerX(FingerLastNailColumn))),
+            };
+        }
+
+        private static double StartOf(TrackDefinition.Segment[] segments, int index)
+        {
+            double start = 0d;
+            for (int i = 0; i < index; i++) start += segments[i].Length;
+            return start;
         }
     }
 }

@@ -293,11 +293,12 @@ namespace ProtoHarness.ChainRush
         }
 
         // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
-        // the ceiling, a guard, the ground and the grapple.
+        // the ceiling, a guard, a kicker's crest, the ground and the grapple.
         private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float dt)
         {
             ref Vector3 velocity = ref racer.Velocity;
             ref float heading = ref racer.Heading;
+            Vector3 before = transform.position;
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
             if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, dt, SwingSettings(), out swingAnchor);
@@ -312,6 +313,12 @@ namespace ProtoHarness.ChainRush
                 GuardContact.Glance(ref velocity, ref heading, guardNormal, frame.Forward, guardSpeedLoss);
                 if (guardScrapeDecel > 0f) GuardContact.Scrape(ref velocity, guardScrapeDecel, dt);
             }
+            // A runner that ran over a kicker's lip this tick leaves the road climbing by its forward speed (user 2026-10-25,
+            // Finger Lanes: the faster, the farther); the up speed also keeps the ground snap below from pulling it back.
+            // The lip is found by the S moved along the frame, so nothing new is kept between ticks.
+            if (grounded && !swinging && !grapple.IsAttached
+                && game.Track.TryLaunchBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward), out float lift))
+                velocity.y = Mathf.Max(velocity.y, lift * Mathf.Max(0f, velocity.x * frame.Forward.x + velocity.z * frame.Forward.z));
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
             if (racer.Grounded) racer.ClearAirGrapple();

@@ -42,8 +42,16 @@ namespace ProtoHarness.ChainRush.Track
             public float Reach;
         }
 
+        // A kicker's lip (AddLaunch): where a runner on the road leaves it, and how steeply (rise per metre forward).
+        private struct Launch
+        {
+            public double S;
+            public float Lift;
+        }
+
         private readonly List<Piece> pieces = new List<Piece>(16);
         private readonly List<ExtraPole> extraPoles = new List<ExtraPole>(8);
+        private readonly List<Launch> launches = new List<Launch>(4);
         private readonly Vector3 origin;
         private readonly float originYaw;
         private Vector3 end;
@@ -83,11 +91,13 @@ namespace ProtoHarness.ChainRush.Track
             }
         }
 
-        // Back to the construction origin with no pieces and no added poles; S restarts at zero and the grade at flat.
+        // Back to the construction origin with no pieces, no added poles and no launches; S restarts at zero and the
+        // grade at flat.
         public void Clear()
         {
             pieces.Clear();
             extraPoles.Clear();
+            launches.Clear();
             end = origin;
             endYaw = originYaw;
             endGrade = 0f;
@@ -290,6 +300,41 @@ namespace ProtoHarness.ChainRush.Track
             if (!IsFinite(position)) throw new ArgumentOutOfRangeException(nameof(position), position, "Position must be finite.");
             if (!(reach > 0f) || float.IsInfinity(reach)) throw new ArgumentOutOfRangeException(nameof(reach), reach, "Reach must be positive and finite.");
             extraPoles.Add(new ExtraPole { Position = position, Reach = reach });
+        }
+
+        // A kicker's lip at s (TrackDefinition.Segment.Kicker): a runner on the road that crosses it going forward leaves it
+        // climbing at lift times its forward speed (RunnerMotor). It is kept by S, so ShiftOrigin does not move it; Clear
+        // removes it.
+        public void AddLaunch(double s, float lift)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            if (!(lift > 0f) || float.IsInfinity(lift)) throw new ArgumentOutOfRangeException(nameof(lift), lift, "Lift must be positive and finite.");
+            launches.Add(new Launch { S = s, Lift = lift });
+        }
+
+        public int LaunchCount => launches.Count;
+
+        // The first launch (AddLaunch order) a runner crosses moving forward from fromS to toS, S as Frame and Project
+        // give it: past fromS and no farther than toS. On a loop the move may wrap the seam and so may the launch's S. A move
+        // backward or nowhere crosses none.
+        public bool TryLaunchBetween(double fromS, double toS, out float lift)
+        {
+            lift = 0f;
+            if (launches.Count == 0) return false;
+            double moved = toS - fromS;
+            if (isLoop && moved < -endS * 0.5d) moved += endS;
+            if (!(moved > 0d)) return false;
+            for (int i = 0; i < launches.Count; i++)
+            {
+                double ahead = launches[i].S - fromS;
+                if (isLoop) ahead -= Math.Floor(ahead / endS) * endS;
+                if (ahead > 0d && ahead <= moved)
+                {
+                    lift = launches[i].Lift;
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1), and AddPole

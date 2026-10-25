@@ -16,8 +16,11 @@ namespace ProtoHarness.ChainRush
         private const float CoyoteSeconds = 0.1f;
         // How far below the track surface a runner has fallen.
         private const float FallDepth = 12f;
-        // The least forward speed a grapple release throws the runner with; an empowered one uses EmpoweredReleaseSpeed.
+        // The least forward speed a grapple release throws the runner with (before the speed class); an empowered one uses
+        // EmpoweredReleaseSpeed.
         private const float ReleaseSpeed = 13f;
+        // How fast a grapple reels the runner in, unless running is faster (before the speed class).
+        private const float GrappleReelSpeed = 16f;
         [SerializeField] private CharacterController controller;
         [SerializeField] private ChainRushGame game;
         [SerializeField] private GrappleController grapple;
@@ -102,11 +105,12 @@ namespace ProtoHarness.ChainRush
         // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
         [SerializeField] private float respawnBackoff = 4f;
         [SerializeField] private float respawnHoldTime = 1f;
-        // The runner's character (Configure): scales on the values above, all 1 until a profile is given.
+        // The runner's character and the race's speed class (Configure): scales on the values above, all 1 until given.
         private RunnerProfile profile;
         private float topSpeedScale = 1f;
         private float accelerationScale = 1f;
         private float gaugeChargeScale = 1f;
+        private float speedClassScale = 1f;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
@@ -138,25 +142,34 @@ namespace ProtoHarness.ChainRush
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
         // The profile given by Configure; null runs on the scene's values.
         public RunnerProfile Profile => profile;
-        // The values the simulation runs on: the scene's, scaled by the profile.
-        public float RunSpeed => runSpeed * topSpeedScale;
-        public float RunAcceleration => runAcceleration * accelerationScale;
-        public float SlingTopSpeed => slingTopSpeed * topSpeedScale;
-        public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale;
-        public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale;
+        // The speed class's scale given by Configure (Flow.SpeedScale); 1 is the scene's speeds.
+        public float SpeedClassScale => speedClassScale;
+        // The values the simulation runs on: the scene's, scaled by the profile and the speed class.
+        public float RunSpeed => runSpeed * topSpeedScale * speedClassScale;
+        public float RunAcceleration => runAcceleration * accelerationScale * speedClassScale;
+        public float SlingTopSpeed => slingTopSpeed * topSpeedScale * speedClassScale;
+        public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale * speedClassScale;
+        public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale * speedClassScale;
         public float SwingMetersPerSlot => swingMetersPerSlot / gaugeChargeScale;
 
-        // Gives the runner a character for the runs to come (the lobby's choice, RaceAssembler). Not while a run is going:
-        // the run would change halfway.
-        public void Configure(RunnerProfile runner)
+        // Gives the runner a character for the runs to come (the lobby's choice, RaceAssembler), at the scene's speeds.
+        public void Configure(RunnerProfile runner) => Configure(runner, 1f);
+
+        // Gives the runner a character and the race's speed class scale (Flow.SpeedScale) for the runs to come. The scale
+        // goes on the speeds and the run acceleration, as the profile's do, and on the grapple's fixed release and reel
+        // speeds; jumps, gravity, decelerations and the turn radius stay. Not while a run is going: the run would change halfway.
+        public void Configure(RunnerProfile runner, float speedScale)
         {
             if (runner == null) throw new System.ArgumentNullException(nameof(runner));
             if (!runner.TryValidate(out string error)) throw new System.ArgumentException(error, nameof(runner));
+            if (!(speedScale > 0f) || float.IsInfinity(speedScale))
+                throw new System.ArgumentOutOfRangeException(nameof(speedScale), speedScale, "RunnerMotor: the speed class scale must be positive.");
             if (game.IsRunning || game.IsPaused) throw new System.InvalidOperationException("RunnerMotor: configure the runner before the run, not during it.");
             profile = runner;
             topSpeedScale = runner.TopSpeedScale;
             accelerationScale = runner.AccelerationScale;
             gaugeChargeScale = runner.GaugeChargeScale;
+            speedClassScale = speedScale;
         }
 
         private void Awake()
@@ -327,6 +340,7 @@ namespace ProtoHarness.ChainRush
         private RunDrive.Settings DriveSettings() => new RunDrive.Settings
         {
             RunSpeed = RunSpeed,
+            GrappleReelSpeed = GrappleReelSpeed * speedClassScale,
             RunAcceleration = RunAcceleration,
             MaxTurnRate = maxTurnRate,
             TurnAcceleration = turnAcceleration,
@@ -472,7 +486,7 @@ namespace ProtoHarness.ChainRush
             float heading = game.Racer.Heading;
             Vector3 facing = RunDrive.FacingOf(heading);
             Vector3 right = RunDrive.RightOf(heading);
-            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : ReleaseSpeed);
+            float forwardSpeed = Mathf.Max(Vector3.Dot(velocity, facing), empowered ? EmpoweredReleaseSpeed : ReleaseSpeed * speedClassScale);
             velocity = facing * forwardSpeed + right * Vector3.Dot(velocity, right) + Vector3.up * Mathf.Max(velocity.y, jumpSpeed);
         }
 

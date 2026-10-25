@@ -7,7 +7,7 @@ using UnityEngine.SceneManagement;
 namespace ProtoHarness.ChainRush.Flow
 {
     // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
-    // the circuit is built, gives the runner the chosen profile and its look, loads the track's environment scene additively, then counts the race in. A finish
+    // the circuit is built, gives the runner the chosen profile at the chosen speed class (SpeedScale) and its look, loads the track's environment scene additively, then counts the race in. A finish
     // goes to the best records (BestRecords). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
@@ -52,16 +52,16 @@ namespace ProtoHarness.ChainRush.Flow
                 Debug.Log("RaceAssembler: no race was requested; the scene runs as saved (opened directly).", this);
                 return;
             }
-            // Only what the simulation can race today: the rest is locked in the lobby.
-            if (setup.Mode != RaceMode.Single || setup.Speed != SpeedClass.Fast)
+            // Only what the simulation can race today: multi is locked in the lobby.
+            if (setup.Mode != RaceMode.Single)
             {
-                Debug.LogError($"RaceAssembler: {setup.Mode} at {setup.Speed} cannot be raced yet (multi: M7, other speed classes: M2-b).", this);
+                Debug.LogError($"RaceAssembler: {setup.Mode} at {setup.Speed} cannot be raced yet (multi: M7).", this);
                 game.enabled = false;
                 enabled = false;
                 return;
             }
             circuit.UseDefinition(setup.Track);
-            player.Configure(setup.Runner);
+            player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
         }

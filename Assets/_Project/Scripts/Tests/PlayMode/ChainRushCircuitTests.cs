@@ -360,6 +360,52 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[0]), Is.LessThan(1e-3f));
         }
 
+        // Halfway round a corner the pole must still hook (play report 2026-10-19; measured 2026-10-25, DECISIONS "측정: 코너
+        // 중간에 …"): the runner's facing falls 5 to 17 degrees behind the track in an R22 corner (the turn limit of speed / 25 m),
+        // which put the pole past 95 degrees of the facing from about 7% of the arc on. The angle is the track's direction's,
+        // so through the whole arc, on the ground, the corner's pole is offered.
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Swing_RoundTheFirstCorner_ItsPoleIsOfferedThroughTheWholeArc()
+        {
+            double arcStart = -1d;
+            for (double s = 100d; s < 250d && arcStart < 0d; s += 0.5d)
+                if (game.Track.FrameAt(s).Curvature != 0f) arcStart = s;
+            Assert.That(arcStart, Is.GreaterThan(0d), "No corner found.");
+            double arcEnd = arcStart;
+            while (game.Track.FrameAt(arcEnd).Curvature != 0f) arcEnd += 0.5d;
+            var feet = new System.Collections.Generic.List<Vector3>();
+            game.Track.GetPoles(feet);
+            Vector3 pole = feet[0];
+            int inArc = 0, offered = 0;
+            string firstMiss = null;
+            System.Action<int> sample = tick =>
+            {
+                Vector3 now = player.transform.position;
+                TrackCoord here = game.Track.Project(now);
+                if (here.S < arcStart || here.S > arcEnd || !player.IsGrounded) return;
+                inArc++;
+                if (player.TryFindPole(out Vector3 got) && Vector3.Distance(got, pole) < 1e-3f) offered++;
+                else if (firstMiss == null)
+                {
+                    Vector3 toward = pole - now;
+                    float angle = Mathf.Abs(Mathf.DeltaAngle(player.Heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg));
+                    firstMiss = $"tick {tick} S {here.S:F1} ({(here.S - arcStart) / (arcEnd - arcStart) * 100d:0}% of the arc), D {here.D:F2}, " +
+                                $"{new Vector2(toward.x, toward.z).magnitude:F2} m and {angle:F1} degrees off the facing";
+                }
+            };
+            game.TickCompleted += sample;
+            game.SetInputSource(new CircuitBot(game, player, grapple, circuit));
+            Time.timeScale = 3f;
+            game.StartRun();
+            float deadline = Time.realtimeSinceStartup + 40f;
+            while (game.IsRunning && circuit.Laps.Progress < arcEnd + 2d && Time.realtimeSinceStartup < deadline) yield return null;
+            Time.timeScale = timeScale;
+            game.TickCompleted -= sample;
+            Debug.Log($"ChainRush first corner (S {arcStart:F1}..{arcEnd:F1}): its pole offered on {offered} of {inArc} grounded ticks in the arc.");
+            Assert.That(inArc, Is.GreaterThan(30), "The bot must run through the corner on the ground. " + State());
+            Assert.That(offered, Is.EqualTo(inArc), "First tick without the corner's pole: " + firstMiss);
+        }
+
         // ---- helpers ------------------------------------------------------------------------------------
 
         private void Teleport(double s)

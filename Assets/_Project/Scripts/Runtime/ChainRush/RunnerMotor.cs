@@ -82,7 +82,7 @@ namespace ProtoHarness.ChainRush
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
-        // the swing key on the ground hooks the nearest pole within poleMaxAngle either side of the facing and no farther than its arc's
+        // the swing key on the ground hooks the nearest pole within poleMaxAngle either side of the track's direction and no farther than its arc's
         // radius plus poleReach (holding the key into reach does not); the runner circles it for as long as the key is
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
@@ -442,9 +442,14 @@ namespace ProtoHarness.ChainRush
         }
 
         // The corner pole a swing key press would hook from here and now, if any (see poleMaxAngle and poleReach). The
-        // simulation asks it on a press; presentation and bots may ask it any time, since it only reads.
-        public bool TryFindPole(out Vector3 pole) =>
-            game.Track.TryFindPole(transform.position, game.Racer.Heading, poleMaxAngle, poleReach, out pole);
+        // angle is taken from the track's direction here, not the facing: in a corner the facing falls behind the track (the
+        // turn limit), which put the pole past the angle halfway round (measured 2026-10-25, DECISIONS "측정: 코너 중간에 …").
+        // The simulation asks it on a press; presentation and bots may ask it any time, since it only reads.
+        public bool TryFindPole(out Vector3 pole)
+        {
+            Vector3 forward = game.Track.Frame(transform.position).Forward;
+            return game.Track.TryFindPole(transform.position, Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, poleMaxAngle, poleReach, out pole);
+        }
 
         // Downhill the road can drop away faster than one tick of grounded fall. When ground is still within
         // reach, pull the capsule back onto it so grounded checks (jump, encounters) do not flicker.

@@ -7,6 +7,20 @@
 
 ---
 
+## 2026-10-26 · Codex 역할: 계획 반박·설계 리뷰·막혔을 때 진단, 모두 읽기 전용
+
+- **결정 (사용자, `docs/codex-rules`)**: "codex 연결 플러그인 깔아놨다 어떻게 활용할 수 있을지" → 조사 뒤 "계획반박은 좋다", "리뷰 자체를 codex가 하는 것은 어떤지" → 추천안(설정 a·훅 조사 d 먼저, 그 결과로 규칙 b·c) "추천대로 진행" → 합의 요청 1·2 "둘 다 진행해라".
+  - 규칙 본문은 `docs/RULES/SUBAGENTS.md` §7-5. Codex 쪽 사실은 `AGENTS.md` "확인한 것".
+  - **리뷰 분담**: 설계·정합성은 Codex(`/codex:adversarial-review`), §0/§1/§5 체크리스트는 `unity-reviewer`. 구현자와 리뷰어가 같은 모델이면 맹점도 같다. 체크리스트는 기계 대조라 바꿀 이유가 없고, `/codex:review` 는 초점 지시를 받지 않으며(플러그인 `commands/review.md` "does not support extra focus text") 이 레포 규칙을 읽는지 확인 못 했다. 병합 보고 두 번의 비교로 다시 정한다.
+  - **Codex 설정** (레포 밖, 사용자 승인 "추천대로 진행"): `~/.codex/config.toml` 의 `unity_mcp` 도구 `Unity_RunCommand`·`Unity_GetConsoleLogs` 를 `approval_mode = "approve"` → `"prompt"`. `approve` 의 뜻이 문서에 없어 "묻지 않고 실행" 으로 간주했다. 이 파일은 Codex 앱·CLI·IDE 가 같이 쓰므로 다른 프로젝트에서도 묻는다.
+- **이유 / 발견**:
+  - 앞선 판단 "Codex 는 Unity 로 검증할 수 없다" 는 틀렸다. Codex 에 Claude 와 같은 relay(`unity_mcp`)가 이미 붙어 있었고, 2026-10-21 SKYWAY 검증을 Codex 로 돌린 기록이 있다(`docs/ART_SKYWAY.md` 결과 XML 경로). 그래서 위험은 "검증 불가" 가 아니라 **두 에이전트가 한 에디터를 공유**하는 것 → §7-5 "한 번에 한쪽만".
+  - Codex 에는 Claude 하네스 훅이 걸려 있지 않다. 훅 형식은 거의 같지만 `guard.ps1` 에 Codex 형식 입력을 넣어 보니 `Bash` 의 `git reset --hard`·dev `git commit` 은 deny, `apply_patch` 로 `.meta`·`.unity` 수정은 판정 없음(출력 없이 exit 0)이었다 — 경로를 `tool_input.file_path` 에서만 읽기 때문. 또 Codex 는 `"ask"` 를 지원하지 않는다. → 후속 `feature/harness-codex-hooks`.
+  - `AGENTS.md` 의 "codex CLI 미설치(2026-08-25)" 는 낡았다. 지금 `codex-cli 0.154.0`, ChatGPT 로그인(플러그인 `setup --json`).
+- **버린 대안**: Codex 에 구현을 기본으로 맡기기("Claude 로 계획, Codex 로 구현") — 훅이 없고 `unity-implementer` 의 `승인:`·`브랜치:` 거부 장치도 없다. `unity-reviewer` 를 Codex 로 통째로 바꾸기 — 비교 근거가 없다. stop 리뷰 게이트 켜기 — 파일을 고친 턴마다 최대 900초.
+- **확인 못 한 것**: 실제 Codex 세션에서 `prompt` 로 바꾼 뒤 승인 질문이 뜨는지. `/codex:review` 가 `AGENTS.md` 를 읽는지.
+- **병합 (문서 검증, `CLAUDE.md` §9-2 적용 범위; 사용자 "커밋+병합 후 요청 2")**: 바뀐 파일은 `AGENTS.md`·`CLAUDE.md`·`docs/DECISIONS.md`·`docs/RULES/SUBAGENTS.md` 뿐이다(`Assets/`·`Packages/`·`ProjectSettings/` 0개). 새 §7-5 와 그 안의 참조(§3-2·§3-4·§4-5·§7-3·§7-4)가 모두 `CLAUDE.md` 또는 `docs/RULES/SUBAGENTS.md` 의 제목으로 해석된다. `.claude/agents/` 는 바꾸지 않았고 옮긴 내용은 없다. 작업 트리의 `ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 에디터 버전 차이라 넣지 않았다.
+
 ## 2026-10-22 · 리팩토링 RF1: IMGUI 헬퍼 4벌을 `NightUi` 하나로 · 리팩토링 묶음 RF
 
 - **결정 (사용자, `feature/refactor-ui-helpers`)**: "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서" → 조사 뒤 낸 4단계 안 중 "R1 ㄱㄱ"(이 문서에서는 R1~R9 와 겹치지 않게 **RF1** 로 부른다).

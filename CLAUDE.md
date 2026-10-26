@@ -288,7 +288,7 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
 - **`main`, `dev` 에 직접 커밋하지 않는다.** 작업을 시작할 때 현재 브랜치를 확인하고, `main`/`dev` 이면 멈추고 브랜치부터 만든다. (브랜치 생성은 합의 대상이 아니다.)
 - **병합은 `--no-ff`** 로 기능 단위가 보이게 묶는다. `feature → dev`, `dev → main` 모두 같다.
 - **테스트는 3단이다** (`docs/DECISIONS.md` 2026-10-14 "테스트 3단", 2026-10-18 "병합은 바뀐 부분만"). ① 작업 중 빠른 확인은 `tools/select-tests.ps1`(기본 범위: 커밋하지 않은 변경까지)이 바뀐 파일로 고른 테스트를 돌린다. ② `feature → dev` 는 아래 병합 조건 — 같은 도구를 **커밋한 범위**로 돌려 고른 테스트다. ③ `dev → main`·태그 전은 아래 마일스톤 조건(게이트 전체). 실행 방법은 §4-4.
-- **병합 조건** (②): 컴파일 에러 0 + EditMode 통과(`Enemy` 제외) + **`tools/select-tests.ps1 -Range dev...HEAD` 가 고른 PlayMode 테스트 1회 통과** (§4). 도구가 **"전체"** 로 판정하면(코어 시뮬·씬·표에 없는 경로 등) 메뉴 `Run PlayMode Tests`(`Device`·`Enemy`·`NetEndReplay` 카테고리 제외) 전체 1회다. 병합 보고에는 도구 출력 전체를 붙인다. CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
+- **병합 조건** (②): 컴파일 에러 0 + EditMode 통과(`Enemy` 제외) + **`tools/select-tests.ps1 -Range dev...HEAD` 가 고른 PlayMode 테스트 1회 통과** (§4). 도구가 **"전체"** 로 판정하면(코어 시뮬·씬·표에 없는 경로 등) 메뉴 `Run PlayMode Tests`(`Device`·`Enemy`·`NetEndReplay` 카테고리 제외) 전체 1회다. 병합 보고에는 도구 출력 전체와 영향 평가(`docs/RULES/VERIFICATION.md` §4-4)를 붙인다. CI 는 없고 로컬에서 검증한다. 검증 못 했으면 병합하지 않는다.
   - 같은 코드 2회 통과는 마일스톤 조건(③)으로 옮겼다. 2회를 둔 이유였던 간헐 실패(`docs/DECISIONS.md` 2026-10-02 "병합 조건 강화")는 지금 게이트에서 빠진 `Device` 테스트였다.
   - `Device` 카테고리는 가상 키보드·마우스 장치 이벤트에 기대는 테스트다. 전달이 흔들려 병합 조건에서 뺐다 (`docs/DECISIONS.md` 2026-10-04 "장치 입력 테스트 분리"). 메뉴 `Run PlayMode Tests` 가 이미 제외하고 돌린다.
   - 입력 장치 경로(`KeyboardMouseInputSource`, `ChainRushGame.Update` 의 메뉴 키)를 바꾼 브랜치는 `Run Device Input Tests` 를 돌린 결과 XML 값을 병합 보고에 붙인다. 실패하면 원문을 적는다.

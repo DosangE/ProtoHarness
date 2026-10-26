@@ -13,6 +13,8 @@
   읽기만 하며 아무 파일도 쓰지 않는다. Assets/ 바깥에 있어야 한다(안으로 옮기면 Unity 가 컴파일한다).
 
   표는 2026-10-14 런타임 타입별 참조 grep 으로 정했다(docs/DECISIONS.md 2026-10-14 "테스트 3단").
+  2026-10-26 부터 한 줄이 클래스 일부(테스트 이름 접두사, Tests)만 고를 수 있고, 시뮬이 읽지 않는 경로는
+  지문을 넣지 않는다(Fingerprint = $false). 바뀐 것을 읽는 쪽만 고른다 (docs/DECISIONS.md 2026-10-26 "영향 범위 테스트").
   표에 없는 Assets/ 경로는 전체로 떨어진다. 테스트 클래스가 표와 어긋나면 경고하고 전체로 떨어진다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장해야 한다.
@@ -31,8 +33,9 @@ $runtime   = $scripts + 'Runtime/ChainRush/'
 $playDir   = Join-Path $root 'Assets/_Project/Scripts/Tests/PlayMode'
 $namespace = 'ProtoHarness.Tests.PlayMode'
 
-# 지문: 서킷 리플레이 해시 (docs/PROPOSAL_TEST_TIERS.md 3-1). 테스트·Net 밖의 Assets/ 가 바뀌면 늘 넣는다
-# (Net 은 시뮬 어셈블리가 참조하지 않아 지문을 바꿀 수 없다).
+# 지문: 서킷 리플레이 해시 (docs/PROPOSAL_TEST_TIERS.md 3-1). 테스트·Net 밖의 Assets/ 가 바뀌면 넣는다
+# (Net 은 시뮬 어셈블리가 참조하지 않아 지문을 바꿀 수 없다). 표에서 Fingerprint = $false 인 줄(시뮬 코드가
+# 참조하지 않는 타입, 2026-10-26 grep)은 넣지 않는다.
 $fingerprint = 'ChainRushReplayTests.Replay_CircuitBotRun_RepeatsEveryTickBitForBit'
 
 $net     = @('NetReconcileTests', 'NetRemoteTests', 'RaceOrderTests', 'RaceStandingsTests', 'RaceStandingsTextTests')
@@ -42,7 +45,8 @@ $course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests',
 $allOnly      = @('ChainRushTests')
 $explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 
-# 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Note = 보고에 붙일 말.
+# 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Tests = 클래스 일부('클래스.이름접두사정규식'),
+# Fingerprint = $false 면 지문을 넣지 않는다, Note = 보고에 붙일 말.
 $rules = @(
     @{ Pattern = '^(Packages|ProjectSettings)/';                    All = $true;  Why = '패키지·프로젝트 설정' }
     @{ Pattern = '^Assets/_Project/(Data|Scenes)/';                 All = $true;  Why = 'SO 값·씬은 시뮬에 들어간다' }
@@ -60,6 +64,8 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
     @{ Pattern = '^' + $runtime + 'Track/';                         Classes = $course + @('ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '노면·트랙 조각' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
+    @{ Pattern = '^' + $runtime + 'Flow/(GameSettings|ScreenOptions)\.cs$'; Classes = @('ChainRushPresentationTests'); Tests = @('ChainRushFlowTests.Lobby_'); Fingerprint = $false; Why = '설정 값 (로비 설정 페이지가 바꾸고 레이스에서는 ChainRushAudio·FollowCamera 가 읽는다. 시뮬은 읽지 않는다)' }
+    @{ Pattern = '^' + $runtime + 'Flow/(Lobby(/|$)|LobbyMenu\.cs$|RunnerPreview\.cs$|TitleScreen\.cs$)'; Tests = @('ChainRushFlowTests.(Lobby|Loop)_', 'ChainRushFlowTests.Race_(Skyway|FingerLanes)FromTheLobby_'); Fingerprint = $false; Why = '타이틀·로비 화면 (로비 메뉴로 트랙을 고르는 레이스 2건 포함, Codex 리뷰 2026-10-26. 시뮬은 읽지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Flow/';                          Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); Why = '타이틀·로비·레이스 조립 (DECISIONS 2026-10-19 "M2 씬 구성")' }
     @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
     @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
@@ -93,7 +99,7 @@ $present = @(Get-ChildItem -Path $playDir -Filter *.cs -File | ForEach-Object {
     $m = Select-String -LiteralPath $_.FullName -Pattern '\bclass\s+(\w+Tests)\b' -Encoding UTF8 | Select-Object -First 1
     if ($m) { $m.Matches[0].Groups[1].Value }
 })
-$known = @($allOnly + $explicitOnly + ($rules | ForEach-Object { $_.Classes }) | Where-Object { $_ } | Sort-Object -Unique)
+$known = @($allOnly + $explicitOnly + ($rules | ForEach-Object { $_.Classes; $_.Tests | ForEach-Object { ($_ -split '\.')[0] } }) | Where-Object { $_ } | Sort-Object -Unique)
 $warnings = New-Object System.Collections.Generic.List[string]
 foreach ($c in $present) { if ($known -notcontains $c) { $warnings.Add("표에 없는 테스트 클래스: $c (표에 배정하기 전까지 전체로 돈다)") } }
 foreach ($c in $known)   { if ($present -notcontains $c) { $warnings.Add("표에는 있으나 PlayMode 폴더에 없는 클래스: $c (표를 고친다)") } }
@@ -103,6 +109,7 @@ $all = $warnings.Count -gt 0
 $touchesAssets = $false
 $touchesNonTest = $false
 $selected = New-Object System.Collections.Generic.List[string]
+$partial = New-Object System.Collections.Generic.List[string]
 $notes = New-Object System.Collections.Generic.List[string]
 
 Write-Output "바뀐 파일 ($source): $($changed.Count)개"
@@ -116,20 +123,24 @@ foreach ($path in $changed) {
         continue
     }
     if ($p -like 'Assets/*') { $touchesAssets = $true }
-    if ($p -like 'Assets/*' -and $p -notlike ($scripts + 'Tests/*') -and $p -notlike ($scripts + 'Runtime/Net/*')) { $touchesNonTest = $true }
+    if ($p -like 'Assets/*' -and $p -notlike ($scripts + 'Tests/*') -and $p -notlike ($scripts + 'Runtime/Net/*') -and $rule.Fingerprint -ne $false) { $touchesNonTest = $true }
 
     if ($rule.All) {
         $all = $true
         Write-Output "  $path  →  전체 ($($rule.Why))"
     } else {
-        $classes = @($rule.Classes)
+        $classes = @($rule.Classes | Where-Object { $_ })
         if ($rule.Own) {
             $own = $Matches[1]
             if ($present -contains $own) { $classes = @($own) }
             else { $all = $true; $warnings.Add("테스트 클래스 파일인데 클래스를 못 찾았다: $path (전체)") }
         }
+        $tests = @($rule.Tests | Where-Object { $_ })
         foreach ($c in $classes) { $selected.Add($c) }
-        $shown = if ($classes.Count -gt 0) { $classes -join ', ' } else { 'PlayMode 없음' }
+        foreach ($t in $tests) { $partial.Add($t) }
+        $parts = @($classes) + @($tests | ForEach-Object { "$_*" })
+        $shown = if ($parts.Count -gt 0) { $parts -join ', ' } else { 'PlayMode 없음' }
+        if ($rule.Fingerprint -eq $false) { $shown += ', 지문 없음' }
         Write-Output "  $path  →  $shown ($($rule.Why))"
     }
     if ($rule.Note) { $notes.Add($rule.Note) }
@@ -153,7 +164,9 @@ if (-not $touchesAssets) {
 }
 
 $classes = @($selected | Sort-Object -Unique)
-$groups = @($classes | ForEach-Object { "^$namespace.$_`$" })
+# 클래스 전체를 고른 곳의 일부는 뺀다.
+$tests = @($partial | Sort-Object -Unique | Where-Object { $classes -notcontains ($_ -split '\.')[0] })
+$groups = @($classes | ForEach-Object { "^$namespace.$_`$" }) + @($tests | ForEach-Object { "^$namespace.$_" })
 if ($touchesNonTest) { $groups += "^$namespace.$fingerprint`$" }
 if ($groups.Count -eq 0) {
     Write-Output '  PlayMode: 없음 (PlayMode 에서 고를 테스트가 없다)'
@@ -161,7 +174,8 @@ if ($groups.Count -eq 0) {
 }
 $quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
 
-$fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (테스트·Net 만 바뀌어 지문 없음)' }
-Write-Output "  PlayMode: 클래스 $($classes.Count)개$fpText"
+$fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (시뮬이 읽는 경로가 바뀌지 않아 지문 없음)' }
+$partText = if ($tests.Count -gt 0) { " + 클래스 일부 $($tests.Count)개($($tests -join ', '))" } else { '' }
+Write-Output "  PlayMode: 클래스 $($classes.Count)개$partText$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
 Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Enemy", "!NetEndReplay" } }));')

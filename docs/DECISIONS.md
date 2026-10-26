@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-10-26 · 영향 범위 테스트: 바뀐 것을 읽는 쪽만 고르고, 시뮬이 읽지 않으면 지문을 빼기
+
+- **결정 (사용자 "테스트, 검증 관련한 것 수정하자 … 영향도 평가를 내리고 그 영향이 미치는 부분들만 테스트", 합의 요청서에 "추천대로 진행하라", `docs/impact-tests`)**:
+  - `tools/select-tests.ps1` 의 표 한 줄이 클래스 일부(`Tests = '클래스.이름접두사'`)를 고를 수 있게 했다.
+  - 시뮬이 읽지 않는 경로는 지문을 넣지 않게 했다(`Fingerprint = $false`).
+  - `Flow/` 한 줄을 셋으로 나눴다.
+    - 설정 값(`GameSettings`·`ScreenOptions`) → `ChainRushFlowTests.Lobby_*` + `ChainRushPresentationTests`.
+    - 타이틀·로비 화면(`Lobby/`·`LobbyMenu`·`RunnerPreview`·`TitleScreen`) → `ChainRushFlowTests.(Lobby|Loop)_*`.
+    - 나머지(레이스 조립·`BestRecords`) → 지금처럼 Flow 전체 + Profile + 지문.
+  - 규칙 본문은 `docs/RULES/VERIFICATION.md` §4-4 "영향 평가": 병합 보고에 "바뀐 타입 → 읽는 곳 → 고른 테스트" 를 적는다. 도구 선택은 하한이라 더하기만 하고, 빼려면 표를 고친다. `CLAUDE.md` §9-2 ② 는 그 절을 가리키는 말만 더했다.
+- **이유**: 화면 설정(`feature/m2-screen-settings`)은 설정·로비만 바꿨는데 레이스 12건·러너 프로필 9건·지문이 돌았다(46건, 약 360초). 폴더 단위(`Flow/`)로 묶은 표와 "늘 넣는 지문" 때문이다.
+  - 영향 평가를 에이전트 판단에 맡기지 않고 표에 넣은 이유: 매번 판단해 빼면 빠뜨려도 드러나지 않는다. 같은 변경은 같은 테스트를 고르는 결정론을 지킨다. 안전망은 마일스톤 ③ 전체 2회다.
+- **근거 (2026-10-26 grep, 시뮬 파일 = `RunnerMotor`·`GrappleController`·`ChainRushGame`·`RacerState`·`Ticks`·`SimSnapshot`·`RunRules`·`CourseTarget`·`RunnerProfile`·`Motion/`·`Track/`·`Race/`·`Control/`)**:
+  - `GameSettings`·`ScreenOptions`·`TitleScreen`·`LobbyMenu`·`LobbyPage`·`SettingsPage`·`RunnerPreview`·`BestRecords`·`UiSound`·`NightUi`·`RunnerTilt` 는 시뮬 참조 0건이다.
+  - `GameSettings` 를 읽는 런타임은 `ChainRushAudio`·`FollowCamera`·`LobbyContext`·`LobbyMenu`·`SettingsPage`·`ScreenOptions`·`TitleScreen` 이다. 그래서 `PresentationTests`(Audio·FollowCamera 의 표 배정)를 남겼다. 다만 그 3건이 설정 값 자체를 시험하지는 않는다.
+- **계획 대비 바뀐 점**: 요청서에는 Audio·Visuals·HUD·FollowCamera 도 지문에서 뺀다고 적었다. 그러나 `ChainRushGame.cs` 가 `ChainRushAudio`·`FollowCamera`·`ChainRushHud` 를 참조하고, `RunnerProfile.cs` 가 `RunnerLook` 을 참조해서 지금처럼 지문을 넣는다. 시뮬 참조가 실제로 상태에 닿는지 따로 보지 않은 채 빼지 않는다.
+- **검증 (스크립트 실행, `-Range`)**:
+
+  | 범위 | 예전 | 새 |
+  |---|---|---|
+  | 화면 설정 `e39a16d...3356fd4` | Flow·Profile 클래스 + 지문 (46건, 359.7초) | Flow·Presentation 클래스, 지문 없음 (`ChainRushFlowTests.cs` 를 고쳐 기존 규칙대로 Flow 전체) |
+  | RF7 로비 `5831e18^1...5831e18^2` | Flow·Profile 클래스 + 지문 | `ChainRushFlowTests.(Lobby\|Loop)_` 만 — Unity 실행 `testcasecount="14" result="Passed" passed="14" failed="0"`, 11.3초 (06:24:42Z~06:24:54Z) |
+  | R8 `adcdd72...37d82a3` | 테스트 클래스 4개, 지문 없음 | 같음 |
+  | `motor-reverse-swing-throttle` `092d828^1...092d828^2` | 전체 | 전체 (코어 시뮬) |
+  | RF2 효과음 `3312243^1...3312243^2` | 전체 | 전체 (코어 시뮬) |
+
+  - 고치는 중 결함 2개를 찾아 고쳤다: `Classes` 가 없는 줄이 빈 클래스(`"^ProtoHarness.Tests.PlayMode.$"`)를 내던 것, 폴더 메타(`Flow/Lobby.meta`)가 새 줄에 걸리지 않던 것.
+- **남은 것 (후보, 하지 않음)**: 테스트 클래스 파일을 고치면 그 클래스 전체가 돈다(`Own` 규칙). 고친 테스트만 고르려면 diff 의 메서드 이름을 읽어야 한다. 화면 설정 브랜치가 덜 줄어든 이유다.
+
 ## 2026-10-26 · 화면 설정: 화면 모드·해상도·VSync (M2-c 남은 것)
 
 - **결정 (사용자 "추천대로 진행해라" 두 번, `feature/m2-screen-settings`)**: 로비 설정의 "조작 키" 아래 5~7번 줄에 화면 모드(전체 화면/창)·해상도·수직 동기화를 둔다. 값은 `GameSettings`(`Windowed`·`ResolutionIndex`·`VSync`)에 두고 `ScreenOptions.Apply` 가 적용한다(`TitleScreen.Awake` 와 줄을 바꿀 때).

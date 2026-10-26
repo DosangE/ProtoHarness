@@ -7,6 +7,41 @@
 
 ---
 
+## 2026-10-26 · 테스트 메서드 단위 선택 · HUD 영향 범위 · 표현 파일 지문
+
+- **결정 (사용자 2026-10-26 "둘 다 진행해라", `docs/test-method-select`)**:
+  - 합의 요청서 ① 테스트 메서드 단위 선택 ② HUD 영향 범위 ③ 표현 파일 지문을 승인했다.
+  - 그중 `tools/select-tests.ps1`·`docs/RULES/VERIFICATION.md`·`docs/DECISIONS.md` 세 파일 수정을 Codex 에 맡기는 것도 승인했다. Codex 가 구현했다.
+  - 테스트 파일은 `git diff -U0` 의 바뀐 줄이 모두 새 쪽 테스트 메서드 범위 안이면 그 메서드만 고른다. 붙은 `//` 주석·특성부터 8칸 들여쓰기의 닫는 중괄호까지다. 삭제된 쪽도 확인해 보조 함수 삭제를 놓치지 않는다.
+  - 범위는 `a...b` 의 merge-base 또는 `a..b` 의 왼쪽부터 오른쪽까지다. 기본은 `git merge-base dev HEAD` 부터 작업 트리까지다. 파일 추가·추적 안 함·메서드 삭제·해석/읽기 실패는 클래스 전체로 둔다. 클래스 전체 선택이 있으면 같은 클래스의 일부 선택은 뺀다.
+  - **빈 줄 예외 (사용자 후속 승인 "첫 번째 안으로 한다")**: 메서드 전체를 새로 추가한 hunk 앞뒤의 빈 줄만 그 메서드에 포함한다. 기존 메서드 사이의 빈 줄만 바꾸면 클래스 전체다.
+  - HUD 는 Flow 의 HUD 레이스 6건 + `Lobby_TrackPage_` 만 고르고 지문을 뺀다. `Visuals/(NightUi|RunnerTilt|RunnerLook).cs`·`Audio/UiSound.cs` 는 기존 클래스 선택을 유지하고 지문만 뺀다. 나머지 표현·오디오 규칙은 그대로다.
+- **이유**: 테스트 하나 추가에 클래스 전체를 돌리는 낭비를 줄인다. 보조 함수·필드·SetUp/TearDown 변경과 불확실한 경우는 클래스 전체로 안전하게 남긴다. 이전 항목의 HUD·RunnerLook 참조는 실제 호출과 주석을 구별하지 못했다.
+- **근거 (2026-10-26 Claude grep, Codex 재확인)**:
+  - HUD 의 외부 런타임 호출은 `Flow/Lobby/TrackPage.cs:78` 의 `ChainRushHud.FormatTime` 뿐이다. `ChainRushGame.cs:150`·`Net/RaceStandingsView.cs:24`·`LobbyView`·`LobbyMenu`·`TitleScreen` 은 주석이다.
+  - PlayMode 의 HUD 사용은 `ChainRushFlowTests.cs:455,469-529,572,726,992` 의 `Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby`·`Race_PauseMenuOpenedDirectly_OffersOnlyWhatTheRaceCanDo`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`·`Race_SkywayFromTheLobby_BotFinishesTwoLaps`·`Race_FingerLanesFromTheLobby_BotFinishesTwoLaps` 6건뿐이다. PresentationTests 는 쓰지 않는다.
+  - 시뮬 파일(`RunnerMotor`·`GrappleController`·`ChainRushGame`·`RacerState`·`Ticks`·`SimSnapshot`·`RunRules`·`CourseTarget`·`RunnerProfile`·`Motion/`·`Track/`·`Race/`·`Control/`)의 네 표현 타입 참조는 `RunnerProfile.cs:20` 의 RunnerLook 주석 하나뿐이다.
+- **검증 (Windows PowerShell 5.1, 수정 전/후 스크립트 실제 실행)**:
+
+  | 범위 | 수정 전 | 수정 후 |
+  |---|---|---|
+  | 화면 설정 `e39a16d...a936879` | Flow·Presentation 클래스 2개, 지문 없음 | Presentation 클래스 1개 + Flow 일부 4개(새 메서드 1개·로비/설정 접두사 3개), 지문 없음 |
+  | R8 `adcdd72...37d82a3` | 클래스 4개, 지문 없음 | 같음. StartOn 변경 줄 532·164·209·296 을 메서드 밖으로 판정 |
+  | RF1 `1ffeba1^1...1ffeba1^2` | 클래스 7개 + 지문 1건 | Net 클래스 5개 + Flow 일부 9개(HUD 7개·로비 2개), 지문 없음 |
+  | 기본 모드 | 전체 | 전체. 이 머신의 기존 Packages·ProjectSettings 변경 때문 |
+
+  - RF1 범위에는 NightUi 변경이 없었다. 별도 메모리 검증에서 네 표현 경로 모두 기존 클래스·지문 없음, 나머지 6개 표현/오디오 경로는 지문 유지를 확인했다.
+  - 메모리 검증 30건 통과: 본문·주석·여러 특성·복수 메서드·매개변수 경계, 삭제·빈 줄·필드·보조 함수·잘못된 범위·새 파일·범위 해석 실패, 새 메서드 앞뒤 빈 줄, 위 경로 규칙, 읽기 실패의 경고·클래스 fallback, 클래스 전체 우선. PowerShell 구문 검사 통과. UTF-8 BOM·CRLF 유지. 출력 C# 문자열의 역슬래시도 이스케이프해 정규식을 보존한다.
+  - Unity 에디터·MCP 는 Codex 는 쓰지 않았다(Claude 지시). 아래 Unity 실행은 Claude 가 했다.
+- **Claude 검토·Unity 확인** (에디터 6000.3.19f1):
+  - diff 범위: 세 파일만 바뀌었고 `select-tests.ps1` 의 BOM(`EF BB BF`)이 유지됐다. Codex 가 쓴 코드를 Codex 리뷰로 다시 보면 다른 눈이 아니라서, 병합 전 리뷰는 Claude 가 diff 를 읽는 것으로 대신했다. 메서드 삭제·이름 변경·새 파일·범위 해석 실패·예외는 모두 클래스 전체로 떨어지고, 삭제된 줄은 이전 판의 메서드 범위로도 확인한다.
+  - 범위 1·3 을 Claude 가 다시 돌려 Codex 보고와 같은 출력을 얻었다. 범위 3 의 Net 클래스 5개는 HUD 때문이 아니라 그 범위에서 `Runtime/Net/RaceStandingsView.cs` 가 바뀌어 Net 줄이 고른 것이다.
+  - 범위 1 출력 실행: `testcasecount="19" result="Passed" passed="19" failed="0" skipped="0"` (06:55:37Z~06:56:57Z, 80.6초). 같은 범위의 예전 선택은 46건·359.7초였다.
+  - 메서드 패턴 하나만(`…ChainRushFlowTests.Lobby_SettingsPage_ScreenRowsChangeOnlyTheirOwnSetting(\(|$)`) 실행: `testcasecount="1" result="Passed"`, 그 1건만 돌았다(06:57:23Z, 1.5초).
+  - 덤: 결과 XML 의 묶음별 `testcasecount` 는 그 클래스 전체 수다(위 실행에서 Flow 묶음 36, 실제로 돈 것 16). 화면 설정 항목의 "합 47 대 46" 은 이 때문이다.
+- **Codex 비용** (저장된 task 세션 `01a176f3-77ab-7e71-98d5-fc37e1c27ad0`, 질문 1회로 멈춘 뒤 이어서 2턴): `total_tokens` 1,249,935(입력 1,230,058 중 캐시 1,128,192, 출력 19,877). 5시간 `used_percent` 는 시작 전 약 10 → 끝 14. Claude 쪽은 Codex 결과 검토·Unity 확인만 했다.
+- **버린 대안**: 보조 함수를 부르는 테스트를 따라가는 분석. 복잡하고 의존 관계를 놓칠 위험이 있어 보조 함수 변경은 클래스 전체로 둔다.
+
 ## 2026-10-26 · 영향 범위 테스트: 바뀐 것을 읽는 쪽만 고르고, 시뮬이 읽지 않으면 지문을 빼기
 
 - **결정 (사용자 "테스트, 검증 관련한 것 수정하자 … 영향도 평가를 내리고 그 영향이 미치는 부분들만 테스트", 합의 요청서에 "추천대로 진행하라", `docs/impact-tests`)**:

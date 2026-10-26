@@ -5,7 +5,7 @@
          powershell -ExecutionPolicy Bypass -File tools/select-tests.ps1 -Range 75b998d^..75b998d
 
   -Range 를 주지 않으면 `dev...HEAD` + 커밋하지 않은 변경 + 추적하지 않는 파일을 본다.
-  바뀐 파일마다 아래 표의 위에서부터 처음 맞는 줄을 쓰고, 고른 테스트 클래스의 합집합을
+  바뀐 파일마다 아래 표의 위에서부터 처음 맞는 줄을 쓰고, 고른 테스트 클래스·메서드의 합집합을
   Unity_RunCommand 에 넣을 TestRunnerApi 호출 한 줄로 출력한다. 하나라도 "전체" 면 전체다.
 
   ① 은 기본 범위로, ② 병합은 -Range dev...HEAD(커밋한 것만)로 돌린다 (CLAUDE.md §9-2, docs/RULES/VERIFICATION.md §4-4,
@@ -70,16 +70,143 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
     @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
     @{ Pattern = '^' + $runtime + 'Control/(InputLog|InputLogFile|InputRecorder|InputReplay|TickInputCodec)\.cs$'; Classes = @('ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushWorldTests') + $net; Why = '입력 기록·재생' }
+    @{ Pattern = '^' + $runtime + 'Visuals/(NightUi|RunnerTilt|RunnerLook)\.cs$'; Classes = @('ChainRushPresentationTests', 'ChainRushInputSourceTests'); Fingerprint = $false; Why = '표현 (시뮬 참조는 RunnerProfile 의 RunnerLook 주석뿐)' }
     @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushInputSourceTests'); Why = '표현 (RunnerTilt 를 쓰는 테스트 포함)' }
-    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Classes = @('ChainRushPresentationTests', 'ChainRushFlowTests') + $net; Why = 'HUD (RaceStandingsView·RaceAssembler 가 쓴다)' }
+    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Tests = @('ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn(\(|$)', 'ChainRushFlowTests.Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby(\(|$)', 'ChainRushFlowTests.Race_PauseMenuOpenedDirectly_OffersOnlyWhatTheRaceCanDo(\(|$)', 'ChainRushFlowTests.Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter(\(|$)', 'ChainRushFlowTests.Race_SkywayFromTheLobby_BotFinishesTwoLaps(\(|$)', 'ChainRushFlowTests.Race_FingerLanesFromTheLobby_BotFinishesTwoLaps(\(|$)', 'ChainRushFlowTests.Lobby_TrackPage_'); Fingerprint = $false; Why = 'HUD 레이스 6건·로비 트랙 페이지 (TrackPage.FormatTime, 시뮬 참조는 주석뿐)' }
+    @{ Pattern = '^' + $runtime + 'Audio/UiSound\.cs$';              Classes = @('ChainRushPresentationTests'); Fingerprint = $false; Why = 'UI 효과음 (시뮬 참조 없음)' }
     @{ Pattern = '^' + $runtime + '(Audio/|FollowCamera\.cs$)';     Classes = @('ChainRushPresentationTests'); Why = '표현' }
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
 )
 
-function Invoke-Git([string[]]$gitArgs) {
+function Invoke-GitLines([string[]]$gitArgs) {
     $out = & git -C $root @gitArgs
     if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') 실패 (exit $LASTEXITCODE)" }
+    return $out
+}
+
+function Invoke-Git([string[]]$gitArgs) {
+    $out = Invoke-GitLines $gitArgs
     return @($out | Where-Object { $_ -ne '' })
+}
+
+# 프로젝트의 8칸 멤버 들여쓰기를 따른다. 해석 못 한 형태는 범위를 만들지 않는다.
+function Get-TestMethods([string[]]$lines) {
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^        \[.+\]\s*$') { continue }
+        $start = $i
+        $isTest = $false
+        while ($i -lt $lines.Count -and $lines[$i] -match '^        \[.+\]\s*$') {
+            if ($lines[$i] -match '(?:\[|,\s*)(?:Test|UnityTest)\s*(?:\(|,|\])') { $isTest = $true }
+            $i++
+        }
+        if (-not $isTest -or $i -ge $lines.Count) { continue }
+        if ($lines[$i] -notmatch '^        (?:public|private|protected|internal)\s+(?:(?:static|async|virtual|override|sealed|new)\s+)*[\w.<>,\[\]?]+\s+(\w+)\s*\([^{};]*\)\s*$') { continue }
+        $name = $Matches[1]
+        if ($i + 1 -ge $lines.Count -or $lines[$i + 1] -notmatch '^        \{\s*$') { continue }
+        $end = $i + 2
+        while ($end -lt $lines.Count -and $lines[$end] -notmatch '^        \}\s*$') {
+            # 다른 멤버/특성이 나오면 닫는 괄호를 확정할 수 없다.
+            if ($lines[$end] -match '^        \S') { break }
+            $end++
+        }
+        if ($end -ge $lines.Count -or $lines[$end] -notmatch '^        \}\s*$') { continue }
+        while ($start -gt 0 -and $lines[$start - 1] -match '^        //') { $start-- }
+        [pscustomobject]@{ Name = $name; Start = $start + 1; End = $end + 1 }
+        $i = $end
+    }
+}
+
+function Get-OwnTestSelection([string]$path) {
+    $fallback = @{ Tests = @(); Why = '범위를 확정하지 못해 클래스 전체' }
+    try {
+        if ($Range -ne '') {
+            if ($Range -notmatch '^([^\s]+?)(\.{2,3})([^\s]+)$') {
+                $fallback.Why = '범위 형식이 a...b/a..b 가 아니어서 클래스 전체'
+                return $fallback
+            }
+            $left = $Matches[1]; $dots = $Matches[2]; $right = $Matches[3]
+            if ($left.Contains('..') -or $right.Contains('..') -or $left.StartsWith('-') -or $right.StartsWith('-')) { return $fallback }
+            $left = @(Invoke-Git @('rev-parse', '--verify', "$left^{commit}"))[0]
+            $right = @(Invoke-Git @('rev-parse', '--verify', "$right^{commit}"))[0]
+            $base = if ($dots -eq '...') { @(Invoke-Git @('merge-base', $left, $right))[0] } else { $left }
+            $diffArgs = @('diff', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0', $base, $right, '--', $path)
+        } else {
+            $base = @(Invoke-Git @('merge-base', 'dev', 'HEAD'))[0]
+            $diffArgs = @('diff', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0', $base, '--', $path)
+        }
+        $diff = @(Invoke-GitLines $diffArgs)
+        if ($diff -match '^(new file mode|deleted file mode|Binary files)') {
+            $fallback.Why = '파일 추가·삭제 또는 바이너리 diff 로 클래스 전체'
+            return $fallback
+        }
+        $hunks = @($diff | ForEach-Object {
+            if ($_ -match '^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
+                [pscustomobject]@{
+                    OldStart = [int]$Matches[1]
+                    OldCount = $(if ([string]::IsNullOrEmpty($Matches[2])) { 1 } else { [int]$Matches[2] })
+                    Start = [int]$Matches[3]
+                    Count = $(if ([string]::IsNullOrEmpty($Matches[4])) { 1 } else { [int]$Matches[4] })
+                }
+            }
+        })
+        if ($hunks.Count -eq 0) { return $fallback }
+        $lines = if ($Range -ne '') { @(Invoke-GitLines @('show', "$right`:$path")) }
+                 else { @(Get-Content -LiteralPath (Join-Path $root $path) -Encoding UTF8) }
+        $oldLines = @(Invoke-GitLines @('show', "$base`:$path"))
+        $methods = @(Get-TestMethods $lines)
+        $oldMethods = @(Get-TestMethods $oldLines)
+        if ($methods.Count -eq 0 -or $oldMethods.Count -eq 0) { return $fallback }
+        foreach ($oldMethod in $oldMethods) {
+            if ($methods.Name -notcontains $oldMethod.Name) {
+                $fallback.Why = '테스트 메서드 삭제·이름 변경으로 클래스 전체'
+                return $fallback
+            }
+        }
+        $picked = New-Object System.Collections.Generic.List[string]
+        foreach ($hunk in $hunks) {
+            $first = [Math]::Max(1, $hunk.Start)
+            $last = $first + [Math]::Max(1, $hunk.Count) - 1
+            if ($last -gt $lines.Count) { return $fallback }
+            # 삭제 위치가 직전 테스트의 닫는 괄호에 걸려도, 보조 함수/필드 삭제를 놓치지 않는다.
+            for ($oldLine = $hunk.OldStart; $oldLine -lt $hunk.OldStart + $hunk.OldCount; $oldLine++) {
+                $oldInside = @($oldMethods | Where-Object { $oldLine -ge $_.Start -and $oldLine -le $_.End })
+                if ($oldInside.Count -ne 1) {
+                    $fallback.Why = "메서드 밖이 바뀌어 클래스 전체: $first (삭제 전 $oldLine)"
+                    return $fallback
+                }
+            }
+            # 새 메서드 전체를 추가한 hunk 앞뒤의 빈 줄만 함께 인정한다(사용자 승인 2026-10-26).
+            $added = @($methods | Where-Object {
+                $hunk.OldCount -eq 0 -and $_.Start -ge $first -and $_.End -le $last -and $oldMethods.Name -notcontains $_.Name
+            })
+            for ($line = $first; $line -le $last; $line++) {
+                $inside = @($methods | Where-Object { $line -ge $_.Start -and $line -le $_.End })
+                if ($inside.Count -eq 1) { $picked.Add($inside[0].Name); continue }
+                $separator = $false
+                if ($hunk.Count -gt 0 -and [string]::IsNullOrWhiteSpace($lines[$line - 1])) {
+                    foreach ($method in $added) {
+                        $from = [Math]::Min($line, $method.Start)
+                        $to = [Math]::Max($line, $method.End)
+                        $onlyBlank = $true
+                        for ($n = $from; $n -le $to; $n++) {
+                            if ($n -ge $method.Start -and $n -le $method.End) { continue }
+                            if (-not [string]::IsNullOrWhiteSpace($lines[$n - 1])) { $onlyBlank = $false; break }
+                        }
+                        if ($onlyBlank) { $separator = $true; break }
+                    }
+                }
+                if (-not $separator) {
+                    $fallback.Why = "메서드 밖이 바뀌어 클래스 전체: $line"
+                    return $fallback
+                }
+            }
+        }
+        if ($picked.Count -eq 0) { return $fallback }
+        return @{ Tests = @($picked | Sort-Object -Unique); Why = '테스트 메서드만 바뀜' }
+    } catch {
+        Write-Warning "테스트 메서드 선택 실패: $path — $($_.Exception.Message) (클래스 전체로 실행)"
+        return $fallback
+    }
 }
 
 # 1. 바뀐 파일
@@ -130,18 +257,31 @@ foreach ($path in $changed) {
         Write-Output "  $path  →  전체 ($($rule.Why))"
     } else {
         $classes = @($rule.Classes | Where-Object { $_ })
+        $tests = @($rule.Tests | Where-Object { $_ })
+        $why = $rule.Why
         if ($rule.Own) {
             $own = $Matches[1]
-            if ($present -contains $own) { $classes = @($own) }
+            if ($present -contains $own) {
+                $classes = @($own)
+                if ($path -eq $p) {
+                    $choice = Get-OwnTestSelection $path
+                    $why = $choice.Why
+                    if ($choice.Tests.Count -gt 0) {
+                        $classes = @()
+                        $tests = @($choice.Tests | ForEach-Object { "$own.$_(\(|$)" })
+                    }
+                }
+            }
             else { $all = $true; $warnings.Add("테스트 클래스 파일인데 클래스를 못 찾았다: $path (전체)") }
         }
-        $tests = @($rule.Tests | Where-Object { $_ })
         foreach ($c in $classes) { $selected.Add($c) }
         foreach ($t in $tests) { $partial.Add($t) }
-        $parts = @($classes) + @($tests | ForEach-Object { "$_*" })
+        $parts = @($classes) + @($tests | ForEach-Object {
+            if ($_.EndsWith('(\(|$)')) { $_.Substring(0, $_.Length - 6) } else { "$_*" }
+        })
         $shown = if ($parts.Count -gt 0) { $parts -join ', ' } else { 'PlayMode 없음' }
         if ($rule.Fingerprint -eq $false) { $shown += ', 지문 없음' }
-        Write-Output "  $path  →  $shown ($($rule.Why))"
+        Write-Output "  $path  →  $shown ($why)"
     }
     if ($rule.Note) { $notes.Add($rule.Note) }
 }
@@ -172,7 +312,7 @@ if ($groups.Count -eq 0) {
     Write-Output '  PlayMode: 없음 (PlayMode 에서 고를 테스트가 없다)'
     exit 0
 }
-$quoted = ($groups | ForEach-Object { '"' + $_ + '"' }) -join ', '
+$quoted = ($groups | ForEach-Object { '"' + $_.Replace('\', '\\').Replace('"', '\"') + '"' }) -join ', '
 
 $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (시뮬이 읽는 경로가 바뀌지 않아 지문 없음)' }
 $partText = if ($tests.Count -gt 0) { " + 클래스 일부 $($tests.Count)개($($tests -join ', '))" } else { '' }

@@ -7,6 +7,18 @@
 
 ---
 
+## 2026-10-26 · Codex 에도 하네스 훅(`guard.ps1`)을 건다
+
+- **결정 (사용자, `feature/harness-codex-hooks`)**: 합의 요청 2 "둘 다 진행해라". `.codex/hooks.json` 이 `PreToolUse` `^(Bash|apply_patch)$` 에 `tools/hooks/guard.ps1` 을 부른다. 스크립트는 Claude·Codex 가 같이 쓴다(사본을 두지 않는다).
+  - `guard.ps1`: 보호 파일 판정을 `Get-ProtectedReason` 하나로 묶고, `tool_name = apply_patch` 면 패치 머리줄(`*** Add File:`·`Update File:`·`Delete File:`·`Move to:`)의 경로를 모두 같은 판정에 넣어 **deny** 한다. Codex 가 `ask` 를 지원하지 않아서다(공식 문서 hooks: 오류를 내고 호출을 계속한다). 머리줄이 없으면 조용히 통과시키지 않고 오류(exit 1)로 알린다. Claude 쪽 판정은 그대로다(사유 문구만 "대상:" 이 앞으로 왔다).
+- **검증 (모의 입력, `guard.ps1` 직접 실행)**: Codex 형식 10건 — `Bash` `git reset --hard`·`git clean -n` deny, `git status` 판정 없음; `apply_patch` `.meta` 수정·`.unity` 수정·`ProjectSettings/` 추가·절대 경로 `.asset` 삭제·`.cs` 를 `.prefab` 으로 이동 deny, `.cs`+`docs/` 판정 없음, 머리줄 없음 exit 1. Claude 형식 4건 — `Edit .meta`·`Write Packages/manifest.json` ask, `Edit .cs` 판정 없음, `PowerShell git restore .` deny. BOM(`EF BB BF`) 유지.
+- **검증 (실제 Codex 세션)**: `codex exec --dangerously-bypass-hook-trust` 는 Claude Code 권한 분류기가 막아("Safety Bypass Flag") 쓰지 않았다. 사용자가 Codex CLI `/hooks` 에서 PreToolUse 1개를 확인하고 신뢰한 뒤, `codex exec --json --sandbox read-only -m gpt-6.1-sol -c model_reasoning_effort=high`(Unity MCP 둘 끔)으로 `git clean -n` 과 `apply_patch` `docs/codex-hook-probe.meta` 추가를 시켰다. 원문:
+  - `Command blocked by PreToolUse hook: git clean 은 금지선이다 (CLAUDE.md §0 Git).. Command: git clean -n`
+  - `Command blocked by PreToolUse hook: .meta 는 직접 만들거나 고치지 않는다. … 대상: docs/codex-hook-probe.meta (CLAUDE.md §0). …` — Codex 는 패치 머리줄에 **절대 경로**(`C:/Users/…/docs/codex-hook-probe.meta`)를 썼고 `Get-ProtectedReason` 이 상대 경로로 바꿔 판정했다. 상대 경로 `tools/hooks/guard.ps1` 도 풀렸다. 파일은 생기지 않았다.
+- **발견 (모델·클라이언트 버전)**: PATH 의 npm `codex-cli 0.154.0` 은 `config.toml` 의 `gpt-6.1-sol` 로 `"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account."`(400 `model_not_found`, 앞서 `Model metadata for gpt-6.1-sol not found`)를 냈다. 같은 모델이 데스크톱 앱의 `codex-cli 0.164.0-alpha.11.1` 로는 돌았다. 플러그인(`/codex:*`)은 PATH 의 `codex` 를 쓴다(플러그인 `scripts/lib/app-server.mjs:190` `spawn("codex", ["app-server"])`). 사용자 "진행해봐" 로 `npm install -g @openai/codex@0.164.0` → `codex-cli 0.164.0`. 그 뒤 플러그인 `setup --json` `ready: true`, `-m` 없이(설정값 `gpt-6.1-sol`·high) `codex exec` 가 답을 냈다(400 사라짐).
+- **병합 (문서 검증 + `tools/` 실행 결과, `CLAUDE.md` §9-2 적용 범위; 사용자 "진행해봐")**: 바뀐 파일은 `.codex/hooks.json`(새)·`AGENTS.md`·`docs/DECISIONS.md`·`tools/hooks/guard.ps1` 뿐이다(`Assets/`·`Packages/`·`ProjectSettings/` 0개). 스크립트 실행 결과는 위 모의 입력 14건과 실제 Codex 세션 2건이다. `.claude/agents/` 는 바꾸지 않았다. 에디터 버전 차이 4개 파일은 넣지 않았다.
+- **버린 대안**: Codex 전용 스크립트를 따로 두기(판정이 두 벌이 되면 어긋난다, 2026-08-25 "단일 진실 원천"). Codex 에서도 ask(지원하지 않아 보호가 사라진다). `Unity_RunCommand` 내용 검사 훅(이번 범위 밖).
+
 ## 2026-10-26 · Codex 역할: 계획 반박·설계 리뷰·막혔을 때 진단, 모두 읽기 전용
 
 - **결정 (사용자, `docs/codex-rules`)**: "codex 연결 플러그인 깔아놨다 어떻게 활용할 수 있을지" → 조사 뒤 "계획반박은 좋다", "리뷰 자체를 codex가 하는 것은 어떤지" → 추천안(설정 a·훅 조사 d 먼저, 그 결과로 규칙 b·c) "추천대로 진행" → 합의 요청 1·2 "둘 다 진행해라".

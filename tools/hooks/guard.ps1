@@ -5,10 +5,13 @@
     deny : 되돌릴 수 없는 git 명령(reset --hard, checkout -- ., restore ., clean, 강제 푸시),
            main/dev 에서의 git commit                                 (§0 Git, §9-2)
     ask  : 승인 후에만 건드릴 수 있는 파일에 Edit/Write/NotebookEdit  (§0 파일·에셋, 설정)
+    deny : 같은 파일에 Codex apply_patch. Codex 는 ask 를 지원하지 않는다(오류를 내고 호출을 계속한다)
   해당 없으면 아무것도 출력하지 않고 exit 0 (= 판정 없음, 평소 권한 흐름).
 
-  스키마: 공식 문서 hooks (stdin: tool_name, tool_input.command|file_path, cwd /
-          stdout: hookSpecificOutput.permissionDecision).
+  Claude Code(.claude/settings.json)와 Codex(.codex/hooks.json)가 같이 부른다.
+  스키마: 두 쪽 공식 문서 hooks (stdin: tool_name, tool_input.command|file_path, cwd /
+          stdout: hookSpecificOutput.permissionDecision). Codex 셸은 tool_name Bash,
+          파일 편집은 apply_patch 이고 경로는 tool_input.command 의 패치 머리줄에 있다.
   한계 (확인 못 한 것): 셸 명령(sed -i, 리다이렉트, rm 등)으로 보호 파일을 바꾸는 것은 판정하지 않는다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다. Windows PowerShell 5.1 은 BOM 이 없으면
@@ -28,6 +31,23 @@ function Write-Decision([string]$decision, [string]$reason) {
     $out   = [Console]::OpenStandardOutput()
     $out.Write($bytes, 0, $bytes.Length)
     $out.Flush()
+}
+
+# 보호 파일이면 사유를, 아니면 $null 을 돌려준다. 경로는 저장소 기준 상대 경로로 바꿔 본다.
+function Get-ProtectedReason([string]$path, [string]$root) {
+    $rootN = $root.Replace([char]92, [char]47).TrimEnd([char]47)
+    $p = $path.Trim().Replace([char]92, [char]47)
+    if ($p.StartsWith($rootN + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $p = $p.Substring($rootN.Length + 1)
+    }
+    if ($p.StartsWith('./')) { $p = $p.Substring(2) }
+
+    if     ($p -match '\.meta$')                                    { return ".meta 는 직접 만들거나 고치지 않는다. GUID 는 Unity 만 발급한다. 대상: $p" }
+    elseif ($p -match '^(Library|Temp|obj|Build|UserSettings)/')    { return "Library/Temp/obj/Build/UserSettings 는 건드리지 않는다. 대상: $p" }
+    elseif ($p -match '^ProjectSettings/')                          { return "ProjectSettings/ 변경은 승인 후에만 한다. 대상: $p" }
+    elseif ($p -match '^Packages/manifest\.json$')                  { return "Packages/manifest.json 변경은 승인 후에만 한다. 대상: $p" }
+    elseif ($p -match '\.(unity|prefab|asset|inputactions)$')       { return "씬·프리팹·에셋·입력 YAML 은 텍스트로 수정하지 않는다. 에디터에서 한다. 대상: $p" }
+    return $null
 }
 
 try {
@@ -88,21 +108,28 @@ try {
 
         $root = $env:CLAUDE_PROJECT_DIR
         if ([string]::IsNullOrWhiteSpace($root)) { $root = $cwd }
-        $rootN = $root.Replace([char]92, [char]47).TrimEnd([char]47)
-        $p = $path.Replace([char]92, [char]47)
-        if ($p.StartsWith($rootN + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
-            $p = $p.Substring($rootN.Length + 1)
-        }
 
-        $reason = $null
-        if     ($p -match '\.meta$')                                    { $reason = '.meta 는 직접 만들거나 고치지 않는다. GUID 는 Unity 만 발급한다' }
-        elseif ($p -match '^(Library|Temp|obj|Build|UserSettings)/')    { $reason = 'Library/Temp/obj/Build/UserSettings 는 건드리지 않는다' }
-        elseif ($p -match '^ProjectSettings/')                          { $reason = 'ProjectSettings/ 변경은 승인 후에만 한다' }
-        elseif ($p -match '^Packages/manifest\.json$')                  { $reason = 'Packages/manifest.json 변경은 승인 후에만 한다' }
-        elseif ($p -match '\.(unity|prefab|asset|inputactions)$')       { $reason = '씬·프리팹·에셋·입력 YAML 은 텍스트로 수정하지 않는다. 에디터에서 한다' }
-
+        $reason = Get-ProtectedReason $path $root
         if ($reason) {
-            Write-Decision 'ask' "$reason (CLAUDE.md §0). 대상: $p"
+            Write-Decision 'ask' "$reason (CLAUDE.md §0)."
+        }
+        exit 0
+    }
+
+    # Codex 파일 편집. 패치 한 개가 여러 파일을 고칠 수 있어 머리줄의 경로를 모두 본다.
+    if ($tool -eq 'apply_patch') {
+        $patch = [string]$in.tool_input.command
+        if ([string]::IsNullOrWhiteSpace($patch)) { throw 'apply_patch 인데 tool_input.command 가 비었다.' }
+
+        $paths = @([regex]::Matches($patch, '(?m)^\*\*\* (?:Add File|Update File|Delete File|Move to): (?<p>.+?)\s*$') |
+                   ForEach-Object { $_.Groups['p'].Value })
+        if ($paths.Count -eq 0) { throw 'apply_patch 의 패치 머리줄(*** Add/Update/Delete File:)에서 경로를 찾지 못했다.' }
+
+        foreach ($path in $paths) {
+            $reason = Get-ProtectedReason $path $cwd
+            if ($reason) {
+                Write-Decision 'deny' "$reason (CLAUDE.md §0). 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."; exit 0
+            }
         }
         exit 0
     }

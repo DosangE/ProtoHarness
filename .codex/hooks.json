@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/hooks/guard.ps1",
+            "timeout": 15,
+            "statusMessage": "CLAUDE.md §0 금지선 확인"
+          }
+        ]
+      }
+    ]
+  }
+}

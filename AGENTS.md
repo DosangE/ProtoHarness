@@ -34,7 +34,7 @@
 |---|---|
 | MCP 설정 위치 | 사용자 `~/.codex/config.toml` 의 `[mcp_servers.<이름>]`. Codex 앱·CLI·IDE 확장이 같이 쓴다. 프로젝트 `.codex/config.toml` 은 신뢰된 프로젝트에서만 읽힌다. 지금 무엇이 붙어 있는지는 `codex mcp list` 로 구한다(머신마다 다르다, CLAUDE.md 맨 위) |
 | MCP 도구 승인 | `[mcp_servers.<이름>.tools.<도구>] approval_mode` — 값은 `auto`·`prompt`·`writes`·`approve`. `Unity_RunCommand` 는 `prompt`(매번 묻는다)로 둔다. CLAUDE.md §0 "상태를 바꾸는 코드는 승인 후에만" |
-| 훅 | Codex 에도 `PreToolUse` 훅이 있다(`.codex/hooks.json`, 신뢰된 프로젝트에서 `/hooks` 로 신뢰한 훅만 돈다). 셸은 `tool_name: Bash`, 파일 편집은 전부 `apply_patch` 하나로 오고 경로는 `tool_input.command` 의 패치 본문에 있다. `permissionDecision: "ask"` 는 지원하지 않는다(오류를 내고 호출을 계속한다). **이 레포의 훅(`tools/hooks/guard.ps1`)은 아직 Codex 에 걸려 있지 않다** |
+| 훅 | Codex 에도 `PreToolUse` 훅이 있다(`.codex/hooks.json`, 신뢰된 프로젝트에서 `/hooks` 로 신뢰한 훅만 돈다). 셸은 `tool_name: Bash`, 파일 편집은 전부 `apply_patch` 하나로 오고 경로는 `tool_input.command` 의 패치 본문에 있다. `permissionDecision: "ask"` 는 지원하지 않는다(오류를 내고 호출을 계속한다). 이 레포는 `.codex/hooks.json` 으로 `tools/hooks/guard.ps1` 을 `Bash`·`apply_patch` 에 건다 — 되돌릴 수 없는 git 명령·`main`/`dev` 커밋·보호 파일 편집을 **deny** 한다(Claude 쪽은 보호 파일이 ask). 훅을 고치면 해시가 바뀌어 `/hooks` 로 다시 신뢰해야 돈다 |
 
 ### 확인 못 한 것 — 단정하지 마라 (§4-1)
 

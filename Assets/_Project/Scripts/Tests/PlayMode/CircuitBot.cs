@@ -7,9 +7,12 @@ using UnityEngine;
 namespace ProtoHarness.Tests.PlayMode
 {
     // A test bot for the circuit: follows the closed centerline (TrackFollower), jumps near the edge of each
-    // gap, and grapples across gaps that have an anchor. The same jump distances as CourseBot (see there).
+    // gap, and grapples across gaps that have an anchor.
     internal sealed class CircuitBot : IInputSource
     {
+        // The straight course's long-run test jumped within 4.5 m of the deck edge and grappled above 2.6 m;
+        // that suits a grapple gap. A flat jump carries 10.25 m (COURSE.md 6-1), so a jump-only gap of up to
+        // 7.7 m needs the takeoff within 2.5 m of the edge: 0.8 m lands 9.45 m past it.
         private const double GrappleGapJumpDistance = 4.5d;
         private const double JumpGapJumpDistance = 0.8d;
         private const float GrappleHeight = 2.6f;

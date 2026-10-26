@@ -11,20 +11,20 @@
 | R5 | **M1** 코너 봉 스윙 P2 (표현) | `feature/corner-pole-look` | 약 11분 + 사용자 플레이 | R4 | 5-1 ② (2026-10-18) |
 | R4b | **M1** 봉 스윙 v2: Shift 스윙 = 드리프트, A/D 줄 길이, 속도·게이지 | `feature/pole-swing-v2` | 약 25분 (Device 포함) + 사용자 플레이 | R5 | 승인 2026-10-18 "진행해보아라" |
 | R4c | **M1** 서킷 코너 R22, 최소 반지름 낮춤 + 조향·감속 | `feature/circuit-r22` | 끝 (2026-10-18) — 사용자 플레이 남음 | R4b | 4-1 ① 사각 (2026-10-18) |
-| ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **보류** (서킷 집중) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
+| ~~R6~~ | ~~코너 봉 스윙 P3 (절차 코스)~~ **없앰** (2026-10-25 무한 모드 삭제 → `DESIGN.md` §10-1 아이디어) | `feature/corner-pole-procedural` | 약 27분 (스윕 포함) | R5 | 6-1 |
 | ~~R7~~ | ~~공격 판정 방향~~ **보류** (서킷 집중, 서킷에는 표적이 없다) | `fix/attack-facing` | 약 11분 | — | 7-1 (설계) |
 | R8 | 기존 착지 확인 테스트 수정 | `fix/test-landing-check` | 약 11분 | — | — |
 | M1-T | **M1** 체감 튜닝 1회 | `feature/tuning-m1` | 사용자 플레이 | R4c | 2026-10-18 에 속력·회전·부스터(앞당김 1)와 조향·감속(R4c)을 했다. 남은 것은 아래 "M1-T 에 넘긴 플레이 피드백", 순서는 `docs/HANDOFF.md` 1절 |
 | ~~RF1~~ | ~~리팩토링: IMGUI 헬퍼 통합~~ **끝** (2026-10-22, DECISIONS "리팩토링 RF1") | `feature/refactor-ui-helpers` | 약 3분 | — | 사용자 "R1 ㄱㄱ" |
 | RF3 | 리팩토링: `RunnerMotor.Step` 분해 + 이름 없는 숫자 상수화 (권장 다음) | `feature/refactor-motor-step` | select-tests 판정(코어 시뮬 → 전체 예상) | — | — |
-| RF2 | 리팩토링: 효과음 번호에 이름(`Cue` enum) | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
+| ~~RF2~~ | ~~리팩토링: 효과음 번호에 이름(`RaceCue` enum)~~ **끝** (2026-10-25, DECISIONS "리팩토링 RF2") | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
 | RF4 | 리팩토링: `CircuitRace` 깔기 코드 분리(`CircuitScenery`) | `feature/refactor-circuit-scenery` | select-tests 판정(`Race/`) | — | — |
-| ~~RF5~~ | ~~모드 분기 추상화~~ **보류** (무한 모드 존속 결정 뒤) | — | — | M3 뒤 무한 모드 판단 | — |
+| ~~RF5~~ | ~~모드 분기 추상화~~ **없앰** (2026-10-25 무한 모드를 지워 "삭제" 로 정해졌다) | — | — | — | — |
 | ~~RF6~~ | ~~여러 레이서 구조~~ **보류** (M5 AI 상대 때) | — | — | M5 | — |
 
 **2026-10-22 리팩토링 RF** (아래 "RF. 리팩토링" 절): 사용자 "현재 작성되어있는 코드 … 리팩토링하자. 구조와 확장성도 고려해서". 모든 RF 는 **동작·결정성 지문을 바꾸지 않고**, MonoBehaviour 이름·직렬화 필드를 그대로 둬 **씬·프리팹을 건드리지 않는다**(§0 YAML 수정 금지). 권장 순서 RF3 → RF2 → RF4. 승인은 항목마다 따로.
 
-**2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다.
+**2026-10-15 서킷 집중** (`docs/DECISIONS.md` 같은 날 "서킷 집중"): 무한 모드와 멀티는 새 기능을 멈춘다. 테스트·병합 조건은 그대로 둔다. R6·R7 은 무한 모드를 다시 열 때 이어서 한다. → 2026-10-25 무한 모드를 지웠다(DECISIONS "무한 모드 삭제"): R6 은 없애고 `DESIGN.md` §10-1 아이디어로 옮겼다. R7 은 표적(테스트 벤치)이 남아 있어 아이템전 때 본다.
 
 **2026-10-15 플레이 경험 순서 로드맵** (`docs/DESIGN.md` §5-1, DECISIONS 같은 날): 지금 마일스톤은 **M1 (한 판이 끝까지 돈다)** — R4 → R5 → 체감 튜닝 → 사용자 플레이 확인 → `dev → main` v0.2. 실제 네트워크 레이스(플레이어 빌드 + 레이스 A·B·C)는 M7(2026-10-19 재배치 전 M5) 까지 돌리지 않는다.
 
@@ -107,10 +107,10 @@
 - ~~**부스터 게이지 가시화**~~ (2026-10-19 끝, DECISIONS "부스터 게이지 화면", 사용자 "좋다"): 카트라이더처럼 **화면 중앙 하단**에 부스터 게이지를 두고, 게이지가 차서 생긴 부스터는 **아이템 칸**처럼 따로 보이게. 지금은 HUD 의 게이지 칸만 있다(`ChainRushHud.DrawGauge`).
 - **벽에 붙어도 속도가 그대로**: 2026-10-18 R4c 에서 1차(정면 손실 0.4, 닿아 있는 동안 25 m/s² 감속, 지상 가속 30 → 8, DECISIONS "R4c"). 플레이 뒤 더 조절.
 - **다른 씬의 속력**: 서킷만 20 m/s 다. 테스트 벤치·절차 코스는 코드 기본값 10 m/s 그대로라 QA 맵에서 10.3 이 나온다. 바꾸면 절차 지문이 바뀌고 `Run Course Sweep` 대상이다. 2026-10-19 사용자: 서킷 값을 기준으로 맞추되(물리값 기준은 서킷), **테스트에서 빨리 확인하기 위한 값(출발 가속 30 등)은 그대로 둔다**. → 2026-10-19 `feature/scenes-circuit-physics`(DECISIONS 같은 날 "다른 씬도 서킷 물리값"): 벤치는 출발 가속 30·조향 반응 1200 을 남기고 나머지 서킷 값, 절차 코스는 서킷과 같게. 게이트 통과, 플레이 확인 없이 병합(사용자 선택).
-- **보류**: 적(Space 공격)·아이템 — **아이템전을 구상할 때** 넣는다(사용자 2026-10-18). 그때까지 그 테스트는 `Enemy` 카테고리로, 무한 모드 테스트는 `Endless` 카테고리로 게이트에서 빠져 있다(DECISIONS "적·아이템·무한 모드 테스트 보류"). 다시 열 때 `CLAUDE.md` §9-2 의 해당 줄을 지우고 카테고리를 뗀다.
+- **보류**: 적(Space 공격)·아이템 — **아이템전을 구상할 때** 넣는다(사용자 2026-10-18). 그때까지 그 테스트는 `Enemy` 카테고리로, 무한 모드 테스트는 `Endless` 카테고리로 게이트에서 빠져 있다(DECISIONS "적·아이템·무한 모드 테스트 보류"). 다시 열 때 `CLAUDE.md` §9-2 의 해당 줄을 지우고 카테고리를 뗀다. → 2026-10-25 적과 무한 모드를 지웠다(`Endless` 카테고리 없음, `Enemy` 에는 공격·표적·체력 테스트만 남음).
 - **서킷 씬의 남은 표적 15개**: 절차 씬에서 복사할 때 따라온 직선 코스 `Sector 01`~`08`(꺼져 있음) 안에 있다. 게임에는 나오지 않지만 씬 정리 대상(씬 수정 — 에디터에서).
 
-## R6. 코너 봉 스윙 P3 — 절차 코스 (보류, 2026-10-15 서킷 집중)
+## R6. 코너 봉 스윙 P3 — 절차 코스 (없앰, 2026-10-25 무한 모드 삭제 → `DESIGN.md` §10-1)
 
 ```
 목표:      절차 코스의 커브에도 봉이 보이고 스트리밍·원점 이동을 따라간다
@@ -127,10 +127,9 @@
 ```
 목표:      공격 판정이 월드 +z 를 보는 문제(HANDOFF 2절)를 고쳐, 자유 조향·커브에서 보는 쪽과 맞는 쪽을 같게 한다
 건드릴 것:  Runtime/ChainRush/CourseTarget.cs:53-54 (TryHit), 공격 링 Strike Arc (ChainRushSceneBuilder.cs:159-161 — 루트 자식),
-           관련 테스트 (Attack_ScriptedPressNearTarget…, ChainRushCombatTests)
+           관련 테스트 (Attack_ScriptedPressNearTarget…; ChainRushCombatTests 는 2026-10-25 무한 모드와 함께 지웠다)
 새로 만들 것: 없음
-검증 방법:  게이트 1회 + Long (CourseTarget 은 표에 없는 경로 → 전체), 절차 지문이 바뀌는지 확인 — CourseBot 이 공격하므로 바뀔 수 있다.
-           바뀌면 사양 변경으로 새 해시를 기록한다
+검증 방법:  게이트 1회 (CourseTarget 은 코어 시뮬 → 전체), 서킷 지문 그대로
 안 하는 것:  적 조우 규칙
 ```
 
@@ -154,32 +153,74 @@
 
 **공통 제약**: 동작 변경 없음. MonoBehaviour 클래스 이름·직렬화 필드를 바꾸지 않는다(씬·프리팹 참조, §0). 새 타입은 MonoBehaviour 가 아닌 것만. 시뮬을 건드리는 RF2·RF3 은 서킷 지문(`ChainRushReplayTests.Replay_CircuitBotRun_RepeatsEveryTickBitForBit`)과 롤백 테스트가 그대로 통과하는 것을 "동작 불변" 의 증거로 삼는다.
 
-### RF3. `RunnerMotor.Step` 분해 (권장 다음)
+### RF3. `RunnerMotor.Step` 분해 — 끝남 (2026-10-25, `feature/refactor-motor-step`, DECISIONS "리팩토링 RF3")
+
+> 아래 줄 번호는 착수 때(`dev` `acd5681`) 값이다. 나눈 뒤 이름은 표와 같고, `Drive` 가 `RunTarget`·`ForwardAcceleration` 을 부른다(목표 속력·가속·속도 합성·중력을 한 단계로 묶었다).
 
 ```
-목표:      160줄 Step 을 읽을 수 있는 단계(스로틀·부스터, 조향, 달리기 목표, 가속, 이동·가드, 낙하)로 나눈다
-건드릴 것:  Runtime/ChainRush/RunnerMotor.cs:201-364 (같은 파일 안의 private 메서드로), 이름 없는 숫자
-           (:222 코요테 0.1, :320 그래플 중 공중 가속 5, :329 감기 16, :332 낙하 상한 -28, :357 낙하 -12, :525 놓기 13)
-           → private const (직렬화하지 않음 → 씬 영향 없음). GrappleController.cs:159 빗나감 0.75 도 같은 식
-새로 만들 것: 없음
-검증 방법:  컴파일 → EditMode → select-tests -Range dev...HEAD (코어 시뮬 → 전체 예상). 지문 해시 그대로
-안 하는 것:  튜닝 값 SO 이전(직렬화 값이 씬에 있어 씬 수정이 필요하다 — 따로 합의), 연산 순서 변경
+목표:      160줄 Step 을 연산 순서 그대로 private 메서드 단계로 나누고, 이름 없는 숫자를 private const 로 바꾼다
+건드릴 것:  Runtime/ChainRush/RunnerMotor.cs:201-364 (Step 본문, 같은 파일 안의 private 메서드로)
+           RunnerMotor.cs:180, :222, :320, :329, :332, :357, :525 (숫자 → const)
+           GrappleController.cs:128 (빗나감 0.75), :131·:142 (줄 최소 길이 5 — 2026-10-25 추가, 두 곳이 같은 값)
+새로 만들 것: 없음 (새 파일·새 타입 없음)
+검증 방법:  컴파일 에러 0 → EditMode(!Enemy) → select-tests -Range dev...HEAD (코어 시뮬 → "전체" 예상 → Run PlayMode Tests 1회).
+           동작 불변의 증거: 서킷 지문 0x18F31E7A2B4F79B3 과 롤백 테스트가 그대로 통과
+안 하는 것:  튜닝 값 SO 이전(직렬화 값이 씬에 있어 씬 수정 — 따로 합의), 연산 순서 변경, 직렬화 필드·public 시그니처 변경,
+           PlayCue 번호(RF2), 객체 분리(RF3b), 씬·프리팹
+브랜치:    feature/refactor-motor-step
 ```
 
-### RF2. 효과음 번호에 이름
+**단계 나누기** (순서는 지금 그대로, `Step` 은 이것들을 차례로 부른다):
+
+| 단계 (private 메서드) | 지금 줄 |
+|---|---|
+| 리스폰 대기 | 207-212 (Step 에 남김, early return) |
+| `ApplyJump` — 코요테·점프 | 222-233 |
+| 체인 액션·봉 걸기·스윙 끝내기 | 238-243 |
+| `CutBoostOnCoast` — 스로틀 놓으면 부스터 끊기 | 249-253 |
+| `Turn` — 조향·향하는 방향 | 260-270 |
+| `SpeedUpSwing` — 스윙 중 부스터·↑ 가속 | 274-287 |
+| `SteerTowardSling` — 새총 당기는 동안 방향 | 288-296 |
+| `RunTarget` — 달리기 목표 속력 | 302-316 |
+| `ForwardAcceleration` — 가속도 고르기 | 317-327 |
+| `MoveAndCollide` — 이동·가드·착지·그래플 놓기 | 329-351 |
+| `CountDownAndCheckFall` — 타이머·낙하 | 352-363 |
+
+**const** (이름 형식은 `ChainRushHud.cs` 의 `private const float GoSeconds` 를 따른다):
+
+| 지금 | 이름 (안) |
+|---|---|
+| `RunnerMotor.cs:222` `0.1f` | `CoyoteSeconds` |
+| `:320` `5f` | `GrappleAirAcceleration` |
+| `:329` `16f` | `GrappleReelSpeed` |
+| `:332` `-28f` | `MaxFallSpeed = 28f` (`-MaxFallSpeed` 로 쓴다) |
+| `:357` `-12f` | `FallDepth = 12f` |
+| `:525` `13f` + `:180` `13f` | `ReleaseSpeed` (`:180` 검증식과 로그의 "normal 13" 이 같은 값) |
+| `GrappleController.cs:128` `0.75f` | `MissSeconds` |
+| `GrappleController.cs:131`·`:142` `5f` | `MinRopeLength` |
+
+### RF3b. 객체 분리 — 끝남 (2026-10-25, `feature/refactor-motor-rules`, DECISIONS "리팩토링 RF3b")
+
+A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 상태 없는 static 클래스 4개(`RunDrive`·`Slingshot`·`PoleSwing`·`GuardContact`)로 떼고, `RunnerMotor` 가 직렬화 값으로 각 `Settings` 를 틱마다 채워 넘긴다. 버린 B 안(튜닝 필드를 `[Serializable]` 묶음으로 옮기기)은 두 씬의 값 이전이 필요해 SO 이전과 함께 따로 본다. 아래는 착수 전 메모다.
+
+사용자 "확장만 하다보니 꽤 지저분하다" (2026-10-25). RF3 에서 드러난 경계(같은 상태를 함께 쓰는 단계 묶음)대로 `RunnerMotor` 의 책임을 MonoBehaviour 가 아닌 C# 클래스로 뗀다. 후보: 봉 스윙(`TryHookPole`·`SwingStep`·`EndSwing`), 새총·부스터, 목표 속력·가속도 계산. `RunnerMotor` 는 직렬화 필드를 든 껍데기로 남겨 씬 참조가 끊기지 않게 한다. 새 파일이 생기므로 RF3 을 병합한 뒤 줄 번호를 붙여 §3-2 요청서로 올린다.
+
+### RF2. 효과음 번호에 이름 — 끝남 (2026-10-25, `feature/refactor-cues`, DECISIONS "리팩토링 RF2")
 
 ```
-목표:      PlayCue(int) 의 0~8 을 이름 있는 enum 으로 바꾼다
-건드릴 것:  ChainRushGame.cs:345-355, RunnerMotor.cs(4곳), GrappleController.cs:165, Combat/EnemyDirector.cs(4곳),
-           Audio/ChainRushAudio.cs:95, Visuals/RunnerAnimation.cs:55,60, PlayCue 를 부르는 테스트(시작 전에 grep)
-새로 만들 것: 목적: 효과음 번호에 이름을 붙이기 위해 / 경로: Runtime/ChainRush/Audio/Cue.cs / 형태: enum
-검증 방법:  RF3 과 같다
-안 하는 것:  아래 2-1 (동작이 바뀐다)
+목표:      PlayCue(int) 의 0~8 을 이름 있는 enum 으로 바꾼다 (동작·지문 불변)
+건드릴 것:  ChainRushGame.cs:282,290,308,311-316, RunnerMotor.cs:276,411,414,426, GrappleController.cs:138,
+           Audio/ChainRushAudio.cs:46-47,95-100,115-141, Visuals/RunnerAnimation.cs:54,59
+           (2026-10-25 다시 확인: EnemyDirector 는 무한 모드 삭제로 없고, 테스트는 GetCue(int)·CueCount 만 불러 고치지 않는다)
+새로 만들 것: 목적: 레이스 효과음 번호에 이름을 붙이기 위해 / 경로: Runtime/ChainRush/Audio/RaceCue.cs / 형태: enum
+           (UiSound.Cue 와 헷갈리지 않게 Cue 대신 RaceCue)
+검증 방법:  select-tests (시뮬 파일 → 전체)
+안 하는 것:  아래 2-1 (동작이 바뀐다), 안 쓰는 4·5·6(Beeps·Crash·Buzz) 삭제, GetCue(int)/CueCount
 ```
 
-**2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:317` `game.StepTick` → `ChainRushGame.cs:215` `player.Step` → `RunnerMotor.cs:230` `game.PlayCue(0)`. 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
+**2-1 사용자 결정 (발견, 2026-10-22)**: 롤백 재실행 중에도 효과음이 다시 난다 — `ClientPredictor.cs:318` `game.StepTick`(`ReplayTo`) → `ChainRushGame.cs:195` `player.Step` → `RunnerMotor.cs:277` `game.PlayCue(RaceCue.Jump)` (줄 번호 2026-10-25 RF2 뒤). 멀티는 M7 까지 닫혀 있어 지금 들리지는 않는다. 고치면 재실행 중 소리를 막는 동작 변경이라 RF2 와 따로 정한다(M7 전에).
 
-### RF4. `CircuitRace` 깔기 코드 분리
+### RF4. `CircuitRace` 깔기 코드 분리 — 끝남 (2026-10-25, `feature/refactor-circuit-scenery`, DECISIONS "리팩토링 RF4")
 
 ```
 목표:      랩 판정과 서킷 장면 만들기(노면·표지·봉)를 떼어 M3 트랙 장식(T3e)이 붙을 자리를 만든다
@@ -190,9 +231,13 @@
 안 하는 것:  CircuitRace 의 직렬화 필드 이동
 ```
 
+### RF7. `LobbyMenu` 페이지 객체화 — 끝남 (2026-10-25, `feature/refactor-lobby`, DECISIONS "리팩토링 RF7")
+
+페이지마다 `LobbyPage` 하위 클래스 하나(`Flow/Lobby/`). 새 페이지는 하위 클래스 + `LobbyMenu.Page` 값 + `Awake` 의 목록 한 줄. 남은 것: ~~속도 잠금 안내의 "M2-b" 문구~~(2026-10-25 M3 속도 단계에서 안내째 지움), 러너 검사의 `error` 버림 — 보이는 글자·로그가 바뀌어 따로 승인(M3 속도 단계 때 같이 볼 수 있다).
+
 ### 보류
 
-- **RF5 모드 분기 추상화** (`IRaceMode` 류): 무한 모드는 동결이고 M3 뒤에 존속을 판단한다(`docs/DESIGN.md` §5-1). 버릴 수 있는 모드를 추상화하지 않는다 — 존속이 정해지면 "분리" 와 "삭제" 중 고른다.
+- ~~**RF5 모드 분기 추상화** (`IRaceMode` 류): 무한 모드는 동결이고 M3 뒤에 존속을 판단한다(`docs/DESIGN.md` §5-1). 버릴 수 있는 모드를 추상화하지 않는다 — 존속이 정해지면 "분리" 와 "삭제" 중 고른다.~~ 2026-10-25 "삭제" 로 정해져 무한 모드를 지웠다(DECISIONS "무한 모드 삭제"). `ChainRushGame` 에는 직선(테스트 벤치)·서킷 두 갈래만 남았다.
 - **RF6 여러 레이서 구조**: `RunnerMotor`·`GrappleController` 가 상태를 `game.Racer` 하나로 읽는다(`RunnerMotor.cs:109-128`, `GrappleController.cs:33-40`). M5 AI 상대에서 지금 멀티처럼 레이서마다 격리 월드(`RaceWorld`)를 쓸지, 한 월드에 여러 러너를 둘지 정할 때 같이 본다(C2 충돌·추월은 공유 월드가 필요 — HANDOFF 2절).
 
 ---
@@ -215,7 +260,7 @@
 - ~~**M2-a1 씬 뼈대**~~ (`feature/m2-scene-flow`, 사용자 "A, M2-a1 ㄱㄱ"): 타이틀·로비·스타디움 장식 씬, `RaceSetup`·`RaceLaunch`·`RaceAssembler`, 결과 → 로비, 서킷 씬의 꺼진 `Skyline Course` 제거. 검증은 DECISIONS "M2 씬 구성".
 - ~~**M2-a2 빌드 씬 목록**~~ (`dev` `0432115`, DECISIONS "M2-a2 빌드 씬 목록").
 - ~~**M2-b 러너 프로필**~~ (`feature/m2-runner-profile`, DECISIONS "M2-b 러너 프로필"): ALPHA~OMEGA 5명, 씬 값에 곱하는 배율.
-- **속도 단계 보통·매우빠름** (후순위, 사용자 2026-10-19): 지금 값 = 빠름(1.0). 배율 후보 0.8 / 1.2 를 속도 전부(그래플 16·놓을 때 13 고정값 포함)와 가속에 곱하고, 점프·중력·최소 회전 반지름은 그대로. 시험용 봇이 1.2 에서 코너를 놓치는지 확인 못 함. 로비(`LobbyMenu` 의 잠금)와 `RaceAssembler` 의 거부를 푼다.
+- 속도 단계 보통·매우빠름 → **M3 으로 옮겼다** (2026-10-23, DECISIONS "M2 범위 조정"). 아래 M3 칸.
 - **사용자 플레이 확인** (M2 완료 조건): 2026-10-19 "씬 처음부터 들어가서 정상 작동 확인했다" → 피드백 3개 중 이름 잘림·트랙 최고 기록은 `feature/lobby-best-record`(DECISIONS "로비: 트랙 선택에 최고 기록"), 점프 속도 유지는 그대로 두고 기록(DECISIONS "버니합"). 러너마다 차이가 느껴지는지는 아직 답 없음.
 - ~~**M2-c 설정**~~ (`feature/m2-settings`, DECISIONS 2026-10-20): 볼륨 3개·속도 시야 효과·조작 키 하위 페이지. 같은 브랜치에서 로비 클릭 버그, 아트 AI 의 스타디움 장식·러너 디자인 5종, 러너 디자인 연결. 남은 설정 후보: 화면(창/전체·해상도·VSync — 플레이어 빌드에서 검증), 피격 깜빡임(맞을 대상이 생길 때).
 - ~~**러너 선택창 프리뷰**~~ (`feature/m2-lobby-pause-ui`, DECISIONS 2026-10-20 "러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴"): RenderTexture 프리뷰·드래그 회전, 입장 버튼, 이전 버튼, 일시정지 메뉴(계속·재시작·로비로), R 재시작 제거.
@@ -223,9 +268,11 @@
 
 **M3 (v0.4) 고를 거리**
 - **SKYWAY LOOP** (`feature/track-skyway`, DECISIONS 2026-10-21 "SKYWAY LOOP"): 카트라이더 "빌리지 고가의 질주" 배치를 기록 영상으로 읽어 옮긴 고속·고저차 서킷(1482.8 m, 2랩, 고가 12 m). 외부 장식 씬(고가 기둥·마을·정원·도시 타워)과 로비 연결 완료(`ART_SKYWAY.md`). 남은 것: 사용자 2랩 플레이. 고가 위 완만한 커브 위치는 썸네일에서 추정한 값.
+- **FINGER LANES** (`feature/m3-track-village-finger`, DECISIONS 2026-10-25 "FINGER LANES"): 카트라이더 빌리지 손가락을 윤곽(러쉬플러스판)과 기록 영상으로 옮긴 테크니컬 서킷(1466 m, 2랩, U턴 7개 R25, 반폭 7.2). 다리·시계탑 출구의 0.5 m 턱이 속도로 띄운다(도약대 `TrackDefinition.Segment.Kicker`). ~~다음: 지름길 2곳~~ 코드 끝(2026-10-25, `feature/m3-finger-shortcuts`, DECISIONS "FINGER LANES 지름길": 연결로 R15 — 봉 스윙으로만, 본선 대비 랩마다 약 9.6 s). 남은 것: 사용자 플레이 확인, 장식(T3e).
 - **새 서킷**: 테크니컬(S자·연속 코너), 고저차(언덕·점프 틈), 고속(긴 직선·완만한 커브) — 지금 `TrackDefinition` 조각(직선·원호·경사·틈)으로 된다. 헤어핀·그래플 중심은 **T5 보충 모듈**(헤어핀 전용 짧은 봉 — `PROPOSAL_CORNER_POLE.md` 8절) 뒤. 마지막에 스타디움 특성까지 섞은 **종합 맵** 몇 개(사용자 2026-10-19). 코너 반지름은 `TrackDefinition.MinRadius` 20 m 와 조향의 최소 회전 반지름 25 m(DECISIONS "조향 2차")를 같이 본다.
 - **T3e 장식**.
-- 무한 모드(R6·R7) 를 다시 열지 이 마일스톤 뒤에 판단한다.
+- ~~**속도 단계 보통·매우빠름**~~ 코드 끝 (2026-10-25, `feature/m3-speed-classes`, DECISIONS "M3 속도 단계"): `Flow/SpeedScale` 0.8 / 1.0 / 1.2 를 러너 프로필과 같은 범위(달리기·부스터·강화 그래플 속도, 달리기 가속)와 그래플 고정값 13·16 에 곱한다. 감속·점프·중력·최소 회전 반지름은 그대로. 매우빠름의 봇은 R22 코너 출구에서 가드를 스친다(허용, 사용자 2026-10-25). 남은 것: 사용자 플레이 확인 "속도 단계마다 차이가 느껴진다".
+- ~~무한 모드(R6·R7) 를 다시 열지 이 마일스톤 뒤에 판단한다.~~ 2026-10-25 앞당겨 지웠다(`DESIGN.md` §10-1 아이디어).
 
 **M4 (v0.5) 다시 할 이유**
 - **최고 기록 저장·결과 화면 비교·내 고스트** (옛 "P2 고스트"): 트랙×러너별. 트랙 × 속도 단계별 최고 기록 1개와 로비 표시는 2026-10-19 먼저 했다(`Flow/BestRecords`, DECISIONS "로비: 트랙 선택에 최고 기록") — 같은 저장소에 더한다. 입력 기록·재생(`InputLogFile`, `InputReplay`)과 R9 의 고스트 모형을 쓴다.

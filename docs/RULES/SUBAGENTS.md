@@ -36,20 +36,24 @@
 
 `codex` 플러그인(`/codex:*`)은 다른 모델 계열의 에이전트를 부른다. 구현자(Claude)와 다른 눈이 필요한 곳에만 쓴다 (`docs/DECISIONS.md` 2026-10-26 "Codex 역할"). Codex 쪽 설정·훅 사실은 `AGENTS.md` 에 있다.
 
-**쓰는 곳** — 셋 다 읽기 전용이다.
+**쓰는 곳** — 넷 다 읽기 전용이다.
 
-| 용도 | 명령 | 언제 |
-|---|---|---|
-| 계획 반박 | `/codex:adversarial-review <초점>` | §3-2 합의 요청서를 `docs/` 파일로 둔 뒤, 승인 **전에**. 반박과 그에 대한 답을 요청서에 붙여 승인을 받는다 |
-| 설계·정합성 리뷰 | `/codex:adversarial-review --base dev <초점>` | `feature → dev` 병합 전. §0/§1/§5 체크리스트는 `unity-reviewer` 가 그대로 맡는다 |
-| 막혔을 때 진단 | `/codex:rescue` + "읽기 전용, 파일을 고치지 마라" | §4-5 에서 3번 실패한 뒤, 보고하는 다음 후보 중 하나로 |
+| 용도 | 명령 (`<cc>` = 플러그인의 `scripts/codex-companion.mjs`) | 언제 | 에이전트가 스스로 부르나 |
+|---|---|---|---|
+| 계획 반박 | `node <cc> adversarial-review --wait <초점>` | §3-2 합의 요청서를 `docs/` 파일로 둔 뒤, 승인 **전에**. 반박과 그에 대한 답을 요청서에 붙여 승인을 받는다 | 사용자가 지시할 때만 |
+| 설계·정합성 리뷰 | `node <cc> adversarial-review --wait --base dev <초점>` | `feature → dev` 병합 전. §0/§1/§5 체크리스트는 `unity-reviewer` 가 그대로 맡는다 | **브랜치당 1회는 지시 없이 부른다.** 다시 부르는 것은 지시가 있을 때만 |
+| 넓은 탐색 | `node <cc> task --wait "<읽기 전용 …>"` | §7-3 "파견한다" 에 해당할 때(독립 영역 3개 이상 등). 1–2 파일은 직접 읽는다 — Codex 는 호출 한 번의 고정비가 크다(2026-10-26 T1: 파일 2개에 입력 407k) | 사용자가 지시할 때만 (§7-3) |
+| 막혔을 때 진단 | `node <cc> task --wait "<읽기 전용 …>"` | §4-5 에서 3번 실패한 뒤, 보고하는 다음 후보 중 하나로 | 사용자가 지시할 때만 |
 
-- `/codex:review`·`/codex:adversarial-review` 는 사용자만 부를 수 있다(플러그인이 모델 호출을 막는다). 에이전트는 필요하면 사용자에게 입력을 청한다.
+- **에이전트는 스크립트를 Bash 로 직접 부른다.** 플러그인 에이전트 `codex:codex-rescue` 와 `/codex:rescue` 는 쓰지 않는다. 전달만 하는 데 Claude 토큰이 든다(2026-10-26 T1 약 29k). 게다가 실패하면 "return nothing"(`agents/codex-rescue.md`)이라 빈 결과가 돌아온다. `<cc>` 위치는 플러그인 설치 경로라 머신마다 다르다. 실행할 때 구한다 (CLAUDE.md 맨 위).
+- **`task` 에 `--write` 를 붙이지 않는다.** 없으면 `read-only` sandbox 로 돈다(`codex-companion.mjs` `sandbox: request.write ? "workspace-write" : "read-only"`). 리뷰는 늘 `read-only` 다.
+- 사용자는 같은 일을 슬래시 명령(`/codex:adversarial-review`·`/codex:review`·`/codex:rescue`)으로 직접 할 수 있다.
 - Codex 결과도 §7-4 와 같이 다룬다. `경로:줄` 근거가 없는 주장은 되묻는다.
+- **Codex 가 실패하면 시끄럽게** (§5): 호출이 0 이 아닌 코드로 끝나거나, 오류를 내거나(사용량 소진 포함), 결과가 비면 그 원문을 보고에 `Codex 리뷰 못 함: <원문>` 으로 적는다. 리뷰 없이 병합할지는 사용자에게 묻는다. 조용히 건너뛰거나 Claude 리뷰만으로 대신했다고 쓰지 않는다.
 - **시험 중**: 리뷰 분담을 정하려고, 병합 보고에 `unity-reviewer` 와 Codex 리뷰의 지적을 나란히 적는다(실제 결함 / 규칙 위반 / 오탐). 두 브랜치를 비교한 뒤 분담을 다시 정하고 이 줄을 지운다.
 
 **지키는 것**
-- **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만)과 §3-4(`승인:`·`브랜치:` 줄)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
-- **쓰기 작업은 맡기지 않는다.** `/codex:rescue` 는 기본이 쓰기(`--write`)라 읽기 전용임을 요청에 적는다. Codex 에 쓰기를 맡기는 것은 그 자체가 §3 합의 대상이다.
+- **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만 — 위 표의 병합 전 리뷰 1회만 예외)과 §3-4(`승인:`·`브랜치:` 줄을 요청 첫머리에)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
+- **쓰기 작업은 맡기지 않는다.** Codex 에 쓰기를 맡기는 것은 그 자체가 §3 합의 대상이다. Codex 기본 지침은 "되돌릴 수 있는 작업과 수정은 허락을 묻지 말고 진행" 쪽이라(2026-10-26 세션 기록 `base_instructions`) §3 과 방향이 반대다.
 - **Unity 에디터는 한 번에 한쪽만 쓴다.** Claude 와 Codex 는 같은 relay 로 같은 에디터에 붙는다. 한쪽이 Unity MCP 를 쓰는 동안 다른 쪽은 쓰지 않는다 (CLAUDE.md §7 병렬 절대 금지 2번).
 - **stop 리뷰 게이트(`/codex:setup --enable-review-gate`)는 켜지 않는다.** 파일을 고친 턴마다 끝에서 Codex 리뷰가 돌고 최대 900초를 기다린다(플러그인 `hooks/hooks.json`). 켜려면 합의한다.

@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-26 · 훅 경로 정규화 · Codex 직접 호출 · Codex 실패 규칙
+
+- **결정 (사용자 "제안대로 진행해라", `fix/guard-path-and-codex-rules`)**: ① `guard.ps1` 경로 정규화 ② §7-5 에 Codex 실패 규칙 ③ 넓은 탐색을 Codex 로(a), 에이전트가 companion 스크립트를 직접 호출(b). 구현 위임(c)은 보류.
+- **① 결함과 수정**: `/codex:adversarial-review --base origin/dev`(시험 T2, 사용자 입력)가 high 로 지적 — `Get-ProtectedReason` 이 루트 접두사와 맨 앞 `./` 만 떼고 `.`·`..` 을 풀지 않아 `Packages/./manifest.json`, `docs/../Packages/manifest.json` 이 판정 없이 통과했다. 재현해 보니 Claude 쪽(`Edit <루트>\docs\..\Packages\manifest.json`)도 같았다. 2026-10-10 "하네스 자동화" 때부터 있던 결함이고, 확장자 규칙(`.meta`·`.unity`·`.prefab`·`.asset`·`.inputactions`)은 영향이 없었다. 수정: `[System.IO.Path]::GetFullPath(Combine(루트, 경로))` 로 푼 뒤 루트 기준 상대 경로로 판정한다. 풀 수 없는 경로(잘못된 문자)는 던지고 exit 1 로 알린다.
+  - 내 모의 입력 14건은 이 경우를 놓쳤다. 다른 모델 리뷰가 실제 결함을 잡은 첫 사례다.
+  - **2차 리뷰 (§7-5 병합 전 1회, 지시 없이 직접 호출 — 방식 b 첫 사용)**: `node <cc> adversarial-review --wait --scope working-tree <초점>` (커밋 전이라 작업 트리 범위, 에디터 버전 차이 4개는 빼라고 초점에 적음). high 1건 — **위 수정이 만든 회귀**: `Edit <루트>\Library\AnnotationManager::$DATA`(NTFS 기본 데이터 스트림 표기, 같은 파일)에서 PowerShell 5.1 `GetFullPath` 가 `The given path's format is not supported.` 를 던지고 바깥 `catch` 가 exit 1(비차단)로 끝나 **판정 없이 지나갔다.** 예전 글자 비교는 `Library/` 접두사로 ask 였다. 확인 뒤 실제 결함으로 판정했다.
+  - **2차 수정 — 판정할 수 없으면 막는다**: `GetFullPath` 실패를 `Get-ProtectedReason` 안에서 잡아 "경로를 판정할 수 없어 보호 파일로 본다 (<예외 원문>)" 를 돌려준다(Claude ask / Codex deny). 같은 종류라 `apply_patch` 머리줄을 못 찾는 경우도 exit 1 → **deny** 로 바꿨다(리뷰가 짚은 범위보다 넓힌 것 — 사용자에게 보고했다). 표준입력이 비거나 JSON 이 깨지는 등 그 밖의 훅 오류는 지금처럼 exit 1(비차단, 원문을 stderr 에)이다 — 2026-10-10 "하네스 자동화" 의 선택을 이번에 바꾸지 않았다.
+  - §7-5 비교 기록: 이 브랜치 Codex 리뷰 2회, 실제 결함 2 / 규칙 위반 0 / 오탐 0. `unity-reviewer` 는 돌리지 않았다(`Assets/` 밖 PowerShell 이라 §0/§1/§5 체크리스트 대상이 아니다) — 그래서 이 브랜치는 비교 2회 중 1회로 세지 않는다.
+- **② 실패 규칙**: Codex 사용량이 다 떨어졌을 때의 모습은 확인 못 했다(플러그인 `scripts/` 에 사용량 한도 처리 없음 — `usage limit`·`rate limit`·`quota`·`429` 검색 0건). `codex-rescue` 는 실패 시 "return nothing" 이라 빈 결과가 조용히 지나갈 수 있다 → 실패·빈 결과는 원문을 `Codex 리뷰 못 함:` 으로 적고 병합 여부를 사용자에게 묻는다.
+- **③ 직접 호출**: `codex-rescue` 전달 에이전트가 호출마다 Claude 토큰 약 29k 를 쓰고(T1), 직접 Bash 호출(T2)은 결과만 들어온다. 상한: 병합 전 설계 리뷰는 브랜치당 1회 지시 없이, 그 밖은 지시가 있을 때만. 플러그인이 review 명령의 모델 호출을 막아 둔 것(`disable-model-invocation: true`)을 이 상한 안에서 우회하는 것은 사용자 승인으로 정했다. `task` 는 `--write` 없이 `read-only` sandbox(`codex-companion.mjs:491`).
+  - 넓은 탐색만 Codex 로 보내는 이유: T1(파일 2개)의 Codex 입력이 407k(캐시 325k)였다. 1–2 파일은 Claude 가 직접 읽는 편이 싸다.
+- **검증**: `guard.ps1` 직접 실행 — 1차 수정 뒤 27건, 2차 수정 뒤 30건 모두 기대대로. 기존 14건 그대로(머리줄 없는 패치만 exit 1 → deny 로 바뀜), 재현 6건(`Packages/./manifest.json`·`docs/../Packages/manifest.json` 등) deny/ask, 경계 7건(`././ProjectSettings/…`·`.\Library\…`·슬래시 절대 경로 `Temp/`·대문자 `PACKAGES/MANIFEST.JSON` deny, 저장소 밖 `../../outside/Library/` 와 `docs/../docs/a.md` 판정 없음, `docs/a<b>.md` deny), 스트림 표기 3건(Claude `Library\AnnotationManager::$DATA`·`Foo.cs.meta::$DATA` ask, Codex `Packages/manifest.json::$DATA` deny). BOM 유지. 실제 Codex 세션(1차 수정 뒤, 2차 수정 뒤에는 돌리지 않음)(`codex-cli 0.164.0`, read-only, Unity MCP 끔): `*** Update File: docs/../Packages/manifest.json` → `Command blocked by PreToolUse hook: Packages/manifest.json 변경은 승인 후에만 한다. 대상: Packages/manifest.json (CLAUDE.md §0). …`, `manifest.json` 해시 그대로.
+- **발견**: `guard.ps1` 만 고쳤을 때 Codex `/hooks` 재신뢰 없이 훅이 돌았다. 신뢰는 `hooks.json` 의 정의에 걸리고 스크립트 내용은 다시 검사하지 않는다(앞 항목의 "훅을 고치면 다시 신뢰" 는 틀렸다 → `AGENTS.md` 고침).
+- **버린 대안**: `..` 이 든 경로를 모두 거부(정상 경로까지 막는다). `Resolve-Path`(없는 파일 — 새로 만드는 파일 — 에서 실패한다).
+
 ## 2026-10-26 · Codex 에도 하네스 훅(`guard.ps1`)을 건다
 
 - **결정 (사용자, `feature/harness-codex-hooks`)**: 합의 요청 2 "둘 다 진행해라". `.codex/hooks.json` 이 `PreToolUse` `^(Bash|apply_patch)$` 에 `tools/hooks/guard.ps1` 을 부른다. 스크립트는 Claude·Codex 가 같이 쓴다(사본을 두지 않는다).

@@ -34,13 +34,22 @@ function Write-Decision([string]$decision, [string]$reason) {
 }
 
 # 보호 파일이면 사유를, 아니면 $null 을 돌려준다. 경로는 저장소 기준 상대 경로로 바꿔 본다.
+# . 과 .. 를 먼저 풀어 절대 경로로 만든다. 글자 그대로 비교하면 docs/../Packages/manifest.json 이 빠져나간다.
+# 풀 수 없는 경로(잘못된 문자, Foo::$DATA 같은 스트림 표기 등)는 보호 파일일 수 있으므로 막는다.
+# 던지게 두면 바깥 catch 의 exit 1(비차단)로 끝나 판정 없이 지나간다 — 예전 글자 비교는 이런 경로도 접두사로 잡았다.
 function Get-ProtectedReason([string]$path, [string]$root) {
-    $rootN = $root.Replace([char]92, [char]47).TrimEnd([char]47)
-    $p = $path.Trim().Replace([char]92, [char]47)
-    if ($p.StartsWith($rootN + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $p = $p.Substring($rootN.Length + 1)
+    $rootFull = [System.IO.Path]::GetFullPath($root).TrimEnd([char]92, [char]47)
+    try {
+        $full = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($rootFull, $path.Trim()))
     }
-    if ($p.StartsWith('./')) { $p = $p.Substring(2) }
+    catch {
+        return "경로를 판정할 수 없어 보호 파일로 본다 ($($_.Exception.Message)). 대상: $path"
+    }
+    $p = $full
+    if ($full.StartsWith($rootFull + [char]92, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $p = $full.Substring($rootFull.Length + 1)
+    }
+    $p = $p.Replace([char]92, [char]47)
 
     if     ($p -match '\.meta$')                                    { return ".meta 는 직접 만들거나 고치지 않는다. GUID 는 Unity 만 발급한다. 대상: $p" }
     elseif ($p -match '^(Library|Temp|obj|Build|UserSettings)/')    { return "Library/Temp/obj/Build/UserSettings 는 건드리지 않는다. 대상: $p" }
@@ -123,7 +132,10 @@ try {
 
         $paths = @([regex]::Matches($patch, '(?m)^\*\*\* (?:Add File|Update File|Delete File|Move to): (?<p>.+?)\s*$') |
                    ForEach-Object { $_.Groups['p'].Value })
-        if ($paths.Count -eq 0) { throw 'apply_patch 의 패치 머리줄(*** Add/Update/Delete File:)에서 경로를 찾지 못했다.' }
+        # 머리줄을 못 찾으면 무엇을 고치는지 판정할 수 없다. 그냥 두면 보호 파일도 지나가므로 막는다.
+        if ($paths.Count -eq 0) {
+            Write-Decision 'deny' 'apply_patch 의 패치 머리줄(*** Add/Update/Delete File:, *** Move to:)에서 경로를 찾지 못해 판정할 수 없다. 머리줄 형식을 확인하라 (tools/hooks/guard.ps1).'; exit 0
+        }
 
         foreach ($path in $paths) {
             $reason = Get-ProtectedReason $path $cwd

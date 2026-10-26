@@ -388,6 +388,52 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // The screen rows (2026-10-26) sit below the keys row; the editor does not apply them (ScreenOptions).
+        [UnityTest]
+        public IEnumerator Lobby_SettingsPage_ScreenRowsChangeOnlyTheirOwnSetting()
+        {
+            var store = TestSettings();
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Settings = store;
+            try
+            {
+                menu.Move(2);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                menu.Move(5);
+                Assert.That(menu.Cursor, Is.EqualTo(5), "The window mode is the row after the keys.");
+                menu.Adjust(1);
+                Assert.That(store.Windowed, Is.True, "Either direction switches the window mode.");
+                menu.Confirm();
+                Assert.That(store.Windowed, Is.False, "Enter switches it too.");
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.ResolutionIndex, Is.EqualTo(ScreenOptions.AutoResolution), "The resolution stops at Auto, it does not wrap.");
+                menu.Adjust(1);
+                Assert.That(store.ResolutionIndex, Is.EqualTo(1));
+                for (int i = 0; i < ScreenOptions.ResolutionCount + 1; i++) menu.Adjust(1);
+                Assert.That(store.ResolutionIndex, Is.EqualTo(ScreenOptions.ResolutionCount - 1), "The resolution stops at the largest.");
+                menu.Confirm();
+                Assert.That(store.ResolutionIndex, Is.EqualTo(ScreenOptions.ResolutionCount - 1), "Enter on the resolution does nothing.");
+                menu.Move(1);
+                menu.Adjust(-1);
+                Assert.That(store.VSync, Is.True, "Either direction switches VSync.");
+                menu.Confirm();
+                Assert.That(store.VSync, Is.False, "Enter switches it too.");
+                Assert.That(store.Windowed, Is.False);
+                Assert.That(store.MasterLevel, Is.EqualTo(GameSettings.MaxLevel), "The volumes are untouched.");
+                Assert.That(store.SpeedFieldOfView, Is.True);
+                menu.Move(1);
+                Assert.That(menu.Cursor, Is.EqualTo(0), "The list wraps from VSync to the first row.");
+            }
+            finally
+            {
+                store.Clear();
+            }
+        }
+
         // ---- the race scene ------------------------------------------------------------------------------
 
         [UnityTest]

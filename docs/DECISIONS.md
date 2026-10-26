@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-26 · R8: 기존 `StartOn` 착지 확인을 고정 틱 1회 뒤로
+
+- **결정 (사용자 "진행해보라", `fix/test-landing-check`)**: `ChainRushCurveTests.cs:164-165`·`ChainRushCornerSwingTests.cs:532-533`·`ChainRushDriftTests.cs:209-210`·`ChainRushSlopeTests.cs:296-297` 의 `StartOn` 에 `yield return new WaitForFixedUpdate();` 1회(와 주석)를 넣었다. 형식은 T3a 때 고친 `ChainRushRoadTests.cs:201-205` 를 글자 그대로 따랐다. 단언 값은 바꾸지 않았다.
+- **이유**: `IsGrounded` 는 `Racer.Grounded` 복사본이고(`RunnerMotor.cs:132`), `ShiftOrigin` 이 컨트롤러를 껐다 켠 뒤 `isGrounded` 를 그대로 복사한다(`RunnerMotor.cs:527-532`). 순간이동 직후 값은 마지막 `Move`(스폰 발판) 결과라 노면이 없어도 "착지" 확인이 통과했다(2026-10-07 T3a "테스트 착지 확인 보강"). 고정 틱 1회 뒤에는 `controller.Move` → `SyncGrounded`(`RunnerMotor.cs:306-307`)로 새 노면 값이다. 껐다 켠 `CharacterController` 가 `isGrounded` 를 유지한다는 점은 엔진 소스로 **확인 못 했다** — T3a 관측에 기댄다. 고치기 전에 실패하는 테스트로 구멍을 보이지는 않았다.
+- **목록**: 테스트 폴더에서 순간이동(`ShiftOrigin`) 뒤 `IsGrounded` 로 착지를 확인하는 곳은 위 4개와 이미 고친 `RoadTests`·`CircuitTests.LandOnRoad`·`PresentationTests` 가 전부다. `ChainRushTests.cs:267` 은 착지 대신 S 진행으로 확인해 대상이 아니다.
+- **행동 변화**: `SlopeTests` 의 점프 테스트 2건(`:181`, `:205`, `StartOn` 바로 뒤 `TakeOff`)은 예전에 첫 틱이 스폰 발판 값으로 코요테를 채워 노면 위 1.2 m(공중)에서 뛰었고, 이제 실제 착지 뒤에 뛴다. 단언 값은 그대로 통과했다.
+- **검증** (에디터 6000.3.19f1): 컴파일 `Tundra build success (1.88 seconds)`. EditMode(`!Enemy`) `testcasecount="276" result="Passed" passed="276" failed="0"` (04:59:42Z~04:59:46Z). `Run PlayMode Tests`(커밋 전, 같은 내용) `testcasecount="196" result="Passed" passed="188" failed="0" skipped="8"` (05:00:05Z~05:12:00Z, 714.4초; skipped 8 은 `[Explicit]` Probe 5·NetworkRace 3). ② `select-tests -Range dev...HEAD`(커밋 `37d82a3`) 가 고른 클래스 4개(Curve·CornerSwing·Drift·Slope, 지문 없음 — 테스트만 바뀌었다) `testcasecount="29" result="Passed" passed="29" failed="0" skipped="0"` (05:16:49Z~05:18:31Z, 101.5초). XML 의 클래스 4개가 도구 출력과 같다. 요청서의 "Long" 은 돌리지 않았다 — `Long` 카테고리와 `Run Long Tests` 메뉴는 2026-10-25 무한 모드 삭제 때 없어졌다.
+- **§7-5 리뷰 비교 1회차** (`Assets/` 를 바꾼 첫 비교 대상): `unity-reviewer` 실제 결함 0 / 규칙 위반 0 / 오탐 0, 의견 2(위 행동 변화, 그것을 커밋 메시지에 적으라). Codex `adversarial-review --scope working-tree`(커밋 전이라 `--base dev` 가 비어 있었다) verdict approve, 지적 0. 같은 근거(`RunnerMotor.cs:132,306-307,491`)를 짚었다. 이번 변경이 작아 분담을 가를 차이는 나오지 않았다 — 비교 2회차를 더 본다.
+- **버린 대안**: 공용 보조로 묶기(4개 파일의 `StartOn` 인자가 서로 달라 새 파일·새 타입이 필요하다 — 이번 범위 밖).
+
 ## 2026-10-26 · 훅 경로 정규화 · Codex 직접 호출 · Codex 실패 규칙
 
 - **결정 (사용자 "제안대로 진행해라", `fix/guard-path-and-codex-rules`)**: ① `guard.ps1` 경로 정규화 ② §7-5 에 Codex 실패 규칙 ③ 넓은 탐색을 Codex 로(a), 에이전트가 companion 스크립트를 직접 호출(b). 구현 위임(c)은 보류.

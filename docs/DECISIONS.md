@@ -7,6 +7,25 @@
 
 ---
 
+## 2026-10-26 · 리뷰 규모: 작은 변경은 `unity-reviewer` 대신 메인이 체크리스트를 대조하고, 리뷰 비용을 병합 보고에 적는다
+
+- **결정 (사용자 "진행해라", `docs/review-scale`)**: 규칙 본문은 `docs/RULES/SUBAGENTS.md` §7-5 "리뷰 규모"·"시험 중".
+  - ① `Assets/` 변경(`.meta` 제외)이 수정만이고 공개 시그니처를 바꾸지 않고 추가+삭제 30줄 이하면 `unity-reviewer` 를 파견하지 않는다. 메인이 체크리스트를 대조해 항목별로 적는다. Codex 설계 리뷰 1회는 그대로 한다.
+  - ② 병합 보고에 리뷰 비용을 적는다: `subagent_tokens` 와 Codex `/status` 5시간 `used_percent` 전후.
+- **이유**: 사용자 "클로드에서 에이전트로 보내는 토큰 사용량이 상당했으며 codex에서의 토큰 사용량은 현저히 적었다". R8(테스트 4파일 8줄) 세션 기록에서 `unity-reviewer` 1회가 `subagent_tokens` 78,161(도구 28회, 130초)이었고 결과는 0건이었다. 같은 변경을 본 Codex 리뷰도 0건이었고, 같은 근거를 짚었다. 체크리스트는 기계 대조라 이미 변경을 아는 메인이 하면 콜드 스타트 비용이 없다.
+  - Codex 쪽이 싸다는 것은 확인하지 못했다. 보이지 않을 뿐이다. companion 리뷰는 `ephemeral` 이라 토큰이 로컬에 남지 않고, 지난 실측(T1)은 파일 2개에 입력 407k 였다. 그래서 비율을 바꾸기 전에 ②로 같은 자리에서 잰다.
+- **30줄의 근거**: 최근 병합의 `Assets/` 변경량(`.meta` 제외)은 R8 8줄, `feature/refactor-ui-helpers` 171줄, `feature/motor-reverse-swing-throttle` 225줄이다.
+- **비교 횟수**: R8 은 새 기준으로 작은 변경이라 비교 횟수에서 뺀다. 아래 R8 항목의 "비교 1회차" 기록은 그대로 둔다. 비교는 0/2 부터 센다.
+- **한계 (확인 못 한 것)**:
+  - Codex 사용량을 비대화식으로 읽는 명령이 없다(`codex-cli 0.164.0 --help`, companion `scripts/` 에 `rateLimits` 0건). 그래서 사용자가 `/status` 를 읽어 준다.
+  - 리뷰 1회로 `used_percent` 가 움직일 만큼 단위가 촘촘한지 확인하지 못했다. 마지막 기록은 `9.0` 이었다.
+  - 그 사이 다른 곳에서 Codex 를 쓰면 수치가 섞인다.
+  - Claude 쪽을 한도 %로 읽는 방법은 확인하지 못했다. 그래서 단위가 여전히 다르다(토큰 대 %).
+- **버린 대안**:
+  - 체크리스트 리뷰를 Codex 로 옮기기: ②의 비교 근거가 쌓인 뒤 다시 본다.
+  - Codex 에 구현 맡기기: `승인:`·`브랜치:` 거부 장치가 없다(2026-10-26 "Codex 역할").
+  - 크기와 상관없이 테스트 파일만 바뀐 브랜치를 가볍게 보기: 큰 테스트 재작성도 §5 위반이 날 수 있다.
+
 ## 2026-10-26 · R8: 기존 `StartOn` 착지 확인을 고정 틱 1회 뒤로
 
 - **결정 (사용자 "진행해보라", `fix/test-landing-check`)**: `ChainRushCurveTests.cs:164-165`·`ChainRushCornerSwingTests.cs:532-533`·`ChainRushDriftTests.cs:209-210`·`ChainRushSlopeTests.cs:296-297` 의 `StartOn` 에 `yield return new WaitForFixedUpdate();` 1회(와 주석)를 넣었다. 형식은 T3a 때 고친 `ChainRushRoadTests.cs:201-205` 를 글자 그대로 따랐다. 단언 값은 바꾸지 않았다.

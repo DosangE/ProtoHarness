@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-26 · 화면 설정: 화면 모드·해상도·VSync (M2-c 남은 것)
+
+- **결정 (사용자 "추천대로 진행해라" 두 번, `feature/m2-screen-settings`)**: 로비 설정의 "조작 키" 아래 5~7번 줄에 화면 모드(전체 화면/창)·해상도·수직 동기화를 둔다. 값은 `GameSettings`(`Windowed`·`ResolutionIndex`·`VSync`)에 두고 `ScreenOptions.Apply` 가 적용한다(`TitleScreen.Awake` 와 줄을 바꿀 때).
+  - 해상도는 고정 목록 "자동(모니터) / 1280×720 / 1600×900 / 1920×1080 / 2560×1440" 이다. 메뉴 캔버스가 1600×900 이라(`LobbyView.cs:80`) 16:9 만 둔다. `Screen.resolutions` 는 기기마다 달라 버렸다.
+  - 기본값은 지금 빌드와 같다: 전체 화면(`ProjectSettings.asset:111` `fullscreenMode: 1`), 자동, VSync 끔(`QualitySettings.asset:86` PC `vSyncCount: 0`).
+  - 줄을 "조작 키" 아래에 둔 이유: 기존 테스트가 조작 키를 4번 줄로 본다(`ChainRushFlowTests.cs` `Lobby_SettingsPage_AdjustsOnlyTheHighlightedSettingAndOpensTheKeys`). 그 테스트는 고치지 않았다.
+  - 줄이 8개라 설정 페이지만 간격 64·높이 54 로 좁혔다. 마지막 줄은 y 740 에서 끝나 알림 줄(y 760, `LobbyView.DrawFooter`) 위에 있다.
+  - **에디터에서는 적용하지 않는다**: 런타임 `QualitySettings.vSyncCount` 변경이 `QualitySettings.asset` 에 저장되는지 확인하지 못했다(§0). 그래서 `Application.isEditor` 면 `Debug.Log` 한 번만 남긴다. 테스트 뒤 `git status` 에 `QualitySettings.asset` 변화가 없었다.
+  - **창 모드의 자동** (리뷰 의견 → 사용자 "추천대로"): 모니터 크기 그대로면 제목 표시줄만큼 넘친다. 그래서 목록에서 모니터보다 가로·세로 모두 작은 크기 중 가장 큰 것을 쓴다. 그런 크기가 없으면(1280×720 이하 모니터) 모니터보다 10% 작은 16:9 크기를 쓴다(Codex 지적으로 추가).
+- **남긴 것 (사용자 "추천대로")**:
+  - 고정 해상도가 모니터보다 클 때 거르지 않는다. 플레이어 빌드에서 확인한다.
+  - Alt+Enter(`allowFullscreenSwitch: 1`)로 바꾸면 저장값과 실제 화면이 어긋난다. 막으려면 ProjectSettings 변경이 필요하다(§0).
+- **검증** (에디터 6000.3.19f1):
+  - 컴파일: 마지막 `Tundra build success (3.94 seconds)`.
+  - EditMode(`!Enemy`): `testcasecount="283" result="Passed" passed="283" failed="0"` (06:13:41Z~06:13:46Z, 최종 코드). 새 테스트 7건 포함.
+  - ② `select-tests -Range dev...HEAD`: 클래스 `ChainRushFlowTests`·`ChainRushProfileTests` + 지문.
+    - 1회차 `a936879`: `testcasecount="46" result="Passed" passed="46" failed="0" skipped="0"` (06:00:48Z~06:06:47Z, 359.7초).
+    - Codex 지적 수정 뒤 `3356fd4`: `testcasecount="46" result="Passed" passed="46" failed="0" skipped="0"` (06:14:22Z~06:20:30Z, 368.0초).
+    - XML 의 묶음 3개가 도구 출력과 같다. 묶음별 `testcasecount` 합(36+9+2=47)이 전체 46 과 1 어긋난다. `<test-case>` 는 46개다.
+  - 같은 코드로 ① 빠른 확인(커밋 전)도 46건 통과했다.
+- **§7-5 리뷰 비교 1회차** ("그 밖": `Assets/` +308 −33, 새 파일 1개):
+  - `unity-reviewer`: `subagent_tokens` 52,917, 도구 9회, 107초. 실제 결함 0 / 규칙 위반 1(이 항목이 아직 없어 `ScreenOptions.cs:7` 참조가 끊겼다 — 병합 전에 쓸 것이었으니 사실상 오탐) / 의견 5. 의견 중 쓰기 묶기·끝에서 다시 적용하지 않기는 반영했고, 창 모드 자동은 사용자 결정으로 반영했고, 2건은 남겼다(위).
+  - Codex `adversarial-review --base dev`(`a936879` 대상): verdict needs-attention. 실제 결함 1(medium, 맞는 크기가 없는 모니터의 자동 크기 — `unity-reviewer` 의 창 모드 지적을 반영하며 생긴 경계) / 규칙 위반 0 / 오탐 0. 수정(`3356fd4`) 뒤에는 다시 부르지 않았다(브랜치당 1회, §7-5).
+  - Codex 비용: 리뷰 전후 `/status` 값을 받지 못해 **기록 없음**.
+  - 비교: 두 리뷰가 같은 영역(창 모드 크기)을 짚었다. `unity-reviewer` 는 설계 의견을 냈고, Codex 는 그 반영의 경계 결함을 냈다.
+- **발견 (범위 밖, 고치지 않음)**: `select-tests` 가 `Flow/` 를 폴더 단위로 묶고(`tools/select-tests.ps1:63`) 지문을 늘 넣어(`:34-36`) 설정만 바꿔도 레이스·프로필·지문이 돈다. 사용자 "작업 범위에 해당하는 것만 … 영향도 평가" → 후속 `docs/impact-tests`.
+- **확인 못 한 것**: 플레이어 빌드에서의 실제 동작 전부 — `Screen.SetResolution`, `vSyncCount`, 다중 모니터에서 `Display.main`, Unity 가 기억한 해상도와의 상호작용. 사용자 플레이 확인으로 남긴다.
+
 ## 2026-10-26 · 리뷰 규모: 작은 변경은 `unity-reviewer` 대신 메인이 체크리스트를 대조하고, 리뷰 비용을 병합 보고에 적는다
 
 - **결정 (사용자 "진행해라", `docs/review-scale`)**: 규칙 본문은 `docs/RULES/SUBAGENTS.md` §7-5 "리뷰 규모"·"시험 중".

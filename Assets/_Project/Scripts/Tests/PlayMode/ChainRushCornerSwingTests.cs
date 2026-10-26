@@ -529,6 +529,8 @@ namespace ProtoHarness.Tests.PlayMode
             Vector3 start = line.FrameAt(5d).TransformPoint(new Vector3(0f, 1.2f, 0f));
             player.ShiftOrigin(start - player.transform.position);
             Physics.SyncTransforms();
+            // IsGrounded still reports the spawn deck until the controller moves once on the new road.
+            yield return new WaitForFixedUpdate();
             float deadline = Time.time + 2f;
             while (!player.IsGrounded && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(player.IsGrounded, Is.True, "Runner never landed on the test road.");

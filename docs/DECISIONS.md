@@ -14,7 +14,7 @@
   - 시뮬이 읽지 않는 경로는 지문을 넣지 않게 했다(`Fingerprint = $false`).
   - `Flow/` 한 줄을 셋으로 나눴다.
     - 설정 값(`GameSettings`·`ScreenOptions`) → `ChainRushFlowTests.Lobby_*` + `ChainRushPresentationTests`.
-    - 타이틀·로비 화면(`Lobby/`·`LobbyMenu`·`RunnerPreview`·`TitleScreen`) → `ChainRushFlowTests.(Lobby|Loop)_*`.
+    - 타이틀·로비 화면(`Lobby/`·`LobbyMenu`·`RunnerPreview`·`TitleScreen`) → `ChainRushFlowTests.(Lobby|Loop)_*` + 로비 메뉴로 트랙을 고르는 레이스 2건 `Race_(Skyway|FingerLanes)FromTheLobby_*`.
     - 나머지(레이스 조립·`BestRecords`) → 지금처럼 Flow 전체 + Profile + 지문.
   - 규칙 본문은 `docs/RULES/VERIFICATION.md` §4-4 "영향 평가": 병합 보고에 "바뀐 타입 → 읽는 곳 → 고른 테스트" 를 적는다. 도구 선택은 하한이라 더하기만 하고, 빼려면 표를 고친다. `CLAUDE.md` §9-2 ② 는 그 절을 가리키는 말만 더했다.
 - **이유**: 화면 설정(`feature/m2-screen-settings`)은 설정·로비만 바꿨는데 레이스 12건·러너 프로필 9건·지문이 돌았다(46건, 약 360초). 폴더 단위(`Flow/`)로 묶은 표와 "늘 넣는 지문" 때문이다.
@@ -28,12 +28,17 @@
   | 범위 | 예전 | 새 |
   |---|---|---|
   | 화면 설정 `e39a16d...3356fd4` | Flow·Profile 클래스 + 지문 (46건, 359.7초) | Flow·Presentation 클래스, 지문 없음 (`ChainRushFlowTests.cs` 를 고쳐 기존 규칙대로 Flow 전체) |
-  | RF7 로비 `5831e18^1...5831e18^2` | Flow·Profile 클래스 + 지문 | `ChainRushFlowTests.(Lobby\|Loop)_` 만 — Unity 실행 `testcasecount="14" result="Passed" passed="14" failed="0"`, 11.3초 (06:24:42Z~06:24:54Z) |
+  | RF7 로비 `5831e18^1...5831e18^2` | Flow·Profile 클래스 + 지문 | Flow 일부 2개 — Unity 실행 `testcasecount="16" result="Passed" passed="16" failed="0" skipped="0"`, 74.7초 (06:31:03Z~06:32:18Z; 레이스 2건이 29.4·31.0초). Codex 지적 전 14건은 11.3초 |
   | R8 `adcdd72...37d82a3` | 테스트 클래스 4개, 지문 없음 | 같음 |
   | `motor-reverse-swing-throttle` `092d828^1...092d828^2` | 전체 | 전체 (코어 시뮬) |
   | RF2 효과음 `3312243^1...3312243^2` | 전체 | 전체 (코어 시뮬) |
 
   - 고치는 중 결함 2개를 찾아 고쳤다: `Classes` 가 없는 줄이 빈 클래스(`"^ProtoHarness.Tests.PlayMode.$"`)를 내던 것, 폴더 메타(`Flow/Lobby.meta`)가 새 줄에 걸리지 않던 것.
+- **Codex 리뷰** (`adversarial-review --base dev`, `2e41861` 대상): verdict needs-attention, 실제 결함 1(medium) / 규칙 위반 0 / 오탐 0.
+  - 지적: 로비 규칙이 `Race_FingerLanesFromTheLobby_BotFinishesTwoLaps` 를 뺀다. 이 테스트가 로비에서 세 번째 트랙을 고르는 유일한 검증이다(`ChainRushFlowTests.cs:977-986`). `Loop_` 는 `RaceSetup` 을 직접 만들어 로비를 거치지 않는다(`:1069`).
+  - 수정: Flow 의 `Lobby_`·`Loop_` 밖 테스트에서 `LobbyMenu`·`BuildSetup`·`TitleScreen`·`GameSettings`·`BestRecords`·`RunnerPreview`·`TrackPage` 를 쓰는 것을 모두 찾았다. 로비 메뉴를 거치는 것은 SKYWAY·FINGER LANES 레이스 2건이라 로비 규칙에 더했다. `Race_FinishFromTheLobby_KeepsItAsTheBestRecord`(`BestRecords`)는 `BestRecords` 가 원래 Flow 줄에 남아 해당 없다.
+  - 교훈: 이름 접두사는 무엇을 덮는지를 보장하지 않는다. 표에 일부 선택을 더할 때는 바뀐 타입을 쓰는 테스트를 본문 grep 으로 찾는다(VERIFICATION §4-4 "근거를 DECISIONS 에").
+  - Codex 비용: 리뷰 전후 `/status` 값이 없어 기록 없음.
 - **남은 것 (후보, 하지 않음)**: 테스트 클래스 파일을 고치면 그 클래스 전체가 돈다(`Own` 규칙). 고친 테스트만 고르려면 diff 의 메서드 이름을 읽어야 한다. 화면 설정 브랜치가 덜 줄어든 이유다.
 
 ## 2026-10-26 · 화면 설정: 화면 모드·해상도·VSync (M2-c 남은 것)

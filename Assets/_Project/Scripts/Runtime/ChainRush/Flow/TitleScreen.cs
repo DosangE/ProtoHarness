@@ -38,6 +38,9 @@ namespace ProtoHarness.ChainRush.Flow
         // "TEST BUILD" in the editor and development builds, "RELEASE" in a release build.
         public static string BuildName => Debug.isDebugBuild ? "TEST BUILD" : "RELEASE";
 
+        // The game starts here, so the stored screen settings take effect here (ScreenOptions).
+        private void Awake() => ScreenOptions.Apply(GameSettings.Player);
+
         private void Update()
         {
             var keyboard = Keyboard.current;

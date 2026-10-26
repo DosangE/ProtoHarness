@@ -28,12 +28,16 @@ namespace ProtoHarness.ChainRush.Flow
         }
 
         // Auto in a window: the largest fixed size smaller than the monitor both ways, so the title bar stays on screen
-        // (a window the monitor's size overflows it, user 2026-10-26); the smallest when none is smaller.
+        // (a window the monitor's size overflows it, user 2026-10-26). A monitor no fixed size fits (1280 x 720 or less)
+        // gets a 16:9 window a tenth smaller than it both ways.
         public static Vector2Int WindowedAutoSize(int monitorWidth, int monitorHeight)
         {
-            for (int i = Sizes.Length - 1; i > AutoResolution + 1; i--)
+            if (monitorWidth <= 0 || monitorHeight <= 0)
+                throw new ArgumentOutOfRangeException(nameof(monitorWidth), $"{monitorWidth} x {monitorHeight}", "A monitor has a size.");
+            for (int i = Sizes.Length - 1; i > AutoResolution; i--)
                 if (Sizes[i].x < monitorWidth && Sizes[i].y < monitorHeight) return Sizes[i];
-            return Sizes[AutoResolution + 1];
+            int width = Mathf.Min(monitorWidth * 9 / 10, monitorHeight * 9 / 10 * 16 / 9);
+            return new Vector2Int(width, width * 9 / 16);
         }
 
         public static void Apply(GameSettings settings)

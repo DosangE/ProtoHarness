@@ -204,7 +204,9 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(ScreenOptions.WindowedAutoSize(3840, 2160), Is.EqualTo(new Vector2Int(2560, 1440)));
             Assert.That(ScreenOptions.WindowedAutoSize(1920, 1200), Is.EqualTo(new Vector2Int(1600, 900)), "Smaller both ways, not just in width.");
             Assert.That(ScreenOptions.WindowedAutoSize(1366, 768), Is.EqualTo(new Vector2Int(1280, 720)));
-            Assert.That(ScreenOptions.WindowedAutoSize(1280, 720), Is.EqualTo(new Vector2Int(1280, 720)), "The smallest when none is smaller.");
+            Assert.That(ScreenOptions.WindowedAutoSize(1280, 720), Is.EqualTo(new Vector2Int(1152, 648)), "None fits: a tenth smaller.");
+            Assert.That(ScreenOptions.WindowedAutoSize(1024, 768), Is.EqualTo(new Vector2Int(921, 518)), "None fits: the width bounds it.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => ScreenOptions.WindowedAutoSize(0, 720));
         }
 
         [Test]

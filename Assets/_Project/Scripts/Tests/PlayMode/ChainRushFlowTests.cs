@@ -966,6 +966,70 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // Holding the key toward the pole through each shortcut swing (user 2026-10-27, "steering in a shortcut swing speeds
+        // the runner up far too much"; DECISIONS "측정: 지름길 스윙의 가속은 …"): the rope still speeds the swing up, but
+        // no faster than running does — every swinging tick the speed rises by at most the run acceleration. Before the
+        // fix a quarter turn went from 19.9 to 30.3 m/s in 0.54 s.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeSpeedsUpNoFasterThanRunning()
+        {
+            var store = TestRecords();
+            TrackDefinition finger = FingerLanes();
+            store.Clear(finger.name, SpeedClass.Fast);
+            RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            Scene raceScene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(raceScene);
+            RunnerMotor player = Find<RunnerMotor>(raceScene);
+            CircuitRace circuit = Find<CircuitRace>(raceScene);
+            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            float scale = Time.timeScale;
+            var bot = new ShortcutBot(game, player, finger) { HoldInnerKey = true };
+            float limit = player.RunAcceleration * Ticks.Seconds;
+            float last = 0f, steepest = float.NegativeInfinity, top = 0f;
+            int steepestTick = -1, swingTicks = 0;
+            bool wasSwinging = false;
+            Action<int> sample = tick =>
+            {
+                float now = player.HorizontalSpeed;
+                if (game.Racer.SwingTicks > 0)
+                {
+                    swingTicks++;
+                    top = Mathf.Max(top, now);
+                    if (wasSwinging && now - last > steepest) { steepest = now - last; steepestTick = tick; }
+                }
+                wasSwinging = game.Racer.SwingTicks > 0;
+                last = now;
+            };
+            try
+            {
+                game.SetInputSource(bot);
+                game.TickCompleted += sample;
+                Time.timeScale = 6f;
+                game.StartRun();
+                float deadline = Time.realtimeSinceStartup + 60f;
+                while (circuit.Laps.CompletedLaps < 1 && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
+                Time.timeScale = scale;
+                string where = $"tick {game.Tick}, {circuit.Laps.CompletedLaps} laps, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}";
+                Debug.Log($"ChainRush Finger Lanes inner-key swings: {swingTicks} swinging ticks, top {top:F2} m/s, steepest rise {steepest:F4} m/s a tick at tick {steepestTick} (limit {limit:F4}). {where}");
+                Assert.That(game.HasFailed, Is.False, "The runner fell. " + where);
+                Assert.That(circuit.Laps.CompletedLaps, Is.GreaterThanOrEqualTo(1), "The runner did not finish a lap. " + where);
+                Assert.That(bot.Taken, Is.EqualTo(2), "Both shortcuts, the inner key held. " + where);
+                Assert.That(swingTicks, Is.GreaterThan(0), "No swing was sampled. " + where);
+                Assert.That(steepest, Is.LessThanOrEqualTo(limit + 1e-3f), $"The swing sped up faster than running at tick {steepestTick}. " + where);
+            }
+            finally
+            {
+                game.TickCompleted -= sample;
+                Time.timeScale = scale;
+                store.Clear(finger.name, SpeedClass.Fast);
+            }
+        }
+
         // The real lobby setup loads the village exterior, then the bot runs both laps at Fast: no fall, no guard
         // touched through the seven half turns, each lap close to the lap length at 20 m/s, and off the road for a moment
         // past each kicker's crest (user 2026-10-25): the bot only steers, so the kickers alone lift it.

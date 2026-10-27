@@ -87,7 +87,8 @@ namespace ProtoHarness.ChainRush
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
         // hook's speed times the hooked rope length over the rope length now, kept within minSwingSpeedScale ..
-        // maxSwingSpeedScale of the hook's speed; a booster while swinging raises the hook's speed toward its own (PoleSwing.SpeedUp), and
+        // maxSwingSpeedScale of the hook's speed, the rope's gain above it coming no faster than the run acceleration
+        // (user 2026-10-27); a booster while swinging raises the hook's speed toward its own (PoleSwing.SpeedUp), and
         // without one the throttle held raises it toward swingThrottleSpeedScale times the run speed by the run acceleration
         // (user 2026-10-22); let go, the hook's speed stays. Every swingMetersPerSlot swung fills one gauge slot. Letting go carries
         // the runner straight on at that speed, the part above running speed falling off by swingCarryFalloff a second.

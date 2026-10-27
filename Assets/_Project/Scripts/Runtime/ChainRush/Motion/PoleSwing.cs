@@ -6,7 +6,8 @@ namespace ProtoHarness.ChainRush.Motion
     // swing key is held, with no running force. Steering works the rope instead of the facing: the key toward the pole
     // shortens it, the other lets it out, by RopeRate a second, never below MinRopeLength. The speed is the hook's speed
     // times the hooked rope length over the rope length now, kept within MinSpeedScale .. MaxSpeedScale of the hook's
-    // speed. Every MetersPerSlot swung fills one gauge slot. The swing's state is RacerState's Swing* values.
+    // speed; what the rope adds above the hook's speed comes no faster than RunAcceleration (user 2026-10-27). Every
+    // MetersPerSlot swung fills one gauge slot. The swing's state is RacerState's Swing* values.
     public static class PoleSwing
     {
         // The values the rules run on (RunnerMotor's, the speeds already scaled by the runner's profile). Treat it as
@@ -81,6 +82,14 @@ namespace ProtoHarness.ChainRush.Motion
             racer.SwingRadius = Mathf.Max(settings.MinRopeLength, racer.SwingRadius - racer.Steer * poleSide * settings.RopeRate * dt);
             float scale = Mathf.Clamp(racer.SwingHookRadius / racer.SwingRadius, settings.MinSpeedScale, settings.MaxSpeedScale);
             float speed = racer.SwingHookSpeed * scale;
+            // The rope's gain above the hook's speed builds up by the run acceleration at most (user 2026-10-27: a quarter
+            // turn in a shortcut went from 19.9 to 30.3 m/s in 0.54 s): a long swing still reaches the rope's speed, a
+            // quick one gains less. A longer rope slows the swing at once, and the hook's own rise (throttle, booster) is kept.
+            if (speed > racer.SwingHookSpeed)
+            {
+                float was = new Vector2(velocity.x, velocity.z).magnitude;
+                speed = Mathf.Min(speed, Mathf.Max(racer.SwingHookSpeed, was + settings.RunAcceleration * dt));
+            }
             velocity = tangent * speed + Vector3.up * velocity.y;
             displacement = velocity * dt;
             Vector3 next = position + displacement - center;

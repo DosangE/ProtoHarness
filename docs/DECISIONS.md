@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-27 · 측정: 지름길 스윙의 가속은 줄 배율 한 번으로 생긴다 — 연속 스윙 겹침이 아니다 (`feature/probe-shortcut-swing-speed`)
+
+- **계기 (사용자)**: FINGER LANES 플레이 "지름길에서 스윙중일때 조향으로 인해 붙는 가속이 좀 많이 심하다". 요청서 S1(측정 먼저)에 "S1 가자".
+- **측정**: `ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`(`[Explicit]`). FINGER LANES 1랩을 빠름·매우빠름 × (스윙 중 조향 안 함 / 안쪽 키 유지 — `ShortcutBot.HoldInnerKey`)로 4번. 봇은 늘 ↑(가속)을 누른다. 에디터 6000.3.19f1, `testcasecount="1" result="Passed"` (07:32:28Z~07:34:04Z). 로그 원문(스윙 1·2 = 첫 지름길, 3·4 = 둘째):
+  ```
+  [Fast, no steering] swing 1: hooked at s 294.0 tick 918 from 19.92 m/s, hook speed at the end 24.00 m/s, rope 15.00 -> 15.00 m, top 24.00 m/s, let go at 23.94 m/s after 1.06 s.
+  [Fast, no steering] swing 2: hooked at s 374.1 tick 1014 from 21.42 m/s, hook speed at the end 24.00 m/s, rope 15.04 -> 15.04 m, top 24.00 m/s, let go at 23.94 m/s after 1.02 s.
+  [Fast, no steering]: lap 1 74.50 s, shortcuts taken 2, hooks missed 0, failed False, top speed 24.00 m/s, run speed 20.00 m/s.
+  [Fast, inner key held] swing 1: hooked at s 294.0 tick 918 from 19.92 m/s, hook speed at the end 24.00 m/s, rope 15.00 -> 11.88 m, top 30.30 m/s, let go at 30.11 m/s after 0.54 s.
+  [Fast, inner key held] swing 2: hooked at s 374.1 tick 1010 from 19.95 m/s, hook speed at the end 24.00 m/s, rope 16.86 -> 11.58 m, top 34.94 m/s, let go at 34.88 m/s after 0.90 s.
+  [Fast, inner key held] swing 3: hooked at s 840.1 tick 2165 from 19.90 m/s, hook speed at the end 24.00 m/s, rope 15.03 -> 11.79 m, top 30.59 m/s, let go at 30.41 m/s after 0.56 s.
+  [Fast, inner key held] swing 4: hooked at s 925.5 tick 2255 from 19.88 m/s, hook speed at the end 24.00 m/s, rope 17.07 -> 11.79 m, top 34.75 m/s, let go at 34.69 m/s after 0.90 s.
+  [Fast, inner key held]: lap 1 69.36 s, shortcuts taken 2, hooks missed 0, failed False, top speed 34.94 m/s, run speed 20.00 m/s.
+  [VeryFast, no steering]: lap 1 62.54 s, shortcuts taken 2, hooks missed 0, failed False, top speed 28.80 m/s, run speed 24.00 m/s.
+  [VeryFast, inner key held] swing 1: hooked at s 294.4 tick 782 from 23.84 m/s, hook speed at the end 28.80 m/s, rope 14.99 -> 11.87 m, top 36.37 m/s, let go at 36.24 m/s after 0.54 s.
+  [VeryFast, inner key held] swing 2: hooked at s 374.1 tick 850 from 22.84 m/s, hook speed at the end 28.80 m/s, rope 18.04 -> 13.12 m, top 39.60 m/s, let go at 39.54 m/s after 0.84 s.
+  [VeryFast, inner key held]: lap 1 58.12 s, shortcuts taken 2, hooks missed 0, failed False, top speed 39.60 m/s, run speed 24.00 m/s.
+  ```
+  (매우빠름의 조향 안 함 스윙 4줄·안쪽 키 스윙 3·4 는 같은 꼴이라 줄였다 — 모두 top 28.80 / 36.70·38.79 m/s.)
+- **읽은 것**:
+  - 조향 없이도 스윙은 ↑ 로 달리기 속도의 1.2배(빠름 24 m/s)까지 오른다(2026-10-22 "스윙 중 ↑ 가속"). 거기에 안쪽 키로 줄을 감으면 **한 번의 90° 스윙(0.54~0.90 s) 안에** 30~35 m/s(달리기 속도의 1.5~1.75배), 매우빠름은 36~40 m/s 가 된다. 첫 스윙은 0.54 s 만에 19.9 → 30.3 m/s, 약 19 m/s² 다.
+  - R15 에서 줄 감기 초당 6 m 는 0.54 s 에 15 → 11.9 m(배율 1.26)다. 둘째 스윙은 첫 스윙 뒤 선을 벗어나 **16.9~18 m 에서 걸려** 배율이 더 커진다(1.37~1.46).
+  - **요청서가 의심한 "연속 스윙 배율 겹침"은 일어나지 않았다**: 둘째 봉을 걸 때 속도가 이미 19.95~24.46 m/s 로 떨어져 있었다(놓을 때 30.1~36.2 m/s). 넘친 속도 감쇠(초당 3 m/s)로는 20 m 동안 약 2 m/s 만 줄어야 하므로 다른 감속이 있었다 — 가드에 닿은 것으로 보이나 **확인하지 않았다**(가드 접촉을 기록하지 않음). 그래서 겹침이 지금 생기지 않는 것은 우연이고, 가드에 안 닿는 라인이면 생길 수 있다.
+  - 랩: 안쪽 키를 쥐면 빠름 74.50 → 69.36 s(−5.1 s), 매우빠름 62.54 → 58.12 s(−4.4 s).
+- **다음**: S2 수정 방향은 사용자 결정(이 측정으로 요청서 S2 의 추천 A "겹침만 막기" 는 체감 원인을 고치지 못한다).
+
+---
+
 ## 2026-10-27 · FINGER LANES 외부 장식과 로비 연결 (`feature/m3-finger-exterior`, `feature/settings-finger-build-scene`)
 
 - **결정 (사용자)**: 다른 AI 세션이 "이전 다른 서킷 디자인했듯이 이 서킷도 외부 디자인만들어봐" 로 FINGER LANES 장식을 만들었다(계획 승인 "ㄱㄱ", MCP 씬 저장·빌드 씬 목록 등록 예외 포함 — `ART_FINGER_LANES.md` 목적과 승인). 병합은 이 세션에서 사용자 "정리하고 푸시까지".

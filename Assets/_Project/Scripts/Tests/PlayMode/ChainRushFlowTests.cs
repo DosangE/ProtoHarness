@@ -31,6 +31,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string SkywayPath = "Assets/_Project/Data/Circuit_Skyway.asset";
         private const string SkywayEnvironmentScene = "ChainRushTrackSkyway";
         private const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
+        private const string FingerLanesEnvironmentScene = "ChainRushTrackFingerLanes";
 
         private const string TestTitle = "TEST TRACK";
 
@@ -965,7 +966,7 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        // The real lobby setup (the third track, no decoration yet), then the bot runs both laps at Fast: no fall, no guard
+        // The real lobby setup loads the village exterior, then the bot runs both laps at Fast: no fall, no guard
         // touched through the seven half turns, each lap close to the lap length at 20 m/s, and off the road for a moment
         // past each kicker's crest (user 2026-10-25): the bot only steers, so the kickers alone lift it.
         [UnityTest, Timeout(120000)]
@@ -983,7 +984,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceSetup setup = menu.BuildSetup();
             Assert.That(setup.Track, Is.SameAs(finger));
             Assert.That(setup.Title, Is.EqualTo("FINGER LANES"));
-            Assert.That(setup.EnvironmentScene, Is.Empty, "No decoration yet (T3e).");
+            Assert.That(setup.EnvironmentScene, Is.EqualTo(FingerLanesEnvironmentScene));
             RaceLaunch.Request(setup);
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -997,6 +998,14 @@ namespace ProtoHarness.Tests.PlayMode
             float assemblyDeadline = Time.realtimeSinceStartup + 20f;
             while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
             Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            Scene environment = SceneManager.GetSceneByName(FingerLanesEnvironmentScene);
+            Assert.That(environment.isLoaded, Is.True, "The village exterior must load through the saved lobby setup.");
+            Assert.That(environment.rootCount, Is.EqualTo(1), "Only the exterior prefab belongs in the decoration scene.");
+            GameObject exterior = environment.GetRootGameObjects()[0];
+            Assert.That(exterior.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(0));
+            Assert.That(exterior.GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<Rigidbody>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
             // Each kicker's crest S, and the most the runner rose above its height on the flat start line within 25 m past it.
             var crests = new System.Collections.Generic.List<double>();
             double crestS = 0d;
@@ -1050,6 +1059,11 @@ namespace ProtoHarness.Tests.PlayMode
                 // The guard stands at the track's own road half width (1.2 times the usual here).
                 Assert.That(maxOffset, Is.LessThan(finger.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
                 Debug.Log($"ChainRush Finger Lanes race: {finger.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
+                assembler.ReturnToLobby();
+                yield return null;
+                yield return null;
+                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
+                Assert.That(SceneManager.GetSceneByName(FingerLanesEnvironmentScene).isLoaded, Is.False, "The village exterior must leave with the race.");
             }
             finally
             {

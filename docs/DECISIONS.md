@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-10-27 · FINGER LANES 외부 장식과 로비 연결 (`feature/m3-finger-exterior`, `feature/settings-finger-build-scene`)
+
+- **결정 (사용자)**: 다른 AI 세션이 "이전 다른 서킷 디자인했듯이 이 서킷도 외부 디자인만들어봐" 로 FINGER LANES 장식을 만들었다(계획 승인 "ㄱㄱ", MCP 씬 저장·빌드 씬 목록 등록 예외 포함 — `ART_FINGER_LANES.md` 목적과 승인). 병합은 이 세션에서 사용자 "정리하고 푸시까지".
+- **결과**: `ChainRushTrackFingerLanes.unity` 가 `FingerLanesExterior.prefab` 하나를 배치하고, 로비 FINGER LANES 가 그 씬을 Additive 로 불러온다(`ChainRushLobby.unity` 의 `environmentScene` 한 줄). 파스텔 마을·지름길 입구 깃발·석교와 수로·통과형 시계탑, 재질 6개(`M_Finger*`). 렌더러만 있고 충돌체·Rigidbody·MonoBehaviour 0개(로비 레이스 테스트가 확인한다). 제작 도구 `FingerLanesEnvironmentBuilder`(에디터). 상세는 `ART_FINGER_LANES.md`.
+- **병합 순서** (§9-2, SKYWAY 와 같다): 빌드 씬 목록만 `feature/settings-finger-build-scene`(`234d0b7`)으로 떼어 먼저 병합했다(`1b84fdb`). 장식 브랜치의 로비 레이스 테스트가 장식 씬을 이름으로 불러오므로 빌드 목록이 먼저 있어야 한다. 장식 커밋은 새 `dev` 위로 옮겼다(`e896b5a` → `e2c3d69`, 푸시 전).
+  - Codex 설계 리뷰(설정 브랜치, needs-attention 보통 1): 설정만 병합하면 `dev` 의 빌드 목록에 아직 없는 씬이 활성으로 남는다 → 두 병합 사이에 `dev` 를 푸시하지 않고 플레이어 빌드도 하지 않는 것으로 막았다. 원격에는 둘이 함께 올라간다.
+- **검증** (에디터 6000.3.19f1):
+  - 설정 브랜치 `234d0b7`: `select-tests -Range dev...HEAD` = 전체(ProjectSettings 1개). EditMode `!Enemy` `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (06:49:21Z~06:49:25Z). PlayMode `testcasecount="197" result="Passed" passed="189" failed="0" skipped="8"` (06:49:48Z~07:02:21Z, 753.0초). skipped 8 = `[Explicit]` 측정 5 + 네트워크 레이스 3.
+  - 장식 브랜치 `e2c3d69`(새 `dev` 위): `select-tests -Range dev...HEAD` = 전체(바뀐 파일 21개 — 재질·프리팹·씬·에디터 도구, `ChainRushFlowTests` 는 메서드 밖이 바뀌어 클래스 전체, ProjectSettings 0개). EditMode `!Enemy` `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (07:04:49Z~07:04:54Z). PlayMode `testcasecount="197" result="Passed" passed="189" failed="0" skipped="8"` (07:05:24Z~07:17:48Z, 744.1초) — `Race_FingerLanesFromTheLobby_BotFinishesTwoLaps` Passed(30.9초, 장식 로드·물리 분리·로비 복귀 시 해제, "1466.0 m a lap, total 166.88 s, max offset 1.98 m at S 355.9"), `Race_FingerLanesShortcuts_ASwingingRunnerTakesBothEachLap` Passed(25.8초), 서킷 지문 `Replay_CircuitBotRun_RepeatsEveryTickBitForBit` Passed. 코드 로드 확인(`FingerLanesEnvironmentBuilder` 타입 로드) 뒤 Console Error 0. Codex 설계 리뷰 approve, 지적 없음(알려진 후속 1·2 제외).
+  - 커밋 전 작업 트리에서 다른 세션이 돌린 값은 `ART_FINGER_LANES.md` 검증 절(EditMode 283, PlayMode 197 두 번 모두 failed 0).
+- **리뷰** (`unity-reviewer`, `e896b5a`, `subagent_tokens` 84,710 · 도구 14회 · 191초. Codex 리뷰 비용은 `/status` 를 읽지 못해 확인 못 함): 치명 0. 테스트는 단언을 강하게만 바꿨다(`Is.Empty` → 장식 씬 이름, 로드·물리 분리·해제 단언 추가). 사용자 "A"(그대로 병합, 아래는 후속)로 정했다.
+  - **후속 1 (중대, §5)**: `FingerLanesEnvironmentBuilder.ValidateClearance` 가 그룹 `01 Landscape below road` 전체를 도로 침범 검사에서 뺀다(`:544`). 땅·수면·옹벽은 앞 줄의 높이 조건(`bounds.max.y <= -1.21`)에서 이미 빠지므로, 이 면제가 실제로 빼는 것은 언덕 18개(`:243-244`, 윗면 y 약 +7~+20)뿐이다. 그런데 완료 로그(`:557`)는 모든 렌더러를 검사한 것처럼 적는다. 언덕이 지금 도로와 겹치는지는 계산하지 않았다(충돌체가 없어 겹쳐도 보이기만 한다). 고칠 때: 면제를 지우거나 이름으로 언덕만 빼고 로그에 밝힌다. `Find` 결과가 null 이면 던진다(Skyway `:133-134` 형식).
+  - **후속 2 (보통, §2·§0)**: `SaveRegisterAndConnect()`(`:51-105`)가 장식 씬 저장·빌드 씬 목록 쓰기·로비 씬 저장을 한 번에 한다. SKYWAY 도구는 저장·등록을 사용자에게 남겼다(Skyway `:13`, `:81`). 메뉴가 없어 `Unity_RunCommand` 로만 불리고, 승인 없이 부르면 §0 위반이다. 고칠 때: 지우거나 SKYWAY 형식으로 나눈다.
+  - 제안(하지 않음): `Palette` 가 있는 재질의 색 인자를 조용히 무시한다(`:156-170`). 재질 생성이 `Layout` 초기화에서 일어나 검증 실패에도 `.mat` 이 남는다(`:182-187`). `ART_FINGER_LANES.md:90` 에 옮긴 로그 문장이 커밋된 코드(`:98`)의 문장과 다르다 — 어느 쪽이 실행된 것인지 확인 못 함.
+- **남은 것**: 사용자 플레이 확인(장식), 위 후속 1·2.
+
+---
+
 ## 2026-10-26 · 테스트 메서드 단위 선택 · HUD 영향 범위 · 표현 파일 지문
 
 - **결정 (사용자 2026-10-26 "둘 다 진행해라", `docs/test-method-select`)**:
@@ -200,7 +218,7 @@
   - **배치를 읽은 곳**: 나무위키 "크레이지레이싱 카트라이더/트랙/빌리지" 의 빌리지 손가락 항목(손가락 모양, 연속 U턴, 손톱 지름길 2개, 엄지 로터리, 시계탑 통로, 시계방향 3바퀴 6.0 km)과 러쉬플러스판 윤곽 이미지(500×256)를 픽셀로 읽었다 — 도로 중심 줄 간격 15 px, U턴 열 83, 손가락 끝 126/154/130/154, 왼쪽 변 19, 출발 표시 81, 시계탑 상자 행 141~166. 높낮이와 다리는 사용자가 준 기록 영상(`youtu.be/S3YvC_eKXeo`, 3랩 약 87초)의 24.5~28.4초를 0.1~0.5초 간격으로 읽었다 — 아랫변 끝의 돌난간 아치 다리(방지턱)를 넘으며 약 0.4~0.5초 뜨고 자갈 광장에 내려 우회전, 자갈길 끝 시계탑의 좁은 아치로 들어가 출구에서 다시 뜬다.
   - **축척**: 세로는 U턴이 정한다(줄 간격 = 2 × U턴 반지름). 가로(손가락 길이)는 1 m/px — 안 A(1:1 은 한 바퀴 3.2 km 라 뺐다). 2랩.
   - **배치** (시계방향, 윗변 출발 표시에서 동쪽): 손가락 7개 — U턴 180° 우·좌·우·좌·우·좌·우 R25, 긴 손가락(조각 4·12)은 71 m, 짧은 것 43~47 m → 아랫변 서쪽(끝 쪽에 다리 턱) → 좌하 우90 R30 → 왼쪽 변 북쪽(시계탑: 좁은 입구 반폭 4·통로 30 m·출구 턱) → 좌상 우90 R30 → 출발선. 32조각, 한 바퀴 1466.03 m, 평지(턱 두 곳만 0.5 m), 틈·앵커 없음. 도로 반폭 7.2(보통의 1.2배). 원본은 `ChainRushCircuitSceneBuilder.FingerLanesSegments` 와 상수, 메뉴 `Create Finger Lanes Track`.
-  - **이름**: 원작 이름을 쓰지 않는다(SKYWAY 와 같다). 후보 중 첫 것 `FINGER LANES`, 에셋 `Circuit_FingerLanes`(최고 기록 키). 로비 세 번째 트랙(장식 씬 없음, T3e 때), `NEON HARBOR` 자리표시는 그 뒤에 잠긴 채 남김. 로비 씬 항목은 `Unity_RunCommand` 로 넣고 저장은 사용자가 했다(§0).
+  - **이름**: 원작 이름을 쓰지 않는다(SKYWAY 와 같다). 후보 중 첫 것 `FINGER LANES`, 에셋 `Circuit_FingerLanes`(최고 기록 키). 로비 세 번째 트랙(~~장식 씬 없음, T3e 때~~ → 2026-10-27 "FINGER LANES 외부 장식과 로비 연결"), `NEON HARBOR` 자리표시는 그 뒤에 잠긴 채 남김. 로비 씬 항목은 `Unity_RunCommand` 로 넣고 저장은 사용자가 했다(§0).
   - **지름길 자리**: 긴 손가락 두 곳의 손톱(윤곽 열 132, 128)에서 나가 다음 줄로 돌아오는 S 구간 약 [294.1, 416.6]·[840.2, 970.8](R25, 빌더 `FingerShortcutStretches` 가 계산)에는 체크포인트를 두지 않는다 — 체크포인트 0.15/0.5/0.75 = S 219.9 / 733.0 / 1099.5. 빌더가 체크포인트가 구간 안이면 저장 전에 던진다. 지름길 자체는 다음 단계.
 - **도약대 (새 기능, 사용자 "급한 경사로 떠오르는 지역 … 다리로 중간에 붕 뜨는 것" → "속도에 의해 그 방지턱에서 붕 뜨는 거다" → "오르막이 아니라 턱이라고 생각해라")**: 러너는 떨어지는 중이면 매 틱 0.3 m 안의 땅으로 다시 붙는다(`RunnerMotor.SnapToGround`) — 20 m/s 에서 20% 내리막도 한 틱에 0.08 m 라 어떤 언덕에서도 뜨지 않았다. 그래서:
   - `TrackDefinition.Segment.Kicker(length, endGrade, launch, endHalfWidth)` — 직선 조각의 끝이 턱(lip)이다. `launch` 는 기울기(0, `MaxLaunch` 0.5]: 땅에 붙은 러너가 그 S 를 앞으로 지나는 틱에 `velocity.y = max(velocity.y, launch × 앞쪽 수평 속도)` — 빠를수록 높고 멀리 난다. 그 위로 속도가 있으니 스냅도 건너뛴다. 스윙·그래플 중에는 없다.

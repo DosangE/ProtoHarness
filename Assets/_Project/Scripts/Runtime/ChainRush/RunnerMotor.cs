@@ -87,7 +87,8 @@ namespace ProtoHarness.ChainRush
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
         // hook's speed times the hooked rope length over the rope length now, kept within minSwingSpeedScale ..
-        // maxSwingSpeedScale of the hook's speed; a booster while swinging raises the hook's speed toward its own (PoleSwing.SpeedUp), and
+        // maxSwingSpeedScale of the hook's speed, the rope and the throttle together adding no faster than the run
+        // acceleration above it (user 2026-10-27); a booster while swinging raises the hook's speed toward its own (PoleSwing.SpeedUp), and
         // without one the throttle held raises it toward swingThrottleSpeedScale times the run speed by the run acceleration
         // (user 2026-10-22); let go, the hook's speed stays. Every swingMetersPerSlot swung fills one gauge slot. Letting go carries
         // the runner straight on at that speed, the part above running speed falling off by swingCarryFalloff a second.
@@ -258,7 +259,9 @@ namespace ProtoHarness.ChainRush
             bool pulling = Slingshot.IsPulling(racer.SlingTicks, sling);
             bool carrying = racer.SlingTicks > 0 && !pulling;
             float turnLimit = RunDrive.Turn(racer, grounded, swinging, reversing, dt, drive);
+            float hookSpeedBefore = racer.SwingHookSpeed;
             PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling);
+            float boostRise = pulling || carrying ? racer.SwingHookSpeed - hookSpeedBefore : 0f;
             if (pulling && !swinging) slingTarget = Slingshot.SteerToward(racer, game.Track, frame, transform.position, dt, sling);
             var now = new RunDrive.Conditions
             {
@@ -271,7 +274,7 @@ namespace ProtoHarness.ChainRush
                 GrappleAttached = grapple.IsAttached,
             };
             RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);
-            MoveAndCollide(racer, frame, grounded, swinging, dt);
+            MoveAndCollide(racer, frame, grounded, swinging, boostRise, dt);
             CountDownAndCheckFall(racer);
         }
 
@@ -294,14 +297,14 @@ namespace ProtoHarness.ChainRush
 
         // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
         // the ceiling, a guard, a kicker's crest, the ground and the grapple.
-        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float dt)
+        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float boostRise, float dt)
         {
             ref Vector3 velocity = ref racer.Velocity;
             ref float heading = ref racer.Heading;
             Vector3 before = transform.position;
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
-            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, dt, SwingSettings(), out swingAnchor);
+            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, boostRise, dt, SwingSettings(), out swingAnchor);
             hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
             SyncGrounded();

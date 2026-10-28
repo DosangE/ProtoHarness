@@ -3,12 +3,14 @@ using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
+using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
@@ -19,10 +21,12 @@ namespace ProtoHarness.Tests.PlayMode
     //   Grapple dip: "a grapple gets released by itself at some point; if the runner sped up on the way it nearly fell".
     //   Swing hook jump: "entering a corner with a swing, the runner jumps to the rope's length, not where it was".
     //   Pole reach: "halfway round the corner the pole never hooks" (2026-10-25: the angle, DECISIONS "측정: 코너 중간에 …").
+    //   Shortcut swing speed: "steering in a shortcut swing speeds the runner up far too much" (2026-10-27).
     [Explicit]
     public sealed class ChainRushProbeTests
     {
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
+        private const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
 
         private ChainRushGame game;
         private RunnerMotor player;
@@ -344,6 +348,103 @@ namespace ProtoHarness.Tests.PlayMode
                           (offered > 0 ? $", from tick {firstOffered} s {firstOfferedS:0.0} ({(firstOfferedS - arcStart) / (arcEnd - arcStart) * 100d:0}%) to tick {lastOffered} s {lastOfferedS:0.0} ({(lastOfferedS - arcStart) / (arcEnd - arcStart) * 100d:0}%)." : "."));
                 Assert.That(sampled, Is.GreaterThan(0), "The bot did not reach the corner.");
                 game.FailRun();
+            }
+        }
+
+        // Finger Lanes' nails at Fast and Very Fast, first with the bot steering straight through each swing, then holding
+        // the key toward the pole the whole swing (ShortcutBot.HoldInnerKey): for each swing the speed before the hook, the
+        // hook's speed at the end (the throttle raises it), the rope from hook to letting go, the top speed and the speed
+        // it lets go at. "Steering in a shortcut swing speeds the runner up far too much" (user 2026-10-27).
+        [UnityTest, Timeout(300000)]
+        public IEnumerator Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld()
+        {
+#if UNITY_EDITOR
+            var finger = AssetDatabase.LoadAssetAtPath<TrackDefinition>(FingerLanesPath);
+#else
+            TrackDefinition finger = null;
+#endif
+            Assert.That(finger, Is.Not.Null, FingerLanesPath);
+            RunnerProfile neutral = ScriptableObject.CreateInstance<RunnerProfile>();
+            var records = new BestRecords("ChainRush.Test.ProbeTests.");
+            try
+            {
+                foreach (SpeedClass speed in new[] { SpeedClass.Fast, SpeedClass.VeryFast })
+                foreach (bool inner in new[] { false, true })
+                {
+                    string run = speed + (inner ? ", inner key held" : ", no steering");
+                    records.Clear(finger.name, speed);
+                    RaceLaunch.Clear();
+                    RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, speed, neutral));
+                    RaceAssembler assembler = null;
+#if UNITY_EDITOR
+                    yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
+#endif
+                    foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+                    {
+                        if (root.TryGetComponent(out RaceAssembler a)) assembler = a;
+                        if (root.TryGetComponent(out ChainRushGame g)) game = g;
+                        if (root.TryGetComponent(out RunnerMotor p)) player = p;
+                        if (root.TryGetComponent(out CircuitRace c)) circuit = c;
+                    }
+                    Assert.That(assembler, Is.Not.Null);
+                    assembler.Records = records;
+                    float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+                    while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+                    Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+
+                    var bot = new ShortcutBot(game, player, finger) { HoldInnerKey = inner };
+                    int swings = 0, hookTick = -1;
+                    float before = 0f, last = 0f, hookSpeed = 0f, hookRope = 0f, minRope = 0f, top = 0f, lapTop = 0f;
+                    double hookS = 0d;
+                    Action<int> sample = tick =>
+                    {
+                        float now = player.HorizontalSpeed;
+                        lapTop = Mathf.Max(lapTop, now);
+                        if (game.Racer.SwingTicks > 0)
+                        {
+                            if (hookTick < 0)
+                            {
+                                hookTick = tick;
+                                before = last;
+                                hookRope = game.Racer.SwingHookRadius;
+                                minRope = hookRope;
+                                top = now;
+                                hookS = game.Track.Project(player.transform.position).S;
+                            }
+                            top = Mathf.Max(top, now);
+                            minRope = Mathf.Min(minRope, game.Racer.SwingRadius);
+                            hookSpeed = game.Racer.SwingHookSpeed;
+                        }
+                        else if (hookTick >= 0)
+                        {
+                            swings++;
+                            Debug.Log($"ChainRush probe shortcut swing [{run}] swing {swings}: hooked at s {hookS:0.0} tick {hookTick} from {before:0.00} m/s, " +
+                                      $"hook speed at the end {hookSpeed:0.00} m/s, rope {hookRope:0.00} -> {minRope:0.00} m, top {top:0.00} m/s, " +
+                                      $"let go at {now:0.00} m/s after {(tick - hookTick) * Ticks.Seconds:0.00} s.");
+                            hookTick = -1;
+                        }
+                        last = now;
+                    };
+                    game.TickCompleted += sample;
+                    yield return RunUntil(bot, () => circuit.Laps.CompletedLaps >= 1 || game.HasFailed, 60f, () => { });
+                    game.TickCompleted -= sample;
+                    Debug.Log($"ChainRush probe shortcut swing [{run}]: lap 1 {(circuit.Laps.CompletedLaps >= 1 ? Ticks.ToSeconds(circuit.Laps.LapTicks(1)).ToString("0.00") + " s" : "not finished")}, " +
+                              $"shortcuts taken {bot.Taken}, hooks missed {bot.Missed}, failed {game.HasFailed}, top speed {lapTop:0.00} m/s, run speed {player.RunSpeed:0.00} m/s.");
+                    if (!inner)
+                    {
+                        Assert.That(game.HasFailed, Is.False, "The plain shortcut run fell. " + run);
+                        Assert.That(bot.Missed, Is.EqualTo(0), "The plain shortcut run missed a hook. " + run);
+                    }
+                    Assert.That(swings, Is.GreaterThan(0), "No swing was measured. " + run);
+                    game.FailRun();
+                }
+            }
+            finally
+            {
+                RaceLaunch.Clear();
+                records.Clear(finger.name, SpeedClass.Fast);
+                records.Clear(finger.name, SpeedClass.VeryFast);
+                UnityEngine.Object.Destroy(neutral);
             }
         }
 

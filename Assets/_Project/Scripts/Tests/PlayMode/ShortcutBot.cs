@@ -8,7 +8,8 @@ namespace ProtoHarness.Tests.PlayMode
     // A test bot for a track's shortcuts (Finger Lanes' nails, DECISIONS 2026-10-25): it follows the centerline
     // (TrackFollower) and at each shortcut hooks the first corner pole as it reaches the junction, lets go a quarter turn
     // later, hooks the second at the end of the straight and lets go on the next row. It does not steer while it swings:
-    // steering works the rope (PoleSwing).
+    // steering works the rope (PoleSwing). HoldInnerKey has it hold the key toward the pole instead, shortening the rope
+    // the whole swing (the probe of the shortcut's swing speed, user 2026-10-27).
     internal sealed class ShortcutBot : IInputSource
     {
         private const float QuarterTurn = 88f;
@@ -50,6 +51,7 @@ namespace ProtoHarness.Tests.PlayMode
         public int Taken { get; private set; }
         // Hooks that found no pole: the bot gives that shortcut up and follows the loop.
         public int Missed { get; private set; }
+        public bool HoldInnerKey;
 
         public void Poll() { }
         public void Clear() { }
@@ -84,8 +86,15 @@ namespace ProtoHarness.Tests.PlayMode
             pressed = follower.SwingPress;
             bool swinging = stage == Stage.FirstSwing || stage == Stage.SecondSwing;
             follower.Steering = !swinging;
-            follower.Override = 0f;
+            follower.Override = swinging && HoldInnerKey && game.Racer.SwingTicks > 0 ? PoleSide() : 0f;
             return follower.Consume();
+        }
+
+        // +1 when the hooked pole is on the runner's right (D shortens the rope), -1 on its left.
+        private float PoleSide()
+        {
+            Vector3 toPole = game.Racer.SwingCenter - runner.transform.position;
+            return Vector3.Dot(toPole, ProtoHarness.ChainRush.Motion.RunDrive.RightOf(runner.Heading)) >= 0f ? 1f : -1f;
         }
 
         private void Hook(int shortcut, Stage next)

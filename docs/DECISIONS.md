@@ -7,6 +7,51 @@
 
 ---
 
+## 2026-10-27 · 봉 스윙: 줄과 ↑ 가 함께 올리는 속도는 달리기 가속까지 — 부스터는 따로 (`fix/swing-rope-acceleration`)
+
+- **결정 (사용자)**: 아래 측정 뒤 S2 방향 A′(스윙 중 가속 한도)를 "추천대로 진행". 리뷰가 찾은 부스터 회귀를 고치며 두 안이 나왔고 "추천대로 작업해봐"로 2번(↑ 와 줄을 합쳐 한도, 부스터만 따로)을 골랐다.
+- **규칙** (`PoleSwing.Step`): 줄 배율의 목표 속도(건 순간 속도 × 배율)가 건 순간 속도보다 크면, 이번 틱 속도는 `직전 틱 수평 속도 + 이번 틱에 부스터가 올린 건 순간 속도 + RunAcceleration·dt` 를 넘지 않고, 건 순간 속도 아래로는 내려가지 않는다. 한도는 새 튜닝 값 없이 달리기 가속을 쓴다(서킷 빠름 8 m/s², 러너 가속 배율·속도 단계가 곱해진다). 긴 U턴 스윙은 지금처럼 배율에 닿고, 지름길의 짧은 90° 스윙은 덜 얻는다.
+  - 그대로인 것: 조향 없는 스윙(배율 1 — 새 분기에 들어가지 않아 비트 단위로 같다), 줄을 풀어 느려지는 것(즉시), ↑·부스터가 건 순간 속도를 올리는 규칙(`SpeedUp`), 게이지(제한된 속도로 찬다 — 짧은 스윙은 덜 찬다).
+  - `RunnerMotor` 가 `SpeedUp` 전의 건 순간 속도로 이번 틱 부스터 상승분을 구해 `PoleSwing.Step` 에 넘긴다(새 인자 `boostRise`, 호출처는 `RunnerMotor` 하나 — 합의 "ㄱㄱ"). 그 틱 안에서만 쓰는 값이라 새 상태·스냅샷·네트워크 형식 변경은 없다.
+- **결과** (측정 `Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`, 안쪽 키 유지, 부스터 없음): 빠름 첫/둘째 스윙 최고 30.3/34.9 → **24.2/27.4 m/s**, 1랩 69.36 → 74.18 s(조향 안 함 74.50 s). 매우빠름 최고 39.6 → 31.1 m/s, 1랩 58.12 → 62.30 s. 조향 안 함은 전후 같다(24.00 / 28.80 m/s, 74.50 / 62.54 s). 즉 **지름길의 짧은 스윙에서 줄 감기는 거의 이득이 없다** — 덜 깎으려면 한도를 올린다(플레이 뒤 사용자 판단).
+- **테스트**:
+  - `ChainRushFlowTests.Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeSpeedsUpNoFasterThanRunning`(빠름, 안쪽 키, 1랩): 스윙 중 틱마다 속도 상승 ≤ RunAcceleration·dt, 줄이 1 m 넘게 감겼고 최고 속도가 ↑ 상한 + 1 보다 크다. 고치기 전 실패 원문(단언 강화 전 판): `The swing sped up faster than running at tick 942` — 틱당 0.4862 > 0.1600, 최고 34.94 m/s. 고친 뒤 최고 27.43, 최대 상승 0.1600.
+  - `ChainRushCornerSwingTests.Swing_BoosterOnAShortenedRope_SpeedsUpByTheRopesRatio`(작업대, 가속 배율 0.1 러너로 한도 3 m/s²): 줄을 감아 둔 채 부스터를 쓰면 속도가 건 순간 속도 × 배율을 그대로 따른다. 첫 수정본(`8dd9f06`, 전체 속도에 한도)에서 실패 원문: `Swing speed after the rope was shortened, boosted for 1 ticks. Expected: 9.45162201f +/- 0.0199999996f But was: 9.0389204f`.
+- **리뷰** (첫 수정본 `8dd9f06` 기준): `unity-reviewer` 치명·중대·보통 0, 제안 4(`subagent_tokens` 67,241) — 1 새 테스트 단언 약함 → 강화했다, 2 ↑ + 줄 감기가 ↑ 만보다 빨라지지 않는다(확인 요청) → 2번 안이 바로 그 동작이다, 3 DECISIONS 에 S2 결정 없음 → 이 항목, 4 `ShortcutBot` 의 긴 타입 이름 → 하지 않음(테스트 보조 파일이라 고치면 게이트 전체). Codex needs-attention 보통 1: 짧아진 줄의 부스터 가속까지 깎는다 → 위 부스터 테스트로 재현하고 고쳤다. 고친 뒤 Codex 재리뷰는 하지 않았다(§7-5 재호출은 지시가 있을 때만).
+- **검증** (에디터 6000.3.19f1, `f60e38d`): `select-tests -Range dev...HEAD` = 전체(코어 시뮬 `PoleSwing`·`RunnerMotor`, 테스트 보조 `ShortcutBot`, ProjectSettings 0개). EditMode `!Enemy` `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (2026-10-28 04:58:38Z~04:58:42Z). PlayMode `testcasecount="200" result="Passed" passed="191" failed="0" skipped="9"` (04:59:05Z~05:12:45Z, 819.8초) — skipped 9 = `[Explicit]` 측정 6 + 네트워크 레이스 3. 서킷 지문 `Replay_CircuitBotRun_RepeatsEveryTickBitForBit` Passed(봇은 스윙 중 조향하지 않는다). 그 전 대상 실행: 스윙·FINGER 16건 `passed="16" failed="0"` (04:55:30Z~04:57:36Z). 첫 수정본 `8dd9f06` 의 게이트(`testcasecount="199" passed="190" failed="0"`, 2026-10-27 07:50:58Z~08:03:39Z)는 코드가 바뀌어 병합 근거가 아니다.
+- **남은 것**: 사용자 FINGER 지름길 플레이(안쪽 키를 쥐어도 짧은 스윙은 거의 빨라지지 않는다 — 한도를 올릴지).
+- **버린 대안**: A 연속 스윙 배율 겹침만 막기(측정에서 겹침은 일어나지 않았다), B 스윙 속도 절대 상한, C 최대 배율 낮추기(모든 트랙), D 줄 감기를 반지름 비례로. 1번 안(줄 몫만 한도, ↑·부스터 따로 — 빠름 최고 31.2 m/s): 덜 깎여 사용자 불만이 남는다. 첫 수정본(전체 속도에 한도): 부스터를 깎는다.
+
+---
+
+## 2026-10-27 · 측정: 지름길 스윙의 가속은 줄 배율 한 번으로 생긴다 — 연속 스윙 겹침이 아니다 (`feature/probe-shortcut-swing-speed` → `fix/swing-rope-acceleration`)
+
+- **계기 (사용자)**: FINGER LANES 플레이 "지름길에서 스윙중일때 조향으로 인해 붙는 가속이 좀 많이 심하다". 요청서 S1(측정 먼저)에 "S1 가자".
+- **측정**: `ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`(`[Explicit]`). FINGER LANES 1랩을 빠름·매우빠름 × (스윙 중 조향 안 함 / 안쪽 키 유지 — `ShortcutBot.HoldInnerKey`)로 4번. 봇은 늘 ↑(가속)을 누른다. 에디터 6000.3.19f1, `testcasecount="1" result="Passed"` (07:32:28Z~07:34:04Z). 로그 원문(스윙 1·2 = 첫 지름길, 3·4 = 둘째):
+  ```
+  [Fast, no steering] swing 1: hooked at s 294.0 tick 918 from 19.92 m/s, hook speed at the end 24.00 m/s, rope 15.00 -> 15.00 m, top 24.00 m/s, let go at 23.94 m/s after 1.06 s.
+  [Fast, no steering] swing 2: hooked at s 374.1 tick 1014 from 21.42 m/s, hook speed at the end 24.00 m/s, rope 15.04 -> 15.04 m, top 24.00 m/s, let go at 23.94 m/s after 1.02 s.
+  [Fast, no steering]: lap 1 74.50 s, shortcuts taken 2, hooks missed 0, failed False, top speed 24.00 m/s, run speed 20.00 m/s.
+  [Fast, inner key held] swing 1: hooked at s 294.0 tick 918 from 19.92 m/s, hook speed at the end 24.00 m/s, rope 15.00 -> 11.88 m, top 30.30 m/s, let go at 30.11 m/s after 0.54 s.
+  [Fast, inner key held] swing 2: hooked at s 374.1 tick 1010 from 19.95 m/s, hook speed at the end 24.00 m/s, rope 16.86 -> 11.58 m, top 34.94 m/s, let go at 34.88 m/s after 0.90 s.
+  [Fast, inner key held] swing 3: hooked at s 840.1 tick 2165 from 19.90 m/s, hook speed at the end 24.00 m/s, rope 15.03 -> 11.79 m, top 30.59 m/s, let go at 30.41 m/s after 0.56 s.
+  [Fast, inner key held] swing 4: hooked at s 925.5 tick 2255 from 19.88 m/s, hook speed at the end 24.00 m/s, rope 17.07 -> 11.79 m, top 34.75 m/s, let go at 34.69 m/s after 0.90 s.
+  [Fast, inner key held]: lap 1 69.36 s, shortcuts taken 2, hooks missed 0, failed False, top speed 34.94 m/s, run speed 20.00 m/s.
+  [VeryFast, no steering]: lap 1 62.54 s, shortcuts taken 2, hooks missed 0, failed False, top speed 28.80 m/s, run speed 24.00 m/s.
+  [VeryFast, inner key held] swing 1: hooked at s 294.4 tick 782 from 23.84 m/s, hook speed at the end 28.80 m/s, rope 14.99 -> 11.87 m, top 36.37 m/s, let go at 36.24 m/s after 0.54 s.
+  [VeryFast, inner key held] swing 2: hooked at s 374.1 tick 850 from 22.84 m/s, hook speed at the end 28.80 m/s, rope 18.04 -> 13.12 m, top 39.60 m/s, let go at 39.54 m/s after 0.84 s.
+  [VeryFast, inner key held]: lap 1 58.12 s, shortcuts taken 2, hooks missed 0, failed False, top speed 39.60 m/s, run speed 24.00 m/s.
+  ```
+  (매우빠름의 조향 안 함 스윙 4줄·안쪽 키 스윙 3·4 는 같은 꼴이라 줄였다 — 모두 top 28.80 / 36.70·38.79 m/s.)
+- **읽은 것**:
+  - 조향 없이도 스윙은 ↑ 로 달리기 속도의 1.2배(빠름 24 m/s)까지 오른다(2026-10-22 "스윙 중 ↑ 가속"). 거기에 안쪽 키로 줄을 감으면 **한 번의 90° 스윙(0.54~0.90 s) 안에** 30~35 m/s(달리기 속도의 1.5~1.75배), 매우빠름은 36~40 m/s 가 된다. 첫 스윙은 0.54 s 만에 19.9 → 30.3 m/s, 약 19 m/s² 다.
+  - R15 에서 줄 감기 초당 6 m 는 0.54 s 에 15 → 11.9 m(배율 1.26)다. 둘째 스윙은 첫 스윙 뒤 선을 벗어나 **16.9~18 m 에서 걸려** 배율이 더 커진다(1.37~1.46).
+  - **요청서가 의심한 "연속 스윙 배율 겹침"은 일어나지 않았다**: 둘째 봉을 걸 때 속도가 이미 19.95~24.46 m/s 로 떨어져 있었다(놓을 때 30.1~36.2 m/s). 넘친 속도 감쇠(초당 3 m/s)로는 20 m 동안 약 2 m/s 만 줄어야 하므로 다른 감속이 있었다 — 가드에 닿은 것으로 보이나 **확인하지 않았다**(가드 접촉을 기록하지 않음). 그래서 겹침이 지금 생기지 않는 것은 우연이고, 가드에 안 닿는 라인이면 생길 수 있다.
+  - 랩: 안쪽 키를 쥐면 빠름 74.50 → 69.36 s(−5.1 s), 매우빠름 62.54 → 58.12 s(−4.4 s).
+- **다음**: S2 수정 방향은 사용자 결정(이 측정으로 요청서 S2 의 추천 A "겹침만 막기" 는 체감 원인을 고치지 못한다). → 위 "봉 스윙: 줄과 ↑ 가 함께 올리는 속도는 달리기 가속까지".
+
+---
+
 ## 2026-10-27 · FINGER LANES 외부 장식과 로비 연결 (`feature/m3-finger-exterior`, `feature/settings-finger-build-scene`)
 
 - **결정 (사용자)**: 다른 AI 세션이 "이전 다른 서킷 디자인했듯이 이 서킷도 외부 디자인만들어봐" 로 FINGER LANES 장식을 만들었다(계획 승인 "ㄱㄱ", MCP 씬 저장·빌드 씬 목록 등록 예외 포함 — `ART_FINGER_LANES.md` 목적과 승인). 병합은 이 세션에서 사용자 "정리하고 푸시까지".

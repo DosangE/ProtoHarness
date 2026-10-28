@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Track;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -11,13 +10,14 @@ using UnityEngine.SceneManagement;
 
 namespace ProtoHarness.Editor.ChainRush
 {
-    // Like SkywayEnvironmentBuilder: persistent decoration, no road, physics or runtime behaviour.
+    // Like SkywayEnvironmentBuilder: persistent decoration, no road, physics or runtime behaviour. It builds and saves only
+    // the prefab; saving the decoration scene, the build's scene list and the lobby entry are left to the user (DECISIONS
+    // 2026-10-27 후속 2: a save-register-connect method here could only be run through Unity_RunCommand, so it went).
     public static class FingerLanesEnvironmentBuilder
     {
         public const string PrefabPath = "Assets/_Project/Prefabs/FingerLanesExterior.prefab";
         public const string ScenePath = "Assets/_Project/Scenes/ChainRushTrackFingerLanes.unity";
         private const string DefinitionPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
-        private const string LobbyPath = "Assets/_Project/Scenes/ChainRushLobby.unity";
         private const string MaterialFolder = "Assets/_Project/Art/Materials/";
         private const float Ground = -1.3f;
 
@@ -46,62 +46,6 @@ namespace ProtoHarness.Editor.ChainRush
             RequireIdle();
             if (!File.Exists(PrefabPath)) throw new InvalidOperationException("Create Finger Lanes Exterior first.");
             BuildPrefab();
-        }
-
-        // Saving/registration is separate from building; invoke only with explicit approval of that scope.
-        public static void SaveRegisterAndConnect()
-        {
-            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode first.");
-            Scene exterior = default;
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                Scene candidate = SceneManager.GetSceneAt(i);
-                if (candidate.name == "ChainRushTrackFingerLanes") exterior = candidate;
-                else if (candidate.isDirty) throw new InvalidOperationException("Save the other open scenes before connecting the exterior.");
-            }
-            if (!exterior.IsValid() || exterior.rootCount != 1)
-                throw new InvalidOperationException("Open the newly created exterior scene with its single prefab instance.");
-            Validate(exterior.GetRootGameObjects()[0]);
-            if (!EditorSceneManager.SaveScene(exterior, ScenePath)) throw new IOException("Could not save the exterior scene.");
-            var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-            int existing = scenes.FindIndex(entry => entry.path == ScenePath);
-            if (existing < 0) scenes.Add(new EditorBuildSettingsScene(ScenePath, true));
-            else scenes[existing] = new EditorBuildSettingsScene(ScenePath, true);
-            EditorBuildSettings.scenes = scenes.ToArray();
-
-            Scene original = SceneManager.GetActiveScene();
-            Scene lobby = SceneManager.GetSceneByPath(LobbyPath);
-            bool opened = !lobby.isLoaded;
-            if (opened) lobby = EditorSceneManager.OpenScene(LobbyPath, OpenSceneMode.Additive);
-            try
-            {
-                TrackDefinition definition = Require<TrackDefinition>(DefinitionPath);
-                int connected = 0;
-                foreach (GameObject root in lobby.GetRootGameObjects())
-                    foreach (LobbyMenu menu in root.GetComponentsInChildren<LobbyMenu>(true))
-                    {
-                        var data = new SerializedObject(menu);
-                        SerializedProperty tracks = data.FindProperty("tracks");
-                        for (int i = 0; i < tracks.arraySize; i++)
-                        {
-                            SerializedProperty entry = tracks.GetArrayElementAtIndex(i);
-                            if (entry.FindPropertyRelative("definition").objectReferenceValue != definition) continue;
-                            Undo.RecordObject(menu, "Connect Finger Lanes exterior");
-                            entry.FindPropertyRelative("environmentScene").stringValue = "ChainRushTrackFingerLanes";
-                            data.ApplyModifiedProperties();
-                            connected++;
-                        }
-                    }
-                if (connected != 1) throw new InvalidOperationException($"Expected one Finger Lanes lobby entry, found {connected}.");
-                EditorSceneManager.MarkSceneDirty(lobby);
-                if (!EditorSceneManager.SaveScene(lobby)) throw new IOException("Could not save the connected lobby.");
-                Debug.Log("Finger Lanes exterior saved, registered and connected to its lobby entry.");
-            }
-            finally
-            {
-                if (opened) EditorSceneManager.CloseScene(lobby, true);
-                if (original.IsValid() && original.isLoaded) SceneManager.SetActiveScene(original);
-            }
         }
 
         public static void Validate(GameObject root)
@@ -250,6 +194,13 @@ namespace ProtoHarness.Editor.ChainRush
                 // 35 pieces since the left edge's S bend (2026-10-28); the tower's passage is still piece 23, the bridge's bump 15.
                 if (definition.Segments.Count != 35 || definition.Shortcuts.Count != 2)
                     throw new InvalidOperationException("Finger Lanes layout changed; review landmark and shortcut placement before rebuilding.");
+                // The pieces are found by number, so check they still are what stands on them (DECISIONS 2026-10-28 후속 ①):
+                // the tower's narrow passage, and the bridge bump's climb with the kicker after it.
+                TrackDefinition.Segment passage = definition.Segments[23];
+                if (passage.IsArc || !(passage.EndHalfWidth > 0f && passage.EndHalfWidth < definition.RoadHalfWidth))
+                    throw new InvalidOperationException("Finger Lanes piece 23 is no longer the clock tower's narrow passage; move the tower.");
+                if (definition.Segments[15].IsArc || !(definition.Segments[15].EndGrade > 0f) || !(definition.Segments[16].Launch > 0f))
+                    throw new InvalidOperationException("Finger Lanes pieces 15-16 are no longer the bridge bump's climb and kicker; move the bridge.");
                 TrackFrame clock = line.FrameAt(StartOf(23) + definition.Segments[23].Length * 0.5d);
                 Transform tower = Group("Clock tower passage", parent);
                 tower.SetPositionAndRotation(new Vector3(clock.Position.x, Ground, clock.Position.z), Quaternion.LookRotation(clock.Forward));

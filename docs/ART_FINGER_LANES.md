@@ -20,7 +20,7 @@
 - 기존 로비 FINGER LANES의 `environmentScene`만 `ChainRushTrackFingerLanes`로 연결했다.
 - 빌드 씬 목록에 새 씬 1개를 활성화해 추가했다. 기존 항목은 유지했다.
 
-생성 메뉴는 `ProtoHarness > Chain Rush > Create Finger Lanes Exterior`, 재제작 메뉴는 `Rebuild Finger Lanes Exterior`다. 재제작은 프리팹의 GUID를 지키며 프리뷰 씬에서 수행한다. 저장·빌드 등록·로비 연결은 생성 메뉴에 숨기지 않고 별도 `SaveRegisterAndConnect()`로 분리했다.
+생성 메뉴는 `ProtoHarness > Chain Rush > Create Finger Lanes Exterior`, 재제작 메뉴는 `Rebuild Finger Lanes Exterior`다. 재제작은 프리팹의 GUID를 지키며 프리뷰 씬에서 수행한다. 저장·빌드 등록·로비 연결은 생성 메뉴에 숨기지 않고 별도 `SaveRegisterAndConnect()`로 분리했다. → 2026-10-28 그 메서드는 지웠다(메뉴가 없어 `Unity_RunCommand` 로만 불렸다, DECISIONS 2026-10-27 후속 2). SKYWAY 처럼 장식 씬 저장·빌드 씬 목록·로비 연결은 사용자가 에디터에서 한다. 아래 실행 기록은 그때의 원문이다.
 
 ## 디자인과 배치
 

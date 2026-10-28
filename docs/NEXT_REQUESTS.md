@@ -16,9 +16,9 @@
 | ~~R8~~ | ~~기존 착지 확인 테스트 수정~~ **끝** (2026-10-26, DECISIONS "R8") | `fix/test-landing-check` | 약 12분 | — | 사용자 "진행해보라" |
 | M1-T | **M1** 체감 튜닝 1회 | `feature/tuning-m1` | 사용자 플레이 | R4c | 2026-10-18 에 속력·회전·부스터(앞당김 1)와 조향·감속(R4c)을 했다. 남은 것은 아래 "M1-T 에 넘긴 플레이 피드백", 순서는 `docs/HANDOFF.md` 1절 |
 | ~~RF1~~ | ~~리팩토링: IMGUI 헬퍼 통합~~ **끝** (2026-10-22, DECISIONS "리팩토링 RF1") | `feature/refactor-ui-helpers` | 약 3분 | — | 사용자 "R1 ㄱㄱ" |
-| RF3 | 리팩토링: `RunnerMotor.Step` 분해 + 이름 없는 숫자 상수화 (권장 다음) | `feature/refactor-motor-step` | select-tests 판정(코어 시뮬 → 전체 예상) | — | — |
+| ~~RF3~~ | ~~리팩토링: `RunnerMotor.Step` 분해 + 이름 없는 숫자 상수화~~ **끝** (2026-10-25, DECISIONS "리팩토링 RF3") | `feature/refactor-motor-step` | select-tests 판정(코어 시뮬 → 전체 예상) | — | — |
 | ~~RF2~~ | ~~리팩토링: 효과음 번호에 이름(`RaceCue` enum)~~ **끝** (2026-10-25, DECISIONS "리팩토링 RF2") | `feature/refactor-cues` | select-tests 판정(코어 시뮬 → 전체 예상) | — | 2-1 (롤백 재실행 중 효과음) |
-| RF4 | 리팩토링: `CircuitRace` 깔기 코드 분리(`CircuitScenery`) | `feature/refactor-circuit-scenery` | select-tests 판정(`Race/`) | — | — |
+| ~~RF4~~ | ~~리팩토링: `CircuitRace` 깔기 코드 분리(`CircuitScenery`)~~ **끝** (2026-10-25, DECISIONS "리팩토링 RF4") | `feature/refactor-circuit-scenery` | select-tests 판정(`Race/`) | — | — |
 | ~~RF5~~ | ~~모드 분기 추상화~~ **없앰** (2026-10-25 무한 모드를 지워 "삭제" 로 정해졌다) | — | — | — | — |
 | ~~RF6~~ | ~~여러 레이서 구조~~ **보류** (M5 AI 상대 때) | — | — | M5 | — |
 
@@ -251,14 +251,14 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 - ~~**M2-a2 빌드 씬 목록**~~ (`dev` `0432115`, DECISIONS "M2-a2 빌드 씬 목록").
 - ~~**M2-b 러너 프로필**~~ (`feature/m2-runner-profile`, DECISIONS "M2-b 러너 프로필"): ALPHA~OMEGA 5명, 씬 값에 곱하는 배율.
 - 속도 단계 보통·매우빠름 → **M3 으로 옮겼다** (2026-10-23, DECISIONS "M2 범위 조정"). 아래 M3 칸.
-- **사용자 플레이 확인** (M2 완료 조건): 2026-10-19 "씬 처음부터 들어가서 정상 작동 확인했다" → 피드백 3개 중 이름 잘림·트랙 최고 기록은 `feature/lobby-best-record`(DECISIONS "로비: 트랙 선택에 최고 기록"), 점프 속도 유지는 그대로 두고 기록(DECISIONS "버니합"). 러너마다 차이가 느껴지는지는 아직 답 없음.
+- **사용자 플레이 확인** (M2 완료 조건): 2026-10-19 "씬 처음부터 들어가서 정상 작동 확인했다" → 피드백 3개 중 이름 잘림·트랙 최고 기록은 `feature/lobby-best-record`(DECISIONS "로비: 트랙 선택에 최고 기록"), 점프 속도 유지는 그대로 두고 기록(DECISIONS "버니합"). ~~러너마다 차이가 느껴지는지는 아직 답 없음.~~ 2026-10-27 사용자 "러너마다 차이가 느껴진다"(정밀 밸런스는 나중).
 - ~~**M2-c 설정**~~ (`feature/m2-settings`, DECISIONS 2026-10-20): 볼륨 3개·속도 시야 효과·조작 키 하위 페이지. 같은 브랜치에서 로비 클릭 버그, 아트 AI 의 스타디움 장식·러너 디자인 5종, 러너 디자인 연결. ~~남은 설정 후보: 화면(창/전체·해상도·VSync)~~ 코드 끝(2026-10-26, `feature/m2-screen-settings`, DECISIONS "화면 설정" — 남은 것: 플레이어 빌드에서 사용자 확인). 남은 설정 후보: 피격 깜빡임(맞을 대상이 생길 때).
 - ~~**러너 선택창 프리뷰**~~ (`feature/m2-lobby-pause-ui`, DECISIONS 2026-10-20 "러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴"): RenderTexture 프리뷰·드래그 회전, 입장 버튼, 이전 버튼, 일시정지 메뉴(계속·재시작·로비로), R 재시작 제거.
 - 헤딩 범위 제한(HANDOFF 3절 #3)은 M2-b 때 같이 본다.
 
 **M3 (v0.4) 고를 거리**
 - **SKYWAY LOOP** (`feature/track-skyway`, DECISIONS 2026-10-21 "SKYWAY LOOP"): 카트라이더 "빌리지 고가의 질주" 배치를 기록 영상으로 읽어 옮긴 고속·고저차 서킷(1482.8 m, 2랩, 고가 12 m). 외부 장식 씬(고가 기둥·마을·정원·도시 타워)과 로비 연결 완료(`ART_SKYWAY.md`). 남은 것: 사용자 2랩 플레이. 고가 위 완만한 커브 위치는 썸네일에서 추정한 값.
-- **FINGER LANES** (`feature/m3-track-village-finger`, DECISIONS 2026-10-25 "FINGER LANES"): 카트라이더 빌리지 손가락을 윤곽(러쉬플러스판)과 기록 영상으로 옮긴 테크니컬 서킷(1466 m → 2026-10-28 왼쪽 변 S자로 1488 m, 2랩, U턴 7개 R25, 반폭 7.2). 다리·시계탑 출구의 0.5 m 턱이 속도로 띄운다(도약대 `TrackDefinition.Segment.Kicker`). ~~다음: 지름길 2곳~~ 코드 끝(2026-10-25, `feature/m3-finger-shortcuts`, DECISIONS "FINGER LANES 지름길": 연결로 R15 — 봉 스윙으로만, 본선 대비 랩마다 약 9.6 s). 남은 것: 사용자 플레이 확인, 장식(T3e).
+- **FINGER LANES** (`feature/m3-track-village-finger`, DECISIONS 2026-10-25 "FINGER LANES"): 카트라이더 빌리지 손가락을 윤곽(러쉬플러스판)과 기록 영상으로 옮긴 테크니컬 서킷(1466 m → 2026-10-28 왼쪽 변 S자로 1488 m, 2랩, U턴 7개 R25, 반폭 7.2). 다리·시계탑 출구의 0.5 m 턱이 속도로 띄운다(도약대 `TrackDefinition.Segment.Kicker`). ~~다음: 지름길 2곳~~ 코드 끝(2026-10-25, `feature/m3-finger-shortcuts`, DECISIONS "FINGER LANES 지름길": 연결로 R15 — 봉 스윙으로만, 본선 대비 랩마다 약 9.6 s). ~~남은 것: 사용자 플레이 확인, 장식(T3e).~~ 2026-10-27 플레이 "잘 구현되었다", 장식 병합(DECISIONS 2026-10-27), 지름길 스윙 한도(DECISIONS 2026-10-27), 왼쪽 변 S자 굽이(DECISIONS 2026-10-28).
 - **새 서킷**: 테크니컬(S자·연속 코너), 고저차(언덕·점프 틈), 고속(긴 직선·완만한 커브) — 지금 `TrackDefinition` 조각(직선·원호·경사·틈)으로 된다. 헤어핀·그래플 중심은 **T5 보충 모듈**(헤어핀 전용 짧은 봉 — `PROPOSAL_CORNER_POLE.md` 8절) 뒤. 마지막에 스타디움 특성까지 섞은 **종합 맵** 몇 개(사용자 2026-10-19). 코너 반지름은 `TrackDefinition.MinRadius` 20 m 와 조향의 최소 회전 반지름 25 m(DECISIONS "조향 2차")를 같이 본다.
 - **T3e 장식**.
 - ~~**속도 단계 보통·매우빠름**~~ 코드 끝 (2026-10-25, `feature/m3-speed-classes`, DECISIONS "M3 속도 단계"): `Flow/SpeedScale` 0.8 / 1.0 / 1.2 를 러너 프로필과 같은 범위(달리기·부스터·강화 그래플 속도, 달리기 가속)와 그래플 고정값 13·16 에 곱한다. 감속·점프·중력·최소 회전 반지름은 그대로. 매우빠름의 봇은 R22 코너 출구에서 가드를 스친다(허용, 사용자 2026-10-25). 남은 것: 사용자 플레이 확인 "속도 단계마다 차이가 느껴진다".

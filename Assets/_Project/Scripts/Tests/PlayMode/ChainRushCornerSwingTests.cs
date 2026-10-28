@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
+using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
@@ -317,6 +318,54 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 2f), "Half a second of booster speeds the swing up.");
             Assert.That(game.Racer.SwingHookSpeed, Is.LessThanOrEqualTo(player.SlingTopSpeed), "No faster than the booster's own speed.");
             AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "boosted");
+        }
+
+        // A booster on a rope already shortened (2026-10-27, the review of the rope's acceleration limit): the limit holds back
+        // only what the rope adds, so the booster's rise still comes through times the rope's ratio. A runner with a tenth of
+        // the run acceleration (3 m/s² here) makes the limit far smaller than the booster's rise, so cutting it would show.
+        [UnityTest]
+        public IEnumerator Swing_BoosterOnAShortenedRope_SpeedsUpByTheRopesRatio()
+        {
+#if UNITY_EDITOR
+            RunnerProfile slow = ScriptableObject.CreateInstance<RunnerProfile>();
+            built.Add(slow);
+            var data = new SerializedObject(slow);
+            data.FindProperty("accelerationScale").floatValue = 0.1f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            player.Configure(slow);
+#else
+            Assert.Fail("These prototype tests require the Unity Editor.");
+            yield break;
+#endif
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            Assert.That(player.RunAcceleration, Is.EqualTo(3f).Within(1e-4f), "precondition: a tenth of the bench's 30.");
+            yield return RunTo(line, HookS);
+            throttle.LetGo = true;
+            yield return Hook(bot, 1f);
+            Assert.That(player.IsSwinging, Is.True);
+            // The inside key for half a second (3 m of rope), then held still for a second while the rope's gain builds up.
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            bot.Override = 0f;
+            for (int i = 0; i < 50; i++) yield return new WaitForFixedUpdate();
+            float hookRope = game.Racer.SwingHookRadius;
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(hookRope / game.Racer.SwingRadius, Is.GreaterThan(1.05f), "precondition: the rope is shorter than hooked.");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, hookRope, "shortened, before the booster");
+
+            float hookSpeed = game.Racer.SwingHookSpeed;
+            game.Racer.AddGauge(1f);
+            // A booster needs the throttle: letting it go cuts one.
+            throttle.LetGo = false;
+            bot.ChainAction = true;
+            for (int i = 0; i < 10; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                Assert.That(player.IsSwinging, Is.True);
+                AssertSwingSpeed(game.Racer.SwingHookSpeed, hookRope, "shortened, boosted for " + (i + 1) + " ticks");
+            }
+            Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 1f), "precondition: the booster raised the hook's speed.");
         }
 
         // The throttle held on a swing speeds it up without a booster (user 2026-10-22, "스윙중에도 앞키로 가속"): the hook's

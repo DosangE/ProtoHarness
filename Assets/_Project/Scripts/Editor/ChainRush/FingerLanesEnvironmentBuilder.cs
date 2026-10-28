@@ -247,7 +247,8 @@ namespace ProtoHarness.Editor.ChainRush
 
             private void Landmarks(Transform parent)
             {
-                if (definition.Segments.Count != 32 || definition.Shortcuts.Count != 2)
+                // 35 pieces since the left edge's S bend (2026-10-28); the tower's passage is still piece 23, the bridge's bump 15.
+                if (definition.Segments.Count != 35 || definition.Shortcuts.Count != 2)
                     throw new InvalidOperationException("Finger Lanes layout changed; review landmark and shortcut placement before rebuilding.");
                 TrackFrame clock = line.FrameAt(StartOf(23) + definition.Segments[23].Length * 0.5d);
                 Transform tower = Group("Clock tower passage", parent);
@@ -538,10 +539,10 @@ namespace ProtoHarness.Editor.ChainRush
                 var intrusions = new List<string>();
                 foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
                 {
-                    // Foundation/water are below the road. Tower's overpass is above the camera/runner corridor.
+                    // Foundation/water are below the road. Tower's overpass is above the camera/runner corridor. Everything
+                    // else is checked, the landscape's hills too (DECISIONS 2026-10-27 후속 1: the whole group used to be skipped).
                     Bounds bounds = renderer.bounds;
                     if (bounds.max.y <= -1.21f || bounds.min.y >= 9f) continue;
-                    if (renderer.transform.IsChildOf(root.transform.Find("01 Landscape below road"))) continue;
                     for (int i = 0; i < samples.Count; i++)
                     {
                         float dx = Mathf.Max(bounds.min.x - samples[i].x, 0f, samples[i].x - bounds.max.x);

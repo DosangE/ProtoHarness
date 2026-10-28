@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-10-28 · FINGER 장식 도구 정리: 조각 성질 확인 · 저장·등록 메서드 제거 (`fix/finger-exterior-tool`)
+
+- **결정 (사용자)**: "후속 작업들 진행" — 아래 두 항목의 후속 ①(2026-10-28)·후속 2(2026-10-27)와 HANDOFF 동기화.
+- **고친 것** (`FingerLanesEnvironmentBuilder`):
+  - 후속 ①: `Layout.Landmarks` 가 조각 번호만 믿지 않는다 — 조각 23 이 좁은 통로(원호 아님, `EndHalfWidth` 가 0 이 아니고 도로 반폭보다 좁다 — 0 은 트랙 기본 폭), 15 가 오르막(`EndGrade > 0`)·16 이 킥커(`Launch > 0`)인지 확인하고 아니면 던진다.
+  - 후속 2: `SaveRegisterAndConnect()` 를 지웠다(장식 씬 저장·빌드 씬 목록 쓰기·로비 씬 저장, 메뉴 없이 `Unity_RunCommand` 로만 불렸다). SKYWAY 도구처럼 저장·등록·연결은 사용자에게 남긴다. `LobbyPath`·`Flow` using 정리, `ART_FINGER_LANES.md:23` 안내 갱신.
+- **검증** (에디터 6000.3.19f1, `7985fc8`): `Rebuild Finger Lanes Exterior` 로 새 검사 통과 — 원문 `Finger Lanes decoration clearance: nearest renderer AABB is 1.07 m outside the main/shortcut road edge` / `Finger Lanes exterior: 3179 renderers; physics=0; runtime scripts=0; main and shortcut corridors clear.` 다시 저장한 프리팹은 파일 ID 와 그에 따른 객체 순서만 달라(파일 ID 를 지우고 객체를 정렬한 해시가 HEAD 와 같다 `f133eeb0e9dafa1dacd33e45ecdd9541`) 그 파일만 `git restore` 로 되돌렸다 — 저장할 때마다 파일 ID 가 새로 매겨진다. `select-tests -Range dev...HEAD` = 전체(씬 빌더). EditMode `!Enemy` `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (06:03:51Z~06:03:57Z). PlayMode `testcasecount="200" result="Passed" passed="191" failed="0" skipped="9"` (06:04:37Z~06:17:22Z, 764.2초), 서킷 지문 통과.
+- **리뷰**: `unity-reviewer` 치명·중대·보통 0(`subagent_tokens` 82,922), 제안 3 — ① ART 문서 안내 → 고쳤다, ② DECISIONS·HANDOFF 의 열린 후속 → 이 항목에서 닫았다, ③ 조각 23 검사는 끝 폭만 봐서 바로 앞 좁아짐 조각(22)이 23 자리로 밀려도 통과한다(`definition.StartHalfWidth(23)` 도 보거나 `definition.EndHalfWidth(23)` 를 쓰자) → **하지 않음**: 조각 수 35 검사와 도로 침범 검사가 그 경우를 막고(교각 안쪽 6.5 m 가 반폭 7.2 와 겹친다 — 리뷰어 계산, 실행 안 함), 고치면 게이트 전체다. Codex approve, 지적 없음(ART 문서 안내만 — 고쳤다).
+
+---
+
 ## 2026-10-28 · FINGER LANES 왼쪽 변 S자 굽이 · 시계탑 턱을 다리 턱처럼 (`feature/m3-finger-sbend`)
 
 - **결정 (사용자)**: 플레이 피드백 "마지막 시계탑 직선구간이 과하게 길다. 절반 길이로 줄이고 턱같은 것도 코너 이전의 턱처럼 지나치면 붕 뜨게". 왼쪽 변은 손가락 7줄의 세로 폭(350 m)이 정해 줄일 수 없어 질문 → "S자 굽이로 끊기 (추천)", 턱은 "완만하게 되어있어 밟으면 공중에 뜨지 않는 턱". 요청서(53 m · 45°×2 · R30 · 서쪽 17.6 m)에 "ㄱㄱ".
@@ -17,7 +28,7 @@
 - **테스트** (`ChainRushFlowTests`): 모양 — 랩 길이식(빌더 상수와 따로 계산), 원호 11개(코너 7·10 R30/90°, S자 8·9 R30/−45°·+45°), 두 턱 lip 0.3·도로 폭 전체. 로비 레이스 — 시계탑 뒤 턱이 다리 턱의 0.9배 이상 뜬다.
 - **검증** (에디터 6000.3.19f1, `7e804e9`): FINGER 대상 10건(모양·로비 레이스·지름길 2·보통/매우빠름 6) `passed="10" failed="0"` (2026-10-28 05:36:38Z~05:40:35Z) — 빠름 봇 1랩 85.82 / 84.58 s, 최대 옆 거리 2.73 m(S 1289.3, S자), 지름길 봇 76.26 / 75.02 s. `select-tests -Range dev...HEAD` = 전체(SO·프리팹·씬 빌더, ProjectSettings 0개). EditMode `!Enemy` `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (05:41:08Z~05:41:12Z). PlayMode `testcasecount="200" result="Passed" passed="191" failed="0" skipped="9"` (05:41:36Z~05:54:59Z, 803.6초), 서킷 지문 통과, 턱 "kicker 0 at S 1024.8: rose 1.13 m", "kicker 1 at S 1216.9: rose 1.14 m".
 - **리뷰**: `unity-reviewer` 치명·중대·보통 0(`subagent_tokens` 101,274, 닫힘·원호 부호·조각 번호·체크포인트를 직접 계산해 확인), 제안 2 — ① 장식 도구가 조각 번호만 믿는다(조각 23 이 좁은 반폭인지, 16 이 턱인지도 확인하자) → **후속**(에디터 도구를 바꾸면 게이트 전체라 이번엔 안 함), ② 옛 사실이 문서에 남음 → 이 항목과 2026-10-25·10-27 항목의 취소선. Codex approve, 지적 없음.
-- **남은 것**: 위 후속 ①. FINGER 최고 기록은 트랙 이름으로 저장되어 옛 배치의 기록이 남는다(건드리지 않음).
+- **남은 것**: ~~위 후속 ①~~ → 2026-10-28 "FINGER 장식 도구 정리" 에서 고침. FINGER 최고 기록은 트랙 이름으로 저장되어 옛 배치의 기록이 남는다(건드리지 않음).
 
 ---
 
@@ -78,7 +89,7 @@
   - 커밋 전 작업 트리에서 다른 세션이 돌린 값은 `ART_FINGER_LANES.md` 검증 절(EditMode 283, PlayMode 197 두 번 모두 failed 0).
 - **리뷰** (`unity-reviewer`, `e896b5a`, `subagent_tokens` 84,710 · 도구 14회 · 191초. Codex 리뷰 비용은 `/status` 를 읽지 못해 확인 못 함): 치명 0. 테스트는 단언을 강하게만 바꿨다(`Is.Empty` → 장식 씬 이름, 로드·물리 분리·해제 단언 추가). 사용자 "A"(그대로 병합, 아래는 후속)로 정했다.
   - **후속 1 (중대, §5)** — 2026-10-28 고침(면제를 지웠다, "FINGER LANES 왼쪽 변 S자 굽이"): `FingerLanesEnvironmentBuilder.ValidateClearance` 가 그룹 `01 Landscape below road` 전체를 도로 침범 검사에서 뺀다(`:544`). 땅·수면·옹벽은 앞 줄의 높이 조건(`bounds.max.y <= -1.21`)에서 이미 빠지므로, 이 면제가 실제로 빼는 것은 언덕 18개(`:243-244`, 윗면 y 약 +7~+20)뿐이다. 그런데 완료 로그(`:557`)는 모든 렌더러를 검사한 것처럼 적는다. 언덕이 지금 도로와 겹치는지는 계산하지 않았다(충돌체가 없어 겹쳐도 보이기만 한다). 고칠 때: 면제를 지우거나 이름으로 언덕만 빼고 로그에 밝힌다. `Find` 결과가 null 이면 던진다(Skyway `:133-134` 형식).
-  - **후속 2 (보통, §2·§0)**: `SaveRegisterAndConnect()`(`:51-105`)가 장식 씬 저장·빌드 씬 목록 쓰기·로비 씬 저장을 한 번에 한다. SKYWAY 도구는 저장·등록을 사용자에게 남겼다(Skyway `:13`, `:81`). 메뉴가 없어 `Unity_RunCommand` 로만 불리고, 승인 없이 부르면 §0 위반이다. 고칠 때: 지우거나 SKYWAY 형식으로 나눈다.
+  - **후속 2 (보통, §2·§0)** — 2026-10-28 고침(메서드를 지웠다, "FINGER 장식 도구 정리"): `SaveRegisterAndConnect()`(`:51-105`)가 장식 씬 저장·빌드 씬 목록 쓰기·로비 씬 저장을 한 번에 한다. SKYWAY 도구는 저장·등록을 사용자에게 남겼다(Skyway `:13`, `:81`). 메뉴가 없어 `Unity_RunCommand` 로만 불리고, 승인 없이 부르면 §0 위반이다. 고칠 때: 지우거나 SKYWAY 형식으로 나눈다.
   - 제안(하지 않음): `Palette` 가 있는 재질의 색 인자를 조용히 무시한다(`:156-170`). 재질 생성이 `Layout` 초기화에서 일어나 검증 실패에도 `.mat` 이 남는다(`:182-187`). `ART_FINGER_LANES.md:90` 에 옮긴 로그 문장이 커밋된 코드(`:98`)의 문장과 다르다 — 어느 쪽이 실행된 것인지 확인 못 함.
 - **남은 것**: 사용자 플레이 확인(장식), 위 후속 1·2.
 

@@ -859,16 +859,20 @@ namespace ProtoHarness.Tests.PlayMode
 
         // Village Finger's outline: seven fingers joined by half turns of R25 (user 2026-10-25: tighter than the first R28),
         // right at the tips and left at the turn column, then two right corners of R30 round the left edge, where the clock
-        // tower narrows the road to 8 m. The road is 1.2 times the usual; two bumps 0.5 m high (user 2026-10-25: a bump, not
-        // a climb) whose tops are kickers throwing by speed, the stone bridge's (lip 0.3) then the clock tower exit's (lip
-        // 0.35). No gaps, no anchors, no extra poles; two laps of 1466 m (plan A, user 2026-10-25).
+        // tower narrows the road to 8 m and an S bend of two R30 45° arcs, left then right, steps the edge 17.6 m west (user
+        // 2026-10-28: the edge's 290 m straight split in two). The road is 1.2 times the usual; two bumps 0.5 m high (user
+        // 2026-10-25: a bump, not a climb) whose tops are kickers throwing by speed, both lip 0.3 on the full road before a
+        // turn: the stone bridge's, then the one past the clock tower (2026-10-28, "like the one before the corner"). No gaps,
+        // no anchors, no extra poles; two laps of about 1488 m.
         [Test]
         public void FingerLanes_Layout_IsSevenHalfTurnFingersAWideRoadAndTwoKickers()
         {
             TrackDefinition finger = FingerLanes();
             Assert.That(finger.TryValidate(out string error), Is.True, error);
             Assert.That(finger.LapCount, Is.EqualTo(2));
-            Assert.That(finger.LapLength, Is.EqualTo(822d + 7d * Math.PI * 25d + Math.PI * 30d).Within(0.01d));
+            // The S bend trades 2 R sin 45° of the edge's straight for its two arcs, and lengthens the top row by 2 R (1 - cos 45°).
+            double jogNorth = 60d * Math.Sin(Math.PI / 4d), jogWest = 60d * (1d - Math.Cos(Math.PI / 4d));
+            Assert.That(finger.LapLength, Is.EqualTo(822d - jogNorth + jogWest + 7d * Math.PI * 25d + Math.PI * 30d + Math.PI * 15d).Within(0.01d));
             var turns = new System.Collections.Generic.List<TrackDefinition.Segment>();
             float total = 0f;
             foreach (TrackDefinition.Segment segment in finger.Segments)
@@ -877,17 +881,21 @@ namespace ProtoHarness.Tests.PlayMode
                 turns.Add(segment);
                 total += segment.Degrees;
             }
-            Assert.That(turns.Count, Is.EqualTo(9));
+            Assert.That(turns.Count, Is.EqualTo(11));
             for (int i = 0; i < 7; i++)
             {
                 Assert.That(turns[i].Radius, Is.EqualTo(25f), "finger turn " + i);
                 Assert.That(turns[i].Degrees, Is.EqualTo(i % 2 == 0 ? 180f : -180f), "finger turn " + i + " alternates, right first");
             }
-            for (int i = 7; i < 9; i++)
+            foreach (int i in new[] { 7, 10 })
             {
                 Assert.That(turns[i].Radius, Is.EqualTo(30f), "corner " + i);
                 Assert.That(turns[i].Degrees, Is.EqualTo(90f), "corner " + i);
             }
+            Assert.That(turns[8].Radius, Is.EqualTo(30f), "the S bend's first arc");
+            Assert.That(turns[8].Degrees, Is.EqualTo(-45f), "the S bend turns left (west) first");
+            Assert.That(turns[9].Radius, Is.EqualTo(30f), "the S bend's second arc");
+            Assert.That(turns[9].Degrees, Is.EqualTo(45f), "and back north");
             Assert.That(total, Is.EqualTo(360f));
             float narrowest = float.MaxValue;
             for (double s = 0d; s < finger.LapLength; s += 1d) narrowest = Mathf.Min(narrowest, finger.HalfWidthAt(s));
@@ -897,7 +905,14 @@ namespace ProtoHarness.Tests.PlayMode
             var launches = new System.Collections.Generic.List<float>();
             foreach (TrackDefinition.Segment segment in finger.Segments)
                 if (segment.Launch > 0f) launches.Add(segment.Launch);
-            Assert.That(launches, Is.EqualTo(new[] { 0.3f, 0.35f }), "The bridge, then the clock tower.");
+            Assert.That(launches, Is.EqualTo(new[] { 0.3f, 0.3f }), "The bridge, then the bump past the clock tower.");
+            // Both bumps sit on the full road, out of the tower's narrow passage.
+            double lip = 0d;
+            foreach (TrackDefinition.Segment segment in finger.Segments)
+            {
+                lip += segment.Length;
+                if (segment.Launch > 0f) Assert.That(finger.HalfWidthAt(lip - 0.5d), Is.EqualTo(finger.RoadHalfWidth).Within(1e-4f), $"The kicker at S {lip:F1} is on the full road.");
+            }
             Centerline line = finger.BuildCenterline(Vector3.zero, 0f);
             Assert.That(line.LaunchCount, Is.EqualTo(2));
             float highest = 0f;
@@ -1115,6 +1130,8 @@ namespace ProtoHarness.Tests.PlayMode
                     Debug.Log($"ChainRush Finger Lanes kicker {k} at S {crests[k]:F1}: rose {lift[k]:F2} m above the road");
                     Assert.That(lift[k], Is.GreaterThan(0.5f), $"The bot was not thrown up past the kicker at S {crests[k]:F1}. " + where);
                 }
+                // The bump past the clock tower throws like the bridge's (user 2026-10-28).
+                Assert.That(lift[1], Is.GreaterThanOrEqualTo(lift[0] * 0.9f), "The clock tower's bump throws much less than the bridge's. " + where);
                 Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + where);
                 Assert.That(game.HasFinished, Is.True, "The bot did not finish two laps. " + where);
                 Assert.That(laps.CompletedLaps, Is.EqualTo(2));

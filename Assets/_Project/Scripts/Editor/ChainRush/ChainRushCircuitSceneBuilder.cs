@@ -26,16 +26,13 @@ namespace ProtoHarness.Editor.ChainRush
 
         public const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
         // Finger Lanes from the Village Finger outline (rush.webp, 500x256 pixels): the columns where the road's centre
-        // runs, the top row's and the clock tower's pixel rows, and the 15 px between rows.
+        // runs. (The clock tower's rows no longer place it: the left edge was reshaped, user 2026-10-28.)
         private const int FingerLeftEdgeColumn = 19;
         private const int FingerStartColumn = 81;
         private const int FingerTurnColumn = 83;
         private const int FingerFirstTipColumn = 126;
         private const int FingerLongTipColumn = 154;
         private const int FingerShortTipColumn = 130;
-        private const float FingerTopRow = 107f;
-        private const float FingerTowerBottomRow = 166f;
-        private const float FingerRowPixels = 15f;
         // Where the nail shortcuts leave the two long fingers (DECISIONS 2026-10-25 "FINGER LANES"): through a narrow gap in
         // the right guard, a tight right quarter turn of FingerNailRadius, across the island, another one onto the next row
         // (user 2026-10-25, the record video at 12.2-13.1 s; tighter than the runner's own 25 m turn, so it takes the swing).
@@ -60,13 +57,20 @@ namespace ProtoHarness.Editor.ChainRush
         // The bump of the stone bridge near the bottom edge's end, then a flat landing before the corner into the square.
         private const float FingerBridgeLanding = 20f;
         private const float FingerBridgeLaunch = 0.3f;
-        // The clock tower where the outline draws it: the road narrows to FingerTowerHalfWidth over FingerTowerTaper
-        // (0.2 m a metre, inside TrackDefinition.MaxWidthChange) into its entrance, runs FingerTowerInside through it, throws
-        // the runner off the bump at its exit and widens back over the landing.
+        // The left edge north (user 2026-10-28, "the clock tower's straight is far too long; its bump should throw you like
+        // the one before the corner"): FingerTowerApproach from the corner, the clock tower — the road narrows to
+        // FingerTowerHalfWidth over FingerTowerTaper (0.2 m a metre, inside TrackDefinition.MaxWidthChange), runs
+        // FingerTowerInside through it and widens back — then a bump on the full road and its landing before an S bend, as
+        // the bridge's before its corner. The S bend (left then right, FingerJogDegrees at FingerJogRadius) moves the edge
+        // west and splits its 290 m straight in two.
+        private const float FingerTowerApproach = 53f;
         private const float FingerTowerHalfWidth = 4f;
         private const float FingerTowerTaper = 16f;
         private const float FingerTowerInside = 30f;
-        private const float FingerTowerLaunch = 0.35f;
+        private const float FingerTowerLaunch = FingerBridgeLaunch;
+        private const float FingerTowerLanding = FingerBridgeLanding;
+        private const float FingerJogRadius = 30f;
+        private const float FingerJogDegrees = 45f;
         // The long fingers and the pieces their shortcuts come back to, in FingerLanesSegments.
         private const int FingerLongIndex = 4;
         private const int FingerLongReturnIndex = 6;
@@ -93,8 +97,8 @@ namespace ProtoHarness.Editor.ChainRush
         // (two FingerUTurnRadius a row, R28 being the half turn the bot holds, DECISIONS 2026-10-21 "SKYWAY LOOP"), and the
         // rows' lengths are FingerMetresPerPixel of the outline's (user 2026-10-25, plan A). Clockwise from the start mark on
         // the top row heading east: seven fingers joined by half turns (right, left, ... right), the bottom edge west over a
-        // stone bridge's bump, the left edge north through the clock tower's narrow entrance and over the bump at its exit,
-        // the top-left corner to the line. The road is 1.2 times the usual width; both bumps are kickers that throw a runner
+        // stone bridge's bump, the left edge north through the clock tower's narrow passage, over a bump past it and round
+        // an S bend west (2026-10-28), the top-left corner to the line. The road is 1.2 times the usual width; both bumps are kickers that throw a runner
         // by its speed. No gaps, two laps.
         // The nail shortcuts of the two long fingers cut across to the next row; their stretches hold no checkpoint.
         [MenuItem("ProtoHarness/Chain Rush/Create Finger Lanes Track")]
@@ -236,13 +240,15 @@ namespace ProtoHarness.Editor.ChainRush
         {
             const float u = FingerUTurnRadius, corner = FingerCornerRadius;
             float rows = 7f * 2f * u;
-            float towerBottom = (FingerTowerBottomRow - FingerTopRow) / FingerRowPixels * 2f * u;
             float longFinger = FingerX(FingerLongTipColumn) - FingerX(FingerTurnColumn);
             float shortFinger = FingerX(FingerShortTipColumn) - FingerX(FingerTurnColumn);
             const float g = FingerSteepGrade, narrow = FingerTowerHalfWidth;
             float bottom = FingerX(FingerLongTipColumn) - corner;
             float bump = 4f * FingerBump;
-            float tower = 2f * FingerTowerTaper + FingerTowerInside + bump;
+            float tower = 2f * FingerTowerTaper + FingerTowerInside;
+            float jogNorth = 2f * FingerJogRadius * Mathf.Sin(FingerJogDegrees * Mathf.Deg2Rad);
+            float jogWest = 2f * FingerJogRadius * (1f - Mathf.Cos(FingerJogDegrees * Mathf.Deg2Rad));
+            float afterJog = rows - 2f * corner - FingerTowerApproach - tower - bump - FingerTowerLanding - jogNorth;
             return new[]
             {
                 // The top row east from the start mark to the first fingertip, and the seven fingers: half turns right at
@@ -260,17 +266,19 @@ namespace ProtoHarness.Editor.ChainRush
                 TrackDefinition.Segment.Straight(FingerBump, g), TrackDefinition.Segment.Kicker(FingerBump, 0f, FingerBridgeLaunch),
                 TrackDefinition.Segment.Straight(FingerBump, -g), TrackDefinition.Segment.Straight(FingerBump, 0f),
                 TrackDefinition.Segment.Straight(FingerBridgeLanding),
-                // Up the left edge to the clock tower: the narrow entrance and the way through, the bump at its exit that throws
-                // the runner by speed, wide again over the landing, and on to the top-left corner.
+                // Up the left edge through the clock tower: the narrow entrance, the way through (piece 23) and wide again,
+                // the bump that throws the runner by speed and its landing, the S bend west, and on to the top-left corner.
                 TrackDefinition.Segment.Arc(corner, 90f),
-                TrackDefinition.Segment.Straight(rows - corner - towerBottom),
+                TrackDefinition.Segment.Straight(FingerTowerApproach),
                 TrackDefinition.Segment.Straight(FingerTowerTaper, 0f, narrow), TrackDefinition.Segment.Straight(FingerTowerInside, 0f, narrow),
-                TrackDefinition.Segment.Straight(FingerBump, g, narrow), TrackDefinition.Segment.Kicker(FingerBump, 0f, FingerTowerLaunch, narrow),
-                TrackDefinition.Segment.Straight(FingerBump, -g, narrow), TrackDefinition.Segment.Straight(FingerBump, 0f, narrow),
                 TrackDefinition.Segment.Straight(FingerTowerTaper),
-                TrackDefinition.Segment.Straight(towerBottom - corner - tower),
-                // The top-left corner and the top row east to the line.
-                TrackDefinition.Segment.Arc(corner, 90f), TrackDefinition.Segment.Straight(FingerX(FingerStartColumn) - corner),
+                TrackDefinition.Segment.Straight(FingerBump, g), TrackDefinition.Segment.Kicker(FingerBump, 0f, FingerTowerLaunch),
+                TrackDefinition.Segment.Straight(FingerBump, -g), TrackDefinition.Segment.Straight(FingerBump, 0f),
+                TrackDefinition.Segment.Straight(FingerTowerLanding),
+                TrackDefinition.Segment.Arc(FingerJogRadius, -FingerJogDegrees), TrackDefinition.Segment.Arc(FingerJogRadius, FingerJogDegrees),
+                TrackDefinition.Segment.Straight(afterJog),
+                // The top-left corner and the top row east to the line, longer by the S bend's step west.
+                TrackDefinition.Segment.Arc(corner, 90f), TrackDefinition.Segment.Straight(FingerX(FingerStartColumn) - corner + jogWest),
             };
         }
 

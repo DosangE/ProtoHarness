@@ -160,7 +160,7 @@ MonoBehaviour:
     endHalfWidth: 0
     gap: 0
     launch: 0
-  - length: 123.33333
+  - length: 53
     radius: 0
     degrees: 0
     endGrade: 0
@@ -181,34 +181,6 @@ MonoBehaviour:
     endHalfWidth: 4
     gap: 0
     launch: 0
-  - length: 2.5
-    radius: 0
-    degrees: 0
-    endGrade: 0.2
-    endHalfWidth: 4
-    gap: 0
-    launch: 0
-  - length: 2.5
-    radius: 0
-    degrees: 0
-    endGrade: 0
-    endHalfWidth: 4
-    gap: 0
-    launch: 0.35
-  - length: 2.5
-    radius: 0
-    degrees: 0
-    endGrade: -0.2
-    endHalfWidth: 4
-    gap: 0
-    launch: 0
-  - length: 2.5
-    radius: 0
-    degrees: 0
-    endGrade: 0
-    endHalfWidth: 4
-    gap: 0
-    launch: 0
   - length: 16
     radius: 0
     degrees: 0
@@ -216,7 +188,56 @@ MonoBehaviour:
     endHalfWidth: 0
     gap: 0
     launch: 0
-  - length: 94.66667
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0.3
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: -0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 20
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: -45
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: 45
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 102.57359
     radius: 0
     degrees: 0
     endGrade: 0
@@ -230,7 +251,7 @@ MonoBehaviour:
     endHalfWidth: 0
     gap: 0
     launch: 0
-  - length: 32
+  - length: 49.573593
     radius: 0
     degrees: 0
     endGrade: 0

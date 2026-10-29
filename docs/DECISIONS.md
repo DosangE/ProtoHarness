@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-10-29 · M4-3 고스트 재생: 러너의 최고 기록이 반투명으로 함께 달린다 (`feature/m4-ghost-replay`)
+
+- **결정 (사용자, 2026-10-29)**: M4-3 합의 요청서(출발 전 한 번 불러오기, 틱 N 에 기록 N 번째, 끝나면 숨김, 깨진 파일은 고스트 없이 + 에러 로그, 런타임 URP Lit 투명 민트 머티리얼)에 "ㄱㄱ".
+- **한 것**:
+  - `Visuals/GhostRunner` (MonoBehaviour, `RaceAssembler` 가 런타임에 붙인다): 러너 모형(`RunnerTilt.Body`, 디자인을 입힌 뒤)을 복제한다. 충돌체는 지우고, 모든 렌더러에 반투명 머티리얼 1개(민트 `NightUi.Accent`, 알파 0.35, 그림자 없음)를 입힌다. `LateUpdate` 에서 `game.Tick` 번째 기록에 선다(틱 0·1 은 첫 기록). 기록보다 틱이 넘으면 숨고, 재시작하면 다시 보인다. 자세는 복제한 그대로다.
+  - `RaceAssembler.ShowGhost`: `Start` 에서 고른 트랙·속도·러너의 고스트를 불러온다. `Ghosts` 를 바꾸면 그 저장소의 고스트로 다시 불러온다(로비가 기록 저장소가 바뀌면 다시 읽는 것과 같다 — 테스트가 씬을 연 뒤 폴더를 준다). 이번 판에 새 기록이 나도 보이던 고스트는 그대로이고, 다음 판부터 새 고스트다. `InvalidDataException`·`IOException` 은 잡아 원문과 함께 `LogError` 하고 고스트 없이 달린다(복구 = 고스트 없는 레이스, §5). 프리팹 `ArmoredRunner` 에는 MonoBehaviour 가 없어(`--- !u!114` 0개) 복제해도 스크립트가 돌지 않는다.
+- **이유**: 틱마다 기록 그대로(보간 없음) — 러너도 `CharacterController` 로 틱에만 움직여서 둘이 같은 리듬으로 보인다. 런타임 머티리얼 — 머티리얼 에셋을 쓰려면 씬 참조가 필요하다(씬 수정). `MetalChain` 이 같은 방식이다.
+- **알고 있는 위험 (확인 못 함)**: 프로젝트에 투명 머티리얼이 없어서, 플레이어 빌드에서 URP Lit 의 투명 변형(`_SURFACE_TYPE_TRANSPARENT`)이 빠질 수 있다. 에디터에서만 확인한다. 빌드에서 깨지면 `M_Ghost` 에셋 + 씬 참조로 바꾼다(씬 수정이라 별도 합의).
+- **안 한 것**: 고스트 달리기 모션(M5), 켜기/끄기 설정, 다른 러너의 전체 최고 고스트, 실시간 차이 표시.
+- **딸린 수정**: 첫 PlayMode 실행에서 2건이 실패했다 — `Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby`, 원문 `Unhandled log message: '[Exception] ArgumentException: A name is required. Parameter name: track'` (`GhostFiles.RequireName` ← `RaceAssembler.ShowGhost` ← `Start`). 두 테스트는 이름 없는 `CreateInstance<TrackDefinition>()` 로 로비 레이스를 연다. 지금까지는 기록 키를 결승 때만 만들어 드러나지 않았다. 고친 것: `RaceAssembler.Awake` 가 러너처럼 트랙 에셋 이름이 비면 끄고 알린다. 테스트의 만든 정의 6곳에 에셋처럼 이름 `TestTrack` 을 준다(M4-1 의 테스트 러너 이름과 같은 이유 — 검사를 약하게 한 것이 아니다).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 4개(`ChainRushFlowTests`·`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushProfileTests`) + 지문 1건, EditMode 전체.
+  - 1회차 (고치기 전): EditMode `testcasecount="297" result="Passed" passed="297" failed="0"` (10:14:23Z). PlayMode `testcasecount="62" result="Failed(Child)" passed="60" failed="2" skipped="0"` (10:15:08Z~10:21:34Z) — 위 딸린 수정의 2건.
+  - 2회차 (고친 뒤): EditMode `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:23:12Z~10:23:13Z). PlayMode `testcasecount="62" result="Passed" passed="62" failed="0" skipped="0"` (10:23:48Z~10:30:16Z, 387.2초) — Flow 39·InputSource 10·Presentation 3·Profile 9·지문 1, 도구 출력과 같다. 새 고스트 테스트 2건과 실패했던 2건 모두 통과.
+  - 화면(반투명이 보이는지, 고스트가 러너와 겹쳐 보기 괜찮은지)은 사용자 플레이 확인 전이다(검증 안 됨). 플레이어 빌드는 확인하지 않았다.
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `faef78c`): `select-tests -Range dev...HEAD` 가 2회차와 같은 테스트(EditMode 전체, PlayMode 클래스 4개 + 지문 1건)를 골랐다. 2회차 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 2회차를 이 커밋의 병합 근거로 쓴다. 1회차 실패 2건은 원인(이름 없는 테스트 트랙 정의)을 위 "딸린 수정" 에 적었고, 코드를 고친 뒤 통과했다 — 다시 돌려 없던 일로 한 것이 아니다.
+  - **영향 평가**: `GhostRunner`·`RaceAssembler` → 읽는 곳 `RaceAssembler.ShowGhost`(`Flow/RaceAssembler.cs`)·`ChainRushFlowTests` → `ChainRushFlowTests`(로비 레이스 조립·고스트)·`ChainRushProfileTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`(표현 경로 표). 시뮬은 `GhostRunner` 를 참조하지 않는다(`game.Tick` 을 읽기만) — 지문 1건으로 확인.
+
 ## 2026-10-29 · M4-2 결과 화면 비교: 이번 기록을 "내 최고"·"전체 최고"와 (`feature/m4-result-compare`)
 
 - **결정 (사용자, 2026-10-29)**: M4-2 합의 요청서(결과 화면 오른쪽 패널, 랩 아래·버튼 위에 두 줄, 차이는 소수 둘째 자리 `-` 가 앞섬, 비교는 이번 결승 전에 있던 기록)에 "ㄱㄱ".

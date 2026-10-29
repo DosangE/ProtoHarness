@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -35,6 +37,8 @@ namespace ProtoHarness.Tests.PlayMode
         private const string FingerLanesEnvironmentScene = "ChainRushTrackFingerLanes";
 
         private const string TestTitle = "TEST TRACK";
+        // A made definition is named as an asset is: the race keeps its records and ghost under the name.
+        private const string TestTrackAsset = "TestTrack";
 
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
@@ -72,6 +76,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTrackOrRunner_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, null, RaceMode.Single, SpeedClass.Fast, runner));
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, null));
@@ -84,6 +89,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTitle_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             foreach (string title in new[] { null, "", "  " })
                 Assert.Throws<ArgumentException>(() => new RaceSetup(made, title, "", RaceMode.Single, SpeedClass.Fast, runner), "title '" + title + "'");
             Assert.That(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner).Title, Is.EqualTo(TestTitle));
@@ -93,6 +99,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceLaunch_SecondRequestBeforeTaking_ThrowsAndTakingEmptiesIt()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             var setup = new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner);
             RaceLaunch.Request(setup);
             Assert.Throws<InvalidOperationException>(() => RaceLaunch.Request(setup));
@@ -448,6 +455,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.That(made.TryValidate(out string error), Is.True, error);
             RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
@@ -469,6 +477,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.That(made.TryValidate(out string error), Is.True, error);
             RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
@@ -580,6 +589,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Find<ChainRushHud>(assembler.gameObject.scene).Heading, Is.EqualTo("CIRCUIT"), "No lobby: no track name to show.");
             Assert.Throws<InvalidOperationException>(assembler.ReturnToLobby, "A scene opened directly has no lobby.");
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.Throws<InvalidOperationException>(() => circuit.UseDefinition(made), "The circuit is already built.");
             Assert.That(circuit.Definition, Is.SameAs(Stadium()));
         }
@@ -678,6 +688,71 @@ namespace ProtoHarness.Tests.PlayMode
                 store.Clear(Stadium().name, SpeedClass.Fast);
                 store.ClearForRunner(Stadium().name, SpeedClass.Fast, runner.name);
             }
+        }
+
+        // ---- the runner's ghost (M4-3, DECISIONS 2026-10-29 "M4-3 고스트 재생") ---------------------------------
+
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_RunnersGhost_FollowsItsTraceTickByTick_AndHidesAtItsEnd()
+        {
+            var trace = new GhostTrace();
+            for (int i = 0; i < 40; i++) trace.Add(new Vector3(i * 0.5f, 1f, 3f), i * 2f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, runner.name, trace);
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.True);
+            GhostRunner ghost = assembler.Ghost;
+            Assert.That(ghost.Count, Is.EqualTo(40));
+            Assert.That(ghost.Visible, Is.True, "Waiting on its first entry before the start.");
+            Assert.That(ghost.Position, Is.EqualTo(trace[0].Position));
+            ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var idle = new InputReplay(new InputLog());
+                foreach (int tick in new[] { 1, 2, 25, 40 })
+                {
+                    while (game.Tick < tick) game.StepTick(idle);
+                    yield return null;
+                    Assert.That(ghost.Visible, Is.True, "tick " + tick);
+                    Assert.That(ghost.Position, Is.EqualTo(trace[tick - 1].Position), "tick " + tick);
+                }
+                game.StepTick(idle);
+                yield return null;
+                Assert.That(ghost.Visible, Is.False, "Past its end the ghost has finished.");
+                game.StartRun();
+                yield return null;
+                Assert.That(ghost.Visible, Is.True, "A restart brings it back.");
+                Assert.That(ghost.Position, Is.EqualTo(trace[0].Position));
+            }
+            finally
+            {
+                Time.timeScale = scale;
+            }
+        }
+
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_ABrokenGhostFile_RacesWithoutAGhostAndSaysSo()
+        {
+            var trace = new GhostTrace();
+            trace.Add(Vector3.zero, 0f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, runner.name, trace);
+            File.WriteAllBytes(Directory.GetFiles(ghosts.Folder)[0], new byte[] { 1, 2, 3 });
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            LogAssert.Expect(LogType.Error, new Regex("could not be read; racing without it"));
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.False);
+            Assert.That(Find<ChainRushGame>(assembler.gameObject.scene).IsCountingDown, Is.True, "The race goes on without its ghost.");
         }
 
         // ---- the skyway (DECISIONS 2026-10-21 "SKYWAY LOOP") -----------------------------------------------

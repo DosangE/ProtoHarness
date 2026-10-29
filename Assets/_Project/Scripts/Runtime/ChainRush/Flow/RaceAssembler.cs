@@ -23,6 +23,10 @@ namespace ProtoHarness.ChainRush.Flow
         private bool leaving;
         private bool wasFinished;
         private BestRecords records = BestRecords.Player;
+        private GhostFiles ghosts;
+        // The run's path so far, for the ghost of a runner's best (M4). Read after each tick, never by the simulation.
+        private readonly GhostTrace trace = new GhostTrace();
+        private bool traceBroken;
 
         // Where a finish from the lobby is kept (the player's records; a test gives its own).
         public BestRecords Records
@@ -30,8 +34,16 @@ namespace ProtoHarness.ChainRush.Flow
             get => records;
             set => records = value ?? throw new System.ArgumentNullException(nameof(value));
         }
+        // Where the ghost of a runner's best is kept (the player's ghosts; a test gives its own folder).
+        public GhostFiles Ghosts
+        {
+            get => ghosts ??= GhostFiles.Player;
+            set => ghosts = value ?? throw new System.ArgumentNullException(nameof(value));
+        }
         // Whether the last finish beat the best record for its track and speed class.
         public bool LastFinishWasBest { get; private set; }
+        // Whether the last finish beat the runner's own best there, and so became its ghost.
+        public bool LastFinishWasRunnerBest { get; private set; }
 
         // Whether this race came from the lobby (and so goes back to it).
         public bool IsLaunched => launched;
@@ -60,10 +72,43 @@ namespace ProtoHarness.ChainRush.Flow
                 enabled = false;
                 return;
             }
+            // The runner's records and ghost are named by its profile asset (BestRecords.TryGetForRunner).
+            if (string.IsNullOrEmpty(setup.Runner.name))
+            {
+                Debug.LogError($"RaceAssembler: the runner '{setup.Runner.DisplayName}' has no asset name to keep its records under.", this);
+                game.enabled = false;
+                enabled = false;
+                return;
+            }
             circuit.UseDefinition(setup.Track);
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
+            game.TickCompleted += RecordTick;
+        }
+
+        private void OnDestroy()
+        {
+            if (launched && game != null) game.TickCompleted -= RecordTick;
+        }
+
+        // Tick 1 is a new run (a restart starts over). Ticks arrive in order in a single race; if one does not, this run
+        // has no ghost rather than a wrong one.
+        private void RecordTick(int tick)
+        {
+            if (tick == 1)
+            {
+                trace.Clear();
+                traceBroken = false;
+            }
+            if (traceBroken) return;
+            if (tick != trace.Count + 1)
+            {
+                Debug.LogError($"RaceAssembler: tick {tick} came after {trace.Count}; this run will keep no ghost.", this);
+                traceBroken = true;
+                return;
+            }
+            trace.Add(player.transform.position, player.Heading);
         }
 
         // Puts the runner's look on the race's runner model (presentation only, RunnerLook). A look that does not fit
@@ -122,13 +167,31 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (!launched) return;
             // Each finish counts once; a restart (pause menu or RUN AGAIN) clears it and the next finish counts again.
+            // Marked before it is kept, so a store that throws is not tried (and the flags not overwritten) every frame.
             bool finished = game.HasFinished;
-            if (finished && !wasFinished)
-                LastFinishWasBest = records.Submit(setup.Track.name, setup.Speed, circuit.Laps.TotalTicks, setup.Runner.DisplayName);
+            bool newFinish = finished && !wasFinished;
             wasFinished = finished;
+            if (newFinish) KeepFinish();
             if (!(finished || game.HasFailed)) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToLobby();
+        }
+
+        // The finish goes to the best for its track and speed class and to the runner's own; a runner's best keeps this
+        // run's path as its ghost.
+        private void KeepFinish()
+        {
+            int ticks = circuit.Laps.TotalTicks;
+            string track = setup.Track.name;
+            LastFinishWasBest = records.Submit(track, setup.Speed, ticks, setup.Runner.DisplayName);
+            LastFinishWasRunnerBest = records.SubmitForRunner(track, setup.Speed, setup.Runner.name, ticks);
+            if (!LastFinishWasRunnerBest) return;
+            if (traceBroken || trace.Count == 0)
+            {
+                Debug.LogError($"RaceAssembler: {setup.Runner.name}'s best on {track} at {setup.Speed} is kept without a ghost (the run's path is incomplete).", this);
+                return;
+            }
+            Ghosts.Save(track, setup.Speed, setup.Runner.name, trace);
         }
 
         // Leaves the race (and its environment scene) for the lobby.

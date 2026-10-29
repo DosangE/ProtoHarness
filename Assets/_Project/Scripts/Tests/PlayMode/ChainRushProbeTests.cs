@@ -365,7 +365,9 @@ namespace ProtoHarness.Tests.PlayMode
 #endif
             Assert.That(finger, Is.Not.Null, FingerLanesPath);
             RunnerProfile neutral = ScriptableObject.CreateInstance<RunnerProfile>();
+            neutral.name = "Neutral";
             var records = new BestRecords("ChainRush.Test.ProbeTests.");
+            var ghosts = new GhostFiles(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ProtoHarnessTests", "ProbeGhosts"));
             try
             {
                 foreach (SpeedClass speed in new[] { SpeedClass.Fast, SpeedClass.VeryFast })
@@ -388,6 +390,7 @@ namespace ProtoHarness.Tests.PlayMode
                     }
                     Assert.That(assembler, Is.Not.Null);
                     assembler.Records = records;
+                    assembler.Ghosts = ghosts;
                     float assemblyDeadline = Time.realtimeSinceStartup + 20f;
                     while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
                     Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
@@ -444,6 +447,9 @@ namespace ProtoHarness.Tests.PlayMode
                 RaceLaunch.Clear();
                 records.Clear(finger.name, SpeedClass.Fast);
                 records.Clear(finger.name, SpeedClass.VeryFast);
+                records.ClearForRunner(finger.name, SpeedClass.Fast, neutral.name);
+                records.ClearForRunner(finger.name, SpeedClass.VeryFast, neutral.name);
+                if (System.IO.Directory.Exists(ghosts.Folder)) System.IO.Directory.Delete(ghosts.Folder, true);
                 UnityEngine.Object.Destroy(neutral);
             }
         }

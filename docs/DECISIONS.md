@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-10-29 · M4 기록 키·고스트 형식: 러너별 최고 기록 · 고스트는 입력 재생이 아니라 틱마다 위치 기록 (`feature/m4-best-records`)
+
+- **결정 (사용자, 2026-10-29)**: M4 첫 작업으로 "최고 기록·결과 비교·내 고스트" 를 골랐다("1 ㄱㄱ"). 고스트 형식은 "위치 기록", 기록 키는 "트랙×속도×러너" 를 골랐다(둘 다 추천안). 이어 M4-1 합의 요청서(러너별 기록 + 고스트 저장 형식, 결과 화면·재생은 다음 단계)에 "ㄱㄱ".
+- **한 것**:
+  - `BestRecords.TryGetForRunner`·`SubmitForRunner`·`ClearForRunner`: 러너별 최고 기록. 러너는 프로필 에셋 이름(`RunnerProfile_Alpha`)으로 부른다 — 트랙을 정의 에셋 이름으로 부르는 것과 같다. 키 `<접두사><트랙>.<속도>.byRunner.<러너>.ticks`. 트랙×속도 전체 최고(로비에 보이는 것, 러너 표시 이름 포함)는 그대로 두고 결승마다 함께 갱신한다.
+  - `Flow/GhostTrace`: 틱마다 위치(float 3)와 Heading(float, 도)을 쌓고 바이트로 만든다. `"PHGT"`·버전 1·틱 수·틱당 16바이트. 읽기는 `InputLogFile` 처럼 엄격하다(머리말·길이·유한하지 않은 값이면 던진다).
+  - `Flow/GhostFiles`: 고스트 파일을 `<트랙>.<속도>.<러너>.ghost` 로 저장·로드·삭제한다. 게임은 `Application.persistentDataPath/Ghosts`, 테스트는 자기 폴더. 파일이 없으면 고스트 없음, 깨진 파일은 던진다(없음으로 넘기지 않는다).
+  - `RaceAssembler`: `ChainRushGame.TickCompleted` 로 틱마다 러너 위치·Heading 을 기록한다(틱 1 이면 비운다 — 재시작, 순서가 어긋나면 그 판은 고스트를 남기지 않고 에러 로그). 결승이 러너 기록을 깨면(`LastFinishWasRunnerBest`) 고스트를 저장한다. 프로필 에셋 이름이 비면 Awake 에서 끄고 알린다. 결승 처리 전에 `wasFinished` 를 먼저 세워 저장이 던져도 매 프레임 다시 시도하며 플래그를 덮지 않게 했다.
+- **이유**:
+  - 위치 기록: 입력 재생은 시뮬을 조금만 바꿔도(튜닝, M6 T5 짧은 봉) 저장된 고스트가 다른 길로 달린다. 그러면 지문이 바뀔 때마다 고스트를 버려야 한다. 그리고 레이스 중에 시뮬을 하나 더 돌려야 하는데, 플레이어용 격리 월드 로더는 없다(DECISIONS "P3 C1a"). 위치 기록은 그 판의 경로를 그대로 남기고 재생은 보간만 하면 된다. 크기는 2랩 90초 기준 약 70KB 다.
+  - 파일 저장(첫 사례): 그동안 저장은 모두 PlayerPrefs 였다(`BestRecords`·`GameSettings`). 수십 KB 데이터는 PlayerPrefs(Windows 레지스트리)에 맞지 않는다.
+  - 전체 최고 유지: 로비 트랙 페이지(`TrackPage.cs:77`)를 바꾸지 않고, M4 전에 세운 기록도 그대로 보인다.
+- **안 한 것**: 옛 트랙×속도 기록을 러너별 기록으로 옮기는 것. 옛 기록은 러너 **표시 이름**만 갖고 있어 에셋 이름으로 확실히 이어 붙일 수 없다. 그래서 러너별 기록은 비어서 시작한다. 결과 화면 비교(M4-2), 레이스 중 고스트 재생(M4-3), 입력 로그 같이 저장.
+- **바뀐 앞 결정**: 2026-10-29 "M3 범위 조정" 의 이유 줄 "M4 고스트는 입력 기록·재생에 기대므로" 는 이 결정으로 더는 맞지 않는다. T5 를 해도 저장된 고스트는 그대로다(`NEXT_REQUESTS.md` M6 "트랙 추가").
+- **버린 대안**: 입력 재생(위 이유). 트랙×속도 기록 하나만 유지 — 사용자가 고르지 않았다.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인 — 병합 근거는 아직 아니다): 컴파일 에러 0(`Unity_RunCommand` `isCompilationSuccessful: true`, Console Error 0). `select-tests` 기본 범위 = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 지문 1건(`Replay_CircuitBotRun_RepeatsEveryTickBitForBit`), EditMode 전체. EditMode `!Enemy` `testcasecount="292" result="Passed" passed="292" failed="0" skipped="0"` (09:21:30Z~09:21:35Z, 새 9건 포함). PlayMode `testcasecount="47" result="Passed" passed="47" failed="0" skipped="0"` (09:23:23Z~09:29:46Z, 382.8초) — Flow 37·Profile 9·지문 1, 도구 출력과 같다. 서킷 지문 통과(기록은 틱 밖에서 읽기만 한다). 테스트 뒤 `persistentDataPath/Ghosts` 는 생기지 않았다(플레이어 고스트를 건드리지 않음).
+  - **병합 조건 ②** (`c786afa`): `select-tests -Range dev...HEAD` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 클래스 일부 1개(`ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`) + 지문 1건, EditMode 전체. 컴파일 `scriptCompilationFailed=False`, Console Error 0. EditMode `!Enemy` `testcasecount="292" result="Passed" passed="292" failed="0" skipped="0"` (09:33:05Z~09:33:09Z). PlayMode `testcasecount="48" result="Passed" passed="47" failed="0" skipped="1"` (09:33:51Z~09:40:05Z, 374.8초) — Flow 37·Profile 9·지문 1 통과, skipped 1 은 Probe(`[Explicit]` 이라 `groupNames` 로는 돌지 않는다). 그래서 Probe 를 `testNames` 로 따로 1회: `testcasecount="1" result="Passed" passed="1" failed="0"` (09:40:46Z~09:42:25Z, 98.6초).
+  - **영향 평가**: `BestRecords`·`GhostTrace`·`GhostFiles`·`RaceAssembler` → 읽는 곳 `RaceAssembler`(`Flow/RaceAssembler.cs`)·`TrackPage.cs:77`·`LobbyMenu.cs:40` → `ChainRushFlowTests`(로비·레이스 조립·결승 기록)·`ChainRushProfileTests`. 시뮬 코드(`RunnerMotor`·`ChainRushGame`·`RacerState`)는 새 타입을 참조하지 않는다(`TickCompleted` 구독만) — 지문 1건으로 확인. 더 돌릴 테스트는 보이지 않았다.
+- **딸린 수정 (사용자 "네 추천대로", 2026-10-29)**: `ChainRushProbeTests`(`[Explicit]`, 게이트 밖)의 `Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld` 는 이름 없는 프로필(`CreateInstance`)로 로비 레이스를 열어 `RaceAssembler.Awake` 의 에셋 이름 검사에 걸리게 됐다. 프로필 이름 `Neutral`, 테스트 고스트 폴더(`assembler.Ghosts`), 끝날 때 러너 기록·폴더 정리를 더했다.
+
 ## 2026-10-29 · main v0.4: M3 "고를 거리" — `dev` 를 `main` 에 병합하고 태그 `v0.4`
 
 - **결정 (사용자, 2026-10-29)**: 아래 "M3 범위 조정" 에서 "지금 닫기"·"태그에 맞추기"를 골랐고, 합의 요청서(`feature/m3-close-v0.4`: 범위 조정·버전 표기·README·이 기록 → `feature → dev`, `dev → main` `--no-ff`, 주석 태그 `v0.4`, 푸시는 지시 때만)에 "ㄱㄱ".

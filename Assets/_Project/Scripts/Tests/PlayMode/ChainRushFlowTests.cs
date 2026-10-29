@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
@@ -39,14 +40,19 @@ namespace ProtoHarness.Tests.PlayMode
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
         private TrackDefinition made;
-        // A runner of all 1s: races exactly as the scene's values.
+        // A runner of all 1s: races exactly as the scene's values. Named, as a profile asset is: its records go under the name.
         private RunnerProfile runner;
+        // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
+        private GhostFiles ghosts;
 
         [SetUp]
         public void SetUp()
         {
             RaceLaunch.Clear();
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
+            runner.name = "TestRunner";
+            ghosts = new GhostFiles(Path.Combine(Path.GetTempPath(), "ProtoHarnessTests", "FlowGhosts"));
+            DeleteGhosts();
         }
 
         [UnityTearDown]
@@ -55,6 +61,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceLaunch.Clear();
             if (made != null) UnityEngine.Object.Destroy(made);
             if (runner != null) UnityEngine.Object.Destroy(runner);
+            DeleteGhosts();
             yield return null;
             LogAssert.NoUnexpectedReceived();
         }
@@ -622,13 +629,15 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecord()
+        public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecordAndTheRunnersGhost()
         {
             var store = TestRecords();
+            store.ClearForRunner(Stadium().name, SpeedClass.Fast, runner.name);
             RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene scene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(scene);
             RunnerMotor player = Find<RunnerMotor>(scene);
@@ -648,11 +657,20 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(store.TryGet(Stadium().name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
                 Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
                 Assert.That(best.Runner, Is.EqualTo(runner.DisplayName));
+                // M4: the runner's own best, and this run's path as its ghost, ending where the runner finished.
+                Assert.That(assembler.LastFinishWasRunnerBest, Is.True);
+                Assert.That(store.TryGetForRunner(Stadium().name, SpeedClass.Fast, runner.name, out int runnerBest), Is.True);
+                Assert.That(runnerBest, Is.EqualTo(circuit.Laps.TotalTicks));
+                Assert.That(ghosts.TryLoad(Stadium().name, SpeedClass.Fast, runner.name, out GhostTrace ghost), Is.True);
+                Assert.That(ghost.Count, Is.GreaterThan(0));
+                Assert.That(ghost[ghost.Count - 1].Position, Is.EqualTo(player.transform.position));
+                Assert.That(ghost[ghost.Count - 1].Heading, Is.EqualTo(player.Heading));
             }
             finally
             {
                 Time.timeScale = scale;
                 store.Clear(Stadium().name, SpeedClass.Fast);
+                store.ClearForRunner(Stadium().name, SpeedClass.Fast, runner.name);
             }
         }
 
@@ -723,6 +741,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene scene = assembler.gameObject.scene;
             Assert.That(Find<ChainRushHud>(scene).Heading, Is.EqualTo("SKYWAY LOOP"), "Not the stadium's name on the skyway.");
             ChainRushGame game = Find<ChainRushGame>(scene);
@@ -802,6 +821,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -947,6 +967,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -995,6 +1016,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -1073,6 +1095,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("FINGER LANES"));
             ChainRushGame game = Find<ChainRushGame>(raceScene);
@@ -1206,6 +1229,11 @@ namespace ProtoHarness.Tests.PlayMode
             var store = new BestRecords("ChainRush.Test.FlowTests.");
             store.Clear(Stadium().name, SpeedClass.Fast);
             return store;
+        }
+
+        private void DeleteGhosts()
+        {
+            if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
         }
 
         // Settings under a test prefix, at their defaults, so the player's settings are never touched.

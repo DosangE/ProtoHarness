@@ -191,6 +191,56 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(game.HasFinished, Is.False);
         }
 
+        // How the comeback looks (M4, DECISIONS 2026-10-29 "M4 복귀 연출"), frame by frame at the end of each frame: on the
+        // frame the runner is put back the camera has cut behind it (not still above the gap) and the screen is dark; the
+        // screen is clear again within the fade; the model blinks while it is held, and shows again once the hold is over.
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Gap_FallAndComeBack_CutsTheCameraFadesInAndBlinksWhileHeld()
+        {
+            var view = Object.FindAnyObjectByType<FollowCamera>();
+            var hud = Object.FindAnyObjectByType<ChainRushHud>();
+            var tilt = player.GetComponent<RunnerTilt>();
+            Assert.That(view, Is.Not.Null);
+            Assert.That(hud, Is.Not.Null);
+            Assert.That(tilt, Is.Not.Null);
+            Renderer[] shown = System.Array.FindAll(tilt.Body.GetComponentsInChildren<Renderer>(true), r => r.enabled);
+            Assert.That(shown, Is.Not.Empty);
+            circuit.TryGetNextGap(150d, out double startS, out _, out _);
+            game.SetInputSource(new TrackFollower(game.Track, player));
+            game.StartRun();
+            Teleport(startS - 12d);
+            yield return LandOnRoad();
+
+            float deadline = Time.time + 10f;
+            while (!player.IsRespawning && game.IsRunning && Time.time < deadline) yield return new WaitForEndOfFrame();
+            Assert.That(player.IsRespawning, Is.True, "Running into the gap must put the runner back on the track. " + State());
+            float cameFrom = Time.time;
+            Vector3 runner = player.transform.position;
+            Vector3 forward = game.Track.Frame(runner).Forward;
+            Vector3 toCamera = view.transform.position - runner;
+            Assert.That(Vector3.Dot(toCamera, forward), Is.LessThan(-1f), "The camera has cut behind the runner.");
+            Assert.That(toCamera.magnitude, Is.LessThan(15f), "The camera has cut to the runner, not swept from the gap.");
+            Assert.That(game.Track.Project(view.transform.position).H, Is.GreaterThan(2d), "The camera is above the road, not down in the gap.");
+            Assert.That(hud.RespawnFade, Is.GreaterThan(0.5f), "The screen is dark the moment the runner comes back.");
+
+            bool blinked = false;
+            while (player.IsRespawning && Time.time < deadline)
+            {
+                yield return new WaitForEndOfFrame();
+                if (tilt.BlinkHidden)
+                {
+                    blinked = true;
+                    Assert.That(System.Array.TrueForAll(shown, r => !r.enabled), Is.True, "A blink hides the whole model.");
+                }
+                if (Time.time - cameFrom > RespawnLook.FadeTime) Assert.That(hud.RespawnFade, Is.Zero, "The fade is over.");
+            }
+            Assert.That(player.IsRespawning, Is.False, "The hold ended. " + State());
+            yield return new WaitForEndOfFrame();
+            Assert.That(blinked, Is.True, "The model blinked while held.");
+            Assert.That(tilt.BlinkHidden, Is.False);
+            Assert.That(System.Array.TrueForAll(shown, r => r.enabled), Is.True, "The model shows again after the hold.");
+        }
+
         // As the player told it (2026-10-19): "hooking the grapple too early makes the rope so long the runner nearly falls".
         // Measured: hooked far behind the anchor (18 m and more along the track) with little climb left, the long rope is
         // still slack while the runner flies on at running speed, so it follows its jump down into the gap and is let go at

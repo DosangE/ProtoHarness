@@ -269,7 +269,7 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
   - ~~① 러너별 기록·고스트 저장 형식~~ 코드 끝(2026-10-29, `feature/m4-best-records`: `BestRecords.*ForRunner`, `Flow/GhostTrace`·`GhostFiles`, `RaceAssembler` 가 틱마다 기록하고 러너 기록을 깨면 저장).
   - ~~② 결과 화면 비교~~ 코드 끝(2026-10-29, `feature/m4-result-compare`: `Flow/FinishComparison`, `ChainRushHud.DrawComparison`, DECISIONS "M4-2 결과 화면 비교"). 남은 것: 사용자 플레이 확인.
   - ~~③ 레이스 중 고스트 재생~~ 코드 끝(2026-10-29, `feature/m4-ghost-replay`: `Visuals/GhostRunner`, `RaceAssembler.ShowGhost`, DECISIONS "M4-3 고스트 재생" — 보간 없이 틱마다, 깨진 파일은 고스트 없이 + 에러 로그). 남은 것: 사용자 플레이 확인, 플레이어 빌드에서 투명 머티리얼이 보이는지(확인 못 함).
-- **복귀 연출**: 낙하 복귀 때 깜빡임·카메라 (HANDOFF 2절 "떨어지면 트랙으로 복귀" 후속).
+- ~~**복귀 연출**~~ 코드 끝(2026-10-29, `feature/m4-respawn-look`, DECISIONS "M4 복귀 연출": 검은 화면 0.3 s · 카메라 컷 · 붙잡힌 동안 0.1 s 깜빡임). 사용자 플레이 확인 "괜찮다". 복귀 효과음은 따로.
 - **조작 피드백 이펙트**: 부스터 발동, 그래플이 걸림 표시.
 
 **M5 (v0.6) 같이 달리는 맛**

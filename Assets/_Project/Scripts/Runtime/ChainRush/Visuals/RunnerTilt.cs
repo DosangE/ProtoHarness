@@ -17,7 +17,7 @@ namespace ProtoHarness.ChainRush.Visuals
         // Renderers made later (the chain's mesh) or hidden by their owner then are never touched.
         private Renderer[] blinking;
         private bool blinkHidden;
-        private RespawnLook.Watch respawn;
+        private StateEdge respawn;
 
         // The runner's visual model (also what a network race copies to draw the other racer, RemoteGhost).
         public Transform Body => body;

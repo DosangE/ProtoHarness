@@ -21,7 +21,7 @@ namespace ProtoHarness.ChainRush
         private float yaw;
         private float swingBlend;
         private float insideSign = 1f;
-        private RespawnLook.Watch respawn;
+        private StateEdge respawn;
         // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
         private GameSettings settings;
 

@@ -7,6 +7,45 @@
 
 ---
 
+## 2026-10-29 · M4 조작 피드백 이펙트: 상태 글자 대신 이펙트 — 스윙 가능·부스터·걸림·빗나감 (`feature/m4-control-feedback`)
+
+- **결정 (사용자, 2026-10-29)**: 초안(상태 글자 "BOOST!"·"HOOKED!"·"POLE HOOK!")에 "상태를 명시할필욘없고 이펙트로 표현하자. 스윙가능할때에 대해서도 화면에서 명확히 알수있게도하고 부스트나 그래플에 대해서도 사용시 이펙트". 수정본에 "네추천대로 ㄱㄱ"(상태 상자 전부 삭제, `StateEdge` 정리 포함), 이어 "gpt에게 구현을 맡겨라".
+- **구현자**: Codex(`codex-companion.mjs task --write --effort high`, workspace-write sandbox). `docs/RULES/SUBAGENTS.md` §7-5 는 Codex 에 쓰기를 맡기지 않는 것이 기본이고 맡기려면 §3 합의 대상이다 — 사용자의 명시 지시를 그 합의로 보았다. 지시서에 `승인:`·`브랜치:` 줄, 파일 8개 범위, Unity MCP·git 쓰기·`.meta`·씬·문서 금지를 적었다. 바뀐 파일은 그 8개뿐이었다(`git status`). 검토·검증·문서는 Claude.
+- **한 것** (모두 표현, 시뮬은 읽기만):
+  - `Visuals/StateEdge` (struct): `RespawnLook.Watch` 를 옮겨 일반화(켜진 프레임 true, `Since`). `ChainRushHud`·`FollowCamera`·`RunnerTilt` 가 이것을 쓴다.
+  - `Visuals/FeedbackLook` (static class): 시간·크기(봉 맥동 0.5 s·1.0↔1.3, 진입 번쩍 0.3 s·1.8배, 부스터 고리 0.3 s, 가장자리 빛줄기·게이지 칸 터짐 0.4 s, 걸림 고리 0.3 s, 괄호 조임 0.25 s·1.6배, 빗나감 흔들림 0.3 s)와 `Fade`·`Pulse`·`PoleScale`·`BracketScale`·`ShakeOffset`.
+  - `Visuals/ControlFeedback` (MonoBehaviour, `ChainRushHud.Awake` 가 런타임에 붙인다 — 씬 수정 없음): 걸 수 있는 봉의 걸림 띠에 맥동하는 민트 고리, 부스터 순간 발밑 충격 고리, 그래플·봉 걸림 순간 앵커·띠에서 퍼지는 고리, 부스터 동안(`SlingTicks > 0` 또는 `GrappleEmpowered`)만 잔상 꼬리(`TrailRenderer`, 굵기 0.25). 런타임 머티리얼은 `GhostRunner` 와 같은 투명 URP Lit + 발광. 일시정지·달리지 않을 때 모두 숨김. (첫 구현의 손→띠 미리보기 줄과 넘친 속도 꼬리는 아래 플레이 피드백 1 에서 지웠다.)
+  - `ChainRushHud`: 왼쪽 아래 상태 상자(RUN/AIR/LINKED/SWING/OUT OF RANGE)와 "LINK / ..m"·"POLE / SHIFT ..m" 글자를 지웠다. 화면 가장자리 민트 빛줄기·속도선, 쓴 게이지 칸 터짐, 봉의 사각 타겟(`DrawTarget`: 네 모서리·잉크 테두리·숨 쉬는 채움, 스윙 가능이면 맥동·진입 번쩍, 걸리면 조임, 화면 밖이면 가장자리 + 화살표 — 플레이 피드백 1·2), 앵커 괄호 조임(걸림), 빗나감은 코랄 괄호 흔들림. `BoostFlash`·`HookFlash` 공개(0~1).
+- **이유**: 순간을 글자로 읽게 하면 달리는 중에 눈이 HUD 로 간다. 이펙트는 그 자리(봉·앵커·러너)에서 보인다. 순간은 상태 false→true 를 프레임마다 읽어 알아챈다 — 시뮬 코드를 고치지 않고, 되감기가 같은 틱을 다시 돌아도 연출은 영향받지 않는다(복귀 연출과 같은 방식).
+- **알아둘 것**: 잔상 꼬리는 러너 자식이다. 복귀(`RunnerMotor.RespawnOnTrack`)는 `SlingTicks = 0`(`RunnerMotor.cs:416`)으로 부스터를 끊으므로 그때 꼬리는 내지 않지만, 내지 않을 때 `TrailRenderer` 가 남은 점과 새 위치를 잇는지는 소스로 확인하지 않았다. 플레이어 빌드에서 런타임 머티리얼(투명 + `_EMISSION`)이 보이는지는 확인 못 했다 — 고스트는 발광 없는 투명만 쓴다. "켜지는 순간" 판정(부스터·걸림·봉 범위)은 `ChainRushHud` 와 `ControlFeedback` 가 각자 같은 식으로 계산한다(리뷰 지적, 한쪽만 고치면 어긋난다).
+- **안 한 것**: 파티클·머티리얼 에셋(M6), 카메라 흔들림·시야 변화, 새 효과음, `FeedbackLook` EditMode 테스트, 씬·프리팹.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): `AssetDatabase.Refresh()` 뒤 `isCompiling=False`, 새 타입 3개 로드(`ControlFeedback`·`StateEdge`·`FeedbackLook` True), Console Error 0(Warning 은 `Deleting invalid font reference.` 뿐 — HANDOFF 4절, 무관).
+  - `select-tests` = PlayMode 클래스 3개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) + 일부 7개(HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건, EditMode 전체.
+  - **영향 평가로 더한 것**: `ControlFeedback` 의 봉 고리·스윙 고리가 스윙 중에 돈다 → `ChainRushCornerSwingTests`(13건). `StateEdge` 로 바꾼 복귀 연출 세 곳 → `ChainRushCircuitTests.Gap_FallAndComeBack_CutsTheCameraFadesInAndBlinksWhileHeld`, `ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`.
+  - EditMode `!Enemy` `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (11:55:49Z~11:55:53Z).
+  - PlayMode `testcasecount="46" result="Passed" passed="46" failed="0" skipped="0"` (11:56:21Z~11:59:32Z, 191.1초) — CornerSwing 13·Flow 8·InputSource 10·Presentation 3·지문 1·ChainRushTests 11(새 3건: `ChainRushHud_BoosterSlotSpent_FlashesThenFades`, `ChainRushHud_GrappleAttached_ShowsHookFlash`, `ControlFeedback_PoleWithinReach_ShowsReadyRingAndHidesWhenPaused`).
+  - 복귀 2건 `testcasecount="2" result="Passed" passed="2" failed="0" skipped="0"` (12:26:56Z~12:27:02Z).
+  - 화면(봉 접근·Ctrl 부스터·그래플 걸기·빗나가기)은 사용자 플레이 확인 전이다(검증 안 됨).
+- **플레이 피드백 1 (사용자, 2026-10-29)**: "전반적으로 괜찮은데 … 잔상 꼬리로 붙는 것이 부스터일때만 … 조금 더 얇게 … 스윙가능한 봉이 있을때 줄이 보이는데 그거 말고 기존에 있는 사각형 타겟? 그거를 저 시각적으로 잘 보이게". Claude 가 직접 고쳤다:
+  - 잔상 꼬리: `SlingTicks > 0`(새총 당김·유지) 또는 `GrappleEmpowered` 동안만. 넘친 속도 조건을 뺐다. 굵기 0.5 → 0.25. (위 "알아둘 것" 의 복귀 때 꼬리 걱정은 넘친 속도 조건과 함께 대부분 없어졌다.)
+  - 봉 미리보기 줄을 지웠다(손 `Chain Origin` 찾기도 같이 없어졌다). 봉 고리는 그대로.
+  - 봉의 화면 타겟(`ChainRushHud.DrawTarget`): 네 모서리 모두, 굵기 3 → 5, 잉크색 테두리, 안쪽에 고리 박자로 숨 쉬는 민트 채움(`FeedbackLook.TargetFillMin`·`Max` 0.08~0.22). 앵커 괄호는 그대로.
+  - 검증: `scriptCompilationFailed=False`, PlayMode `ChainRushTests`·`ChainRushPresentationTests`·`Gap_FallAndComeBack_*` `testcasecount="15" result="Passed" passed="15" failed="0"` (12:39:29Z~12:40:04Z). 화면은 사용자 확인 전.
+- **플레이 피드백 2 (사용자, 2026-10-29)**: "화면 밖에 있는 봉은 보이지 않는다. 화면 밖에 있어도 그 방향에 있다고 그 이펙트로 보여주는건 어떤가" → 제안(가장자리 고정 + 화살표)에 "ㄱㄱ 화살표까지".
+  - 봉이 화면 밖(옆, 또는 카메라 뒤 — 투영이 화면 중심에 대해 뒤집혀 나오므로 되돌린다)이면 같은 타겟을 화면 중심에서 그 방향으로 그은 선이 `EdgeInset` 60 px 안쪽 사각형을 나가는 자리에 0.8배로 붙이고(`FeedbackLook.PinToEdge`·`IsOnScreen`), 그 바깥에 같은 방향을 가리키는 민트 삼각 화살표(잉크 테두리, `ChainRushHud.DrawArrow` — GUI 행렬을 돌려 그린다). 맥동·진입 번쩍·걸림 조임은 그대로 따라간다.
+  - `PinToEdge` 는 순수 함수지만 EditMode 테스트는 넣지 않았다(새 파일). `Unity_RunCommand` 로 값만 확인: 1600×900 에서 (3000, 450) → (1540, 450) 방향 (1, 0), (-800, -400) → (65.88, 60) 방향 (-0.88, -0.47).
+  - 검증: `scriptCompilationFailed=False`, PlayMode `ChainRushTests`·`ChainRushPresentationTests`·`ChainRushCornerSwingTests` `testcasecount="27" result="Passed" passed="27" failed="0"` (12:45:44Z~12:46:56Z). 사용자 플레이 "확인했다" (2026-10-29).
+- **병합 전 리뷰** (§7-5 "그 밖": 새 파일 3개) — 커밋 `5809440` 에 대해:
+  - `unity-reviewer` (subagent_tokens 86,458): 치명·중대 없음. 실제 결함 1(HUD 의 봉 범위 판정이 `Update` 에서 돌아 `GrappleController.LateUpdate` 보다 먼저 — 범위에 든 첫 프레임에 번쩍임 없이 그렸다가 다음 프레임에 1.8배로 튐), 제안 3(초기화 실패 뒤 다시 켜면 NRE, "켜지는 순간" 판정이 HUD·`ControlFeedback` 에 두 벌, 테스트만 읽는 공개 속성), 문서 불일치 1(이 항목의 "한 것"·"알아둘 것" 이 피드백 1·2 전 내용 — 고쳤다). 오탐 0.
+  - Codex 설계 리뷰(`adversarial-review --base dev`): `needs-attention`, medium 2 — ① 첫 빗나감이 유효한 0.75 s 안의 두 번째 빗나감은 `JustMissed` 가 계속 켜져 있어 흔들림이 없다(`MarkMiss` 는 `airGrappleUsed` 를 세우지 않아 다시 누를 수 있다, `RacerState.cs:269`), ② 새총 당김 중 그래플 강화로 두 번째 칸을 써도 `IsSlingPulling || GrappleEmpowered` 가 이미 참이라 이펙트가 없다(`RunnerMotor.cs:432-435`). 둘 다 코드로 확인한 실제 결함, 오탐 0. 비용(`/status` 5시간 `used_percent`)은 받지 못했다.
+  - 사용자 "추천대로" → `0f65044`: "켜지는 순간" 판정을 `ControlFeedback`(실행 순서 200, `GrappleController` 150 뒤) 한 곳으로 모으고 HUD 는 OnGUI 에서 `SinceBoost`·`SinceHook`·`SinceSwing`·`SinceMiss`·`SincePoleReady`·`SpentBoostSlot` 을 읽는다(결함 1·중복 해소). 빗나감은 `MissUntilTick` 이 늦춰질 때마다(①), 부스터는 새총 당김·그래플 강화를 따로(②). 초기화 실패 뒤 다시 켜지면 에러 로그 후 끈다. HUD `MissShake` 공개.
+  - 회귀 테스트 `ChainRushHud_SecondMissWhileTheFirstStillCounts_ShakesAgain`, `ChainRushHud_GrappleEmpoweredWhileTheSlingshotPulls_FlashesAgain`. **고치기 전 실패 확인**: 감지만 옛 방식으로 임시로 되돌려 두 테스트를 돌리면 `testcasecount="2" result="Failed(Child)" passed="0" failed="2"` (13:18:43Z) — "The second spend must start the booster effect again. Expected: greater than 0.780395865f But was: 0.780395865f", "Expected: greater than 0.0f But was: 0.0f". 되돌린 뒤 통과(아래).
+  - 수정 커밋은 다시 리뷰하지 않았다(Codex 는 브랜치당 1회). 메인이 바뀐 줄을 `unity-reviewer` 체크리스트에 대조: `LateUpdate` 추가분은 값 비교·struct 만, 실패 경로의 `LogError` 는 상수 문자열 — 위반 없음.
+- **병합 조건 ②** (사용자 "확인했다 커밋 병합 ㄱㄱ", `5809440`·`0f65044`, 에디터 6000.3.25f1): 컴파일 `scriptCompilationFailed=False`. `select-tests -Range dev...HEAD` = EditMode 전체, PlayMode 클래스 3개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) + 일부 7개(HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건. 영향 평가로 더한 것: `ChainRushCornerSwingTests`(`ControlFeedback` 봉·스윙 고리가 스윙 중에 돈다), `ChainRushCircuitTests.Gap_FallAndComeBack_*`·`ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`(복귀 연출 세 곳이 `StateEdge` 로 바뀌었다). 바뀐 타입 → 읽는 곳: `ControlFeedback`·`FeedbackLook`·`StateEdge` → `ChainRushHud`·`FollowCamera`·`RunnerTilt` → 위 테스트. 시뮬은 이 타입들을 읽지 않는다 — 지문 1건.
+  - `5809440` 에서 1회: EditMode `testcasecount="296" result="Passed" passed="296" failed="0"` (12:48:32Z~12:48:36Z), PlayMode `testcasecount="48" result="Passed" passed="48" failed="0" skipped="0"` (12:49:00Z~12:52:19Z, 199.0초).
+  - `0f65044`(최종)에서 1회: EditMode `testcasecount="296" result="Passed" passed="296" failed="0"` (13:19:45Z~13:19:46Z), PlayMode `testcasecount="50" result="Passed" passed="50" failed="0" skipped="0"` (13:20:07Z~13:23:24Z, 197.5초) — Circuit 1·CornerSwing 13·Flow 8·InputSource 10·Presentation 3·지문 1·Rollback 1·ChainRushTests 13(새 회귀 2건 포함).
+  - 그 밖의 실행(전부 통과, 실패 없음): ① 빠른 확인 46·2·15·27건(위), 수정 중 `ChainRushTests` 13건 (13:17:33Z). 실패한 실행은 위 "고치기 전 실패 확인" 1회뿐이고 의도한 것이다.
+
 ## 2026-10-29 · 고스트: 트랙 × 속도의 최고 기록 하나 — 러너별 기록·고스트를 없앤다 (`feature/ghost-track-best`)
 
 - **결정 (사용자, 2026-10-29)**: 고스트를 확인하고 "같은 러너가 아니여도 보였으면 좋겠다(같은 트랙, 같은 속도에서)", 이어 "트랙별 최고기록만 남기고 싶다". 질문에 "트랙 × 속도마다 1개"·"러너별을 없앤다"(둘 다 추천안), 요청서에 "ㄱㄱ".

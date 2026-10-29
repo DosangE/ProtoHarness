@@ -4,7 +4,8 @@ using UnityEngine;
 namespace ProtoHarness.ChainRush.Flow
 {
     // The best finish time per track and speed class, with the runner that set it (user 2026-10-19: shown on the lobby's
-    // track page, "기록 없음" until there is one). Kept in PlayerPrefs under a key prefix; the game uses Player, tests
+    // track page, "기록 없음" until there is one), whose run is also the ghost there (GhostFiles; user 2026-10-29 "트랙별
+    // 최고기록만 남기고 싶다" — the per-runner bests of M4-1 are gone, their keys are left unread). Kept in PlayerPrefs under a key prefix; the game uses Player, tests
     // their own prefix so they never touch the player's records.
     public sealed class BestRecords
     {

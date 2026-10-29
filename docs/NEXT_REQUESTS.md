@@ -265,16 +265,29 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 - ~~무한 모드(R6·R7) 를 다시 열지 이 마일스톤 뒤에 판단한다.~~ 2026-10-25 앞당겨 지웠다(`DESIGN.md` §10-1 아이디어).
 
 **M4 (v0.5) 다시 할 이유**
-- **최고 기록 저장·결과 화면 비교·내 고스트** (옛 "P2 고스트"): 트랙×러너별. 트랙 × 속도 단계별 최고 기록 1개와 로비 표시는 2026-10-19 먼저 했다(`Flow/BestRecords`, DECISIONS "로비: 트랙 선택에 최고 기록") — 같은 저장소에 더한다. 입력 기록·재생(`InputLogFile`, `InputReplay`)과 R9 의 고스트 모형을 쓴다.
-- **복귀 연출**: 낙하 복귀 때 깜빡임·카메라 (HANDOFF 2절 "떨어지면 트랙으로 복귀" 후속).
-- **조작 피드백 이펙트**: 부스터 발동, 그래플이 걸림 표시.
+- **최고 기록 저장·결과 화면 비교·고스트** (옛 "P2 고스트"): ~~트랙 × 속도 단계 × 러너별~~ 트랙 × 속도 단계마다 최고 기록 하나와 그 고스트(2026-10-29 사용자 "트랙별 최고기록만 남기고 싶다", DECISIONS "고스트: 트랙 × 속도의 최고 기록 하나"). 트랙 × 속도 단계별 최고 기록 1개와 로비 표시는 2026-10-19 먼저 했다(`Flow/BestRecords`, DECISIONS "로비: 트랙 선택에 최고 기록") — 같은 저장소에 더한다. 고스트는 입력 재생이 아니라 틱마다 위치·방향 기록(DECISIONS 2026-10-29 "M4 기록 키·고스트 형식")이고 R9 의 고스트 모형을 쓴다. 세 단계:
+  - ~~① 러너별 기록·고스트 저장 형식~~ 코드 끝(2026-10-29, `feature/m4-best-records`: `BestRecords.*ForRunner`, `Flow/GhostTrace`·`GhostFiles`, `RaceAssembler` 가 틱마다 기록하고 러너 기록을 깨면 저장).
+  - ~~② 결과 화면 비교~~ 코드 끝(2026-10-29, `feature/m4-result-compare`: `Flow/FinishComparison`, `ChainRushHud.DrawComparison`, DECISIONS "M4-2 결과 화면 비교"). 남은 것: 사용자 플레이 확인.
+  - ~~③ 레이스 중 고스트 재생~~ 코드 끝(2026-10-29, `feature/m4-ghost-replay`: `Visuals/GhostRunner`, `RaceAssembler.ShowGhost`, DECISIONS "M4-3 고스트 재생" — 보간 없이 틱마다, 깨진 파일은 고스트 없이 + 에러 로그). 남은 것: 사용자 플레이 확인, 플레이어 빌드에서 투명 머티리얼이 보이는지(확인 못 함).
+- ~~**복귀 연출**~~ 코드 끝(2026-10-29, `feature/m4-respawn-look`, DECISIONS "M4 복귀 연출": 검은 화면 0.3 s · 카메라 컷 · 붙잡힌 동안 0.1 s 깜빡임). 사용자 플레이 확인 "괜찮다". 복귀 효과음은 따로.
+- ~~**조작 피드백 이펙트**~~ 코드 끝(2026-10-29, `feature/m4-control-feedback`, DECISIONS "M4 조작 피드백 이펙트"): 사용자가 아래 초안의 상태 글자를 빼고 이펙트로, 스윙 가능 표시를 더해 고쳤다("네추천대로 ㄱㄱ"). `StateEdge`·`FeedbackLook`·`ControlFeedback`. 사용자 플레이 "확인했다", `dev` 병합(2026-10-29). M4 항목이 모두 끝났다 — `main` v0.5 (2026-10-29, DECISIONS "main v0.5"). 아래는 첫 초안(기록).
+- (첫 초안) **조작 피드백 이펙트**: 부스터 발동, 그래플이 걸림 표시. **합의 요청서 초안 (2026-10-29 작성, 사용자 "합의요청서만 만들어라 새로운세션에서 진행하겠다")**. 브랜치 `feature/m4-control-feedback` 는 `dev` `7c588c2`(푸시 끝)에서 만들어 두었다.
+  - **지금 있는 것**: 부스터(Ctrl 로 게이지 한 칸 — 슬링샷 `RunnerMotor.cs:439`, 강화 그래플 `:436`)는 효과음(`RaceCue.Action`)과 게이지 칸이 비는 것뿐(`ChainRushHud.DrawBoost`). 그래플 걸림(`GrappleController.cs:136-139`)은 효과음·체인·앵커 괄호 민트→흰색·상태 글자 "LINKED"(`ChainRushHud.cs:265-286`). 봉 걸기(`RunnerMotor.cs:450-451`)는 효과음·상태 글자 "SWING". 순간을 알리는 화면 효과가 없다.
+  - **목표**: 부스터 발동과 그래플·봉 걸림을 그 순간 화면에서 바로 알 수 있게 한다. 모두 HUD 표현, 시뮬은 읽기만(지문 그대로).
+  - **연출**: ① 부스터(슬링샷 시작 또는 강화 그래플 — 게이지 한 칸을 쓰는 순간): 화면 양옆 민트 빛줄기 0.4 s(피격 깜빡임 자리, 색만 민트), 방금 쓴 게이지 칸이 0.4 s 밝게 빛나며 빈다, 화면 아래 가운데 "BOOST!" 0.6 s. ② 그래플 걸림: 앵커 괄호가 1.6배 → 1배로 0.25 s 조여들고 흰색 + 민트 고리 한 번, 상태 줄 "HOOKED!" 0.5 s. ③ 봉 걸림: ② 와 같은 조임을 `SwingLook.PoleBite` 자리에, 상태 줄 "POLE HOOK!" 0.5 s. 알아채기는 상태 false→true — 부스터 `IsSlingPulling` 또는 `Racer.GrappleEmpowered`, 그래플 `IsAttached`, 봉 `IsSwinging`.
+  - **건드릴 것**: `ChainRushHud.cs`(①②③ 그리기, 공개 `BoostFlash`·`HookFlash` 0~1). `Visuals/RespawnLook.cs`(안의 `Watch` 를 새 `StateEdge` 로 옮기고 그것을 쓴다 — 같은 "켜지는 순간" 코드가 둘이 되지 않게). `Visuals/RunnerTilt.cs`·`FollowCamera.cs`(`Watch` → `StateEdge` 이름만). `Tests/PlayMode/ChainRushTests.cs`(기존 게이지·Ctrl 테스트 `:283` 방식: 부스터 쓰면 `BoostFlash > 0`, 0.4 s 뒤 0, 그래플 걸리면 `HookFlash > 0`).
+  - **새로 만들 것**: ① 목적: "상태가 켜진 순간과 그 뒤 몇 초" 를 여러 연출이 같은 방식으로 쓰기 위해 / 경로 `Assets/_Project/Scripts/Runtime/ChainRush/Visuals/StateEdge.cs` / 형태 struct(`RespawnLook.Watch` 를 옮기고 이름만 일반화). ② 목적: 조작 피드백의 시간·크기 상수와 알파 계산을 한곳에 / 경로 `Assets/_Project/Scripts/Runtime/ChainRush/Visuals/FeedbackLook.cs` / 형태 static class(`RespawnLook`·`SwingLook` 과 같은 자리·형식).
+  - **검증**: 컴파일 에러 0, EditMode 전체(`Enemy` 제외), `select-tests` 가 고른 PlayMode, 서킷 지문. 화면은 사용자 플레이 확인(Ctrl 부스터, 그래플, 봉).
+  - **문서**: DECISIONS "M4 조작 피드백 이펙트", HANDOFF, NEXT_REQUESTS. 이것으로 M4 항목이 모두 끝난다 → 다음은 M4 마감(v0.5 마일스톤 조건 ③: 게이트 2회·Device·사용자 플레이 확인) 여부를 사용자에게 묻는다.
+  - **안 하는 것**: 파티클·머티리얼 에셋(M6), 카메라 흔들림·시야 변화(속도 시야 효과가 이미 있다), 새 효과음, 씬·프리팹.
+  - **사용자에게 물을 것**: 이대로 진행할지, 시간·글자 조정, `StateEdge` 정리를 뺄지. 기존 파일 5개 수정 + 새 파일 2개라 §3-1 합의 대상.
 
 **M5 (v0.6) 같이 달리는 맛**
 - **AI 상대**: 시험용 봇 경로 추종(`TrackFollower`)을 게임용으로, 순위 표시(`RaceStandings`).
 - **상대 레이서 달리기 연출** (2026-10-15 사용자 "달리는 연출은 없긴 했다"): R9 의 고스트는 복제한 순간의 자세로 고정돼 있다. AI 상대와 고스트에 같이 필요하다.
 
 **M6 폴리시**
-- **트랙 추가** (M3 에서 옮김, 2026-10-29 DECISIONS "M3 범위 조정"): 고저차(언덕·점프 틈) — 지금 `TrackDefinition` 조각(직선·원호·경사·틈)으로 된다. 헤어핀·그래플 중심은 **T5 보충 모듈**(헤어핀 전용 짧은 봉 — `PROPOSAL_CORNER_POLE.md` 8절) 뒤. 마지막에 스타디움 특성까지 섞은 **종합 맵** 몇 개(사용자 2026-10-19). 코너 반지름은 `TrackDefinition.MinRadius` 20 m 와 조향의 최소 회전 반지름 25 m(DECISIONS "조향 2차")를 같이 본다. 새 트랙도 `Race_OtherSpeedClasses_BotFinishesEveryTrack` 에 넣어 속도 단계마다 완주를 잰다. T5 는 시뮬 변경이라 지문이 바뀐다 — M4 고스트 저장 형식이 정해진 뒤에 한다.
+- **트랙 추가** (M3 에서 옮김, 2026-10-29 DECISIONS "M3 범위 조정"): 고저차(언덕·점프 틈) — 지금 `TrackDefinition` 조각(직선·원호·경사·틈)으로 된다. 헤어핀·그래플 중심은 **T5 보충 모듈**(헤어핀 전용 짧은 봉 — `PROPOSAL_CORNER_POLE.md` 8절) 뒤. 마지막에 스타디움 특성까지 섞은 **종합 맵** 몇 개(사용자 2026-10-19). 코너 반지름은 `TrackDefinition.MinRadius` 20 m 와 조향의 최소 회전 반지름 25 m(DECISIONS "조향 2차")를 같이 본다. 새 트랙도 `Race_OtherSpeedClasses_BotFinishesEveryTrack` 에 넣어 속도 단계마다 완주를 잰다. T5 는 시뮬 변경이라 지문이 바뀐다 — ~~M4 고스트 저장 형식이 정해진 뒤에 한다~~ 고스트가 위치 기록으로 정해져(2026-10-29) 시뮬을 바꿔도 저장된 고스트는 그대로다. 기록 시간은 옛 시뮬에서 낸 값으로 남는다.
 - **그래플 타이밍 보상** (추후 아이디어, 사용자 2026-10-19 "2도 추후 아이디어로 메모해둬라"): 지금 그래플은 언제 걸든 놓을 때 앞 속도가 약 20 m/s 로 같다(`RunnerMotor.AddReleaseBoost` — 앞은 지금 속도와 13 중 큰 값, 위로 11.5; 측정 13번 모두 19.4~20.0 m/s). 잘 건 것에 보상이 없다. 생각: 걸 수 있게 된 순간보다 점프 정점 근처에서 걸어 줄이 팽팽하게 받칠 때 놓기 속도에 작은 보너스(강화 그래플보다 작게)와 표시. 점프 타이밍(틈 가장자리 가까이에서 뛰기)과 거는 타이밍이 함께 기술이 되게. 측정 근거는 DECISIONS 2026-10-19 "그래플: 앵커 높이 안에서만 건다".
 - 캐릭터 모형·모션, 봉 스윙 이펙트(불꽃·줄 끊김·잔상·소리 — 옛 S1b 의 생각, S1b 자체는 DECISIONS 2026-10-14 "코너 스윙을 봉 스윙으로 대체" 로 하지 않는다. 머티리얼·파티클 에셋 필요), 사운드, 환경 아트. 생성형 에셋(`Unity_AssetGeneration_GenerateAsset`)은 사용자가 요청할 때만(§0).
 

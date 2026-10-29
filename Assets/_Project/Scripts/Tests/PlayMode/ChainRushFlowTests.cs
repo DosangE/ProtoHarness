@@ -1,8 +1,11 @@
 using System;
 using System.Collections;
+using System.IO;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -34,19 +37,26 @@ namespace ProtoHarness.Tests.PlayMode
         private const string FingerLanesEnvironmentScene = "ChainRushTrackFingerLanes";
 
         private const string TestTitle = "TEST TRACK";
+        // A made definition is named as an asset is: the race keeps its records and ghost under the name.
+        private const string TestTrackAsset = "TestTrack";
 
         private const string AlphaPath = "Assets/_Project/Data/RunnerProfile_Alpha.asset";
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
         private TrackDefinition made;
-        // A runner of all 1s: races exactly as the scene's values.
+        // A runner of all 1s: races exactly as the scene's values. Named, as a profile asset is.
         private RunnerProfile runner;
+        // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
+        private GhostFiles ghosts;
 
         [SetUp]
         public void SetUp()
         {
             RaceLaunch.Clear();
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
+            runner.name = "TestRunner";
+            ghosts = new GhostFiles(Path.Combine(Path.GetTempPath(), "ProtoHarnessTests", "FlowGhosts"));
+            DeleteGhosts();
         }
 
         [UnityTearDown]
@@ -55,6 +65,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceLaunch.Clear();
             if (made != null) UnityEngine.Object.Destroy(made);
             if (runner != null) UnityEngine.Object.Destroy(runner);
+            DeleteGhosts();
             yield return null;
             LogAssert.NoUnexpectedReceived();
         }
@@ -65,6 +76,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTrackOrRunner_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(null, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, null, RaceMode.Single, SpeedClass.Fast, runner));
             Assert.Throws<ArgumentNullException>(() => new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, null));
@@ -77,6 +89,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceSetup_MissingTitle_Throws()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             foreach (string title in new[] { null, "", "  " })
                 Assert.Throws<ArgumentException>(() => new RaceSetup(made, title, "", RaceMode.Single, SpeedClass.Fast, runner), "title '" + title + "'");
             Assert.That(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner).Title, Is.EqualTo(TestTitle));
@@ -86,6 +99,7 @@ namespace ProtoHarness.Tests.PlayMode
         public void RaceLaunch_SecondRequestBeforeTaking_ThrowsAndTakingEmptiesIt()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             var setup = new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner);
             RaceLaunch.Request(setup);
             Assert.Throws<InvalidOperationException>(() => RaceLaunch.Request(setup));
@@ -99,16 +113,17 @@ namespace ProtoHarness.Tests.PlayMode
         // ---- the lobby -----------------------------------------------------------------------------------
 
         [UnityTest]
-        public IEnumerator Lobby_SingleThroughTrackSpeedAndRunner_BuildsTheChosenSetup()
+        // Speed first (user 2026-10-29), so the track page can show that speed's records.
+        public IEnumerator Lobby_SingleThroughSpeedTrackAndRunner_BuildsTheChosenSetup()
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
-            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
-            Assert.That(menu.Cursor, Is.EqualTo(1), "The speed page opens on Fast, the only class unlocked.");
+            Assert.That(menu.Cursor, Is.EqualTo(1), "The speed page opens on Fast.");
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             RaceSetup setup = menu.BuildSetup();
@@ -150,7 +165,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(DrawnPixels(preview.Texture), Is.GreaterThan(500), "The runner is drawn in the middle of the preview.");
 
             menu.Back();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
             Assert.That(preview.Rendering, Is.False, "Leaving the runner page stops the preview.");
         }
 
@@ -193,26 +208,25 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.Notice, Is.Empty, "Moving clears the notice.");
         }
 
-        // The speed classes opened with M3 (DECISIONS 2026-10-25 "M3 속도 단계"): each one goes on to the runner page and into the setup.
+        // The speed classes opened with M3 (DECISIONS 2026-10-25 "M3 속도 단계"): each one goes on to the track page and into the setup.
         [UnityTest]
         public IEnumerator Lobby_SpeedClasses_AreAllOpen_AndTheChosenOneGoesIntoTheSetup()
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
-            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "Fast until another is chosen.");
             menu.Move(-1);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Normal is open.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), "Normal is open.");
             Assert.That(menu.Notice, Is.Empty);
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Normal));
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             menu.Move(2);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Very fast is open.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), "Very fast is open.");
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.VeryFast));
         }
 
@@ -225,6 +239,7 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
             menu.Highlight(3);
             Assert.That(menu.TrackRecordText(3), Is.EqualTo("준비 중"));
@@ -236,7 +251,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.Cursor, Is.EqualTo(0), "The cursor wraps from the last placeholder to the stadium.");
             Assert.That(menu.BuildSetup().Track, Is.SameAs(Stadium()), "A refused track is not chosen.");
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
         }
 
         // The lobby tells UiSound each moment once (user 2026-10-21; the sounds come later): a move that moves the highlight,
@@ -262,7 +277,7 @@ namespace ProtoHarness.Tests.PlayMode
                 menu.Highlight(0);
                 menu.Confirm();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Move, UiSound.Cue.Confirm }));
-                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
                 heard.Clear();
                 menu.Back();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Back }));
@@ -274,13 +289,13 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        // The main, track and speed pages describe every entry, each differently; settings has no description panel.
+        // The main, speed and track pages describe every entry, each differently; settings has no description panel.
         [UnityTest]
         public IEnumerator Lobby_MainTrackAndSpeedEntries_EachHaveADescription()
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
-            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Track, LobbyMenu.Page.Speed })
+            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Speed, LobbyMenu.Page.Track })
             {
                 Assert.That(menu.CurrentPage, Is.EqualTo(expected));
                 var seen = new System.Collections.Generic.HashSet<string>();
@@ -290,7 +305,7 @@ namespace ProtoHarness.Tests.PlayMode
                     Assert.That(menu.Description, Is.Not.Empty, $"{expected} row {row}");
                     Assert.That(seen.Add(menu.Description), Is.True, $"{expected} row {row} repeats another row's description.");
                 }
-                // Main: single race (0); track: the stadium (0); speed: fast (1), the open ones.
+                // Main: single race (0); speed: fast (1); track: the stadium (0).
                 menu.Highlight(expected == LobbyMenu.Page.Speed ? 1 : 0);
                 menu.Confirm();
             }
@@ -313,7 +328,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Confirm();
             menu.Confirm();
             menu.Back();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Move(2);
@@ -441,6 +456,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.That(made.TryValidate(out string error), Is.True, error);
             RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
@@ -462,6 +478,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby()
         {
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.That(made.TryValidate(out string error), Is.True, error);
             RaceLaunch.Request(new RaceSetup(made, TestTitle, "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
@@ -573,6 +590,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Find<ChainRushHud>(assembler.gameObject.scene).Heading, Is.EqualTo("CIRCUIT"), "No lobby: no track name to show.");
             Assert.Throws<InvalidOperationException>(assembler.ReturnToLobby, "A scene opened directly has no lobby.");
             made = ScriptableObject.CreateInstance<TrackDefinition>();
+            made.name = TestTrackAsset;
             Assert.Throws<InvalidOperationException>(() => circuit.UseDefinition(made), "The circuit is already built.");
             Assert.That(circuit.Definition, Is.SameAs(Stadium()));
         }
@@ -613,22 +631,55 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Records = store;
-            Assert.That(menu.TrackRecordText(0), Is.EqualTo("기록 없음"));
+            Assert.That(menu.TrackRecordText(0), Is.EqualTo("빠름 기록 없음"));
             store.Submit(Stadium().name, SpeedClass.Fast, 3970, "BETA");
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
-            Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록  01:19.4  ·  BETA"), "Read again as the track page opens.");
+            Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록 (빠름)  01:19.4  ·  BETA"), "Read again as the track page opens.");
             store.Clear(Stadium().name, SpeedClass.Fast);
         }
 
+        // The report that moved the speed page first (user 2026-10-29): with a record at Fast only, choosing Normal shows
+        // Normal's (none), and going back to choose Fast shows Fast's — the track page always shows the speed just chosen.
+        [UnityTest]
+        public IEnumerator Lobby_TrackPage_ShowsTheRecordsOfTheSpeedJustChosen()
+        {
+            var store = TestRecords();
+            store.Clear(Stadium().name, SpeedClass.Normal);
+            store.Submit(Stadium().name, SpeedClass.Fast, 3970, "BETA");
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Records = store;
+            try
+            {
+                menu.Confirm();
+                menu.Highlight(0);
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+                Assert.That(menu.TrackRecordText(0), Is.EqualTo("보통 기록 없음"));
+                menu.Back();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+                menu.Highlight(1);
+                menu.Confirm();
+                Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록 (빠름)  01:19.4  ·  BETA"));
+            }
+            finally
+            {
+                store.Clear(Stadium().name, SpeedClass.Fast);
+                store.Clear(Stadium().name, SpeedClass.Normal);
+            }
+        }
+
         [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecord()
+        public IEnumerator Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt()
         {
             var store = TestRecords();
             RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene scene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(scene);
             RunnerMotor player = Find<RunnerMotor>(scene);
@@ -645,15 +696,97 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(game.HasFinished, Is.True, "The bot did not finish three laps.");
                 yield return null;
                 Assert.That(assembler.LastFinishWasBest, Is.True);
+                // M4-2: compared with what was kept before it — nothing, so a first record.
+                Assert.That(assembler.HasLastFinish, Is.True);
+                Assert.That(assembler.LastFinish.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
+                Assert.That(assembler.LastFinish.BestBefore, Is.Zero);
+                Assert.That(assembler.LastFinish.BestLine, Is.EqualTo("최고 기록  첫 기록"));
                 Assert.That(store.TryGet(Stadium().name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
                 Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
                 Assert.That(best.Runner, Is.EqualTo(runner.DisplayName));
+                // The best's run as the ghost for the track and speed, ending where the runner finished.
+                Assert.That(ghosts.TryLoad(Stadium().name, SpeedClass.Fast, out GhostTrace saved), Is.True);
+                Assert.That(saved.Count, Is.GreaterThan(0));
+                Assert.That(saved[saved.Count - 1].Position, Is.EqualTo(player.transform.position));
+                Assert.That(saved[saved.Count - 1].Heading, Is.EqualTo(player.Heading));
+                // There was no ghost to race in this run; RUN AGAIN counts in against the one just saved.
+                Assert.That(assembler.HasGhost, Is.False);
+                game.StartCountdown();
+                yield return null;
+                Assert.That(assembler.HasGhost, Is.True, "RUN AGAIN after a new best races its ghost.");
+                Assert.That(assembler.Ghost.Count, Is.EqualTo(saved.Count));
             }
             finally
             {
                 Time.timeScale = scale;
                 store.Clear(Stadium().name, SpeedClass.Fast);
             }
+        }
+
+        // ---- the ghost (M4-3, DECISIONS 2026-10-29 "M4-3 고스트 재생", "고스트: 트랙 × 속도의 최고 기록 하나") ------
+
+        // The ghost belongs to the track and speed, not to a runner: whoever races there races it.
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_TheBestsGhost_FollowsItsTraceTickByTick_AndHidesAtItsEnd()
+        {
+            var trace = new GhostTrace();
+            for (int i = 0; i < 40; i++) trace.Add(new Vector3(i * 0.5f, 1f, 3f), i * 2f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.True);
+            GhostRunner ghost = assembler.Ghost;
+            Assert.That(ghost.Count, Is.EqualTo(40));
+            Assert.That(ghost.Visible, Is.True, "Waiting on its first entry before the start.");
+            Assert.That(ghost.Position, Is.EqualTo(trace[0].Position));
+            ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var idle = new InputReplay(new InputLog());
+                foreach (int tick in new[] { 1, 2, 25, 40 })
+                {
+                    while (game.Tick < tick) game.StepTick(idle);
+                    yield return null;
+                    Assert.That(ghost.Visible, Is.True, "tick " + tick);
+                    Assert.That(ghost.Position, Is.EqualTo(trace[tick - 1].Position), "tick " + tick);
+                }
+                game.StepTick(idle);
+                yield return null;
+                Assert.That(ghost.Visible, Is.False, "Past its end the ghost has finished.");
+                game.StartRun();
+                yield return null;
+                Assert.That(ghost.Visible, Is.True, "A restart brings it back.");
+                Assert.That(ghost.Position, Is.EqualTo(trace[0].Position));
+            }
+            finally
+            {
+                Time.timeScale = scale;
+            }
+        }
+
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_ABrokenGhostFile_RacesWithoutAGhostAndSaysSo()
+        {
+            var trace = new GhostTrace();
+            trace.Add(Vector3.zero, 0f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
+            File.WriteAllBytes(Directory.GetFiles(ghosts.Folder)[0], new byte[] { 1, 2, 3 });
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            LogAssert.Expect(LogType.Error, new Regex("could not be read; racing without it"));
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.False);
+            Assert.That(Find<ChainRushGame>(assembler.gameObject.scene).IsCountingDown, Is.True, "The race goes on without its ghost.");
         }
 
         // ---- the skyway (DECISIONS 2026-10-21 "SKYWAY LOOP") -----------------------------------------------
@@ -664,9 +797,10 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
+            menu.Confirm();
             menu.Highlight(1);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "The skyway can be raced.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "The skyway can be raced.");
             RaceSetup setup = menu.BuildSetup();
             Assert.That(setup.Track, Is.SameAs(Skyway()));
             Assert.That(setup.Title, Is.EqualTo("SKYWAY LOOP"));
@@ -714,6 +848,7 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
             menu.Confirm();
+            menu.Confirm();
             menu.Highlight(1);
             menu.Confirm();
             RaceSetup setup = menu.BuildSetup();
@@ -723,6 +858,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene scene = assembler.gameObject.scene;
             Assert.That(Find<ChainRushHud>(scene).Heading, Is.EqualTo("SKYWAY LOOP"), "Not the stadium's name on the skyway.");
             ChainRushGame game = Find<ChainRushGame>(scene);
@@ -802,6 +938,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -947,6 +1084,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -995,6 +1133,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -1062,9 +1201,10 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
             menu.Confirm();
+            menu.Confirm();
             menu.Highlight(2);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed), "Finger Lanes can be raced.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Finger Lanes can be raced.");
             RaceSetup setup = menu.BuildSetup();
             Assert.That(setup.Track, Is.SameAs(finger));
             Assert.That(setup.Title, Is.EqualTo("FINGER LANES"));
@@ -1073,6 +1213,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             assembler.Records = store;
+            assembler.Ghosts = ghosts;
             Scene raceScene = assembler.gameObject.scene;
             Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("FINGER LANES"));
             ChainRushGame game = Find<ChainRushGame>(raceScene);
@@ -1206,6 +1347,11 @@ namespace ProtoHarness.Tests.PlayMode
             var store = new BestRecords("ChainRush.Test.FlowTests.");
             store.Clear(Stadium().name, SpeedClass.Fast);
             return store;
+        }
+
+        private void DeleteGhosts()
+        {
+            if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
         }
 
         // Settings under a test prefix, at their defaults, so the player's settings are never touched.

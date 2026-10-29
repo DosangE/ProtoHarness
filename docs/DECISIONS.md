@@ -7,6 +7,157 @@
 
 ---
 
+## 2026-10-29 · main v0.5: M4 "다시 할 이유" — `dev` 를 `main` 에 병합하고 태그 `v0.5`
+
+- **결정 (사용자, 2026-10-29)**: M4 마지막 항목(조작 피드백 이펙트)을 `dev` 에 병합한 뒤 "M4 를 마감(v0.5)할까요?" 에 "확인햇다 병합 ㄱㄱ". 절차는 "main v0.4" 와 같다: `feature/m4-close-v0.5`(타이틀 버전 표기·README·이 기록) → `dev` → `main` `--no-ff`, 주석 태그 `v0.5`, 푸시는 지시 때만.
+- **v0.5 에 든 것** (`main` v0.4 뒤): 트랙 × 속도의 최고 기록과 그 판의 고스트(틱마다 위치·방향 기록 재생, 어느 러너든 같은 트랙·속도면 겨룬다), 결과 화면 기록 비교, 낙하 복귀 연출, 조작 피드백 이펙트(스윙 가능 봉 표시·화면 밖 봉 가장자리 + 화살표, 부스터·걸림·빗나감), 로비 순서 속도 → 트랙 → 러너. 각각 이 문서의 같은 이름 항목. 타이틀 버전 표기 `0.5`. README 를 v0.5 에 맞췄다(상태 줄, 진행 표, 로비 순서).
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `feature/m4-close-v0.5` `8a48938`(뒤 커밋은 `docs/` 만), 에디터 **6000.3.25f1**(Unity MCP `Application.unityVersion`), `ProtoHarness.slnx` 는 넣지 않는다. 시각은 UTC(결과 XML):
+  - 컴파일: `scriptCompilationFailed=False`, `TitleScreen.Version` 이 `0.5` 로 읽힘.
+  - EditMode (`!Enemy`): `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (13:59:58Z~13:59:59Z).
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="209" result="Passed" passed="200" failed="0" skipped="9"` (14:00:15Z~14:12:12Z, 717.0초).
+  - PlayMode 게이트 2회차 (같은 코드): `testcasecount="209" result="Passed" passed="200" failed="0" skipped="9"` (14:12:41Z~14:24:39Z, 717.9초). 두 회차 모두 skipped 9 는 `[Explicit]` — `ChainRushProbeTests` 6건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0x18F31E7A2B4F79B3` (기준과 같다).
+  - ② 의 하한: 이 브랜치의 `Assets/` 변경은 `TitleScreen.Version` 한 줄 — 읽는 곳 `TitleScreen.cs:83`(화면 글자, 시뮬 밖). 게이트 전체가 포함한다.
+  - `Run Device Input Tests` 1회 (20초 뒤 시작하게 걸고 사용자가 에디터를 앞으로 가져옴, 시작 순간 `editor focused=True`): `testcasecount="3" result="Passed" passed="3" failed="0"` (14:25:24Z~14:25:40Z).
+  - 사용자 플레이 확인 (M4 완료 조건 "고스트와 겨뤄 기록을 갱신할 수 있다"): "확인햇다" (2026-10-29, M4 마감 질문에 대한 답). 그 전 받은 확인: "고스트 좋다", 복귀 연출 "괜찮다", 조작 피드백 "확인했다".
+  - 실패한 실행 없음. 하지 않은 것: 네트워크 레이스(M7 부터).
+- **v0.5 에 없는 것**: 아직 답이 없는 확인 — 다른 러너로 매우빠름·STADIUM 고스트, 플레이어 빌드에서 고스트·이펙트 런타임 머티리얼(투명·발광)이 보이는지, 결과 화면 두 줄. v0.4 때 남은 플레이 확인(SKYWAY 2랩·직선 슬라럼 등)도 그대로다. README 이미지는 v0.3 캡처 그대로다. README 테스트 절의 `Run Long Tests`·`Run Course Sweep`·`Sweep`·`Long`·`Endless` 는 2026-10-25 무한 모드 삭제 때 없어진 것이라 낡았다(이번에 고치지 않았다).
+
+## 2026-10-29 · M4 조작 피드백 이펙트: 상태 글자 대신 이펙트 — 스윙 가능·부스터·걸림·빗나감 (`feature/m4-control-feedback`)
+
+- **결정 (사용자, 2026-10-29)**: 초안(상태 글자 "BOOST!"·"HOOKED!"·"POLE HOOK!")에 "상태를 명시할필욘없고 이펙트로 표현하자. 스윙가능할때에 대해서도 화면에서 명확히 알수있게도하고 부스트나 그래플에 대해서도 사용시 이펙트". 수정본에 "네추천대로 ㄱㄱ"(상태 상자 전부 삭제, `StateEdge` 정리 포함), 이어 "gpt에게 구현을 맡겨라".
+- **구현자**: Codex(`codex-companion.mjs task --write --effort high`, workspace-write sandbox). `docs/RULES/SUBAGENTS.md` §7-5 는 Codex 에 쓰기를 맡기지 않는 것이 기본이고 맡기려면 §3 합의 대상이다 — 사용자의 명시 지시를 그 합의로 보았다. 지시서에 `승인:`·`브랜치:` 줄, 파일 8개 범위, Unity MCP·git 쓰기·`.meta`·씬·문서 금지를 적었다. 바뀐 파일은 그 8개뿐이었다(`git status`). 검토·검증·문서는 Claude.
+- **한 것** (모두 표현, 시뮬은 읽기만):
+  - `Visuals/StateEdge` (struct): `RespawnLook.Watch` 를 옮겨 일반화(켜진 프레임 true, `Since`). `ChainRushHud`·`FollowCamera`·`RunnerTilt` 가 이것을 쓴다.
+  - `Visuals/FeedbackLook` (static class): 시간·크기(봉 맥동 0.5 s·1.0↔1.3, 진입 번쩍 0.3 s·1.8배, 부스터 고리 0.3 s, 가장자리 빛줄기·게이지 칸 터짐 0.4 s, 걸림 고리 0.3 s, 괄호 조임 0.25 s·1.6배, 빗나감 흔들림 0.3 s)와 `Fade`·`Pulse`·`PoleScale`·`BracketScale`·`ShakeOffset`.
+  - `Visuals/ControlFeedback` (MonoBehaviour, `ChainRushHud.Awake` 가 런타임에 붙인다 — 씬 수정 없음): 걸 수 있는 봉의 걸림 띠에 맥동하는 민트 고리, 부스터 순간 발밑 충격 고리, 그래플·봉 걸림 순간 앵커·띠에서 퍼지는 고리, 부스터 동안(`SlingTicks > 0` 또는 `GrappleEmpowered`)만 잔상 꼬리(`TrailRenderer`, 굵기 0.25). 런타임 머티리얼은 `GhostRunner` 와 같은 투명 URP Lit + 발광. 일시정지·달리지 않을 때 모두 숨김. (첫 구현의 손→띠 미리보기 줄과 넘친 속도 꼬리는 아래 플레이 피드백 1 에서 지웠다.)
+  - `ChainRushHud`: 왼쪽 아래 상태 상자(RUN/AIR/LINKED/SWING/OUT OF RANGE)와 "LINK / ..m"·"POLE / SHIFT ..m" 글자를 지웠다. 화면 가장자리 민트 빛줄기·속도선, 쓴 게이지 칸 터짐, 봉의 사각 타겟(`DrawTarget`: 네 모서리·잉크 테두리·숨 쉬는 채움, 스윙 가능이면 맥동·진입 번쩍, 걸리면 조임, 화면 밖이면 가장자리 + 화살표 — 플레이 피드백 1·2), 앵커 괄호 조임(걸림), 빗나감은 코랄 괄호 흔들림. `BoostFlash`·`HookFlash` 공개(0~1).
+- **이유**: 순간을 글자로 읽게 하면 달리는 중에 눈이 HUD 로 간다. 이펙트는 그 자리(봉·앵커·러너)에서 보인다. 순간은 상태 false→true 를 프레임마다 읽어 알아챈다 — 시뮬 코드를 고치지 않고, 되감기가 같은 틱을 다시 돌아도 연출은 영향받지 않는다(복귀 연출과 같은 방식).
+- **알아둘 것**: 잔상 꼬리는 러너 자식이다. 복귀(`RunnerMotor.RespawnOnTrack`)는 `SlingTicks = 0`(`RunnerMotor.cs:416`)으로 부스터를 끊으므로 그때 꼬리는 내지 않지만, 내지 않을 때 `TrailRenderer` 가 남은 점과 새 위치를 잇는지는 소스로 확인하지 않았다. 플레이어 빌드에서 런타임 머티리얼(투명 + `_EMISSION`)이 보이는지는 확인 못 했다 — 고스트는 발광 없는 투명만 쓴다. "켜지는 순간" 판정(부스터·걸림·봉 범위)은 `ChainRushHud` 와 `ControlFeedback` 가 각자 같은 식으로 계산한다(리뷰 지적, 한쪽만 고치면 어긋난다).
+- **안 한 것**: 파티클·머티리얼 에셋(M6), 카메라 흔들림·시야 변화, 새 효과음, `FeedbackLook` EditMode 테스트, 씬·프리팹.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): `AssetDatabase.Refresh()` 뒤 `isCompiling=False`, 새 타입 3개 로드(`ControlFeedback`·`StateEdge`·`FeedbackLook` True), Console Error 0(Warning 은 `Deleting invalid font reference.` 뿐 — HANDOFF 4절, 무관).
+  - `select-tests` = PlayMode 클래스 3개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) + 일부 7개(HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건, EditMode 전체.
+  - **영향 평가로 더한 것**: `ControlFeedback` 의 봉 고리·스윙 고리가 스윙 중에 돈다 → `ChainRushCornerSwingTests`(13건). `StateEdge` 로 바꾼 복귀 연출 세 곳 → `ChainRushCircuitTests.Gap_FallAndComeBack_CutsTheCameraFadesInAndBlinksWhileHeld`, `ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`.
+  - EditMode `!Enemy` `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (11:55:49Z~11:55:53Z).
+  - PlayMode `testcasecount="46" result="Passed" passed="46" failed="0" skipped="0"` (11:56:21Z~11:59:32Z, 191.1초) — CornerSwing 13·Flow 8·InputSource 10·Presentation 3·지문 1·ChainRushTests 11(새 3건: `ChainRushHud_BoosterSlotSpent_FlashesThenFades`, `ChainRushHud_GrappleAttached_ShowsHookFlash`, `ControlFeedback_PoleWithinReach_ShowsReadyRingAndHidesWhenPaused`).
+  - 복귀 2건 `testcasecount="2" result="Passed" passed="2" failed="0" skipped="0"` (12:26:56Z~12:27:02Z).
+  - 화면(봉 접근·Ctrl 부스터·그래플 걸기·빗나가기)은 사용자 플레이 확인 전이다(검증 안 됨).
+- **플레이 피드백 1 (사용자, 2026-10-29)**: "전반적으로 괜찮은데 … 잔상 꼬리로 붙는 것이 부스터일때만 … 조금 더 얇게 … 스윙가능한 봉이 있을때 줄이 보이는데 그거 말고 기존에 있는 사각형 타겟? 그거를 저 시각적으로 잘 보이게". Claude 가 직접 고쳤다:
+  - 잔상 꼬리: `SlingTicks > 0`(새총 당김·유지) 또는 `GrappleEmpowered` 동안만. 넘친 속도 조건을 뺐다. 굵기 0.5 → 0.25. (위 "알아둘 것" 의 복귀 때 꼬리 걱정은 넘친 속도 조건과 함께 대부분 없어졌다.)
+  - 봉 미리보기 줄을 지웠다(손 `Chain Origin` 찾기도 같이 없어졌다). 봉 고리는 그대로.
+  - 봉의 화면 타겟(`ChainRushHud.DrawTarget`): 네 모서리 모두, 굵기 3 → 5, 잉크색 테두리, 안쪽에 고리 박자로 숨 쉬는 민트 채움(`FeedbackLook.TargetFillMin`·`Max` 0.08~0.22). 앵커 괄호는 그대로.
+  - 검증: `scriptCompilationFailed=False`, PlayMode `ChainRushTests`·`ChainRushPresentationTests`·`Gap_FallAndComeBack_*` `testcasecount="15" result="Passed" passed="15" failed="0"` (12:39:29Z~12:40:04Z). 화면은 사용자 확인 전.
+- **플레이 피드백 2 (사용자, 2026-10-29)**: "화면 밖에 있는 봉은 보이지 않는다. 화면 밖에 있어도 그 방향에 있다고 그 이펙트로 보여주는건 어떤가" → 제안(가장자리 고정 + 화살표)에 "ㄱㄱ 화살표까지".
+  - 봉이 화면 밖(옆, 또는 카메라 뒤 — 투영이 화면 중심에 대해 뒤집혀 나오므로 되돌린다)이면 같은 타겟을 화면 중심에서 그 방향으로 그은 선이 `EdgeInset` 60 px 안쪽 사각형을 나가는 자리에 0.8배로 붙이고(`FeedbackLook.PinToEdge`·`IsOnScreen`), 그 바깥에 같은 방향을 가리키는 민트 삼각 화살표(잉크 테두리, `ChainRushHud.DrawArrow` — GUI 행렬을 돌려 그린다). 맥동·진입 번쩍·걸림 조임은 그대로 따라간다.
+  - `PinToEdge` 는 순수 함수지만 EditMode 테스트는 넣지 않았다(새 파일). `Unity_RunCommand` 로 값만 확인: 1600×900 에서 (3000, 450) → (1540, 450) 방향 (1, 0), (-800, -400) → (65.88, 60) 방향 (-0.88, -0.47).
+  - 검증: `scriptCompilationFailed=False`, PlayMode `ChainRushTests`·`ChainRushPresentationTests`·`ChainRushCornerSwingTests` `testcasecount="27" result="Passed" passed="27" failed="0"` (12:45:44Z~12:46:56Z). 사용자 플레이 "확인했다" (2026-10-29).
+- **병합 전 리뷰** (§7-5 "그 밖": 새 파일 3개) — 커밋 `5809440` 에 대해:
+  - `unity-reviewer` (subagent_tokens 86,458): 치명·중대 없음. 실제 결함 1(HUD 의 봉 범위 판정이 `Update` 에서 돌아 `GrappleController.LateUpdate` 보다 먼저 — 범위에 든 첫 프레임에 번쩍임 없이 그렸다가 다음 프레임에 1.8배로 튐), 제안 3(초기화 실패 뒤 다시 켜면 NRE, "켜지는 순간" 판정이 HUD·`ControlFeedback` 에 두 벌, 테스트만 읽는 공개 속성), 문서 불일치 1(이 항목의 "한 것"·"알아둘 것" 이 피드백 1·2 전 내용 — 고쳤다). 오탐 0.
+  - Codex 설계 리뷰(`adversarial-review --base dev`): `needs-attention`, medium 2 — ① 첫 빗나감이 유효한 0.75 s 안의 두 번째 빗나감은 `JustMissed` 가 계속 켜져 있어 흔들림이 없다(`MarkMiss` 는 `airGrappleUsed` 를 세우지 않아 다시 누를 수 있다, `RacerState.cs:269`), ② 새총 당김 중 그래플 강화로 두 번째 칸을 써도 `IsSlingPulling || GrappleEmpowered` 가 이미 참이라 이펙트가 없다(`RunnerMotor.cs:432-435`). 둘 다 코드로 확인한 실제 결함, 오탐 0. 비용(`/status` 5시간 `used_percent`)은 받지 못했다.
+  - 사용자 "추천대로" → `0f65044`: "켜지는 순간" 판정을 `ControlFeedback`(실행 순서 200, `GrappleController` 150 뒤) 한 곳으로 모으고 HUD 는 OnGUI 에서 `SinceBoost`·`SinceHook`·`SinceSwing`·`SinceMiss`·`SincePoleReady`·`SpentBoostSlot` 을 읽는다(결함 1·중복 해소). 빗나감은 `MissUntilTick` 이 늦춰질 때마다(①), 부스터는 새총 당김·그래플 강화를 따로(②). 초기화 실패 뒤 다시 켜지면 에러 로그 후 끈다. HUD `MissShake` 공개.
+  - 회귀 테스트 `ChainRushHud_SecondMissWhileTheFirstStillCounts_ShakesAgain`, `ChainRushHud_GrappleEmpoweredWhileTheSlingshotPulls_FlashesAgain`. **고치기 전 실패 확인**: 감지만 옛 방식으로 임시로 되돌려 두 테스트를 돌리면 `testcasecount="2" result="Failed(Child)" passed="0" failed="2"` (13:18:43Z) — "The second spend must start the booster effect again. Expected: greater than 0.780395865f But was: 0.780395865f", "Expected: greater than 0.0f But was: 0.0f". 되돌린 뒤 통과(아래).
+  - 수정 커밋은 다시 리뷰하지 않았다(Codex 는 브랜치당 1회). 메인이 바뀐 줄을 `unity-reviewer` 체크리스트에 대조: `LateUpdate` 추가분은 값 비교·struct 만, 실패 경로의 `LogError` 는 상수 문자열 — 위반 없음.
+- **병합 조건 ②** (사용자 "확인했다 커밋 병합 ㄱㄱ", `5809440`·`0f65044`, 에디터 6000.3.25f1): 컴파일 `scriptCompilationFailed=False`. `select-tests -Range dev...HEAD` = EditMode 전체, PlayMode 클래스 3개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) + 일부 7개(HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건. 영향 평가로 더한 것: `ChainRushCornerSwingTests`(`ControlFeedback` 봉·스윙 고리가 스윙 중에 돈다), `ChainRushCircuitTests.Gap_FallAndComeBack_*`·`ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`(복귀 연출 세 곳이 `StateEdge` 로 바뀌었다). 바뀐 타입 → 읽는 곳: `ControlFeedback`·`FeedbackLook`·`StateEdge` → `ChainRushHud`·`FollowCamera`·`RunnerTilt` → 위 테스트. 시뮬은 이 타입들을 읽지 않는다 — 지문 1건.
+  - `5809440` 에서 1회: EditMode `testcasecount="296" result="Passed" passed="296" failed="0"` (12:48:32Z~12:48:36Z), PlayMode `testcasecount="48" result="Passed" passed="48" failed="0" skipped="0"` (12:49:00Z~12:52:19Z, 199.0초).
+  - `0f65044`(최종)에서 1회: EditMode `testcasecount="296" result="Passed" passed="296" failed="0"` (13:19:45Z~13:19:46Z), PlayMode `testcasecount="50" result="Passed" passed="50" failed="0" skipped="0"` (13:20:07Z~13:23:24Z, 197.5초) — Circuit 1·CornerSwing 13·Flow 8·InputSource 10·Presentation 3·지문 1·Rollback 1·ChainRushTests 13(새 회귀 2건 포함).
+  - 그 밖의 실행(전부 통과, 실패 없음): ① 빠른 확인 46·2·15·27건(위), 수정 중 `ChainRushTests` 13건 (13:17:33Z). 실패한 실행은 위 "고치기 전 실패 확인" 1회뿐이고 의도한 것이다.
+
+## 2026-10-29 · 고스트: 트랙 × 속도의 최고 기록 하나 — 러너별 기록·고스트를 없앤다 (`feature/ghost-track-best`)
+
+- **결정 (사용자, 2026-10-29)**: 고스트를 확인하고 "같은 러너가 아니여도 보였으면 좋겠다(같은 트랙, 같은 속도에서)", 이어 "트랙별 최고기록만 남기고 싶다". 질문에 "트랙 × 속도마다 1개"·"러너별을 없앤다"(둘 다 추천안), 요청서에 "ㄱㄱ".
+- **한 것**:
+  - `BestRecords`: `TryGetForRunner`·`SubmitForRunner`·`ClearForRunner` 를 지웠다. 트랙 × 속도의 최고 기록 하나(로비에 보이는 것)만 남는다. 옛 `…byRunner…` PlayerPrefs 키는 읽지 않는다(남아 있다).
+  - `GhostFiles`: 키를 `<트랙>.<속도>.ghost` 로(러너 매개변수 삭제).
+  - `RaceAssembler`: 결승이 최고 기록을 깨면(`LastFinishWasBest`) 그 판을 고스트로 저장한다. 경로가 불완전하면 옛 고스트를 지우고 에러 로그 — 고스트는 언제나 최고 기록의 판이다. 레이스는 트랙·속도의 고스트를 띄운다(어느 러너든). 이번 판에 새 고스트가 저장되면 다음 카운트다운(다시 달리기·재시작)에서 다시 불러온다 — 전에는 로비로 나갔다 와야 했다. `LastFinishWasRunnerBest` 와 러너 에셋 이름 검사를 지웠다(키에 안 쓴다, 트랙 이름 검사는 남는다).
+  - `FinishComparison`: 이전 최고 하나 — `최고 기록  01:18.9 · BETA` + 차이. 결과 화면(`ChainRushHud.DrawComparison`)은 한 줄.
+  - 사용자 데이터: `Circuit_Stadium.VeryFast.RunnerProfile_Omega.ghost` 가 그 트랙·속도의 최고 기록과 같은 판임을 읽기 전용으로 확인하고(최고 2944틱·OMEGA, 러너 최고 2944틱, 고스트 (47116 − 12) / 16 = 2944틱) `Circuit_Stadium.VeryFast.ghost` 로 이름만 바꿨다(승인에 포함).
+- **이유**: 사용자가 원한 것은 "그 트랙에서 가장 잘 달린 판과 겨루기" 다. 러너별로 나누면 같은 트랙에서도 러너를 바꿀 때마다 고스트가 없다. 로비 기록·결과 화면·고스트가 한 기준(트랙 × 속도 최고)을 본다.
+- **알아둘 것**: M4 전에 세운 최고 기록에는 고스트가 없다 — 그 기록을 깰 때까지 그 트랙·속도에는 고스트가 없다(사용자에게 알렸다). 고스트 모양은 지금 달리는 러너의 모형을 칠한 것이다(그 기록을 세운 러너의 디자인이 아니다).
+- **앞 결정 바뀜**: 2026-10-29 "M4 기록 키·고스트 형식" 의 러너별 기록·고스트(키 `트랙.속도.러너`)와 "M4-2 결과 화면 비교" 의 "내 최고" 줄은 이 결정으로 없어졌다(그 항목에 취소선 표시).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 일부 1개(`ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`) + 지문 1건, EditMode 전체.
+  - EditMode `!Enemy` `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (11:26:26Z~11:26:30Z) — 러너별 테스트 2건을 지우고 비교 테스트가 1건 늘어 297 → 296.
+  - PlayMode `testcasecount="51" result="Passed" passed="50" failed="0" skipped="1"` (11:27:13Z~11:33:21Z, 368.3초). skipped 1 은 `[Explicit]` Probe. 결승 테스트(`Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`: 최고 기록의 고스트 저장, 다시 달리기에서 그 고스트를 불러옴), 고스트 따라가기·깨진 파일, 지문 통과.
+  - Probe 를 `testNames` 로 1회: `testcasecount="1" result="Passed" passed="1" failed="0"` (11:34:03Z~11:35:41Z, 97.6초).
+  - 화면(다른 러너로 매우빠름·STADIUM 에서 OMEGA 의 고스트가 보이는지)은 사용자 확인 전이다(검증 안 됨).
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `06ad587`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트(EditMode 전체, PlayMode 클래스 2개 + Probe 1 + 지문 1)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다. 영향 평가: `BestRecords`·`GhostFiles`·`FinishComparison`·`RaceAssembler`·`ChainRushHud` → 읽는 곳 `RaceAssembler`·`ChainRushHud.DrawResult`·`TrackPage.RefreshRecords` → `ChainRushFlowTests`(로비 기록·결승·고스트)·`ChainRushProfileTests`·Probe(테스트 파일 변경). 시뮬은 이 타입들을 읽지 않는다 — 지문 1건.
+
+## 2026-10-29 · 로비 순서: 속도 → 트랙 → 러너 · 트랙 기록 줄에 속도 이름 (`feature/lobby-speed-first`)
+
+- **결정 (사용자, 2026-10-29)**: "트랙을 고르고 속도(보통)를 선택한뒤 뒤로 나가면 기록 셋팅값이 보통으로 되어있다 … 따라서 속도를 고르고 트랙을 고르게 하자". 요청서(순서 변경 + 기록 줄 속도 이름 제안)에 "둘 다 ㄱㄱ 속도 이름도 붙여".
+- **원인**: 트랙 페이지는 `LobbyContext.Speed` 의 기록을 보인다(`TrackPage.RefreshRecords`). 속도는 트랙 다음에 골랐으므로 트랙 페이지에서 보이는 기록은 "아직 고르지 않은" 속도 — 처음엔 기본값 빠름, 한 번 보통을 고르고 돌아오면 보통 — 의 것이었다.
+- **한 것**: 싱글 레이스 = 메인 → 속도 → 트랙 → 러너(`MainPage`·`SpeedPage`·`TrackPage`·`RunnerPage` 의 Confirm/Back). 뒤로는 그 반대(러너 → 트랙 → 속도 → 메인). 트랙 기록 줄 `최고 기록 (빠름)  01:19.4  ·  BETA` / `빠름 기록 없음`. 메인 설명 문구 "속도와 트랙, 러너를 골라", 각 페이지·`LobbyMenu` 주석.
+- **테스트**: `ChainRushFlowTests` 의 로비를 따라가는 테스트를 새 순서로 고쳤다(사양이 바뀌었다 — 검사를 약하게 한 것이 아니다). 첫 테스트는 이름도 `Lobby_SingleThroughSpeedTrackAndRunner_BuildsTheChosenSetup` 으로. 새 테스트 `Lobby_TrackPage_ShowsTheRecordsOfTheSpeedJustChosen`: 빠름에만 기록이 있을 때 보통을 고르면 "보통 기록 없음", 돌아가 빠름을 고르면 빠름 기록.
+- **화면**: 가장 긴 줄(`최고 기록 (매우빠름)  …  ·  OMEGA`)이 트랙 행 오른쪽 칸에 들어간다 — 사용자 "가장 긴 줄 확인했다" (2026-10-29).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode `ChainRushFlowTests` 전체(테스트 메서드 이름 변경), 지문 없음(로비는 시뮬이 읽지 않는다), EditMode 전체. EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (11:05:05Z~11:05:09Z). PlayMode `testcasecount="40" result="Passed" passed="40" failed="0" skipped="0"` (11:05:47Z~11:10:37Z, 289.3초) — 로비 테스트 14건 포함, 새 테스트 통과.
+  - **병합 조건 ②** (사용자 "작업한것들 커밋 병합", `369566b`): `select-tests -Range dev...HEAD` 가 같은 테스트(EditMode 전체, PlayMode `ChainRushFlowTests` 1개, 지문 없음)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다. 영향 평가: 바뀐 로비 페이지 → 읽는 곳 `LobbyMenu`(`Flow/LobbyMenu.cs`) → `ChainRushFlowTests`(로비·로비에서 고르는 레이스). 로비는 시뮬이 읽지 않는다.
+
+## 2026-10-29 · M4 복귀 연출: 검은 화면에서 밝아지기 · 카메라 컷 · 붙잡힌 동안 깜빡임 (`feature/m4-respawn-look`)
+
+- **결정 (사용자, 2026-10-29)**: "다음작업 ㄱㄱ" → 복귀 연출 합의 요청서(덮개 0.3 s, 카메라 Snap, 0.1 s 간격 깜빡임, 표현만)에 "ㄱㄱ".
+- **한 것** (모두 표현 계층, 시뮬은 `RunnerMotor.IsRespawning` 을 읽기만):
+  - `Visuals/RespawnLook` (static class, `SwingLook` 과 같은 자리·형식): `FadeTime` 0.3 s, `BlinkInterval` 0.1 s, `FadeAlpha(since)`, `Shown(since)`, 그리고 복귀 순간(`IsRespawning` false→true)을 알아채는 `Watch` 구조체 — 세 곳이 각자 프레임에서 쓴다.
+  - `ChainRushHud`: 복귀 순간부터 0.3 s 동안 화면 전체를 검정 알파 1→0 으로 덮는다(달리는 화면, "GO!" 위). `RespawnFade` 공개.
+  - `FollowCamera.LateUpdate`: 복귀 순간 `Snap()` — 출발 때처럼 트랙 방향 뒤로 바로 옮긴다. 떨어진 곳 아래에서 날아오지 않는다. 덮개가 끊김을 가린다.
+  - `RunnerTilt`: `Awake` 에 몸의 켜진 렌더러를 캐시하고(나중에 생기는 체인 메시는 빠진다), 붙잡힌 동안 `Shown` 이 거짓인 구간에 끈다. 붙잡힘이 끝나거나 컴포넌트가 꺼지면 다시 켠다. `BlinkHidden` 공개.
+- **이유**: 순간이동이 화면 휩쓸림으로만 보여 "어디로 갔지" 가 됐다. 끊고 가리고 깜빡여서 "여기서 다시" 를 분명히 한다(카트라이더식). 복귀 순간을 시뮬 이벤트가 아니라 상태 변화로 읽어 시뮬 코드를 고치지 않았고, 되감기로 같은 틱이 다시 돌아도 연출은 영향받지 않는다.
+- **알아둘 것**: 깜빡임·덮개는 게임 시간(`Time.time`)으로 잰다. 붙잡힌 동안 일시정지하면 깜빡임 박자가 붙잡힘 틱과 어긋날 수 있다(끝나는 시점은 붙잡힘을 따른다).
+- **안 한 것**: 복귀 위치·붙잡힘 시간(시뮬), 복귀 효과음, 고스트 깜빡임, 붙잡힘 중 공격 입력.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. 새 테스트 `ChainRushCircuitTests.Gap_FallAndComeBack_CutsTheCameraFadesInAndBlinksWhileHeld` — 그래플 틈으로 떨어뜨려 프레임 끝마다 본다: 복귀 프레임에 카메라가 러너 뒤(트랙 방향 내적 < -1 m)·15 m 안·노면 위 2 m 넘게, 덮개 > 0.5. 0.3 s 뒤 덮개 0, 붙잡힌 동안 깜빡임이 몸 전체를 끄는 프레임이 있다, 끝나면 모두 켜진다.
+  - `select-tests` = PlayMode 클래스 2개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`) + 일부 8개(새 테스트, HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건, EditMode 전체.
+  - **영향 평가로 더한 것**: 바뀐 `RunnerTilt`·`FollowCamera`·`ChainRushHud` 가 낙하 중에 새 경로를 돈다 → 기존 낙하 테스트 `ChainRushCircuitTests.Gap_*`(1건 더)와 낙하·붙잡힘을 되감는 `ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`(깜빡임이 시뮬에 닿지 않는지).
+  - EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:44:59Z~10:45:03Z). PlayMode `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (10:45:42Z~10:47:54Z, 132.0초) — Circuit 2·Flow 7·InputSource 10·Presentation 3·지문 1·Rollback 1.
+  - 화면: 사용자 플레이 확인 "괜찮다" (2026-10-29).
+  - **병합 조건 ②** (사용자 "둘 다 ㄱㄱ", `46aa4b1`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트를 골랐다(위 실행은 여기에 영향 평가 2개를 더한 것). 그 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다.
+
+## 2026-10-29 · M4-3 고스트 재생: 러너의 최고 기록이 반투명으로 함께 달린다 (`feature/m4-ghost-replay`)
+
+- **결정 (사용자, 2026-10-29)**: M4-3 합의 요청서(출발 전 한 번 불러오기, 틱 N 에 기록 N 번째, 끝나면 숨김, 깨진 파일은 고스트 없이 + 에러 로그, 런타임 URP Lit 투명 민트 머티리얼)에 "ㄱㄱ".
+- **한 것**:
+  - `Visuals/GhostRunner` (MonoBehaviour, `RaceAssembler` 가 런타임에 붙인다): 러너 모형(`RunnerTilt.Body`, 디자인을 입힌 뒤)을 복제한다. 충돌체는 지우고, 모든 렌더러에 반투명 머티리얼 1개(민트 `NightUi.Accent`, 알파 0.35, 그림자 없음)를 입힌다. `LateUpdate` 에서 `game.Tick` 번째 기록에 선다(틱 0·1 은 첫 기록). 기록보다 틱이 넘으면 숨고, 재시작하면 다시 보인다. 자세는 복제한 그대로다.
+  - `RaceAssembler.ShowGhost`: `Start` 에서 고른 트랙·속도·러너의 고스트를 불러온다. `Ghosts` 를 바꾸면 그 저장소의 고스트로 다시 불러온다(로비가 기록 저장소가 바뀌면 다시 읽는 것과 같다 — 테스트가 씬을 연 뒤 폴더를 준다). 이번 판에 새 기록이 나도 보이던 고스트는 그대로이고, 다음 판부터 새 고스트다. `InvalidDataException`·`IOException` 은 잡아 원문과 함께 `LogError` 하고 고스트 없이 달린다(복구 = 고스트 없는 레이스, §5). 프리팹 `ArmoredRunner` 에는 MonoBehaviour 가 없어(`--- !u!114` 0개) 복제해도 스크립트가 돌지 않는다.
+- **이유**: 틱마다 기록 그대로(보간 없음) — 러너도 `CharacterController` 로 틱에만 움직여서 둘이 같은 리듬으로 보인다. 런타임 머티리얼 — 머티리얼 에셋을 쓰려면 씬 참조가 필요하다(씬 수정). `MetalChain` 이 같은 방식이다.
+- **알고 있는 위험 (확인 못 함)**: 프로젝트에 투명 머티리얼이 없어서, 플레이어 빌드에서 URP Lit 의 투명 변형(`_SURFACE_TYPE_TRANSPARENT`)이 빠질 수 있다. 에디터에서만 확인한다. 빌드에서 깨지면 `M_Ghost` 에셋 + 씬 참조로 바꾼다(씬 수정이라 별도 합의).
+- **안 한 것**: 고스트 달리기 모션(M5), 켜기/끄기 설정, 다른 러너의 전체 최고 고스트, 실시간 차이 표시.
+- **딸린 수정**: 첫 PlayMode 실행에서 2건이 실패했다 — `Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby`, 원문 `Unhandled log message: '[Exception] ArgumentException: A name is required. Parameter name: track'` (`GhostFiles.RequireName` ← `RaceAssembler.ShowGhost` ← `Start`). 두 테스트는 이름 없는 `CreateInstance<TrackDefinition>()` 로 로비 레이스를 연다. 지금까지는 기록 키를 결승 때만 만들어 드러나지 않았다. 고친 것: `RaceAssembler.Awake` 가 러너처럼 트랙 에셋 이름이 비면 끄고 알린다. 테스트의 만든 정의 6곳에 에셋처럼 이름 `TestTrack` 을 준다(M4-1 의 테스트 러너 이름과 같은 이유 — 검사를 약하게 한 것이 아니다).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 4개(`ChainRushFlowTests`·`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushProfileTests`) + 지문 1건, EditMode 전체.
+  - 1회차 (고치기 전): EditMode `testcasecount="297" result="Passed" passed="297" failed="0"` (10:14:23Z). PlayMode `testcasecount="62" result="Failed(Child)" passed="60" failed="2" skipped="0"` (10:15:08Z~10:21:34Z) — 위 딸린 수정의 2건.
+  - 2회차 (고친 뒤): EditMode `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:23:12Z~10:23:13Z). PlayMode `testcasecount="62" result="Passed" passed="62" failed="0" skipped="0"` (10:23:48Z~10:30:16Z, 387.2초) — Flow 39·InputSource 10·Presentation 3·Profile 9·지문 1, 도구 출력과 같다. 새 고스트 테스트 2건과 실패했던 2건 모두 통과.
+  - 화면(반투명이 보이는지, 고스트가 러너와 겹쳐 보기 괜찮은지)은 사용자 플레이 확인 전이다(검증 안 됨). 플레이어 빌드는 확인하지 않았다.
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `faef78c`): `select-tests -Range dev...HEAD` 가 2회차와 같은 테스트(EditMode 전체, PlayMode 클래스 4개 + 지문 1건)를 골랐다. 2회차 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 2회차를 이 커밋의 병합 근거로 쓴다. 1회차 실패 2건은 원인(이름 없는 테스트 트랙 정의)을 위 "딸린 수정" 에 적었고, 코드를 고친 뒤 통과했다 — 다시 돌려 없던 일로 한 것이 아니다.
+  - **영향 평가**: `GhostRunner`·`RaceAssembler` → 읽는 곳 `RaceAssembler.ShowGhost`(`Flow/RaceAssembler.cs`)·`ChainRushFlowTests` → `ChainRushFlowTests`(로비 레이스 조립·고스트)·`ChainRushProfileTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`(표현 경로 표). 시뮬은 `GhostRunner` 를 참조하지 않는다(`game.Tick` 을 읽기만) — 지문 1건으로 확인.
+
+## 2026-10-29 · M4-2 결과 화면 비교: 이번 기록을 "내 최고"·"전체 최고"와 (`feature/m4-result-compare`)
+
+- **결정 (사용자, 2026-10-29)**: M4-2 합의 요청서(결과 화면 오른쪽 패널, 랩 아래·버튼 위에 두 줄, 차이는 소수 둘째 자리 `-` 가 앞섬, 비교는 이번 결승 전에 있던 기록)에 "ㄱㄱ".
+- **한 것**:
+  - `Flow/FinishComparison` (readonly struct): 이번 틱, ~~이전 러너 최고,~~ 이전 전체 최고와 그 러너(없으면 0). 새 기록 여부(동률은 아니다 — `BestRecords` 가 옛것을 남긴다), 줄 문구 ~~`내 최고  01:19.4` /~~ `전체 최고  01:18.9 · BETA` / 없으면 `첫 기록`, 차이 `-0.60  NEW` / `+0.50` / `±0.00`. 차이는 틱에서 바로 계산해 정확하다(1틱 = 0.02 s). → 2026-10-29 "고스트: 트랙 × 속도의 최고 기록 하나" 로 러너 최고 줄을 지웠다. 남은 줄은 `최고 기록  01:18.9 · BETA`.
+  - `RaceAssembler.KeepFinish`: 기록을 저장하기 전에 두 기록을 읽어 `LastFinish`(`HasLastFinish`)로 남긴다.
+  - `ChainRushHud.DrawResult`: 로비에서 온 레이스가 결승했을 때만 `DrawComparison` 두 줄(새 기록이면 차이를 민트로)과 왼쪽 안내 "새 기록! 고스트로 저장했습니다."(러너 기록을 깼을 때). 실패·직접 연 씬은 그대로다.
+- **이유**: M4 목표 "기록을 깨고 싶게" — 이번 판이 얼마나 모자랐는지가 보여야 다시 달린다. 문구와 계산을 struct 로 떼어 OnGUI 없이 EditMode 에서 검사한다.
+- **안 한 것**: 레이스 중 실시간 차이(M4-3 고스트와 같이 볼 거리), 랩별 최고 비교(랩 시간은 저장하지 않는다), 로비 표시 변경.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 지문 1건, EditMode 전체. EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (09:57:51Z~09:57:55Z, 새 5건 포함). PlayMode `testcasecount="47" result="Passed" passed="47" failed="0" skipped="0"` (09:58:44Z~10:04:54Z, 370.0초) — Flow 37·Profile 9·지문 1, 도구 출력과 같다. 화면은 사용자 플레이 확인 전이다(검증 안 됨).
+  - **병합 조건 ②** (사용자 "커밋병합 진행하라", `afcaf62`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트(EditMode 전체, PlayMode 클래스 2개 + 지문 1건)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았고(그 뒤 고친 것은 `docs/` 뿐) 커밋의 `Assets/` 가 실행한 작업 트리와 같으므로, 위 두 실행을 이 커밋의 병합 근거로 쓴다. 다시 돌리지 않았다.
+  - **영향 평가**: `FinishComparison`·`RaceAssembler` → 읽는 곳 `ChainRushHud.DrawResult`(`ChainRushHud.cs`)·`RaceAssembler.KeepFinish` → `ChainRushFlowTests`(로비 결승·결과 화면 경로)·`ChainRushProfileTests`. `ChainRushHud` 는 시뮬이 읽지 않는다(그리기만) — 지문 1건으로 확인. 더 돌릴 테스트는 보이지 않았다.
+
+## 2026-10-29 · M4 기록 키·고스트 형식: 러너별 최고 기록 · 고스트는 입력 재생이 아니라 틱마다 위치 기록 (`feature/m4-best-records`)
+
+- **결정 (사용자, 2026-10-29)**: M4 첫 작업으로 "최고 기록·결과 비교·내 고스트" 를 골랐다("1 ㄱㄱ"). 고스트 형식은 "위치 기록", 기록 키는 "트랙×속도×러너" 를 골랐다(둘 다 추천안). 이어 M4-1 합의 요청서(러너별 기록 + 고스트 저장 형식, 결과 화면·재생은 다음 단계)에 "ㄱㄱ".
+- **한 것**:
+  - ~~`BestRecords.TryGetForRunner`·`SubmitForRunner`·`ClearForRunner`: 러너별 최고 기록. 러너는 프로필 에셋 이름(`RunnerProfile_Alpha`)으로 부른다 — 트랙을 정의 에셋 이름으로 부르는 것과 같다. 키 `<접두사><트랙>.<속도>.byRunner.<러너>.ticks`. 트랙×속도 전체 최고(로비에 보이는 것, 러너 표시 이름 포함)는 그대로 두고 결승마다 함께 갱신한다.~~ → 2026-10-29 "고스트: 트랙 × 속도의 최고 기록 하나" 로 지웠다(사용자 "트랙별 최고기록만 남기고 싶다"). 고스트 파일 키도 `<트랙>.<속도>.ghost` 로 바뀌었다. 아래 GhostTrace 형식은 그대로다.
+  - `Flow/GhostTrace`: 틱마다 위치(float 3)와 Heading(float, 도)을 쌓고 바이트로 만든다. `"PHGT"`·버전 1·틱 수·틱당 16바이트. 읽기는 `InputLogFile` 처럼 엄격하다(머리말·길이·유한하지 않은 값이면 던진다).
+  - `Flow/GhostFiles`: 고스트 파일을 `<트랙>.<속도>.<러너>.ghost` 로 저장·로드·삭제한다. 게임은 `Application.persistentDataPath/Ghosts`, 테스트는 자기 폴더. 파일이 없으면 고스트 없음, 깨진 파일은 던진다(없음으로 넘기지 않는다).
+  - `RaceAssembler`: `ChainRushGame.TickCompleted` 로 틱마다 러너 위치·Heading 을 기록한다(틱 1 이면 비운다 — 재시작, 순서가 어긋나면 그 판은 고스트를 남기지 않고 에러 로그). 결승이 러너 기록을 깨면(`LastFinishWasRunnerBest`) 고스트를 저장한다. 프로필 에셋 이름이 비면 Awake 에서 끄고 알린다. 결승 처리 전에 `wasFinished` 를 먼저 세워 저장이 던져도 매 프레임 다시 시도하며 플래그를 덮지 않게 했다.
+- **이유**:
+  - 위치 기록: 입력 재생은 시뮬을 조금만 바꿔도(튜닝, M6 T5 짧은 봉) 저장된 고스트가 다른 길로 달린다. 그러면 지문이 바뀔 때마다 고스트를 버려야 한다. 그리고 레이스 중에 시뮬을 하나 더 돌려야 하는데, 플레이어용 격리 월드 로더는 없다(DECISIONS "P3 C1a"). 위치 기록은 그 판의 경로를 그대로 남기고 재생은 보간만 하면 된다. 크기는 2랩 90초 기준 약 70KB 다.
+  - 파일 저장(첫 사례): 그동안 저장은 모두 PlayerPrefs 였다(`BestRecords`·`GameSettings`). 수십 KB 데이터는 PlayerPrefs(Windows 레지스트리)에 맞지 않는다.
+  - 전체 최고 유지: 로비 트랙 페이지(`TrackPage.cs:77`)를 바꾸지 않고, M4 전에 세운 기록도 그대로 보인다.
+- **안 한 것**: 옛 트랙×속도 기록을 러너별 기록으로 옮기는 것. 옛 기록은 러너 **표시 이름**만 갖고 있어 에셋 이름으로 확실히 이어 붙일 수 없다. 그래서 러너별 기록은 비어서 시작한다. 결과 화면 비교(M4-2), 레이스 중 고스트 재생(M4-3), 입력 로그 같이 저장.
+- **바뀐 앞 결정**: 2026-10-29 "M3 범위 조정" 의 이유 줄 "M4 고스트는 입력 기록·재생에 기대므로" 는 이 결정으로 더는 맞지 않는다. T5 를 해도 저장된 고스트는 그대로다(`NEXT_REQUESTS.md` M6 "트랙 추가").
+- **버린 대안**: 입력 재생(위 이유). 트랙×속도 기록 하나만 유지 — 사용자가 고르지 않았다.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인 — 병합 근거는 아직 아니다): 컴파일 에러 0(`Unity_RunCommand` `isCompilationSuccessful: true`, Console Error 0). `select-tests` 기본 범위 = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 지문 1건(`Replay_CircuitBotRun_RepeatsEveryTickBitForBit`), EditMode 전체. EditMode `!Enemy` `testcasecount="292" result="Passed" passed="292" failed="0" skipped="0"` (09:21:30Z~09:21:35Z, 새 9건 포함). PlayMode `testcasecount="47" result="Passed" passed="47" failed="0" skipped="0"` (09:23:23Z~09:29:46Z, 382.8초) — Flow 37·Profile 9·지문 1, 도구 출력과 같다. 서킷 지문 통과(기록은 틱 밖에서 읽기만 한다). 테스트 뒤 `persistentDataPath/Ghosts` 는 생기지 않았다(플레이어 고스트를 건드리지 않음).
+  - **병합 조건 ②** (`c786afa`): `select-tests -Range dev...HEAD` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 클래스 일부 1개(`ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`) + 지문 1건, EditMode 전체. 컴파일 `scriptCompilationFailed=False`, Console Error 0. EditMode `!Enemy` `testcasecount="292" result="Passed" passed="292" failed="0" skipped="0"` (09:33:05Z~09:33:09Z). PlayMode `testcasecount="48" result="Passed" passed="47" failed="0" skipped="1"` (09:33:51Z~09:40:05Z, 374.8초) — Flow 37·Profile 9·지문 1 통과, skipped 1 은 Probe(`[Explicit]` 이라 `groupNames` 로는 돌지 않는다). 그래서 Probe 를 `testNames` 로 따로 1회: `testcasecount="1" result="Passed" passed="1" failed="0"` (09:40:46Z~09:42:25Z, 98.6초).
+  - **영향 평가**: `BestRecords`·`GhostTrace`·`GhostFiles`·`RaceAssembler` → 읽는 곳 `RaceAssembler`(`Flow/RaceAssembler.cs`)·`TrackPage.cs:77`·`LobbyMenu.cs:40` → `ChainRushFlowTests`(로비·레이스 조립·결승 기록)·`ChainRushProfileTests`. 시뮬 코드(`RunnerMotor`·`ChainRushGame`·`RacerState`)는 새 타입을 참조하지 않는다(`TickCompleted` 구독만) — 지문 1건으로 확인. 더 돌릴 테스트는 보이지 않았다.
+- **딸린 수정 (사용자 "네 추천대로", 2026-10-29)**: `ChainRushProbeTests`(`[Explicit]`, 게이트 밖)의 `Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld` 는 이름 없는 프로필(`CreateInstance`)로 로비 레이스를 열어 `RaceAssembler.Awake` 의 에셋 이름 검사에 걸리게 됐다. 프로필 이름 `Neutral`, 테스트 고스트 폴더(`assembler.Ghosts`), 끝날 때 러너 기록·폴더 정리를 더했다.
+
 ## 2026-10-29 · main v0.4: M3 "고를 거리" — `dev` 를 `main` 에 병합하고 태그 `v0.4`
 
 - **결정 (사용자, 2026-10-29)**: 아래 "M3 범위 조정" 에서 "지금 닫기"·"태그에 맞추기"를 골랐고, 합의 요청서(`feature/m3-close-v0.4`: 범위 조정·버전 표기·README·이 기록 → `feature → dev`, `dev → main` `--no-ff`, 주석 태그 `v0.4`, 푸시는 지시 때만)에 "ㄱㄱ".

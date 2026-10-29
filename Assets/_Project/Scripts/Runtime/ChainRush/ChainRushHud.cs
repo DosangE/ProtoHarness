@@ -35,7 +35,14 @@ namespace ProtoHarness.ChainRush
         private GUIStyle raceWord;
         private GUIStyle accentWord;
         private GUIStyle totalTime;
+        private GUIStyle compare;
+        private GUIStyle compareDelta;
+        private GUIStyle compareNew;
         private int pauseCursor;
+        private StateEdge respawn;
+        // Notices the control moments for both the world effects and this HUD, so the two never disagree (review
+        // 2026-10-29); it runs after GrappleController, and OnGUI after every LateUpdate, so the HUD draws this frame's.
+        private ControlFeedback feedback;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
         private const string CueGlyphs = "321GO!";
@@ -61,11 +68,26 @@ namespace ProtoHarness.ChainRush
             {
                 Debug.LogError("ChainRushHud: game, player, grapple and camera are required.", this);
                 enabled = false;
+                return;
             }
+            feedback = gameObject.AddComponent<ControlFeedback>();
+            feedback.Initialize(game, player, grapple);
         }
+
+        // How dark the respawn fade has the screen right now (RespawnLook): 1 the moment a fallen runner is put back.
+        public float RespawnFade => RespawnLook.FadeAlpha(respawn.Since(Time.time));
+
+        // These envelopes belong to rendered frames, not ticks, and never feed back into the simulation.
+        public float BoostFlash => game.IsRunning ? FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.BoostFlashTime) : 0f;
+        public float HookFlash => game.IsRunning ? Mathf.Max(
+            FeedbackLook.Fade(feedback.SinceHook(Time.time), FeedbackLook.HookRingTime),
+            FeedbackLook.Fade(feedback.SinceSwing(Time.time), FeedbackLook.HookRingTime)) : 0f;
+        // 1 the moment a grapple misses, 0 once the shake is over.
+        public float MissShake => game.IsRunning ? FeedbackLook.Fade(feedback.SinceMiss(Time.time), FeedbackLook.MissShakeTime) : 0f;
 
         private void Update()
         {
+            respawn.Update(player.IsRespawning, Time.time);
             if (!game.IsPaused)
             {
                 pauseCursor = (int)PauseChoice.Continue;
@@ -130,6 +152,11 @@ namespace ProtoHarness.ChainRush
             raceWord = NightUi.Style(displayFont, 112, Color.white, FontStyle.BoldAndItalic);
             accentWord = NightUi.Style(displayFont, 112, Mint, FontStyle.BoldAndItalic);
             totalTime = NightUi.Style(displayFont, 84, Color.white, FontStyle.BoldAndItalic);
+            compare = Style(18, Color.white);
+            compareDelta = Style(18, Color.white, FontStyle.Bold);
+            compareDelta.alignment = TextAnchor.UpperRight;
+            compareNew = Style(18, Mint, FontStyle.Bold);
+            compareNew.alignment = TextAnchor.UpperRight;
             button = Style(22, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
@@ -163,6 +190,9 @@ namespace ProtoHarness.ChainRush
             {
                 DrawPlay(width, height, scale);
                 if (game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
+                // Over everything, the screen coming up from black after a fall hides the camera's cut.
+                float fade = RespawnFade;
+                if (fade > 0f) NightUi.Block(new Rect(0, 0, width, height), new Color(0f, 0f, 0f, fade));
             }
             GUI.matrix = previous;
         }
@@ -246,29 +276,17 @@ namespace ProtoHarness.ChainRush
             int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
             for (int i = 0; i < 20; i++) NightUi.Block(new Rect(width - 332 + i * 13, height - 125, 9, 5), i < speedMarks ? Mint : Row);
             DrawBoost(width, height);
-            string status = grapple.IsAttached ? "LINKED / 놓으면 도약" : player.IsGrounded ? "RUN / 노란 선에서 점프" : "AIR / ALT 로 앵커 잡기";
-            if (player.IsSwinging) status = "SWING / SHIFT 유지 · ←/→ 길이";
-            if (grapple.JustMissed) status = "OUT OF RANGE  /  앵커에 더 가까이";
-            NightUi.Block(new Rect(64, height - 185, 430, 63), Ink);
-            NightUi.Block(new Rect(64, height - 185, 3, 63), Mint);
-            GUI.Label(new Rect(84, height - 167, 400, 32), status, small);
             Transform anchor = grapple.Candidate;
-            if (anchor != null)
+            if (grapple.IsAttached || anchor != null)
             {
-                Vector3 screen = viewCamera.WorldToScreenPoint(anchor.position);
-                if (screen.z > 0f)
-                {
-                    float x = screen.x / scale;
-                    float y = (Screen.height - screen.y) / scale;
-                    Color color = grapple.IsAttached ? Color.white : Mint;
-                    NightUi.Block(new Rect(x - 26, y - 26, 15, 3), color);
-                    NightUi.Block(new Rect(x - 26, y - 26, 3, 15), color);
-                    NightUi.Block(new Rect(x + 11, y + 23, 15, 3), color);
-                    NightUi.Block(new Rect(x + 23, y + 11, 3, 15), color);
-                    GUI.Label(new Rect(x + 34, y - 10, 170, 25), "LINK / " + Vector3.Distance(player.transform.position, anchor.position).ToString("0") + "m", small);
-                }
+                Vector3 point = grapple.IsAttached ? grapple.AnchorPosition : anchor.position;
+                float sinceHook = feedback.SinceHook(Time.time);
+                Color color = Color.Lerp(Mint, Color.white, FeedbackLook.Fade(sinceHook, FeedbackLook.HookRingTime));
+                DrawWorldBracket(point, scale, FeedbackLook.BracketScale(sinceHook), color);
             }
-            if (grapple.HasPoleCandidate) DrawPoleCandidate(scale);
+            if (player.IsSwinging || grapple.HasPoleCandidate) DrawPoleCandidate(width, height, scale);
+            DrawMiss(scale);
+            DrawBoostFlash(width, height);
             if (game.DamageFlash)
             {
                 Color flash = Coral;
@@ -278,24 +296,143 @@ namespace ProtoHarness.ChainRush
             }
         }
 
-        // The corner pole Shift would hook now, bracketed at the band the chain bites, like an anchor. A hook costs nothing,
-        // so it is always mint.
-        private void DrawPoleCandidate(float scale)
+        // The offered pole pulses at its bite band; hooking it tightens the same bracket around the actual swing center.
+        // A pole off the screen (to the side, or behind the camera) keeps its target pinned at the screen's edge toward
+        // it, smaller, with an arrow pointing at it.
+        private void DrawPoleCandidate(float width, float height, float scale)
         {
-            Vector3 top = SwingLook.PoleBite(grapple.PoleCandidate);
-            Vector3 screen = viewCamera.WorldToScreenPoint(top);
-            if (screen.z <= 0f) return;
-            float x = screen.x / scale;
-            float y = (Screen.height - screen.y) / scale;
-            Color color = Mint;
-            NightUi.Block(new Rect(x - 26, y - 26, 15, 3), color);
-            NightUi.Block(new Rect(x - 26, y - 26, 3, 15), color);
-            NightUi.Block(new Rect(x + 11, y + 23, 15, 3), color);
-            NightUi.Block(new Rect(x + 23, y + 11, 3, 15), color);
-            GUI.Label(new Rect(x + 34, y - 10, 200, 25), "POLE / SHIFT  " + Vector3.Distance(player.transform.position, top).ToString("0") + "m", small);
+            bool swinging = player.IsSwinging;
+            Vector3 pole = swinging ? game.Racer.SwingCenter : grapple.PoleCandidate;
+            float since = swinging ? feedback.SinceSwing(Time.time) : feedback.SincePoleReady(Time.time);
+            float size = swinging ? FeedbackLook.BracketScale(since) : FeedbackLook.PoleScale(since);
+            float flash = FeedbackLook.Fade(since, swinging ? FeedbackLook.HookRingTime : FeedbackLook.PoleEnterTime);
+            Color color = Color.Lerp(Mint, Color.white, flash);
+            float fill = swinging ? 0f : Mathf.Lerp(FeedbackLook.TargetFillMin, FeedbackLook.TargetFillMax, FeedbackLook.Pulse(since));
+            Vector3 screen = viewCamera.WorldToScreenPoint(SwingLook.PoleBite(pole));
+            var point = new Vector2(screen.x / scale, (Screen.height - screen.y) / scale);
+            // Behind the camera the projection comes out mirrored through the screen's center.
+            if (screen.z < 0f) point = new Vector2(width - point.x, height - point.y);
+            if (screen.z > 0f && FeedbackLook.IsOnScreen(point, width, height))
+            {
+                DrawTarget(point.x, point.y, size, color, fill);
+                return;
+            }
+            Vector2 pinned = FeedbackLook.PinToEdge(point, width, height, out Vector2 direction);
+            float edgeSize = size * FeedbackLook.EdgeTargetScale;
+            DrawTarget(pinned.x, pinned.y, edgeSize, color, fill);
+            // Past the square's side in that direction, so the arrow never overlaps the target.
+            float reach = PoleTargetHalf * edgeSize / Mathf.Max(Mathf.Abs(direction.x), Mathf.Abs(direction.y));
+            DrawArrow(pinned + direction * (reach + FeedbackLook.ArrowGap), direction, color);
         }
 
-        // Booster gauge at the bottom middle, above the status line (KartRider style): the bar fills toward the next booster
+        private const float PoleTargetHalf = 30f;
+
+        // The pole's target is bolder than an anchor's bracket (user 2026-10-29 "사각형 타겟 … 잘 보이게"): all four
+        // corners, thicker, outlined in ink so it reads against bright scenery, over a faint fill that breathes with the
+        // ring on the pole.
+        private static void DrawTarget(float x, float y, float size, Color color, float fill)
+        {
+            const float Arm = 18f, Thick = 5f, Edge = 2f;
+            float half = PoleTargetHalf * size, arm = Arm * size;
+            Color inside = color;
+            inside.a = fill;
+            if (fill > 0f) NightUi.Block(new Rect(x - half, y - half, half * 2f, half * 2f), inside);
+            DrawCorners(x, y, half + Edge, arm + Edge * 2f, Thick + Edge * 2f, Ink);
+            DrawCorners(x, y, half, arm, Thick, color);
+        }
+
+        // An L at each corner of the square half from (x, y): arms arm long and thick wide, reaching inward.
+        private static void DrawCorners(float x, float y, float half, float arm, float thick, Color color)
+        {
+            float left = x - half, top = y - half, right = x + half, bottom = y + half;
+            NightUi.Block(new Rect(left, top, arm, thick), color);
+            NightUi.Block(new Rect(left, top, thick, arm), color);
+            NightUi.Block(new Rect(right - arm, top, arm, thick), color);
+            NightUi.Block(new Rect(right - thick, top, thick, arm), color);
+            NightUi.Block(new Rect(left, bottom - thick, arm, thick), color);
+            NightUi.Block(new Rect(left, bottom - arm, thick, arm), color);
+            NightUi.Block(new Rect(right - arm, bottom - thick, arm, thick), color);
+            NightUi.Block(new Rect(right - thick, bottom - arm, thick, arm), color);
+        }
+
+        // A small triangle whose base is centered on at, pointing along direction (HUD coordinates, y down): columns of
+        // blocks narrowing to the tip over a slightly larger one in ink, like the target's outline. Drawn in a turned
+        // GUI matrix and put back after.
+        private static void DrawArrow(Vector2 at, Vector2 direction, Color color)
+        {
+            const int Columns = 6;
+            const float Column = 3f, Base = 26f, Step = 4f, Edge = 2f;
+            Matrix4x4 previous = GUI.matrix;
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            GUI.matrix = previous * Matrix4x4.TRS(new Vector3(at.x, at.y, 0f), Quaternion.Euler(0f, 0f, angle), Vector3.one);
+            for (int i = 0; i <= Columns; i++)
+            {
+                float tall = Base + Edge * 2f - i * Step;
+                NightUi.Block(new Rect(i * Column - Edge, -tall * 0.5f, Column, tall), Ink);
+            }
+            for (int i = 0; i < Columns; i++)
+            {
+                float tall = Base - i * Step;
+                NightUi.Block(new Rect(i * Column, -tall * 0.5f, Column, tall), color);
+            }
+            GUI.matrix = previous;
+        }
+
+        private void DrawWorldBracket(Vector3 point, float scale, float size, Color color)
+        {
+            Vector3 screen = viewCamera.WorldToScreenPoint(point);
+            if (screen.z <= 0f) return;
+            DrawBracket(screen.x / scale, (Screen.height - screen.y) / scale, size, color);
+        }
+
+        // Keep the four corner blocks, scaling their offsets and lengths together as a hook draws them inward.
+        private static void DrawBracket(float x, float y, float size, Color color)
+        {
+            NightUi.Block(new Rect(x - 26 * size, y - 26 * size, 15 * size, 3), color);
+            NightUi.Block(new Rect(x - 26 * size, y - 26 * size, 3, 15 * size), color);
+            NightUi.Block(new Rect(x + 11 * size, y + 23 * size, 15 * size, 3), color);
+            NightUi.Block(new Rect(x + 23 * size, y + 11 * size, 3, 15 * size), color);
+        }
+
+        private void DrawMiss(float scale)
+        {
+            float since = feedback.SinceMiss(Time.time);
+            float fade = FeedbackLook.Fade(since, FeedbackLook.MissShakeTime);
+            if (fade <= 0f) return;
+            Vector3 screen = grapple.Candidate != null ? viewCamera.WorldToScreenPoint(grapple.Candidate.position)
+                : new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 1f);
+            if (screen.z <= 0f) return;
+            Color color = Coral;
+            color.a = fade;
+            DrawBracket(screen.x / scale + FeedbackLook.ShakeOffset(since), (Screen.height - screen.y) / scale, 1f, color);
+        }
+
+        // Layered edge strips fall off toward the view, with short lines moving inward as the burst fades.
+        private void DrawBoostFlash(float width, float height)
+        {
+            float fade = BoostFlash;
+            if (fade <= 0f) return;
+            for (int layer = 0; layer < 5; layer++)
+            {
+                Color color = Mint;
+                color.a = fade * (0.3f - layer * 0.05f);
+                float x = layer * 12f;
+                NightUi.Block(new Rect(x, 0f, 12f, height), color);
+                NightUi.Block(new Rect(width - x - 12f, 0f, 12f, height), color);
+            }
+            for (int i = 0; i < 7; i++)
+            {
+                Color color = Mint;
+                color.a = fade * 0.7f;
+                float x = 12f + (1f - fade) * (45f + i * 7f);
+                float y = height * (0.18f + i * 0.1f);
+                float length = (45f + (i % 3) * 18f) * fade;
+                NightUi.Block(new Rect(x, y, length, 2f), color);
+                NightUi.Block(new Rect(width - x - length, y, length, 2f), color);
+            }
+        }
+
+        // Booster gauge at the bottom middle (KartRider style): the bar fills toward the next booster
         // as the runner swings, and each whole gauge slot is a booster waiting in an item box beside it, spent by Ctrl.
         // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
         private void DrawBoost(float width, float height)
@@ -315,6 +452,8 @@ namespace ProtoHarness.ChainRush
             NightUi.Block(bar, Row);
             bar.width *= fill;
             NightUi.Block(bar, Mint);
+            float burst = FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.GaugeBurstTime);
+            int spentBoostSlot = feedback.SpentBoostSlot;
             for (int i = 0; i < boxes; i++)
             {
                 var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
@@ -322,6 +461,13 @@ namespace ProtoHarness.ChainRush
                 var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
                 NightUi.Block(item, i < boosters ? Mint : Row);
                 if (i < boosters) GUI.Label(item, "▶▶", button);
+                if (i == spentBoostSlot && burst > 0f)
+                {
+                    Color color = Color.Lerp(Mint, Color.white, burst);
+                    color.a = burst;
+                    float spread = (1f - burst) * 12f;
+                    NightUi.Block(new Rect(item.x - spread, item.y - spread, item.width + spread * 2f, item.height + spread * 2f), color);
+                }
             }
         }
 
@@ -333,8 +479,10 @@ namespace ProtoHarness.ChainRush
             float panelWidth = width * .41f;
             GUI.Label(new Rect(left, y + 10, width * .45f, 142), game.HasFinished ? "RACE" : "SIGNAL", raceWord);
             GUI.Label(new Rect(left, y + 128, width * .45f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
-            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), game.HasFinished
-                ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 점프 후 앵커를 잡으세요.", small);
+            bool compared = game.HasFinished && FromLobby && assembler.HasLastFinish;
+            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), !game.HasFinished ? "다시 도전하세요. 점프 후 앵커를 잡으세요."
+                : compared && assembler.LastFinish.IsNewBest ? "새 기록! 고스트로 저장했습니다."
+                : "결승선 도착. 다음 기록에 도전하세요.", small);
             NightUi.Surface(new Rect(x, y, panelWidth, 520));
             NightUi.Block(new Rect(x, y, panelWidth, 3), game.HasFailed ? Coral : Mint);
             GUI.Label(new Rect(x + 34, y + 30, panelWidth - 68, 30), "TOTAL TIME / RACE RESULT", small);
@@ -352,6 +500,7 @@ namespace ProtoHarness.ChainRush
                 }
             }
             else GUI.Label(new Rect(x + 34, y + 222, panelWidth - 68, 38), "LINKS " + game.Grapples + "   HITS " + game.Hits, body);
+            if (compared) DrawComparison(assembler.LastFinish, x + 34, y + 340, panelWidth - 68);
             bool again = false, lobby = false;
             if (game.ManualStart)
             {
@@ -375,6 +524,15 @@ namespace ProtoHarness.ChainRush
                 UiSound.Play(UiSound.Cue.Confirm);
                 game.StartCountdown();
             }
+        }
+
+        // Below the laps (three at most end at y + 344 of the panel) and above the buttons: this finish against the
+        // track's best at this speed as it was before it, the difference in mint when it beat it (M4-2).
+        private void DrawComparison(Flow.FinishComparison finish, float x, float y, float width)
+        {
+            NightUi.Block(new Rect(x, y - 2, width, 1), Row);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.BestLine, compare);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.BestDelta, finish.IsNewBest ? compareNew : compareDelta);
         }
 
         // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in

@@ -62,7 +62,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             return Step.Launch;
         }
 
-        public override Step Back() => Step.Open(LobbyMenu.Page.Speed, Context.Speed);
+        public override Step Back() => Step.Open(LobbyMenu.Page.Track, Context.Track);
 
         public override void Opened(int highlight)
         {

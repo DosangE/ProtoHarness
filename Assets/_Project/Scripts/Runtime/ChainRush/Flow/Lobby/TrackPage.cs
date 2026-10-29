@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
-    // The tracks: the scene's (LobbyMenu.TrackChoice) with each one's best record at the chosen speed class, then the
-    // tracks still to come (Placeholders), locked. Choosing one goes on to the speed page.
+    // The tracks: the scene's (LobbyMenu.TrackChoice) with each one's best record at the speed class chosen on the page
+    // before (named in the line), then the tracks still to come (Placeholders), locked. Choosing one goes on to the runner page.
     public sealed class TrackPage : LobbyPage
     {
         // Tracks still to come, listed after the scene's tracks and locked; they have no definition yet.
@@ -53,7 +53,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override string Description(int row) => descriptions[row];
         public override string DescriptionFoot(int row) => records[row];
 
-        // The record line for a track: "최고 기록  01:19.2 · BETA", "기록 없음", or PlaceholderRecord.
+        // The record line for a track: "최고 기록 (빠름)  01:19.2  ·  BETA", "빠름 기록 없음", or PlaceholderRecord.
         public string RecordText(int row) => records[row];
 
         // A scene track's description, by its title; empty for a title not written here.
@@ -73,19 +73,20 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public void RefreshRecords()
         {
             SpeedClass speed = SpeedPage.ClassAt(Context.Speed);
+            string speedName = SpeedPage.LabelAt(Context.Speed);
             for (int i = 0; i < Context.Tracks.Count; i++)
                 records[i] = Context.Records.TryGet(Context.Tracks[i].Definition.name, speed, out BestRecords.Record best)
-                    ? "최고 기록  " + ChainRushHud.FormatTime(Ticks.ToSeconds(best.Ticks)) + "  ·  " + best.Runner
-                    : "기록 없음";
+                    ? "최고 기록 (" + speedName + ")  " + ChainRushHud.FormatTime(Ticks.ToSeconds(best.Ticks)) + "  ·  " + best.Runner
+                    : speedName + " 기록 없음";
         }
 
         public override Step Confirm(int row)
         {
             Context.Track = row;
-            return Step.Open(LobbyMenu.Page.Speed, Context.Speed);
+            return Step.Open(LobbyMenu.Page.Runner, Context.Runner);
         }
 
-        public override Step Back() => Step.Open(LobbyMenu.Page.Main, MainPage.SingleRow);
+        public override Step Back() => Step.Open(LobbyMenu.Page.Speed, Context.Speed);
 
         public override void Opened(int highlight) => RefreshRecords();
 

@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-10-29 · 로비 순서: 속도 → 트랙 → 러너 · 트랙 기록 줄에 속도 이름 (`feature/lobby-speed-first`)
+
+- **결정 (사용자, 2026-10-29)**: "트랙을 고르고 속도(보통)를 선택한뒤 뒤로 나가면 기록 셋팅값이 보통으로 되어있다 … 따라서 속도를 고르고 트랙을 고르게 하자". 요청서(순서 변경 + 기록 줄 속도 이름 제안)에 "둘 다 ㄱㄱ 속도 이름도 붙여".
+- **원인**: 트랙 페이지는 `LobbyContext.Speed` 의 기록을 보인다(`TrackPage.RefreshRecords`). 속도는 트랙 다음에 골랐으므로 트랙 페이지에서 보이는 기록은 "아직 고르지 않은" 속도 — 처음엔 기본값 빠름, 한 번 보통을 고르고 돌아오면 보통 — 의 것이었다.
+- **한 것**: 싱글 레이스 = 메인 → 속도 → 트랙 → 러너(`MainPage`·`SpeedPage`·`TrackPage`·`RunnerPage` 의 Confirm/Back). 뒤로는 그 반대(러너 → 트랙 → 속도 → 메인). 트랙 기록 줄 `최고 기록 (빠름)  01:19.4  ·  BETA` / `빠름 기록 없음`. 메인 설명 문구 "속도와 트랙, 러너를 골라", 각 페이지·`LobbyMenu` 주석.
+- **테스트**: `ChainRushFlowTests` 의 로비를 따라가는 테스트를 새 순서로 고쳤다(사양이 바뀌었다 — 검사를 약하게 한 것이 아니다). 첫 테스트는 이름도 `Lobby_SingleThroughSpeedTrackAndRunner_BuildsTheChosenSetup` 으로. 새 테스트 `Lobby_TrackPage_ShowsTheRecordsOfTheSpeedJustChosen`: 빠름에만 기록이 있을 때 보통을 고르면 "보통 기록 없음", 돌아가 빠름을 고르면 빠름 기록.
+- **화면**: 가장 긴 줄(`최고 기록 (매우빠름)  …  ·  OMEGA`)이 트랙 행 오른쪽 칸에 들어간다 — 사용자 "가장 긴 줄 확인했다" (2026-10-29).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode `ChainRushFlowTests` 전체(테스트 메서드 이름 변경), 지문 없음(로비는 시뮬이 읽지 않는다), EditMode 전체. EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (11:05:05Z~11:05:09Z). PlayMode `testcasecount="40" result="Passed" passed="40" failed="0" skipped="0"` (11:05:47Z~11:10:37Z, 289.3초) — 로비 테스트 14건 포함, 새 테스트 통과.
+  - **병합 조건 ②** (사용자 "작업한것들 커밋 병합", `369566b`): `select-tests -Range dev...HEAD` 가 같은 테스트(EditMode 전체, PlayMode `ChainRushFlowTests` 1개, 지문 없음)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다. 영향 평가: 바뀐 로비 페이지 → 읽는 곳 `LobbyMenu`(`Flow/LobbyMenu.cs`) → `ChainRushFlowTests`(로비·로비에서 고르는 레이스). 로비는 시뮬이 읽지 않는다.
+
 ## 2026-10-29 · M4 복귀 연출: 검은 화면에서 밝아지기 · 카메라 컷 · 붙잡힌 동안 깜빡임 (`feature/m4-respawn-look`)
 
 - **결정 (사용자, 2026-10-29)**: "다음작업 ㄱㄱ" → 복귀 연출 합의 요청서(덮개 0.3 s, 카메라 Snap, 0.1 s 간격 깜빡임, 표현만)에 "ㄱㄱ".

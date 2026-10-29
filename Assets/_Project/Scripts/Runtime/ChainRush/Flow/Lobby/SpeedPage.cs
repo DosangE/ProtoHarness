@@ -1,6 +1,7 @@
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
-    // The speed classes, all open (M3; SpeedScale has their scales). Choosing one goes on to the runner page.
+    // The speed classes, all open (M3; SpeedScale has their scales). The first page of a single race (user 2026-10-29);
+    // choosing one goes on to the track page, which shows that speed's records.
     public sealed class SpeedPage : LobbyPage
     {
         private static readonly SpeedClass[] Classes = { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast };
@@ -26,9 +27,9 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override Step Confirm(int row)
         {
             Context.Speed = row;
-            return Step.Open(LobbyMenu.Page.Runner, Context.Runner);
+            return Step.Open(LobbyMenu.Page.Track, Context.Track);
         }
 
-        public override Step Back() => Step.Open(LobbyMenu.Page.Track, Context.Track);
+        public override Step Back() => Step.Open(LobbyMenu.Page.Main, MainPage.SingleRow);
     }
 }

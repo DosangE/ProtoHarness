@@ -8,8 +8,8 @@ using UnityEngine.SceneManagement;
 
 namespace ProtoHarness.ChainRush.Flow
 {
-    // The lobby: main menu (single race / multi, locked / settings), then for a single race the track, the speed class
-    // and the runner, then RaceLaunch and the race scene. ↑/↓ choose, Enter confirms, ESC goes back (from the main menu,
+    // The lobby: main menu (single race / multi, locked / settings), then for a single race the speed class, the track
+    // (with that speed's records, user 2026-10-29) and the runner, then RaceLaunch and the race scene. ↑/↓ choose, Enter confirms, ESC goes back (from the main menu,
     // to the title). Locked entries are shown but refuse with a notice. Drawn like ChainRushHud (OnGUI, 1600 x 900).
     // Each page is a LobbyPage (Flow/Lobby/: its rows, what choosing and going back do, how it is drawn); this keeps the
     // page shown and the cursor, reads the keys and the mouse, plays the cues and changes pages and scenes. Moving,
@@ -74,7 +74,7 @@ namespace ProtoHarness.ChainRush.Flow
             }
         }
         public Page CurrentPage => page.Id;
-        // The track page's record line for a track: "최고 기록  01:19.2 · BETA", or "기록 없음".
+        // The track page's record line for a track: "최고 기록 (빠름)  01:19.2  ·  BETA", or "빠름 기록 없음".
         public string TrackRecordText(int index) => trackPage.RecordText(index);
         public int Cursor => cursor;
         // The runner the setup names: on the runner page the highlighted one (a click only picks it since 2026-10-20),

@@ -14,7 +14,7 @@ namespace ProtoHarness.ChainRush.Flow
     {
         // Not the Player Settings bundle version (ProjectSettings is off limits, CLAUDE.md §0); raised by hand to match
         // the milestone tag (user 2026-10-29).
-        public const string Version = "0.4";
+        public const string Version = "0.5";
         private static readonly Color Ink = NightUi.Background;
         private static readonly Color Mint = NightUi.Accent;
         private static readonly Color Muted = NightUi.Muted;

@@ -155,6 +155,9 @@ MonoBehaviour:
   - title: SKYWAY LOOP
     definition: {fileID: 11400000, guid: 1b518dfd3292dce47904e7b029d0c925, type: 2}
     environmentScene: ChainRushTrackSkyway
+  - title: FINGER LANES
+    definition: {fileID: 11400000, guid: b7b22479ac1b36b4380d58c44abcb726, type: 2}
+    environmentScene: ChainRushTrackFingerLanes
   runners:
   - {fileID: 11400000, guid: 70e8d84855df5114182dddd9a937357d, type: 2}
   - {fileID: 11400000, guid: 25ffae7fda0824f4ebdf655e4c2a5fd0, type: 2}

@@ -52,6 +52,9 @@ namespace ProtoHarness.ChainRush
         // The highlighted pause entry; back on Continue whenever the game is not paused.
         public PauseChoice PauseCursor => (PauseChoice)pauseCursor;
 
+        // The title at the top left: the lobby's track name, or what the scene is when it was opened directly.
+        public string Heading => FromLobby ? assembler.Setup.Title : game.IsCircuit ? "CIRCUIT" : "CHAIN RUSH";
+
         private void Awake()
         {
             if (game == null || player == null || grapple == null || viewCamera == null)
@@ -181,8 +184,8 @@ namespace ProtoHarness.ChainRush
 
         private void DrawHeader(float width)
         {
-            NightUi.ShadowLabel(new Rect(64, 38, 410, 54), game.IsCircuit ? "STADIUM" : "CHAIN RUSH", heading);
-            GUI.Label(new Rect(66, 97, 350, 28), game.IsEndless ? "ENDLESS PURSUIT" : game.IsCircuit ? "SINGLE RACE / CIRCUIT" : "SKYLINE TRIAL", small);
+            NightUi.ShadowLabel(new Rect(64, 38, 410, 54), Heading, heading);
+            GUI.Label(new Rect(66, 97, 350, 28), game.IsCircuit ? "SINGLE RACE / CIRCUIT" : "SKYLINE TRIAL", small);
             for (int i = 0; i < 3; i++)
                 NightUi.Block(new Rect(66 + i * 39, 138, 30, 5), i < game.Health ? Mint : Row);
             if (game.IsCircuit && game.Circuit.Laps != null)
@@ -202,12 +205,12 @@ namespace ProtoHarness.ChainRush
         private void DrawReady(float width, float height)
         {
             NightUi.Block(new Rect(32, 178, 750, height - 298), Ink);
-            GUI.Label(new Rect(69, 169, 640, 26), game.IsEndless ? "FIELD TEST  /  002                         ENDLESS COMBAT" : game.IsCircuit ? "FIELD TEST  /  003                         TIME ATTACK" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
+            GUI.Label(new Rect(69, 169, 640, 26), game.IsCircuit ? "FIELD TEST  /  003                         TIME ATTACK" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
             GUI.Label(new Rect(62, 222, 660, 130), "CHAIN", title);
             GUI.Label(new Rect(62, 326, 660, 130), "THE SKY.", title);
             NightUi.Block(new Rect(70, 470, 65, 4), Mint);
             GUI.Label(new Rect(70, 500, 640, 37), "달리고, 걸고, 도약하세요.", heading);
-            GUI.Label(new Rect(70, 551, 655, 35), game.IsEndless ? "끝없는 옥상을 달리며 침입 드론을 체인으로 격파하세요." : game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
+            GUI.Label(new Rect(70, 551, 655, 35), game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
             GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 ALT 점프 → 공중에서 다시 ALT 누르고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
             if (game.ManualStart)
@@ -223,22 +226,21 @@ namespace ProtoHarness.ChainRush
                 NightUi.Block(start, new Color(0.2f, 0.3f, 0.33f));
                 GUI.Label(start, "출발 신호를 기다리는 중", waiting);
             }
-            GUI.Label(new Rect(470, height - 218, 240, 24), game.IsEndless ? "무한 생존  ·  체력 3칸" : game.IsCircuit ? game.Circuit.LapCount + "랩  ·  타임어택" : "약 50초  ·  체력 3칸", small);
+            GUI.Label(new Rect(470, height - 218, 240, 24), game.IsCircuit ? game.Circuit.LapCount + "랩  ·  타임어택" : "약 50초  ·  체력 3칸", small);
 
             NightUi.Block(new Rect(width - 420, height - 390, 388, 255), Ink);
             GUI.Label(new Rect(width - 391, height - 361, 320, 30), "READ THE COURSE", body);
             GUI.Label(new Rect(width - 391, height - 308, 335, 27), "01   MINT      공중 그래플 앵커", small);
-            GUI.Label(new Rect(width - 391, height - 269, 335, 27), game.IsEndless ? "02   경고      위 / 왼쪽 / 오른쪽 진입" : game.IsCircuit ? "02   GAP      틈은 점프 / 그래플" : "02   CORAL   위험물 / 좌우 회피", small);
-            GUI.Label(new Rect(width - 391, height - 230, 335, 27), game.IsEndless ? "03   SPACE   조준 표시 후 1.2초 이내" : game.IsCircuit ? "03   LINE     출발선 · 체크포인트" : "03   GOLD     표적 / SPACE 공격", small);
+            GUI.Label(new Rect(width - 391, height - 269, 335, 27), game.IsCircuit ? "02   GAP      틈은 점프 / 그래플" : "02   CORAL   위험물 / 좌우 회피", small);
+            GUI.Label(new Rect(width - 391, height - 230, 335, 27), game.IsCircuit ? "03   LINE     출발선 · 체크포인트" : "03   GOLD     표적 / SPACE 공격", small);
             GUI.Label(new Rect(width - 391, height - 179, 330, 24), "INSPIRED BY CHAIN-RUSH  /  DOSANGE", small);
         }
 
         private void DrawPlay(float width, float height, float scale)
         {
             NightUi.Block(new Rect(66, 163, 300, 4), Row);
-            NightUi.Block(new Rect(66, 163, 300 * (game.IsEndless ? (float)(game.Distance % 500d / 500d) : game.Progress), 4), Mint);
-            if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), game.IsEndless ? "DISTANCE / " + game.Distance.ToString("0") + " M   HITS / " + game.Hits : "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
-            if (game.IsEndless) DrawEncounter(width, scale);
+            NightUi.Block(new Rect(66, 163, 300 * game.Progress, 4), Mint);
+            if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
             NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), player.HorizontalSpeed.ToString("00.0"), speedNumber);
             GUI.Label(new Rect(width - 150, height - 169, 90, 26), "M / S", small);
             int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
@@ -321,28 +323,6 @@ namespace ProtoHarness.ChainRush
                 NightUi.Block(item, i < boosters ? Mint : Row);
                 if (i < boosters) GUI.Label(item, "▶▶", button);
             }
-        }
-
-        private void DrawEncounter(float width, float scale)
-        {
-            var enemy = game.Enemies;
-            if (!enemy.HasEncounter) return;
-            string direction = enemy.Direction == Combat.EnemyDirector.Entrance.Above ? "↓  상공" : enemy.Direction == Combat.EnemyDirector.Entrance.Left ? "→  왼쪽" : "←  오른쪽";
-            string prompt = enemy.CanAttack ? "SPACE  /  체인 발사   " + enemy.Remaining.ToString("0.0") + "s" :
-                enemy.State == Combat.EnemyDirector.EncounterState.Firing ? "CHAIN OUT  /  연결 중" :
-                enemy.State == Combat.EnemyDirector.EncounterState.Retracting ? "TARGET BROKEN  /  회수" :
-                enemy.State == Combat.EnemyDirector.EncounterState.Striking ? "MISSED  /  적 공격" : direction + "에서 적 진입 — 준비";
-            NightUi.Block(new Rect(width / 2f - 250, 118, 500, 86), Ink);
-            GUI.Label(new Rect(width / 2f - 224, 135, 460, 32), prompt, body);
-            NightUi.Block(new Rect(width / 2f - 224, 181, 448 * (enemy.CanAttack ? enemy.WindowFraction : 1f), 5), enemy.CanAttack ? Mint : Coral);
-            if (!enemy.CanAttack) return;
-            Vector3 screen = viewCamera.WorldToScreenPoint(enemy.Target.position);
-            if (screen.z <= 0f) return;
-            float x = screen.x / scale;
-            float y = (Screen.height - screen.y) / scale;
-            NightUi.Block(new Rect(x - 42, y - 42, 84, 3), Coral);
-            NightUi.Block(new Rect(x - 42, y + 39, 84, 3), Coral);
-            GUI.Label(new Rect(x - 45, y + 47, 110, 24), "SPACE", body);
         }
 
         private void DrawResult(float width, float height)

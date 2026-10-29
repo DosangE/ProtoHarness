@@ -257,23 +257,14 @@ namespace ProtoHarness.Editor.ChainRush
             return created;
         }
 
-        // Merge gate run (CLAUDE.md §9-2): everything except the Device, Sweep, Long, Enemy, Endless and NetEndReplay
-        // categories. Enemy (enemies, attacks, targets) waits for the item race, Endless (the procedural course) for the
-        // endless mode to reopen (docs/DECISIONS.md 2026-10-18), NetEndReplay for multiplayer to reopen (M7, 2026-10-19).
+        // Merge gate run (CLAUDE.md §9-2): everything except the Device, Enemy and NetEndReplay categories. Enemy (attacks,
+        // targets) waits for the item race (docs/DECISIONS.md 2026-10-18), NetEndReplay for multiplayer to reopen (M7, 2026-10-19).
         [MenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")]
-        public static void RunTests() => RunPlayMode("!Device", "!Sweep", "!Long", "!Enemy", "!Endless", "!NetEndReplay");
-
-        // Long tests covered elsewhere. The merge gate adds them when the branch changes core code.
-        [MenuItem("ProtoHarness/Chain Rush/Run Long Tests")]
-        public static void RunLongTests() => RunPlayMode("Long");
+        public static void RunTests() => RunPlayMode("!Device", "!Enemy", "!NetEndReplay");
 
         // Tests that need virtual Keyboard/Mouse devices. Not part of the merge gate.
         [MenuItem("ProtoHarness/Chain Rush/Run Device Input Tests")]
         public static void RunDeviceTests() => RunPlayMode("Device");
-
-        // The 20-seed course sweep that proves the T3c completion criterion. Run once, outside the merge gate.
-        [MenuItem("ProtoHarness/Chain Rush/Run Course Sweep")]
-        public static void RunCourseSweep() => RunPlayMode("Sweep");
 
         private static void RunPlayMode(params string[] categories)
         {

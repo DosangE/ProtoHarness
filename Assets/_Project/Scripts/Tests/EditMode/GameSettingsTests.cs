@@ -129,6 +129,96 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(PlayerPrefs.GetInt(Prefix + "SpeedFieldOfView", -1), Is.EqualTo(7));
         }
 
+        // ---- screen (2026-10-26) ------------------------------------------------------------------------------
+
+        [Test]
+        public void Screen_NothingStored_FullScreenAutoResolutionVSyncOff()
+        {
+            Assert.That(settings.Windowed, Is.False);
+            Assert.That(settings.ResolutionIndex, Is.EqualTo(ScreenOptions.AutoResolution));
+            Assert.That(settings.VSync, Is.False);
+        }
+
+        [Test]
+        public void Screen_SetThenNewInstance_ReadsTheSameValues()
+        {
+            settings.SetWindowed(true);
+            settings.SetResolution(ScreenOptions.ResolutionCount - 1);
+            settings.SetVSync(true);
+            var loaded = new GameSettings(Prefix);
+            Assert.That(loaded.Windowed, Is.True);
+            Assert.That(loaded.ResolutionIndex, Is.EqualTo(ScreenOptions.ResolutionCount - 1));
+            Assert.That(loaded.VSync, Is.True);
+            settings.Clear();
+            Assert.That(settings.Windowed, Is.False);
+            Assert.That(settings.ResolutionIndex, Is.EqualTo(ScreenOptions.AutoResolution));
+            Assert.That(settings.VSync, Is.False);
+            Assert.That(new GameSettings(Prefix).ResolutionIndex, Is.EqualTo(ScreenOptions.AutoResolution), "Clear removes the stored value.");
+        }
+
+        [Test]
+        public void SetResolution_OutOfRange_ThrowsAndKeepsTheValue()
+        {
+            settings.SetResolution(2);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.SetResolution(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.SetResolution(ScreenOptions.ResolutionCount));
+            Assert.That(settings.ResolutionIndex, Is.EqualTo(2));
+            Assert.That(new GameSettings(Prefix).ResolutionIndex, Is.EqualTo(2), "A refused resolution is not stored.");
+        }
+
+        [Test]
+        public void Screen_StoredValueOutOfRange_LogsAndUsesTheDefaultForThatSettingOnly()
+        {
+            settings.SetVSync(true);
+            PlayerPrefs.SetInt(Prefix + "Resolution", 9);
+            PlayerPrefs.SetInt(Prefix + "Windowed", 2);
+            int last = ScreenOptions.ResolutionCount - 1;
+            LogAssert.Expect(LogType.Error, new Regex(@"^GameSettings: " + Regex.Escape(Prefix + "Windowed") + @" holds 2, neither 0 nor 1"));
+            LogAssert.Expect(LogType.Error, new Regex(@"^GameSettings: " + Regex.Escape(Prefix + "Resolution") + @" holds 9, outside 0\.\." + last));
+            var loaded = new GameSettings(Prefix);
+            Assert.That(loaded.Windowed, Is.False);
+            Assert.That(loaded.ResolutionIndex, Is.EqualTo(ScreenOptions.AutoResolution));
+            Assert.That(loaded.VSync, Is.True, "The other settings read as stored.");
+            Assert.That(PlayerPrefs.GetInt(Prefix + "Resolution", -1), Is.EqualTo(9), "The damaged value is not overwritten.");
+        }
+
+        [Test]
+        public void ScreenOptions_Sizes_AutoFirstThenSixteenByNine()
+        {
+            Assert.That(ScreenOptions.Size(ScreenOptions.AutoResolution), Is.EqualTo(Vector2Int.zero));
+            for (int i = 1; i < ScreenOptions.ResolutionCount; i++)
+            {
+                Vector2Int size = ScreenOptions.Size(i);
+                Assert.That(size.x * 9, Is.EqualTo(size.y * 16), $"Resolution {i} ({size}) is 16:9.");
+                Assert.That(size.x, Is.GreaterThan(ScreenOptions.Size(i - 1).x), "Smallest first.");
+            }
+            Assert.Throws<ArgumentOutOfRangeException>(() => ScreenOptions.Size(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => ScreenOptions.Size(ScreenOptions.ResolutionCount));
+        }
+
+        [Test]
+        public void ScreenOptions_WindowedAuto_LargestSizeSmallerThanTheMonitor()
+        {
+            Assert.That(ScreenOptions.WindowedAutoSize(1920, 1080), Is.EqualTo(new Vector2Int(1600, 900)));
+            Assert.That(ScreenOptions.WindowedAutoSize(2560, 1440), Is.EqualTo(new Vector2Int(1920, 1080)));
+            Assert.That(ScreenOptions.WindowedAutoSize(3840, 2160), Is.EqualTo(new Vector2Int(2560, 1440)));
+            Assert.That(ScreenOptions.WindowedAutoSize(1920, 1200), Is.EqualTo(new Vector2Int(1600, 900)), "Smaller both ways, not just in width.");
+            Assert.That(ScreenOptions.WindowedAutoSize(1366, 768), Is.EqualTo(new Vector2Int(1280, 720)));
+            Assert.That(ScreenOptions.WindowedAutoSize(1280, 720), Is.EqualTo(new Vector2Int(1152, 648)), "None fits: a tenth smaller.");
+            Assert.That(ScreenOptions.WindowedAutoSize(1024, 768), Is.EqualTo(new Vector2Int(921, 518)), "None fits: the width bounds it.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => ScreenOptions.WindowedAutoSize(0, 720));
+        }
+
+        [Test]
+        public void ScreenOptions_InTheEditor_LeavesVSyncAlone()
+        {
+            int vSync = QualitySettings.vSyncCount;
+            settings.SetVSync(vSync == 0);
+            ScreenOptions.Apply(settings);
+            Assert.That(QualitySettings.vSyncCount, Is.EqualTo(vSync), "The editor's quality settings are not changed.");
+            Assert.Throws<ArgumentNullException>(() => ScreenOptions.Apply(null));
+        }
+
         [Test]
         public void Constructor_NoPrefix_Throws()
         {

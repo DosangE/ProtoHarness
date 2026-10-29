@@ -25,11 +25,17 @@ namespace ProtoHarness.ChainRush.Track
         public const float MaxWidthChange = 0.25f;
         public const float MinPoleReach = 2f;
         public const float MaxPoleReach = 40f;
+        // The steepest lip a kicker has: the runner leaves it climbing at this times its forward speed.
+        public const float MaxLaunch = 0.5f;
+        public const float MinShortcutRadius = 10f;
 
         // One piece of the circuit. A straight (Radius 0) keeps its Length; an arc turns Degrees (positive
         // right) at Radius and its length follows from those. EndGrade is where the grade eases to over the piece.
         // EndHalfWidth is where the road's half width goes to over it; 0 means the track's roadHalfWidth.
-        // A gap is a flat straight with no road surface.
+        // A gap is a flat straight with no road surface. A kicker is a straight whose end is a lip: a runner on the road
+        // leaves it climbing at Launch times its forward speed, so the faster it comes the farther it flies (user
+        // 2026-10-25, Finger Lanes: the bridge and the clock tower throw a kart by its speed). Without it the ground snap
+        // holds a runner to any crest (RunnerMotor).
         [Serializable]
         public struct Segment
         {
@@ -39,8 +45,9 @@ namespace ProtoHarness.ChainRush.Track
             [SerializeField] private float endGrade;
             [SerializeField] private float endHalfWidth;
             [SerializeField] private bool gap;
+            [SerializeField] private float launch;
 
-            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap)
+            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap, float launch)
             {
                 this.length = length;
                 this.radius = radius;
@@ -48,11 +55,13 @@ namespace ProtoHarness.ChainRush.Track
                 this.endGrade = endGrade;
                 this.endHalfWidth = endHalfWidth;
                 this.gap = gap;
+                this.launch = launch;
             }
 
-            public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false);
-            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true);
-            public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false);
+            public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, 0f);
+            public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true, 0f);
+            public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false, 0f);
+            public static Segment Kicker(float length, float endGrade, float launch, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, launch);
 
             public bool IsArc => radius != 0f;
             public bool IsGap => gap;
@@ -60,6 +69,7 @@ namespace ProtoHarness.ChainRush.Track
             public float Degrees => degrees;
             public float EndGrade => endGrade;
             public float EndHalfWidth => endHalfWidth;
+            public float Launch => launch;
 
             // The same float expression as Centerline.AppendArc, so the S values match exactly.
             public float Length => IsArc ? radius * Mathf.Abs(degrees) * Mathf.Deg2Rad : length;
@@ -112,6 +122,35 @@ namespace ProtoHarness.ChainRush.Track
             public float Reach => reach;
         }
 
+        // A shortcut off the road's right side (user 2026-10-25, Finger Lanes' nails): from the main road at FromS a right
+        // quarter turn of Radius, Straight metres, another right quarter turn, back onto the main road at ToS. Its road is
+        // HalfWidth either side; the main road's right guard opens where the two roads cross (ShortcutGuardGaps).
+        [Serializable]
+        public struct Shortcut
+        {
+            [SerializeField] private float fromS;
+            [SerializeField] private float toS;
+            [SerializeField] private float radius;
+            [SerializeField] private float straight;
+            [SerializeField] private float halfWidth;
+
+            public Shortcut(float fromS, float toS, float radius, float straight, float halfWidth)
+            {
+                this.fromS = fromS;
+                this.toS = toS;
+                this.radius = radius;
+                this.straight = straight;
+                this.halfWidth = halfWidth;
+            }
+
+            public float FromS => fromS;
+            public float ToS => toS;
+            public float Radius => radius;
+            public float Straight => straight;
+            public float HalfWidth => halfWidth;
+            public float Length => Mathf.PI * radius + straight;
+        }
+
         [SerializeField] private List<Segment> segments = new List<Segment>
         {
             // Straight A (140 m): a hill (0 -> +10% -> -10% -> 0, 2 m high) and a jump gap of 6 m.
@@ -130,6 +169,7 @@ namespace ProtoHarness.ChainRush.Track
         // The anchor hangs over the middle of the grapple gap: 140 + 60 + pi x 22 + 30 + 15 + 8.
         [SerializeField] private List<Anchor> anchors = new List<Anchor> { new Anchor(322.12f, 0f, 10f) };
         [SerializeField] private List<Pole> poles = new List<Pole>();
+        [SerializeField] private List<Shortcut> shortcuts = new List<Shortcut>();
         [Tooltip("Checkpoints as fractions of a lap, ascending, strictly between 0 and 1.")]
         [SerializeField] private float[] checkpointFractions = { 0.25f, 0.5f, 0.75f };
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]
@@ -141,6 +181,7 @@ namespace ProtoHarness.ChainRush.Track
         public IReadOnlyList<Segment> Segments => segments;
         public IReadOnlyList<Anchor> Anchors => anchors;
         public IReadOnlyList<Pole> Poles => poles;
+        public IReadOnlyList<Shortcut> Shortcuts => shortcuts;
         public int LapCount => lapCount;
         public float RoadHalfWidth => roadHalfWidth;
         public float RoadThickness => roadThickness;
@@ -185,7 +226,8 @@ namespace ProtoHarness.ChainRush.Track
             return gaps;
         }
 
-        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles added.
+        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles, the
+        // kickers' crests and the shortcuts added.
         public Centerline BuildCenterline(Vector3 origin, float yawDegrees)
         {
             if (!TryValidate(out string error)) throw new InvalidOperationException(error);
@@ -194,7 +236,57 @@ namespace ProtoHarness.ChainRush.Track
             line.Close();
             for (int i = 0; i < poles.Count; i++)
                 line.AddPole(line.FrameAt(poles[i].S).TransformPoint(new Vector3(poles[i].Offset, 0f, 0f)), poles[i].Reach);
+            double s = 0d;
+            for (int i = 0; i < segments.Count; i++)
+            {
+                s += segments[i].Length;
+                if (segments[i].Launch > 0f) line.AddLaunch(s, segments[i].Launch);
+            }
+            for (int i = 0; i < shortcuts.Count; i++)
+                line.AddBranch(shortcuts[i].FromS, shortcuts[i].ToS, ShortcutLine(line, shortcuts[i]), HalfWidthAt(shortcuts[i].FromS));
             return line;
+        }
+
+        // A shortcut's own road as an open line: from the main line's frame at its FromS, a right quarter turn, the
+        // straight, a right quarter turn, all flat. The race (Centerline.AddBranch) and the road (CircuitScenery) use it.
+        public static Centerline ShortcutLine(Centerline main, Shortcut shortcut)
+        {
+            if (main == null) throw new ArgumentNullException(nameof(main));
+            TrackFrame frame = main.FrameAt(shortcut.FromS);
+            var line = new Centerline(frame.Position, Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg);
+            line.AppendArc(shortcut.Radius, 90f, 0f);
+            line.AppendStraight(shortcut.Straight, 0f);
+            line.AppendArc(shortcut.Radius, 90f, 0f);
+            return line;
+        }
+
+        // Where a shortcut's road meets a main road of mainHalfWidth, measured from the junction: along the main road, the
+        // inner and the outer edge of the shortcut (Radius -+ HalfWidth round its corner pole) cross the main road's edge
+        // at inner and outer metres; along the shortcut, its inner and outer edge leave the main road at innerS and outerS.
+        public static void Junction(Shortcut shortcut, float mainHalfWidth, out float inner, out float outer, out float innerS, out float outerS)
+        {
+            float r = shortcut.Radius, w = shortcut.HalfWidth, edge = r - mainHalfWidth;
+            inner = Mathf.Sqrt((r - w) * (r - w) - edge * edge);
+            outer = Mathf.Sqrt((r + w) * (r + w) - edge * edge);
+            innerS = r * Mathf.Acos(edge / (r - w));
+            outerS = r * Mathf.Acos(edge / (r + w));
+        }
+
+        // The S stretches of the main road with no right guard: where each shortcut leaves and where it comes back, the
+        // crossing of the two roads widened by a guard's thickness either side. In lap order of the shortcuts.
+        public List<(double From, double To)> ShortcutGuardGaps()
+        {
+            var gaps = new List<(double From, double To)>(shortcuts.Count * 2);
+            const float guard = RoadMeshBuilder.GuardThickness;
+            for (int i = 0; i < shortcuts.Count; i++)
+            {
+                Shortcut shortcut = shortcuts[i];
+                Junction(shortcut, HalfWidthAt(shortcut.FromS), out float inner, out float outer, out _, out _);
+                gaps.Add((shortcut.FromS + inner - guard, shortcut.FromS + outer + guard));
+                Junction(shortcut, HalfWidthAt(shortcut.ToS), out inner, out outer, out _, out _);
+                gaps.Add((shortcut.ToS - outer - guard, shortcut.ToS - inner + guard));
+            }
+            return gaps;
         }
 
         // A piece's end half width, the track's roadHalfWidth where it names none.
@@ -250,6 +342,8 @@ namespace ProtoHarness.ChainRush.Track
                 Segment segment = segments[i];
                 startGrades[i] = grade;
                 if (float.IsNaN(segment.EndGrade) || Mathf.Abs(segment.EndGrade) > MaxGrade) return Fail($"segment {i}: the end grade {segment.EndGrade} must be within +-{MaxGrade}.", out error);
+                if (segment.Launch != 0f && (segment.IsArc || segment.IsGap || !(segment.Launch > 0f && segment.Launch <= MaxLaunch)))
+                    return Fail($"segment {i}: a launch ({segment.Launch}) must be on a road straight and within (0, {MaxLaunch}].", out error);
                 if (segment.IsArc)
                 {
                     if (segment.IsGap) return Fail($"segment {i}: a gap must be a straight.", out error);
@@ -318,8 +412,52 @@ namespace ProtoHarness.ChainRush.Track
             var line = new Centerline(Vector3.zero, 0f);
             for (int i = 0; i < segments.Count; i++) segments[i].AppendTo(line);
             if (!line.TryClose(out string closeError)) return Fail("the circuit does not close: " + closeError, out error);
+            for (int i = 0; i < shortcuts.Count; i++)
+                if (!TryValidateShortcut(i, line, lap, out error)) return false;
             error = null;
             return true;
+        }
+
+        // A shortcut leaves and rejoins the closed line where the main road is a flat straight for the whole crossing, is
+        // narrower than the main road and wider than a corner pole's reach allows, and its end meets the main line at ToS.
+        private bool TryValidateShortcut(int i, Centerline line, double lap, out string error)
+        {
+            Shortcut shortcut = shortcuts[i];
+            const float guard = RoadMeshBuilder.GuardThickness;
+            double from = shortcut.FromS, to = shortcut.ToS;
+            if (!(from > guard) || !(to > from) || !(to < lap - guard))
+                return Fail($"shortcut {i}: it must leave at S {from} and come back at S {to}, later in the same lap.", out error);
+            if (!(shortcut.Radius >= MinShortcutRadius) || float.IsInfinity(shortcut.Radius) || !(shortcut.Straight > 0f) || float.IsInfinity(shortcut.Straight))
+                return Fail($"shortcut {i}: the radius must be at least {MinShortcutRadius} m and the straight positive.", out error);
+            float mainWidth = Mathf.Min(HalfWidthAt(from), HalfWidthAt(to));
+            if (!(shortcut.HalfWidth >= MinHalfWidth && shortcut.HalfWidth < mainWidth) || !(shortcut.Radius - shortcut.HalfWidth > mainWidth))
+                return Fail($"shortcut {i}: the half width {shortcut.HalfWidth} must be within [{MinHalfWidth}, {mainWidth}) and the radius beyond the main road ({mainWidth} m) by more than it.", out error);
+            Junction(shortcut, HalfWidthAt(from), out _, out float leaving, out _, out _);
+            Junction(shortcut, HalfWidthAt(to), out _, out float joining, out _, out _);
+            if (from + leaving + guard >= to - joining - guard)
+                return Fail($"shortcut {i}: where it leaves and where it comes back overlap.", out error);
+            for (double s = from; s <= from + leaving + guard; s += 0.5d)
+                if (!FlatStraightAt(line, s)) return Fail($"shortcut {i}: the main road must be a flat straight where it leaves (S {s:F1}).", out error);
+            for (double s = to - joining - guard; s <= to; s += 0.5d)
+                if (!FlatStraightAt(line, s)) return Fail($"shortcut {i}: the main road must be a flat straight where it comes back (S {s:F1}).", out error);
+            List<(double Start, double End)> gaps = Gaps();
+            for (int g = 0; g < gaps.Count; g++)
+                if ((gaps[g].End > from && gaps[g].Start < from + leaving + guard) || (gaps[g].End > to - joining - guard && gaps[g].Start < to))
+                    return Fail($"shortcut {i}: a crossing is over a gap.", out error);
+            Centerline own = ShortcutLine(line, shortcut);
+            TrackFrame end = own.FrameAt(own.EndS), join = line.FrameAt(to);
+            Vector3 miss = end.Position - join.Position;
+            float yaw = Vector3.Angle(end.Forward, join.Forward);
+            if (miss.magnitude > 0.5f || yaw > 1f)
+                return Fail($"shortcut {i}: it ends {miss.magnitude:F2} m and {yaw:F2} degrees away from the main road at S {to}; the limits are 0.50 m and 1.00 degrees.", out error);
+            error = null;
+            return true;
+        }
+
+        private static bool FlatStraightAt(Centerline line, double s)
+        {
+            TrackFrame frame = line.FrameAt(s);
+            return frame.Curvature == 0f && Mathf.Abs(frame.Grade) < 1e-4f;
         }
 
         // The length of consecutive flat straights (no gap, flat at both ends) from segment `from` in direction

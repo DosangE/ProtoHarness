@@ -1,0 +1,282 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd293ac35c2905e46b4f39e20f0df22b, type: 3}
+  m_Name: Circuit_FingerLanes
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Track.TrackDefinition
+  segments:
+  - length: 45
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: 180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 43
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: -180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 71
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: 180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 71
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: -180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 47
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: 180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 47
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: -180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 71
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 25
+    degrees: 180
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 75
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0.3
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: -0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 20
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 53
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 16
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 4
+    gap: 0
+    launch: 0
+  - length: 30
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 4
+    gap: 0
+    launch: 0
+  - length: 16
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0.3
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: -0.2
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 2.5
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 20
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: -45
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: 45
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 102.57359
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 0
+    radius: 30
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  - length: 49.573593
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+  anchors: []
+  poles: []
+  shortcuts:
+  - fromS: 294.07965
+    toS: 416.61945
+    radius: 15
+    straight: 20
+    halfWidth: 3.6000001
+  - fromS: 840.2389
+    toS: 970.77875
+    radius: 15
+    straight: 20
+    halfWidth: 3.6000001
+  checkpointFractions:
+  - 0.15
+  - 0.5
+  - 0.75
+  startSlots:
+  - 0
+  lapCount: 2
+  roadHalfWidth: 7.2000003
+  roadThickness: 1.2

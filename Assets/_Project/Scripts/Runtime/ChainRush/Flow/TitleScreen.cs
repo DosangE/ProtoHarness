@@ -12,8 +12,9 @@ namespace ProtoHarness.ChainRush.Flow
     // left empty until the runner art is settled; the top right names the version and the build.
     public sealed class TitleScreen : MonoBehaviour
     {
-        // Not the Player Settings bundle version (ProjectSettings is off limits, CLAUDE.md §0); raised by hand.
-        public const string Version = "0.0.1";
+        // Not the Player Settings bundle version (ProjectSettings is off limits, CLAUDE.md §0); raised by hand to match
+        // the milestone tag (user 2026-10-29).
+        public const string Version = "0.4";
         private static readonly Color Ink = NightUi.Background;
         private static readonly Color Mint = NightUi.Accent;
         private static readonly Color Muted = NightUi.Muted;
@@ -37,6 +38,9 @@ namespace ProtoHarness.ChainRush.Flow
 
         // "TEST BUILD" in the editor and development builds, "RELEASE" in a release build.
         public static string BuildName => Debug.isDebugBuild ? "TEST BUILD" : "RELEASE";
+
+        // The game starts here, so the stored screen settings take effect here (ScreenOptions).
+        private void Awake() => ScreenOptions.Apply(GameSettings.Player);
 
         private void Update()
         {

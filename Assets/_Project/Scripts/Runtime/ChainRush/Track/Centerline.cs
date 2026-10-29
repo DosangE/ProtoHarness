@@ -42,8 +42,29 @@ namespace ProtoHarness.ChainRush.Track
             public float Reach;
         }
 
+        // A kicker's lip (AddLaunch): where a runner on the road leaves it, and how steeply (rise per metre forward).
+        private struct Launch
+        {
+            public double S;
+            public float Lift;
+        }
+
+        // A shortcut's road beside the loop (AddBranch): its own pieces, whose S runs from FromS to ToS of the loop in
+        // proportion to the distance along them, and the half width of the main road it leaves.
+        private sealed class Branch
+        {
+            public double FromS;
+            public double Scale;
+            public float MainHalfWidth;
+            public readonly List<Piece> Pieces = new List<Piece>(3);
+
+            public double MapS(double along) => FromS + along * Scale;
+        }
+
         private readonly List<Piece> pieces = new List<Piece>(16);
         private readonly List<ExtraPole> extraPoles = new List<ExtraPole>(8);
+        private readonly List<Launch> launches = new List<Launch>(4);
+        private readonly List<Branch> branches = new List<Branch>(2);
         private readonly Vector3 origin;
         private readonly float originYaw;
         private Vector3 end;
@@ -83,11 +104,14 @@ namespace ProtoHarness.ChainRush.Track
             }
         }
 
-        // Back to the construction origin with no pieces and no added poles; S restarts at zero and the grade at flat.
+        // Back to the construction origin with no pieces, no added poles, no launches and no branches; S restarts at zero
+        // and the grade at flat.
         public void Clear()
         {
             pieces.Clear();
             extraPoles.Clear();
+            launches.Clear();
+            branches.Clear();
             end = origin;
             endYaw = originYaw;
             endGrade = 0f;
@@ -242,22 +266,98 @@ namespace ProtoHarness.ChainRush.Track
                 pole.Position += offset;
                 extraPoles[i] = pole;
             }
+            for (int b = 0; b < branches.Count; b++)
+            {
+                List<Piece> own = branches[b].Pieces;
+                for (int i = 0; i < own.Count; i++)
+                {
+                    Piece piece = own[i];
+                    piece.Start += offset;
+                    piece.Center += offset;
+                    piece.End += offset;
+                    own[i] = piece;
+                }
+            }
             end += offset;
         }
 
+        // A point on a branch (AddBranch) gets the branch's coordinates and S; any other the loop's.
         public TrackCoord Project(Vector3 world)
         {
             Piece piece = PieceAt(world, out float along, out float right);
+            if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out float branchRight))
+                return new TrackCoord(Wrap(branch.MapS(onBranch.StartS + branchAlong)), branchRight, world.y - HeightOn(onBranch, branchAlong));
             return new TrackCoord(WrapIfLoop(piece.StartS + along), right, world.y - HeightOn(piece, along));
         }
 
-        // The frame at the centerline point nearest to world.
+        // The frame at the centerline point nearest to world (a branch's, with the branch's S, on a branch).
         public TrackFrame Frame(Vector3 world)
         {
-            Piece piece = PieceAt(world, out float along, out _);
+            Piece piece = PieceAt(world, out float along, out float right);
+            if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out _))
+            {
+                TrackFrame own = FrameOn(onBranch, branchAlong);
+                return new TrackFrame(Wrap(branch.MapS(own.S)), own.Position, own.Forward, own.Right, own.Grade, own.Curvature);
+            }
             TrackFrame frame = FrameOn(piece, along);
             if (!isLoop) return frame;
             return new TrackFrame(Wrap(frame.S), frame.Position, frame.Forward, frame.Right, frame.Grade, frame.Curvature);
+        }
+
+        public int BranchCount => branches.Count;
+
+        // A shortcut's road beside the loop (user 2026-10-25, Finger Lanes): line is its open centerline from the loop at
+        // fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the loop's road half width there. A point
+        // off the loop's road (farther to the side than mainHalfWidth) and nearer to the branch than to the loop is on the
+        // branch: Project and Frame answer with the branch's pieces, and S goes from fromS to toS in proportion along it, so
+        // the laps keep counting across. The branch's arcs have corner poles like the loop's.
+        public void AddBranch(double fromS, double toS, Centerline line, float mainHalfWidth)
+        {
+            if (!isLoop) throw new InvalidOperationException("Only a closed centerline takes branches.");
+            if (line == null) throw new ArgumentNullException(nameof(line));
+            if (line.isLoop || line.pieces.Count == 0) throw new ArgumentException("A branch is an open line with pieces.", nameof(line));
+            if (!(fromS >= 0d) || !(toS > fromS) || !(toS < endS))
+                throw new ArgumentOutOfRangeException(nameof(toS), toS, $"A branch leaves at {fromS} and comes back later in the lap [0, {endS}).");
+            if (!(mainHalfWidth > 0f) || float.IsInfinity(mainHalfWidth))
+                throw new ArgumentOutOfRangeException(nameof(mainHalfWidth), mainHalfWidth, "The main road's half width must be positive and finite.");
+            var branch = new Branch { FromS = fromS, Scale = (toS - fromS) / line.endS, MainHalfWidth = mainHalfWidth };
+            branch.Pieces.AddRange(line.pieces);
+            branches.Add(branch);
+        }
+
+        // The branch piece a point is on, if any: only off the loop's road on the loop's nearest piece, and only nearer to
+        // the branch piece (measured as NearestPiece does) than to that loop piece.
+        private bool TryBranchAt(Vector3 world, Piece main, float mainAlong, float mainRight, out Branch branch, out Piece piece, out float along, out float right)
+        {
+            branch = null;
+            piece = default;
+            along = 0f;
+            right = 0f;
+            if (branches.Count == 0) return false;
+            float best = Score(main, mainAlong, mainRight);
+            for (int b = 0; b < branches.Count; b++)
+            {
+                if (Mathf.Abs(mainRight) <= branches[b].MainHalfWidth) continue;
+                List<Piece> own = branches[b].Pieces;
+                for (int i = 0; i < own.Count; i++)
+                {
+                    LocalOn(own[i], world, out float candidateAlong, out float candidateRight);
+                    float score = Score(own[i], candidateAlong, candidateRight);
+                    if (score >= best) continue;
+                    best = score;
+                    branch = branches[b];
+                    piece = own[i];
+                    along = candidateAlong;
+                    right = candidateRight;
+                }
+            }
+            return branch != null;
+        }
+
+        private static float Score(Piece piece, float along, float right)
+        {
+            float overshoot = along < 0f ? -along : Mathf.Max(0f, along - piece.Length);
+            return right * right + overshoot * overshoot;
         }
 
         public TrackFrame FrameAt(double s)
@@ -279,6 +379,9 @@ namespace ProtoHarness.ChainRush.Track
             if (poles == null) throw new ArgumentNullException(nameof(poles));
             for (int i = 0; i < pieces.Count; i++)
                 if (pieces[i].Curvature != 0f) poles.Add(pieces[i].Center);
+            for (int b = 0; b < branches.Count; b++)
+                for (int i = 0; i < branches[b].Pieces.Count; i++)
+                    if (branches[b].Pieces[i].Curvature != 0f) poles.Add(branches[b].Pieces[i].Center);
             for (int i = 0; i < extraPoles.Count; i++) poles.Add(extraPoles[i].Position);
         }
 
@@ -290,6 +393,41 @@ namespace ProtoHarness.ChainRush.Track
             if (!IsFinite(position)) throw new ArgumentOutOfRangeException(nameof(position), position, "Position must be finite.");
             if (!(reach > 0f) || float.IsInfinity(reach)) throw new ArgumentOutOfRangeException(nameof(reach), reach, "Reach must be positive and finite.");
             extraPoles.Add(new ExtraPole { Position = position, Reach = reach });
+        }
+
+        // A kicker's lip at s (TrackDefinition.Segment.Kicker): a runner on the road that crosses it going forward leaves it
+        // climbing at lift times its forward speed (RunnerMotor). It is kept by S, so ShiftOrigin does not move it; Clear
+        // removes it.
+        public void AddLaunch(double s, float lift)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            if (!(lift > 0f) || float.IsInfinity(lift)) throw new ArgumentOutOfRangeException(nameof(lift), lift, "Lift must be positive and finite.");
+            launches.Add(new Launch { S = s, Lift = lift });
+        }
+
+        public int LaunchCount => launches.Count;
+
+        // The first launch (AddLaunch order) a runner crosses moving forward from fromS to toS, S as Frame and Project
+        // give it: past fromS and no farther than toS. On a loop the move may wrap the seam and so may the launch's S. A move
+        // backward or nowhere crosses none.
+        public bool TryLaunchBetween(double fromS, double toS, out float lift)
+        {
+            lift = 0f;
+            if (launches.Count == 0) return false;
+            double moved = toS - fromS;
+            if (isLoop && moved < -endS * 0.5d) moved += endS;
+            if (!(moved > 0d)) return false;
+            for (int i = 0; i < launches.Count; i++)
+            {
+                double ahead = launches[i].S - fromS;
+                if (isLoop) ahead -= Math.Floor(ahead / endS) * endS;
+                if (ahead > 0d && ahead <= moved)
+                {
+                    lift = launches[i].Lift;
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1), and AddPole
@@ -316,6 +454,15 @@ namespace ProtoHarness.ChainRush.Track
                 pole = piece.Center;
                 found = true;
             }
+            for (int b = 0; b < branches.Count; b++)
+                for (int i = 0; i < branches[b].Pieces.Count; i++)
+                {
+                    Piece piece = branches[b].Pieces[i];
+                    if (piece.Curvature == 0f) continue;
+                    if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
+                    pole = piece.Center;
+                    found = true;
+                }
             for (int i = 0; i < extraPoles.Count; i++)
             {
                 if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;

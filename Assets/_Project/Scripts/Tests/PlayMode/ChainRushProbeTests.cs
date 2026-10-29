@@ -447,8 +447,6 @@ namespace ProtoHarness.Tests.PlayMode
                 RaceLaunch.Clear();
                 records.Clear(finger.name, SpeedClass.Fast);
                 records.Clear(finger.name, SpeedClass.VeryFast);
-                records.ClearForRunner(finger.name, SpeedClass.Fast, neutral.name);
-                records.ClearForRunner(finger.name, SpeedClass.VeryFast, neutral.name);
                 if (System.IO.Directory.Exists(ghosts.Folder)) System.IO.Directory.Delete(ghosts.Folder, true);
                 UnityEngine.Object.Destroy(neutral);
             }

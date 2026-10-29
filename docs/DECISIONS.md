@@ -7,6 +7,25 @@
 
 ---
 
+## 2026-10-29 · 고스트: 트랙 × 속도의 최고 기록 하나 — 러너별 기록·고스트를 없앤다 (`feature/ghost-track-best`)
+
+- **결정 (사용자, 2026-10-29)**: 고스트를 확인하고 "같은 러너가 아니여도 보였으면 좋겠다(같은 트랙, 같은 속도에서)", 이어 "트랙별 최고기록만 남기고 싶다". 질문에 "트랙 × 속도마다 1개"·"러너별을 없앤다"(둘 다 추천안), 요청서에 "ㄱㄱ".
+- **한 것**:
+  - `BestRecords`: `TryGetForRunner`·`SubmitForRunner`·`ClearForRunner` 를 지웠다. 트랙 × 속도의 최고 기록 하나(로비에 보이는 것)만 남는다. 옛 `…byRunner…` PlayerPrefs 키는 읽지 않는다(남아 있다).
+  - `GhostFiles`: 키를 `<트랙>.<속도>.ghost` 로(러너 매개변수 삭제).
+  - `RaceAssembler`: 결승이 최고 기록을 깨면(`LastFinishWasBest`) 그 판을 고스트로 저장한다. 경로가 불완전하면 옛 고스트를 지우고 에러 로그 — 고스트는 언제나 최고 기록의 판이다. 레이스는 트랙·속도의 고스트를 띄운다(어느 러너든). 이번 판에 새 고스트가 저장되면 다음 카운트다운(다시 달리기·재시작)에서 다시 불러온다 — 전에는 로비로 나갔다 와야 했다. `LastFinishWasRunnerBest` 와 러너 에셋 이름 검사를 지웠다(키에 안 쓴다, 트랙 이름 검사는 남는다).
+  - `FinishComparison`: 이전 최고 하나 — `최고 기록  01:18.9 · BETA` + 차이. 결과 화면(`ChainRushHud.DrawComparison`)은 한 줄.
+  - 사용자 데이터: `Circuit_Stadium.VeryFast.RunnerProfile_Omega.ghost` 가 그 트랙·속도의 최고 기록과 같은 판임을 읽기 전용으로 확인하고(최고 2944틱·OMEGA, 러너 최고 2944틱, 고스트 (47116 − 12) / 16 = 2944틱) `Circuit_Stadium.VeryFast.ghost` 로 이름만 바꿨다(승인에 포함).
+- **이유**: 사용자가 원한 것은 "그 트랙에서 가장 잘 달린 판과 겨루기" 다. 러너별로 나누면 같은 트랙에서도 러너를 바꿀 때마다 고스트가 없다. 로비 기록·결과 화면·고스트가 한 기준(트랙 × 속도 최고)을 본다.
+- **알아둘 것**: M4 전에 세운 최고 기록에는 고스트가 없다 — 그 기록을 깰 때까지 그 트랙·속도에는 고스트가 없다(사용자에게 알렸다). 고스트 모양은 지금 달리는 러너의 모형을 칠한 것이다(그 기록을 세운 러너의 디자인이 아니다).
+- **앞 결정 바뀜**: 2026-10-29 "M4 기록 키·고스트 형식" 의 러너별 기록·고스트(키 `트랙.속도.러너`)와 "M4-2 결과 화면 비교" 의 "내 최고" 줄은 이 결정으로 없어졌다(그 항목에 취소선 표시).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 일부 1개(`ChainRushProbeTests.Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld`) + 지문 1건, EditMode 전체.
+  - EditMode `!Enemy` `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (11:26:26Z~11:26:30Z) — 러너별 테스트 2건을 지우고 비교 테스트가 1건 늘어 297 → 296.
+  - PlayMode `testcasecount="51" result="Passed" passed="50" failed="0" skipped="1"` (11:27:13Z~11:33:21Z, 368.3초). skipped 1 은 `[Explicit]` Probe. 결승 테스트(`Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`: 최고 기록의 고스트 저장, 다시 달리기에서 그 고스트를 불러옴), 고스트 따라가기·깨진 파일, 지문 통과.
+  - Probe 를 `testNames` 로 1회: `testcasecount="1" result="Passed" passed="1" failed="0"` (11:34:03Z~11:35:41Z, 97.6초).
+  - 화면(다른 러너로 매우빠름·STADIUM 에서 OMEGA 의 고스트가 보이는지)은 사용자 확인 전이다(검증 안 됨).
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `06ad587`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트(EditMode 전체, PlayMode 클래스 2개 + Probe 1 + 지문 1)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다. 영향 평가: `BestRecords`·`GhostFiles`·`FinishComparison`·`RaceAssembler`·`ChainRushHud` → 읽는 곳 `RaceAssembler`·`ChainRushHud.DrawResult`·`TrackPage.RefreshRecords` → `ChainRushFlowTests`(로비 기록·결승·고스트)·`ChainRushProfileTests`·Probe(테스트 파일 변경). 시뮬은 이 타입들을 읽지 않는다 — 지문 1건.
+
 ## 2026-10-29 · 로비 순서: 속도 → 트랙 → 러너 · 트랙 기록 줄에 속도 이름 (`feature/lobby-speed-first`)
 
 - **결정 (사용자, 2026-10-29)**: "트랙을 고르고 속도(보통)를 선택한뒤 뒤로 나가면 기록 셋팅값이 보통으로 되어있다 … 따라서 속도를 고르고 트랙을 고르게 하자". 요청서(순서 변경 + 기록 줄 속도 이름 제안)에 "둘 다 ㄱㄱ 속도 이름도 붙여".
@@ -56,7 +75,7 @@
 
 - **결정 (사용자, 2026-10-29)**: M4-2 합의 요청서(결과 화면 오른쪽 패널, 랩 아래·버튼 위에 두 줄, 차이는 소수 둘째 자리 `-` 가 앞섬, 비교는 이번 결승 전에 있던 기록)에 "ㄱㄱ".
 - **한 것**:
-  - `Flow/FinishComparison` (readonly struct): 이번 틱, 이전 러너 최고, 이전 전체 최고와 그 러너(없으면 0). 새 기록 여부(동률은 아니다 — `BestRecords` 가 옛것을 남긴다), 줄 문구 `내 최고  01:19.4` / `전체 최고  01:18.9 · BETA` / 없으면 `첫 기록`, 차이 `-0.60  NEW` / `+0.50` / `±0.00`. 차이는 틱에서 바로 계산해 정확하다(1틱 = 0.02 s).
+  - `Flow/FinishComparison` (readonly struct): 이번 틱, ~~이전 러너 최고,~~ 이전 전체 최고와 그 러너(없으면 0). 새 기록 여부(동률은 아니다 — `BestRecords` 가 옛것을 남긴다), 줄 문구 ~~`내 최고  01:19.4` /~~ `전체 최고  01:18.9 · BETA` / 없으면 `첫 기록`, 차이 `-0.60  NEW` / `+0.50` / `±0.00`. 차이는 틱에서 바로 계산해 정확하다(1틱 = 0.02 s). → 2026-10-29 "고스트: 트랙 × 속도의 최고 기록 하나" 로 러너 최고 줄을 지웠다. 남은 줄은 `최고 기록  01:18.9 · BETA`.
   - `RaceAssembler.KeepFinish`: 기록을 저장하기 전에 두 기록을 읽어 `LastFinish`(`HasLastFinish`)로 남긴다.
   - `ChainRushHud.DrawResult`: 로비에서 온 레이스가 결승했을 때만 `DrawComparison` 두 줄(새 기록이면 차이를 민트로)과 왼쪽 안내 "새 기록! 고스트로 저장했습니다."(러너 기록을 깼을 때). 실패·직접 연 씬은 그대로다.
 - **이유**: M4 목표 "기록을 깨고 싶게" — 이번 판이 얼마나 모자랐는지가 보여야 다시 달린다. 문구와 계산을 struct 로 떼어 OnGUI 없이 EditMode 에서 검사한다.
@@ -69,7 +88,7 @@
 
 - **결정 (사용자, 2026-10-29)**: M4 첫 작업으로 "최고 기록·결과 비교·내 고스트" 를 골랐다("1 ㄱㄱ"). 고스트 형식은 "위치 기록", 기록 키는 "트랙×속도×러너" 를 골랐다(둘 다 추천안). 이어 M4-1 합의 요청서(러너별 기록 + 고스트 저장 형식, 결과 화면·재생은 다음 단계)에 "ㄱㄱ".
 - **한 것**:
-  - `BestRecords.TryGetForRunner`·`SubmitForRunner`·`ClearForRunner`: 러너별 최고 기록. 러너는 프로필 에셋 이름(`RunnerProfile_Alpha`)으로 부른다 — 트랙을 정의 에셋 이름으로 부르는 것과 같다. 키 `<접두사><트랙>.<속도>.byRunner.<러너>.ticks`. 트랙×속도 전체 최고(로비에 보이는 것, 러너 표시 이름 포함)는 그대로 두고 결승마다 함께 갱신한다.
+  - ~~`BestRecords.TryGetForRunner`·`SubmitForRunner`·`ClearForRunner`: 러너별 최고 기록. 러너는 프로필 에셋 이름(`RunnerProfile_Alpha`)으로 부른다 — 트랙을 정의 에셋 이름으로 부르는 것과 같다. 키 `<접두사><트랙>.<속도>.byRunner.<러너>.ticks`. 트랙×속도 전체 최고(로비에 보이는 것, 러너 표시 이름 포함)는 그대로 두고 결승마다 함께 갱신한다.~~ → 2026-10-29 "고스트: 트랙 × 속도의 최고 기록 하나" 로 지웠다(사용자 "트랙별 최고기록만 남기고 싶다"). 고스트 파일 키도 `<트랙>.<속도>.ghost` 로 바뀌었다. 아래 GhostTrace 형식은 그대로다.
   - `Flow/GhostTrace`: 틱마다 위치(float 3)와 Heading(float, 도)을 쌓고 바이트로 만든다. `"PHGT"`·버전 1·틱 수·틱당 16바이트. 읽기는 `InputLogFile` 처럼 엄격하다(머리말·길이·유한하지 않은 값이면 던진다).
   - `Flow/GhostFiles`: 고스트 파일을 `<트랙>.<속도>.<러너>.ghost` 로 저장·로드·삭제한다. 게임은 `Application.persistentDataPath/Ghosts`, 테스트는 자기 폴더. 파일이 없으면 고스트 없음, 깨진 파일은 던진다(없음으로 넘기지 않는다).
   - `RaceAssembler`: `ChainRushGame.TickCompleted` 로 틱마다 러너 위치·Heading 을 기록한다(틱 1 이면 비운다 — 재시작, 순서가 어긋나면 그 판은 고스트를 남기지 않고 에러 로그). 결승이 러너 기록을 깨면(`LastFinishWasRunnerBest`) 고스트를 저장한다. 프로필 에셋 이름이 비면 Awake 에서 끄고 알린다. 결승 처리 전에 `wasFinished` 를 먼저 세워 저장이 던져도 매 프레임 다시 시도하며 플래그를 덮지 않게 했다.

@@ -23,6 +23,7 @@
   - **영향 평가로 더한 것**: 바뀐 `RunnerTilt`·`FollowCamera`·`ChainRushHud` 가 낙하 중에 새 경로를 돈다 → 기존 낙하 테스트 `ChainRushCircuitTests.Gap_*`(1건 더)와 낙하·붙잡힘을 되감는 `ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`(깜빡임이 시뮬에 닿지 않는지).
   - EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:44:59Z~10:45:03Z). PlayMode `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (10:45:42Z~10:47:54Z, 132.0초) — Circuit 2·Flow 7·InputSource 10·Presentation 3·지문 1·Rollback 1.
   - 화면: 사용자 플레이 확인 "괜찮다" (2026-10-29).
+  - **병합 조건 ②** (사용자 "둘 다 ㄱㄱ", `46aa4b1`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트를 골랐다(위 실행은 여기에 영향 평가 2개를 더한 것). 그 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다.
 
 ## 2026-10-29 · M4-3 고스트 재생: 러너의 최고 기록이 반투명으로 함께 달린다 (`feature/m4-ghost-replay`)
 

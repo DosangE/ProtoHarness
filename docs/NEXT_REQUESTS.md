@@ -268,7 +268,7 @@ A 안(사용자 "A안으로 ㄱㄱ"): 규칙을 `Runtime/ChainRush/Motion/` 의 
 - **최고 기록 저장·결과 화면 비교·내 고스트** (옛 "P2 고스트"): 트랙 × 속도 단계 × 러너별. 트랙 × 속도 단계별 최고 기록 1개와 로비 표시는 2026-10-19 먼저 했다(`Flow/BestRecords`, DECISIONS "로비: 트랙 선택에 최고 기록") — 같은 저장소에 더한다. 고스트는 입력 재생이 아니라 틱마다 위치·방향 기록(DECISIONS 2026-10-29 "M4 기록 키·고스트 형식")이고 R9 의 고스트 모형을 쓴다. 세 단계:
   - ~~① 러너별 기록·고스트 저장 형식~~ 코드 끝(2026-10-29, `feature/m4-best-records`: `BestRecords.*ForRunner`, `Flow/GhostTrace`·`GhostFiles`, `RaceAssembler` 가 틱마다 기록하고 러너 기록을 깨면 저장).
   - ~~② 결과 화면 비교~~ 코드 끝(2026-10-29, `feature/m4-result-compare`: `Flow/FinishComparison`, `ChainRushHud.DrawComparison`, DECISIONS "M4-2 결과 화면 비교"). 남은 것: 사용자 플레이 확인.
-  - ③ 레이스 중 고스트 재생: `GhostFiles.TryLoad` 로 고른 러너의 고스트를 불러 보간해 그린다(`RemoteGhost` 는 `ProtoHarness.Net` 이라 ChainRush 에서 못 쓴다 — 모형 복제 방식만 따른다). 깨진 파일은 던진다 → 레이스에서 어떻게 알릴지 이 단계에서 정한다.
+  - ~~③ 레이스 중 고스트 재생~~ 코드 끝(2026-10-29, `feature/m4-ghost-replay`: `Visuals/GhostRunner`, `RaceAssembler.ShowGhost`, DECISIONS "M4-3 고스트 재생" — 보간 없이 틱마다, 깨진 파일은 고스트 없이 + 에러 로그). 남은 것: 사용자 플레이 확인, 플레이어 빌드에서 투명 머티리얼이 보이는지(확인 못 함).
 - **복귀 연출**: 낙하 복귀 때 깜빡임·카메라 (HANDOFF 2절 "떨어지면 트랙으로 복귀" 후속).
 - **조작 피드백 이펙트**: 부스터 발동, 그래플이 걸림 표시.
 

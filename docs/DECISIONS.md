@@ -17,6 +17,8 @@
 - **이유**: M4 목표 "기록을 깨고 싶게" — 이번 판이 얼마나 모자랐는지가 보여야 다시 달린다. 문구와 계산을 struct 로 떼어 OnGUI 없이 EditMode 에서 검사한다.
 - **안 한 것**: 레이스 중 실시간 차이(M4-3 고스트와 같이 볼 거리), 랩별 최고 비교(랩 시간은 저장하지 않는다), 로비 표시 변경.
 - **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 지문 1건, EditMode 전체. EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (09:57:51Z~09:57:55Z, 새 5건 포함). PlayMode `testcasecount="47" result="Passed" passed="47" failed="0" skipped="0"` (09:58:44Z~10:04:54Z, 370.0초) — Flow 37·Profile 9·지문 1, 도구 출력과 같다. 화면은 사용자 플레이 확인 전이다(검증 안 됨).
+  - **병합 조건 ②** (사용자 "커밋병합 진행하라", `afcaf62`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트(EditMode 전체, PlayMode 클래스 2개 + 지문 1건)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았고(그 뒤 고친 것은 `docs/` 뿐) 커밋의 `Assets/` 가 실행한 작업 트리와 같으므로, 위 두 실행을 이 커밋의 병합 근거로 쓴다. 다시 돌리지 않았다.
+  - **영향 평가**: `FinishComparison`·`RaceAssembler` → 읽는 곳 `ChainRushHud.DrawResult`(`ChainRushHud.cs`)·`RaceAssembler.KeepFinish` → `ChainRushFlowTests`(로비 결승·결과 화면 경로)·`ChainRushProfileTests`. `ChainRushHud` 는 시뮬이 읽지 않는다(그리기만) — 지문 1건으로 확인. 더 돌릴 테스트는 보이지 않았다.
 
 ## 2026-10-29 · M4 기록 키·고스트 형식: 러너별 최고 기록 · 고스트는 입력 재생이 아니라 틱마다 위치 기록 (`feature/m4-best-records`)
 

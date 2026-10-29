@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-10-29 · M4-2 결과 화면 비교: 이번 기록을 "내 최고"·"전체 최고"와 (`feature/m4-result-compare`)
+
+- **결정 (사용자, 2026-10-29)**: M4-2 합의 요청서(결과 화면 오른쪽 패널, 랩 아래·버튼 위에 두 줄, 차이는 소수 둘째 자리 `-` 가 앞섬, 비교는 이번 결승 전에 있던 기록)에 "ㄱㄱ".
+- **한 것**:
+  - `Flow/FinishComparison` (readonly struct): 이번 틱, 이전 러너 최고, 이전 전체 최고와 그 러너(없으면 0). 새 기록 여부(동률은 아니다 — `BestRecords` 가 옛것을 남긴다), 줄 문구 `내 최고  01:19.4` / `전체 최고  01:18.9 · BETA` / 없으면 `첫 기록`, 차이 `-0.60  NEW` / `+0.50` / `±0.00`. 차이는 틱에서 바로 계산해 정확하다(1틱 = 0.02 s).
+  - `RaceAssembler.KeepFinish`: 기록을 저장하기 전에 두 기록을 읽어 `LastFinish`(`HasLastFinish`)로 남긴다.
+  - `ChainRushHud.DrawResult`: 로비에서 온 레이스가 결승했을 때만 `DrawComparison` 두 줄(새 기록이면 차이를 민트로)과 왼쪽 안내 "새 기록! 고스트로 저장했습니다."(러너 기록을 깼을 때). 실패·직접 연 씬은 그대로다.
+- **이유**: M4 목표 "기록을 깨고 싶게" — 이번 판이 얼마나 모자랐는지가 보여야 다시 달린다. 문구와 계산을 struct 로 떼어 OnGUI 없이 EditMode 에서 검사한다.
+- **안 한 것**: 레이스 중 실시간 차이(M4-3 고스트와 같이 볼 거리), 랩별 최고 비교(랩 시간은 저장하지 않는다), 로비 표시 변경.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. `select-tests` = PlayMode 클래스 2개(`ChainRushFlowTests`·`ChainRushProfileTests`) + 지문 1건, EditMode 전체. EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (09:57:51Z~09:57:55Z, 새 5건 포함). PlayMode `testcasecount="47" result="Passed" passed="47" failed="0" skipped="0"` (09:58:44Z~10:04:54Z, 370.0초) — Flow 37·Profile 9·지문 1, 도구 출력과 같다. 화면은 사용자 플레이 확인 전이다(검증 안 됨).
+
 ## 2026-10-29 · M4 기록 키·고스트 형식: 러너별 최고 기록 · 고스트는 입력 재생이 아니라 틱마다 위치 기록 (`feature/m4-best-records`)
 
 - **결정 (사용자, 2026-10-29)**: M4 첫 작업으로 "최고 기록·결과 비교·내 고스트" 를 골랐다("1 ㄱㄱ"). 고스트 형식은 "위치 기록", 기록 키는 "트랙×속도×러너" 를 골랐다(둘 다 추천안). 이어 M4-1 합의 요청서(러너별 기록 + 고스트 저장 형식, 결과 화면·재생은 다음 단계)에 "ㄱㄱ".

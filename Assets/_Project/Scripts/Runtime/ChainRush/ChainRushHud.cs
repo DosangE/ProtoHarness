@@ -35,6 +35,9 @@ namespace ProtoHarness.ChainRush
         private GUIStyle raceWord;
         private GUIStyle accentWord;
         private GUIStyle totalTime;
+        private GUIStyle compare;
+        private GUIStyle compareDelta;
+        private GUIStyle compareNew;
         private int pauseCursor;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
@@ -130,6 +133,11 @@ namespace ProtoHarness.ChainRush
             raceWord = NightUi.Style(displayFont, 112, Color.white, FontStyle.BoldAndItalic);
             accentWord = NightUi.Style(displayFont, 112, Mint, FontStyle.BoldAndItalic);
             totalTime = NightUi.Style(displayFont, 84, Color.white, FontStyle.BoldAndItalic);
+            compare = Style(18, Color.white);
+            compareDelta = Style(18, Color.white, FontStyle.Bold);
+            compareDelta.alignment = TextAnchor.UpperRight;
+            compareNew = Style(18, Mint, FontStyle.Bold);
+            compareNew.alignment = TextAnchor.UpperRight;
             button = Style(22, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
@@ -333,8 +341,10 @@ namespace ProtoHarness.ChainRush
             float panelWidth = width * .41f;
             GUI.Label(new Rect(left, y + 10, width * .45f, 142), game.HasFinished ? "RACE" : "SIGNAL", raceWord);
             GUI.Label(new Rect(left, y + 128, width * .45f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
-            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), game.HasFinished
-                ? "결승선 도착. 다음 기록에 도전하세요." : "다시 도전하세요. 점프 후 앵커를 잡으세요.", small);
+            bool compared = game.HasFinished && FromLobby && assembler.HasLastFinish;
+            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), !game.HasFinished ? "다시 도전하세요. 점프 후 앵커를 잡으세요."
+                : compared && assembler.LastFinish.IsNewRunnerBest ? "새 기록! 고스트로 저장했습니다."
+                : "결승선 도착. 다음 기록에 도전하세요.", small);
             NightUi.Surface(new Rect(x, y, panelWidth, 520));
             NightUi.Block(new Rect(x, y, panelWidth, 3), game.HasFailed ? Coral : Mint);
             GUI.Label(new Rect(x + 34, y + 30, panelWidth - 68, 30), "TOTAL TIME / RACE RESULT", small);
@@ -352,6 +362,7 @@ namespace ProtoHarness.ChainRush
                 }
             }
             else GUI.Label(new Rect(x + 34, y + 222, panelWidth - 68, 38), "LINKS " + game.Grapples + "   HITS " + game.Hits, body);
+            if (compared) DrawComparison(assembler.LastFinish, x + 34, y + 340, panelWidth - 68);
             bool again = false, lobby = false;
             if (game.ManualStart)
             {
@@ -375,6 +386,17 @@ namespace ProtoHarness.ChainRush
                 UiSound.Play(UiSound.Cue.Confirm);
                 game.StartCountdown();
             }
+        }
+
+        // Below the laps (three at most end at y + 344 of the panel) and above the buttons: this finish against the
+        // runner's best and the track's best as they were before it, the difference in mint when it beat them (M4-2).
+        private void DrawComparison(Flow.FinishComparison finish, float x, float y, float width)
+        {
+            NightUi.Block(new Rect(x, y - 2, width, 1), Row);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.RunnerLine, compare);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.RunnerDelta, finish.IsNewRunnerBest ? compareNew : compareDelta);
+            GUI.Label(new Rect(x, y + 32, width, 26), finish.BestLine, compare);
+            GUI.Label(new Rect(x, y + 32, width, 26), finish.BestDelta, finish.IsNewBest ? compareNew : compareDelta);
         }
 
         // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in

@@ -7,11 +7,10 @@ using UnityEngine;
 namespace ProtoHarness.Tests.EditMode
 {
     // A run's path for its ghost (M4, DECISIONS 2026-10-29 "M4 기록 키·고스트 형식"): bytes that come back bit for bit and
-    // refuse anything else, and the files that keep one per track, speed class and runner (in a folder of the tests' own).
+    // refuse anything else, and the files that keep one per track and speed class (in a folder of the tests' own).
     public sealed class GhostTraceTests
     {
         private const string Track = "TestTrack";
-        private const string Runner = "RunnerProfile_Beta";
         private GhostFiles files;
 
         [SetUp]
@@ -93,37 +92,38 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void Files_SaveLoadDelete_PerTrackSpeedAndRunner()
+        public void Files_SaveLoadDelete_PerTrackAndSpeed()
         {
-            Assert.That(files.TryLoad(Track, SpeedClass.Fast, Runner, out _), Is.False, "No ghost yet.");
-            files.Save(Track, SpeedClass.Fast, Runner, ThreeTicks());
-            Assert.That(files.TryLoad(Track, SpeedClass.Fast, Runner, out GhostTrace loaded), Is.True);
+            Assert.That(files.TryLoad(Track, SpeedClass.Fast, out _), Is.False, "No ghost yet.");
+            files.Save(Track, SpeedClass.Fast, ThreeTicks());
+            Assert.That(files.TryLoad(Track, SpeedClass.Fast, out GhostTrace loaded), Is.True);
             Assert.That(loaded.Count, Is.EqualTo(3));
             Assert.That(loaded[2].Position, Is.EqualTo(new Vector3(-1e-7f, 12f, 1482.8f)));
-            Assert.That(files.TryLoad(Track, SpeedClass.Normal, Runner, out _), Is.False);
-            Assert.That(files.TryLoad(Track, SpeedClass.Fast, "RunnerProfile_Theta", out _), Is.False);
-            files.Delete(Track, SpeedClass.Fast, Runner);
-            Assert.That(files.TryLoad(Track, SpeedClass.Fast, Runner, out _), Is.False);
+            Assert.That(files.TryLoad(Track, SpeedClass.Normal, out _), Is.False);
+            Assert.That(files.TryLoad("OtherTrack", SpeedClass.Fast, out _), Is.False);
+            Assert.That(File.Exists(Path.Combine(files.Folder, "TestTrack.Fast.ghost")), Is.True, "Named by track and speed.");
+            files.Delete(Track, SpeedClass.Fast);
+            Assert.That(files.TryLoad(Track, SpeedClass.Fast, out _), Is.False);
         }
 
         [Test]
         public void Files_ABrokenFile_ThrowsRatherThanReadingAsNone()
         {
-            files.Save(Track, SpeedClass.Fast, Runner, ThreeTicks());
+            files.Save(Track, SpeedClass.Fast, ThreeTicks());
             string path = Directory.GetFiles(files.Folder)[0];
             File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
-            Assert.Throws<InvalidDataException>(() => files.TryLoad(Track, SpeedClass.Fast, Runner, out _));
+            Assert.Throws<InvalidDataException>(() => files.TryLoad(Track, SpeedClass.Fast, out _));
         }
 
         [Test]
         public void Files_Arguments_Invalid_Throw()
         {
             Assert.Throws<ArgumentException>(() => new GhostFiles(""));
-            Assert.Throws<ArgumentException>(() => files.TryLoad("", SpeedClass.Fast, Runner, out _));
-            Assert.Throws<ArgumentException>(() => files.TryLoad(Track, SpeedClass.Fast, "a/b", out _));
-            Assert.Throws<ArgumentOutOfRangeException>(() => files.TryLoad(Track, (SpeedClass)7, Runner, out _));
-            Assert.Throws<ArgumentException>(() => files.Save(Track, SpeedClass.Fast, Runner, new GhostTrace()), "an empty ghost");
-            Assert.Throws<ArgumentNullException>(() => files.Save(Track, SpeedClass.Fast, Runner, null));
+            Assert.Throws<ArgumentException>(() => files.TryLoad("", SpeedClass.Fast, out _));
+            Assert.Throws<ArgumentException>(() => files.TryLoad("a/b", SpeedClass.Fast, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() => files.TryLoad(Track, (SpeedClass)7, out _));
+            Assert.Throws<ArgumentException>(() => files.Save(Track, SpeedClass.Fast, new GhostTrace()), "an empty ghost");
+            Assert.Throws<ArgumentNullException>(() => files.Save(Track, SpeedClass.Fast, null));
         }
     }
 }

@@ -8,8 +8,8 @@ namespace ProtoHarness.ChainRush.Flow
 {
     // Puts the race scene together from the lobby's RaceSetup (RaceLaunch): swaps in the chosen track definition before
     // the circuit is built, gives the runner the chosen profile at the chosen speed class (SpeedScale) and its look, loads the track's environment scene additively, then counts the race in. A finish
-    // goes to the best records (BestRecords) and, when it is the runner's best, becomes its ghost (GhostFiles), which the
-    // next race shows running alongside (GhostRunner). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
+    // goes to the best records (BestRecords) and, when it is the best for its track and speed, becomes the ghost there
+    // (GhostFiles), which every race there shows running alongside, whichever runner (GhostRunner). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
     [DefaultExecutionOrder(-100)]
@@ -25,11 +25,13 @@ namespace ProtoHarness.ChainRush.Flow
         private bool wasFinished;
         private BestRecords records = BestRecords.Player;
         private GhostFiles ghosts;
-        // The run's path so far, for the ghost of a runner's best (M4). Read after each tick, never by the simulation.
+        // The run's path so far, for the ghost of a new best (M4). Read after each tick, never by the simulation.
         private readonly GhostTrace trace = new GhostTrace();
         private bool traceBroken;
         private bool started;
         private GhostRunner ghost;
+        // A finish in this race saved a new ghost; the next count-in shows it.
+        private bool ghostReplaced;
 
         // Where a finish from the lobby is kept (the player's records; a test gives its own).
         public BestRecords Records
@@ -37,7 +39,7 @@ namespace ProtoHarness.ChainRush.Flow
             get => records;
             set => records = value ?? throw new System.ArgumentNullException(nameof(value));
         }
-        // Where the ghost of a runner's best is kept (the player's ghosts; a test gives its own folder). Changing it once
+        // Where the ghost of each track and speed's best is kept (the player's ghosts; a test gives its own folder). Changing it once
         // the race is set up shows that store's ghost instead, as the lobby reads its records again when they change.
         public GhostFiles Ghosts
         {
@@ -48,13 +50,11 @@ namespace ProtoHarness.ChainRush.Flow
                 if (started) ShowGhost();
             }
         }
-        // The runner's best run racing alongside (M4-3), or null when it has none here (or its file could not be read).
+        // The best run here racing alongside (M4-3), or null when there is none (or its file could not be read).
         public GhostRunner Ghost => ghost;
         public bool HasGhost => ghost != null;
-        // Whether the last finish beat the best record for its track and speed class.
+        // Whether the last finish beat the best record for its track and speed class, and so became the ghost there.
         public bool LastFinishWasBest { get; private set; }
-        // Whether the last finish beat the runner's own best there, and so became its ghost.
-        public bool LastFinishWasRunnerBest { get; private set; }
         // The last finish against the records kept before it, for the result screen (M4-2). Valid once HasLastFinish.
         public FinishComparison LastFinish { get; private set; }
         public bool HasLastFinish { get; private set; }
@@ -86,14 +86,7 @@ namespace ProtoHarness.ChainRush.Flow
                 enabled = false;
                 return;
             }
-            // Records and ghosts are named by the track's definition asset and the runner's profile asset (BestRecords, GhostFiles).
-            if (string.IsNullOrEmpty(setup.Runner.name))
-            {
-                Debug.LogError($"RaceAssembler: the runner '{setup.Runner.DisplayName}' has no asset name to keep its records under.", this);
-                game.enabled = false;
-                enabled = false;
-                return;
-            }
+            // Records and ghosts are named by the track's definition asset (BestRecords, GhostFiles).
             if (string.IsNullOrEmpty(setup.Track.name))
             {
                 Debug.LogError($"RaceAssembler: the track '{setup.Title}' has no asset name to keep its records under.", this);
@@ -179,11 +172,12 @@ namespace ProtoHarness.ChainRush.Flow
             load.completed += _ => CountIn();
         }
 
-        // The runner's own best here, loaded once before the start: a new best set in this race is the next race's ghost.
-        // A file that does not read is no reason to stop the race: it runs without a ghost, and says why (the file stays
-        // until the next best replaces it).
+        // The best run on this track at this speed, whichever runner set it, loaded before the start and again when a race
+        // that set a new best counts in once more (Update). A file that does not read is no reason to stop the race: it
+        // runs without a ghost, and says why (the file stays until the next best replaces it).
         private void ShowGhost()
         {
+            ghostReplaced = false;
             if (ghost != null)
             {
                 Destroy(ghost.gameObject);
@@ -192,11 +186,11 @@ namespace ProtoHarness.ChainRush.Flow
             GhostTrace best;
             try
             {
-                if (!Ghosts.TryLoad(setup.Track.name, setup.Speed, setup.Runner.name, out best)) return;
+                if (!Ghosts.TryLoad(setup.Track.name, setup.Speed, out best)) return;
             }
             catch (System.Exception e) when (e is System.IO.InvalidDataException || e is System.IO.IOException)
             {
-                Debug.LogError($"RaceAssembler: the ghost of {setup.Runner.name} on {setup.Track.name} at {setup.Speed} could not be read; racing without it. {e.Message}", this);
+                Debug.LogError($"RaceAssembler: the ghost on {setup.Track.name} at {setup.Speed} could not be read; racing without it. {e.Message}", this);
                 return;
             }
             Transform model = player.TryGetComponent(out RunnerTilt tilt) ? tilt.Body : null;
@@ -227,31 +221,34 @@ namespace ProtoHarness.ChainRush.Flow
             bool newFinish = finished && !wasFinished;
             wasFinished = finished;
             if (newFinish) KeepFinish();
+            // RUN AGAIN or a restart after a new best: race the new ghost from this count-in.
+            if (ghostReplaced && game.IsCountingDown) ShowGhost();
             if (!(finished || game.HasFailed)) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ReturnToLobby();
         }
 
-        // The finish goes to the best for its track and speed class and to the runner's own; a runner's best keeps this
-        // run's path as its ghost.
+        // The finish goes to the best for its track and speed class; a new best keeps this run's path as the ghost there.
+        // The ghost is always the best's own run: a new best whose path is incomplete removes the old ghost, loudly.
         private void KeepFinish()
         {
             int ticks = circuit.Laps.TotalTicks;
             string track = setup.Track.name;
-            // Read before the finish replaces them: the result screen compares with what was there.
-            records.TryGetForRunner(track, setup.Speed, setup.Runner.name, out int runnerBefore);
+            // Read before the finish replaces it: the result screen compares with what was there.
             bool hadBest = records.TryGet(track, setup.Speed, out BestRecords.Record before);
-            LastFinish = new FinishComparison(ticks, runnerBefore, hadBest ? before.Ticks : 0, hadBest ? before.Runner : "");
+            LastFinish = new FinishComparison(ticks, hadBest ? before.Ticks : 0, hadBest ? before.Runner : "");
             HasLastFinish = true;
             LastFinishWasBest = records.Submit(track, setup.Speed, ticks, setup.Runner.DisplayName);
-            LastFinishWasRunnerBest = records.SubmitForRunner(track, setup.Speed, setup.Runner.name, ticks);
-            if (!LastFinishWasRunnerBest) return;
+            if (!LastFinishWasBest) return;
             if (traceBroken || trace.Count == 0)
             {
-                Debug.LogError($"RaceAssembler: {setup.Runner.name}'s best on {track} at {setup.Speed} is kept without a ghost (the run's path is incomplete).", this);
+                Debug.LogError($"RaceAssembler: the best on {track} at {setup.Speed} is kept without a ghost (the run's path is incomplete); the old ghost is removed.", this);
+                Ghosts.Delete(track, setup.Speed);
+                ghostReplaced = true;
                 return;
             }
-            Ghosts.Save(track, setup.Speed, setup.Runner.name, trace);
+            Ghosts.Save(track, setup.Speed, trace);
+            ghostReplaced = true;
         }
 
         // Leaves the race (and its environment scene) for the lobby.

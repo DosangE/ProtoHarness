@@ -4,7 +4,7 @@ using ProtoHarness.ChainRush.Flow;
 
 namespace ProtoHarness.Tests.EditMode
 {
-    // Best records per track and speed class (user 2026-10-19), and each runner's own (M4). A test prefix keeps the player's records untouched.
+    // Best records per track and speed class (user 2026-10-19). A test prefix keeps the player's records untouched.
     public sealed class BestRecordsTests
     {
         private const string Track = "TestTrack";
@@ -22,12 +22,7 @@ namespace ProtoHarness.Tests.EditMode
 
         private void Clear()
         {
-            foreach (SpeedClass speed in Enum.GetValues(typeof(SpeedClass)))
-            {
-                records.Clear(Track, speed);
-                records.ClearForRunner(Track, speed, "RunnerProfile_Beta");
-                records.ClearForRunner(Track, speed, "RunnerProfile_Theta");
-            }
+            foreach (SpeedClass speed in Enum.GetValues(typeof(SpeedClass))) records.Clear(Track, speed);
         }
 
         [Test]
@@ -67,38 +62,9 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(records.TryGet(Track, SpeedClass.VeryFast, out _), Is.False);
         }
 
-        // ---- each runner's own best (M4) ----
-
-        [Test]
-        public void SubmitForRunner_RunnersAreKeptApart_AndTheBestAboveIsUntouched()
-        {
-            Assert.That(records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 4000), Is.True);
-            Assert.That(records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Theta", 4200), Is.True, "A slower runner keeps its own best.");
-            Assert.That(records.TryGetForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", out int beta), Is.True);
-            Assert.That(records.TryGetForRunner(Track, SpeedClass.Fast, "RunnerProfile_Theta", out int theta), Is.True);
-            Assert.That(beta, Is.EqualTo(4000));
-            Assert.That(theta, Is.EqualTo(4200));
-            Assert.That(records.TryGetForRunner(Track, SpeedClass.Normal, "RunnerProfile_Beta", out _), Is.False);
-            Assert.That(records.TryGet(Track, SpeedClass.Fast, out _), Is.False, "A runner's best is not the best for the track.");
-        }
-
-        [Test]
-        public void SubmitForRunner_SlowerOrTied_KeepsTheOlder_FasterReplacesIt()
-        {
-            records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 4000);
-            Assert.That(records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 4100), Is.False);
-            Assert.That(records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 4000), Is.False, "A tie keeps the older record.");
-            Assert.That(records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 3900), Is.True);
-            records.TryGetForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", out int best);
-            Assert.That(best, Is.EqualTo(3900));
-        }
-
         [Test]
         public void Arguments_Invalid_Throw()
         {
-            Assert.Throws<ArgumentException>(() => records.TryGetForRunner(Track, SpeedClass.Fast, "", out _));
-            Assert.Throws<ArgumentOutOfRangeException>(() => records.SubmitForRunner(Track, SpeedClass.Fast, "RunnerProfile_Beta", 0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => records.SubmitForRunner(Track, (SpeedClass)7, "RunnerProfile_Beta", 4000));
             Assert.Throws<ArgumentException>(() => new BestRecords(""));
             Assert.Throws<ArgumentException>(() => records.TryGet("", SpeedClass.Fast, out _));
             Assert.Throws<ArgumentOutOfRangeException>(() => records.TryGet(Track, (SpeedClass)7, out _));

@@ -44,7 +44,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string BetaPath = "Assets/_Project/Data/RunnerProfile_Beta.asset";
 
         private TrackDefinition made;
-        // A runner of all 1s: races exactly as the scene's values. Named, as a profile asset is: its records go under the name.
+        // A runner of all 1s: races exactly as the scene's values. Named, as a profile asset is.
         private RunnerProfile runner;
         // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
         private GhostFiles ghosts;
@@ -672,10 +672,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FinishFromTheLobby_KeepsItAsTheBestRecordAndTheRunnersGhost()
+        public IEnumerator Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt()
         {
             var store = TestRecords();
-            store.ClearForRunner(Stadium().name, SpeedClass.Fast, runner.name);
             RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -697,40 +696,42 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(game.HasFinished, Is.True, "The bot did not finish three laps.");
                 yield return null;
                 Assert.That(assembler.LastFinishWasBest, Is.True);
-                // M4-2: compared with what was kept before it — nothing, so a first record everywhere.
+                // M4-2: compared with what was kept before it — nothing, so a first record.
                 Assert.That(assembler.HasLastFinish, Is.True);
                 Assert.That(assembler.LastFinish.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
-                Assert.That(assembler.LastFinish.RunnerBestBefore, Is.Zero);
                 Assert.That(assembler.LastFinish.BestBefore, Is.Zero);
-                Assert.That(assembler.LastFinish.RunnerLine, Is.EqualTo("내 최고  첫 기록"));
+                Assert.That(assembler.LastFinish.BestLine, Is.EqualTo("최고 기록  첫 기록"));
                 Assert.That(store.TryGet(Stadium().name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
                 Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
                 Assert.That(best.Runner, Is.EqualTo(runner.DisplayName));
-                // M4: the runner's own best, and this run's path as its ghost, ending where the runner finished.
-                Assert.That(assembler.LastFinishWasRunnerBest, Is.True);
-                Assert.That(store.TryGetForRunner(Stadium().name, SpeedClass.Fast, runner.name, out int runnerBest), Is.True);
-                Assert.That(runnerBest, Is.EqualTo(circuit.Laps.TotalTicks));
-                Assert.That(ghosts.TryLoad(Stadium().name, SpeedClass.Fast, runner.name, out GhostTrace ghost), Is.True);
-                Assert.That(ghost.Count, Is.GreaterThan(0));
-                Assert.That(ghost[ghost.Count - 1].Position, Is.EqualTo(player.transform.position));
-                Assert.That(ghost[ghost.Count - 1].Heading, Is.EqualTo(player.Heading));
+                // The best's run as the ghost for the track and speed, ending where the runner finished.
+                Assert.That(ghosts.TryLoad(Stadium().name, SpeedClass.Fast, out GhostTrace saved), Is.True);
+                Assert.That(saved.Count, Is.GreaterThan(0));
+                Assert.That(saved[saved.Count - 1].Position, Is.EqualTo(player.transform.position));
+                Assert.That(saved[saved.Count - 1].Heading, Is.EqualTo(player.Heading));
+                // There was no ghost to race in this run; RUN AGAIN counts in against the one just saved.
+                Assert.That(assembler.HasGhost, Is.False);
+                game.StartCountdown();
+                yield return null;
+                Assert.That(assembler.HasGhost, Is.True, "RUN AGAIN after a new best races its ghost.");
+                Assert.That(assembler.Ghost.Count, Is.EqualTo(saved.Count));
             }
             finally
             {
                 Time.timeScale = scale;
                 store.Clear(Stadium().name, SpeedClass.Fast);
-                store.ClearForRunner(Stadium().name, SpeedClass.Fast, runner.name);
             }
         }
 
-        // ---- the runner's ghost (M4-3, DECISIONS 2026-10-29 "M4-3 고스트 재생") ---------------------------------
+        // ---- the ghost (M4-3, DECISIONS 2026-10-29 "M4-3 고스트 재생", "고스트: 트랙 × 속도의 최고 기록 하나") ------
 
+        // The ghost belongs to the track and speed, not to a runner: whoever races there races it.
         [UnityTest, Timeout(60000)]
-        public IEnumerator Race_RunnersGhost_FollowsItsTraceTickByTick_AndHidesAtItsEnd()
+        public IEnumerator Race_TheBestsGhost_FollowsItsTraceTickByTick_AndHidesAtItsEnd()
         {
             var trace = new GhostTrace();
             for (int i = 0; i < 40; i++) trace.Add(new Vector3(i * 0.5f, 1f, 3f), i * 2f);
-            ghosts.Save(Stadium().name, SpeedClass.Fast, runner.name, trace);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
             RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
@@ -775,7 +776,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             var trace = new GhostTrace();
             trace.Add(Vector3.zero, 0f);
-            ghosts.Save(Stadium().name, SpeedClass.Fast, runner.name, trace);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
             File.WriteAllBytes(Directory.GetFiles(ghosts.Folder)[0], new byte[] { 1, 2, 3 });
             RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;

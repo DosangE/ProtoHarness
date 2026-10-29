@@ -4,7 +4,8 @@ using UnityEngine;
 namespace ProtoHarness.ChainRush.Flow
 {
     // The best finish time per track and speed class, with the runner that set it (user 2026-10-19: shown on the lobby's
-    // track page, "기록 없음" until there is one), and each runner's own best beside it (M4). Kept in PlayerPrefs under a key prefix; the game uses Player, tests
+    // track page, "기록 없음" until there is one), whose run is also the ghost there (GhostFiles; user 2026-10-29 "트랙별
+    // 최고기록만 남기고 싶다" — the per-runner bests of M4-1 are gone, their keys are left unread). Kept in PlayerPrefs under a key prefix; the game uses Player, tests
     // their own prefix so they never touch the player's records.
     public sealed class BestRecords
     {
@@ -60,39 +61,12 @@ namespace ProtoHarness.ChainRush.Flow
             PlayerPrefs.DeleteKey(key + ".runner");
         }
 
-        // Each runner's own best (M4): the runner is named by its profile asset (RunnerProfile_Alpha), as the track by its
-        // definition, and the record beside it is that runner's ghost (GhostFiles). Kept apart from the best above, which
-        // a finish updates as well; the ones set before M4 have no runner's best (DECISIONS 2026-10-29).
-        public bool TryGetForRunner(string track, SpeedClass speed, string runner, out int ticks)
-        {
-            ticks = PlayerPrefs.GetInt(RunnerKey(track, speed, runner), 0);
-            return ticks > 0;
-        }
-
-        // Keeps the finish if it beats this runner's stored one (or there is none) and says whether it did. A tie keeps the older.
-        public bool SubmitForRunner(string track, SpeedClass speed, string runner, int ticks)
-        {
-            if (ticks <= 0) throw new ArgumentOutOfRangeException(nameof(ticks), ticks, "A finish takes at least one tick.");
-            if (TryGetForRunner(track, speed, runner, out int best) && best <= ticks) return false;
-            PlayerPrefs.SetInt(RunnerKey(track, speed, runner), ticks);
-            PlayerPrefs.Save();
-            return true;
-        }
-
-        public void ClearForRunner(string track, SpeedClass speed, string runner) => PlayerPrefs.DeleteKey(RunnerKey(track, speed, runner));
-
         // A track is named by its definition asset (Circuit_Stadium); renaming the asset starts its records over.
         private string Key(string track, SpeedClass speed)
         {
             if (string.IsNullOrEmpty(track)) throw new ArgumentException("A track is required.", nameof(track));
             if (!Enum.IsDefined(typeof(SpeedClass), speed)) throw new ArgumentOutOfRangeException(nameof(speed), speed, "Unknown speed class.");
             return prefix + track + "." + speed;
-        }
-
-        private string RunnerKey(string track, SpeedClass speed, string runner)
-        {
-            if (string.IsNullOrEmpty(runner)) throw new ArgumentException("A runner is required.", nameof(runner));
-            return Key(track, speed) + ".byRunner." + runner + ".ticks";
         }
     }
 }

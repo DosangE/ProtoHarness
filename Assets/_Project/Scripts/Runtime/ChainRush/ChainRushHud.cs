@@ -351,7 +351,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(left, y + 128, width * .45f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
             bool compared = game.HasFinished && FromLobby && assembler.HasLastFinish;
             GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), !game.HasFinished ? "다시 도전하세요. 점프 후 앵커를 잡으세요."
-                : compared && assembler.LastFinish.IsNewRunnerBest ? "새 기록! 고스트로 저장했습니다."
+                : compared && assembler.LastFinish.IsNewBest ? "새 기록! 고스트로 저장했습니다."
                 : "결승선 도착. 다음 기록에 도전하세요.", small);
             NightUi.Surface(new Rect(x, y, panelWidth, 520));
             NightUi.Block(new Rect(x, y, panelWidth, 3), game.HasFailed ? Coral : Mint);
@@ -397,14 +397,12 @@ namespace ProtoHarness.ChainRush
         }
 
         // Below the laps (three at most end at y + 344 of the panel) and above the buttons: this finish against the
-        // runner's best and the track's best as they were before it, the difference in mint when it beat them (M4-2).
+        // track's best at this speed as it was before it, the difference in mint when it beat it (M4-2).
         private void DrawComparison(Flow.FinishComparison finish, float x, float y, float width)
         {
             NightUi.Block(new Rect(x, y - 2, width, 1), Row);
-            GUI.Label(new Rect(x, y + 4, width, 26), finish.RunnerLine, compare);
-            GUI.Label(new Rect(x, y + 4, width, 26), finish.RunnerDelta, finish.IsNewRunnerBest ? compareNew : compareDelta);
-            GUI.Label(new Rect(x, y + 32, width, 26), finish.BestLine, compare);
-            GUI.Label(new Rect(x, y + 32, width, 26), finish.BestDelta, finish.IsNewBest ? compareNew : compareDelta);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.BestLine, compare);
+            GUI.Label(new Rect(x, y + 4, width, 26), finish.BestDelta, finish.IsNewBest ? compareNew : compareDelta);
         }
 
         // The pause menu over the dimmed game: the race so far and the entries this race offers, the highlighted one in

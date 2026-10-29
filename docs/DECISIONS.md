@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-10-29 · M4 복귀 연출: 검은 화면에서 밝아지기 · 카메라 컷 · 붙잡힌 동안 깜빡임 (`feature/m4-respawn-look`)
+
+- **결정 (사용자, 2026-10-29)**: "다음작업 ㄱㄱ" → 복귀 연출 합의 요청서(덮개 0.3 s, 카메라 Snap, 0.1 s 간격 깜빡임, 표현만)에 "ㄱㄱ".
+- **한 것** (모두 표현 계층, 시뮬은 `RunnerMotor.IsRespawning` 을 읽기만):
+  - `Visuals/RespawnLook` (static class, `SwingLook` 과 같은 자리·형식): `FadeTime` 0.3 s, `BlinkInterval` 0.1 s, `FadeAlpha(since)`, `Shown(since)`, 그리고 복귀 순간(`IsRespawning` false→true)을 알아채는 `Watch` 구조체 — 세 곳이 각자 프레임에서 쓴다.
+  - `ChainRushHud`: 복귀 순간부터 0.3 s 동안 화면 전체를 검정 알파 1→0 으로 덮는다(달리는 화면, "GO!" 위). `RespawnFade` 공개.
+  - `FollowCamera.LateUpdate`: 복귀 순간 `Snap()` — 출발 때처럼 트랙 방향 뒤로 바로 옮긴다. 떨어진 곳 아래에서 날아오지 않는다. 덮개가 끊김을 가린다.
+  - `RunnerTilt`: `Awake` 에 몸의 켜진 렌더러를 캐시하고(나중에 생기는 체인 메시는 빠진다), 붙잡힌 동안 `Shown` 이 거짓인 구간에 끈다. 붙잡힘이 끝나거나 컴포넌트가 꺼지면 다시 켠다. `BlinkHidden` 공개.
+- **이유**: 순간이동이 화면 휩쓸림으로만 보여 "어디로 갔지" 가 됐다. 끊고 가리고 깜빡여서 "여기서 다시" 를 분명히 한다(카트라이더식). 복귀 순간을 시뮬 이벤트가 아니라 상태 변화로 읽어 시뮬 코드를 고치지 않았고, 되감기로 같은 틱이 다시 돌아도 연출은 영향받지 않는다.
+- **알아둘 것**: 깜빡임·덮개는 게임 시간(`Time.time`)으로 잰다. 붙잡힌 동안 일시정지하면 깜빡임 박자가 붙잡힘 틱과 어긋날 수 있다(끝나는 시점은 붙잡힘을 따른다).
+- **안 한 것**: 복귀 위치·붙잡힘 시간(시뮬), 복귀 효과음, 고스트 깜빡임, 붙잡힘 중 공격 입력.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, ① 빠른 확인): 컴파일 `scriptCompilationFailed=False`, Console Error 0. 새 테스트 `ChainRushCircuitTests.Gap_FallAndComeBack_CutsTheCameraFadesInAndBlinksWhileHeld` — 그래플 틈으로 떨어뜨려 프레임 끝마다 본다: 복귀 프레임에 카메라가 러너 뒤(트랙 방향 내적 < -1 m)·15 m 안·노면 위 2 m 넘게, 덮개 > 0.5. 0.3 s 뒤 덮개 0, 붙잡힌 동안 깜빡임이 몸 전체를 끄는 프레임이 있다, 끝나면 모두 켜진다.
+  - `select-tests` = PlayMode 클래스 2개(`ChainRushInputSourceTests`·`ChainRushPresentationTests`) + 일부 8개(새 테스트, HUD 레이스 6건·`Lobby_TrackPage_`) + 지문 1건, EditMode 전체.
+  - **영향 평가로 더한 것**: 바뀐 `RunnerTilt`·`FollowCamera`·`ChainRushHud` 가 낙하 중에 새 경로를 돈다 → 기존 낙하 테스트 `ChainRushCircuitTests.Gap_*`(1건 더)와 낙하·붙잡힘을 되감는 `ChainRushRollbackTests.Rollback_AroundAFallAndTheRespawnHold_ReplaysEveryTickBitForBit`(깜빡임이 시뮬에 닿지 않는지).
+  - EditMode `!Enemy` `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:44:59Z~10:45:03Z). PlayMode `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (10:45:42Z~10:47:54Z, 132.0초) — Circuit 2·Flow 7·InputSource 10·Presentation 3·지문 1·Rollback 1.
+  - 화면: 사용자 플레이 확인 "괜찮다" (2026-10-29).
+
 ## 2026-10-29 · M4-3 고스트 재생: 러너의 최고 기록이 반투명으로 함께 달린다 (`feature/m4-ghost-replay`)
 
 - **결정 (사용자, 2026-10-29)**: M4-3 합의 요청서(출발 전 한 번 불러오기, 틱 N 에 기록 N 번째, 끝나면 숨김, 깨진 파일은 고스트 없이 + 에러 로그, 런타임 URP Lit 투명 민트 머티리얼)에 "ㄱㄱ".

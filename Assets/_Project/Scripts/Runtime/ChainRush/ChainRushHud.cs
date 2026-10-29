@@ -39,6 +39,7 @@ namespace ProtoHarness.ChainRush
         private GUIStyle compareDelta;
         private GUIStyle compareNew;
         private int pauseCursor;
+        private RespawnLook.Watch respawn;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
         private const string CueGlyphs = "321GO!";
@@ -67,8 +68,12 @@ namespace ProtoHarness.ChainRush
             }
         }
 
+        // How dark the respawn fade has the screen right now (RespawnLook): 1 the moment a fallen runner is put back.
+        public float RespawnFade => RespawnLook.FadeAlpha(respawn.Since(Time.time));
+
         private void Update()
         {
+            respawn.Update(player.IsRespawning, Time.time);
             if (!game.IsPaused)
             {
                 pauseCursor = (int)PauseChoice.Continue;
@@ -171,6 +176,9 @@ namespace ProtoHarness.ChainRush
             {
                 DrawPlay(width, height, scale);
                 if (game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
+                // Over everything, the screen coming up from black after a fall hides the camera's cut.
+                float fade = RespawnFade;
+                if (fade > 0f) NightUi.Block(new Rect(0, 0, width, height), new Color(0f, 0f, 0f, fade));
             }
             GUI.matrix = previous;
         }

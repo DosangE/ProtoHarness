@@ -21,6 +21,7 @@ namespace ProtoHarness.ChainRush
         private float yaw;
         private float swingBlend;
         private float insideSign = 1f;
+        private RespawnLook.Watch respawn;
         // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
         private GameSettings settings;
 
@@ -51,10 +52,16 @@ namespace ProtoHarness.ChainRush
         private void Start() => Snap();
 
         // Sits behind the runner's facing (free steering), never below the track surface plus the offset height.
-        // A corner swing moves it toward the outside of the curve and widens the view (SwingLook).
+        // A corner swing moves it toward the outside of the curve and widens the view (SwingLook). A runner put back after
+        // a fall gets a cut behind it instead of a sweep from where it fell; the HUD's fade hides the cut (RespawnLook).
         private void LateUpdate()
         {
             if (game.IsPaused) return;
+            if (respawn.Update(target.IsRespawning, Time.time))
+            {
+                Snap();
+                return;
+            }
             Vector3 targetPosition = target.transform.position;
             yaw = Mathf.MoveTowardsAngle(yaw, target.Heading, maxYawSpeed * Time.deltaTime);
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);

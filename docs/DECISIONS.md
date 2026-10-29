@@ -21,6 +21,8 @@
   - 1회차 (고치기 전): EditMode `testcasecount="297" result="Passed" passed="297" failed="0"` (10:14:23Z). PlayMode `testcasecount="62" result="Failed(Child)" passed="60" failed="2" skipped="0"` (10:15:08Z~10:21:34Z) — 위 딸린 수정의 2건.
   - 2회차 (고친 뒤): EditMode `testcasecount="297" result="Passed" passed="297" failed="0" skipped="0"` (10:23:12Z~10:23:13Z). PlayMode `testcasecount="62" result="Passed" passed="62" failed="0" skipped="0"` (10:23:48Z~10:30:16Z, 387.2초) — Flow 39·InputSource 10·Presentation 3·Profile 9·지문 1, 도구 출력과 같다. 새 고스트 테스트 2건과 실패했던 2건 모두 통과.
   - 화면(반투명이 보이는지, 고스트가 러너와 겹쳐 보기 괜찮은지)은 사용자 플레이 확인 전이다(검증 안 됨). 플레이어 빌드는 확인하지 않았다.
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `faef78c`): `select-tests -Range dev...HEAD` 가 2회차와 같은 테스트(EditMode 전체, PlayMode 클래스 4개 + 지문 1건)를 골랐다. 2회차 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 2회차를 이 커밋의 병합 근거로 쓴다. 1회차 실패 2건은 원인(이름 없는 테스트 트랙 정의)을 위 "딸린 수정" 에 적었고, 코드를 고친 뒤 통과했다 — 다시 돌려 없던 일로 한 것이 아니다.
+  - **영향 평가**: `GhostRunner`·`RaceAssembler` → 읽는 곳 `RaceAssembler.ShowGhost`(`Flow/RaceAssembler.cs`)·`ChainRushFlowTests` → `ChainRushFlowTests`(로비 레이스 조립·고스트)·`ChainRushProfileTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`(표현 경로 표). 시뮬은 `GhostRunner` 를 참조하지 않는다(`game.Tick` 을 읽기만) — 지문 1건으로 확인.
 
 ## 2026-10-29 · M4-2 결과 화면 비교: 이번 기록을 "내 최고"·"전체 최고"와 (`feature/m4-result-compare`)
 

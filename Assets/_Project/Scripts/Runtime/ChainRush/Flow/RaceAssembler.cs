@@ -44,6 +44,9 @@ namespace ProtoHarness.ChainRush.Flow
         public bool LastFinishWasBest { get; private set; }
         // Whether the last finish beat the runner's own best there, and so became its ghost.
         public bool LastFinishWasRunnerBest { get; private set; }
+        // The last finish against the records kept before it, for the result screen (M4-2). Valid once HasLastFinish.
+        public FinishComparison LastFinish { get; private set; }
+        public bool HasLastFinish { get; private set; }
 
         // Whether this race came from the lobby (and so goes back to it).
         public bool IsLaunched => launched;
@@ -183,6 +186,11 @@ namespace ProtoHarness.ChainRush.Flow
         {
             int ticks = circuit.Laps.TotalTicks;
             string track = setup.Track.name;
+            // Read before the finish replaces them: the result screen compares with what was there.
+            records.TryGetForRunner(track, setup.Speed, setup.Runner.name, out int runnerBefore);
+            bool hadBest = records.TryGet(track, setup.Speed, out BestRecords.Record before);
+            LastFinish = new FinishComparison(ticks, runnerBefore, hadBest ? before.Ticks : 0, hadBest ? before.Runner : "");
+            HasLastFinish = true;
             LastFinishWasBest = records.Submit(track, setup.Speed, ticks, setup.Runner.DisplayName);
             LastFinishWasRunnerBest = records.SubmitForRunner(track, setup.Speed, setup.Runner.name, ticks);
             if (!LastFinishWasRunnerBest) return;

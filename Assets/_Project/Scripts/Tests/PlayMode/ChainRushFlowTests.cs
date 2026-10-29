@@ -654,6 +654,12 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(game.HasFinished, Is.True, "The bot did not finish three laps.");
                 yield return null;
                 Assert.That(assembler.LastFinishWasBest, Is.True);
+                // M4-2: compared with what was kept before it — nothing, so a first record everywhere.
+                Assert.That(assembler.HasLastFinish, Is.True);
+                Assert.That(assembler.LastFinish.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
+                Assert.That(assembler.LastFinish.RunnerBestBefore, Is.Zero);
+                Assert.That(assembler.LastFinish.BestBefore, Is.Zero);
+                Assert.That(assembler.LastFinish.RunnerLine, Is.EqualTo("내 최고  첫 기록"));
                 Assert.That(store.TryGet(Stadium().name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
                 Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
                 Assert.That(best.Runner, Is.EqualTo(runner.DisplayName));

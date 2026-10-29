@@ -198,6 +198,60 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // A second miss while the first still counts (JustMissed lasts 0.75 s and nothing stops another press) shakes
+        // again (Codex review 2026-10-29).
+        [UnityTest]
+        public IEnumerator ChainRushHud_SecondMissWhileTheFirstStillCounts_ShakesAgain()
+        {
+            game.SetInputSource(new FullThrottleInputSource());
+            game.StartRun();
+            MovePlayer(new Vector3(50f, 5f, 12f));
+            yield return new WaitForFixedUpdate();
+            Assert.That(grapple.TryAttach(), Is.False);
+            yield return null;
+            Assert.That(hud.MissShake, Is.GreaterThan(0f));
+            yield return new WaitForSeconds(FeedbackLook.MissShakeTime + 0.05f);
+            Assert.That(hud.MissShake, Is.Zero);
+            Assert.That(grapple.JustMissed, Is.True, "precondition: the first miss still counts.");
+            Assert.That(player.IsGrounded, Is.False, "precondition: still in the air.");
+            Assert.That(grapple.TryAttach(), Is.False);
+            yield return null;
+            Assert.That(hud.MissShake, Is.GreaterThan(0f));
+        }
+
+        // A booster spent while another still runs (the slingshot pulling as the grapple it led into is empowered with a
+        // second slot) shows again: each spend is its own moment (Codex review 2026-10-29).
+        [UnityTest]
+        public IEnumerator ChainRushHud_GrappleEmpoweredWhileTheSlingshotPulls_FlashesAgain()
+        {
+            var input = new FeedbackInputSource();
+            game.SetInputSource(input);
+            game.StartRun();
+            MovePlayer(new Vector3(0f, 1f, GrappleJumpZ));
+            yield return new WaitForFixedUpdate();
+            input.PressPrimary();
+            yield return WaitForAnchorInReach();
+            game.Racer.AddGauge(2f);
+            input.PressBoost();
+            float deadline = Time.time + 0.5f;
+            while (!player.IsSlingPulling && Time.time < deadline) yield return null;
+            Assert.That(player.IsSlingPulling, Is.True, "precondition: the slingshot fired in the air.");
+            yield return null;
+            Assert.That(feedback.SinceBoost(Time.time), Is.GreaterThanOrEqualTo(0f));
+            float firstAt = Time.time - feedback.SinceBoost(Time.time);
+            Assert.That(grapple.TryAttach(), Is.True);
+            input.PressBoost();
+            deadline = Time.time + 0.5f;
+            while (!game.Racer.GrappleEmpowered && Time.time < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Racer.GrappleEmpowered, Is.True, "precondition: the second slot empowered the grapple.");
+            Assert.That(player.IsSlingPulling, Is.True, "precondition: the slingshot was still pulling.");
+            yield return null;
+            float secondAt = Time.time - feedback.SinceBoost(Time.time);
+            Assert.That(secondAt, Is.GreaterThan(firstAt), "The second spend must start the booster effect again.");
+            Assert.That(hud.BoostFlash, Is.GreaterThan(0f));
+            Assert.That(player.Gauge, Is.EqualTo(0f).Within(0.001f));
+        }
+
         [UnityTest]
         public IEnumerator Grapple_NoAnchorInRange_DoesNotAttach()
         {

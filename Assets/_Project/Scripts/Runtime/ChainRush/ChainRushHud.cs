@@ -40,12 +40,9 @@ namespace ProtoHarness.ChainRush
         private GUIStyle compareNew;
         private int pauseCursor;
         private StateEdge respawn;
-        private StateEdge boost;
-        private StateEdge hook;
-        private StateEdge swing;
-        private StateEdge miss;
-        private StateEdge poleReady;
-        private int spentBoostSlot = -1;
+        // Notices the control moments for both the world effects and this HUD, so the two never disagree (review
+        // 2026-10-29); it runs after GrappleController, and OnGUI after every LateUpdate, so the HUD draws this frame's.
+        private ControlFeedback feedback;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
         private const int CueSize = 160;
         private const string CueGlyphs = "321GO!";
@@ -73,36 +70,24 @@ namespace ProtoHarness.ChainRush
                 enabled = false;
                 return;
             }
-            gameObject.AddComponent<ControlFeedback>().Initialize(game, player, grapple);
+            feedback = gameObject.AddComponent<ControlFeedback>();
+            feedback.Initialize(game, player, grapple);
         }
 
         // How dark the respawn fade has the screen right now (RespawnLook): 1 the moment a fallen runner is put back.
         public float RespawnFade => RespawnLook.FadeAlpha(respawn.Since(Time.time));
 
         // These envelopes belong to rendered frames, not ticks, and never feed back into the simulation.
-        public float BoostFlash => game.IsRunning ? FeedbackLook.Fade(boost.Since(Time.time), FeedbackLook.BoostFlashTime) : 0f;
+        public float BoostFlash => game.IsRunning ? FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.BoostFlashTime) : 0f;
         public float HookFlash => game.IsRunning ? Mathf.Max(
-            FeedbackLook.Fade(hook.Since(Time.time), FeedbackLook.HookRingTime),
-            FeedbackLook.Fade(swing.Since(Time.time), FeedbackLook.HookRingTime)) : 0f;
+            FeedbackLook.Fade(feedback.SinceHook(Time.time), FeedbackLook.HookRingTime),
+            FeedbackLook.Fade(feedback.SinceSwing(Time.time), FeedbackLook.HookRingTime)) : 0f;
+        // 1 the moment a grapple misses, 0 once the shake is over.
+        public float MissShake => game.IsRunning ? FeedbackLook.Fade(feedback.SinceMiss(Time.time), FeedbackLook.MissShakeTime) : 0f;
 
         private void Update()
         {
             respawn.Update(player.IsRespawning, Time.time);
-            if (game.IsRunning)
-            {
-                float now = Time.time;
-                if (boost.Update(player.IsSlingPulling || game.Racer.GrappleEmpowered, now))
-                    spentBoostSlot = Mathf.FloorToInt(player.Gauge);
-                hook.Update(grapple.IsAttached, now);
-                swing.Update(player.IsSwinging, now);
-                miss.Update(grapple.JustMissed, now);
-                poleReady.Update(grapple.HasPoleCandidate, now);
-            }
-            else if (!game.IsPaused)
-            {
-                boost = hook = swing = miss = poleReady = default;
-                spentBoostSlot = -1;
-            }
             if (!game.IsPaused)
             {
                 pauseCursor = (int)PauseChoice.Continue;
@@ -295,8 +280,9 @@ namespace ProtoHarness.ChainRush
             if (grapple.IsAttached || anchor != null)
             {
                 Vector3 point = grapple.IsAttached ? grapple.AnchorPosition : anchor.position;
-                Color color = Color.Lerp(Mint, Color.white, FeedbackLook.Fade(hook.Since(Time.time), FeedbackLook.HookRingTime));
-                DrawWorldBracket(point, scale, FeedbackLook.BracketScale(hook.Since(Time.time)), color);
+                float sinceHook = feedback.SinceHook(Time.time);
+                Color color = Color.Lerp(Mint, Color.white, FeedbackLook.Fade(sinceHook, FeedbackLook.HookRingTime));
+                DrawWorldBracket(point, scale, FeedbackLook.BracketScale(sinceHook), color);
             }
             if (player.IsSwinging || grapple.HasPoleCandidate) DrawPoleCandidate(width, height, scale);
             DrawMiss(scale);
@@ -317,7 +303,7 @@ namespace ProtoHarness.ChainRush
         {
             bool swinging = player.IsSwinging;
             Vector3 pole = swinging ? game.Racer.SwingCenter : grapple.PoleCandidate;
-            float since = swinging ? swing.Since(Time.time) : poleReady.Since(Time.time);
+            float since = swinging ? feedback.SinceSwing(Time.time) : feedback.SincePoleReady(Time.time);
             float size = swinging ? FeedbackLook.BracketScale(since) : FeedbackLook.PoleScale(since);
             float flash = FeedbackLook.Fade(since, swinging ? FeedbackLook.HookRingTime : FeedbackLook.PoleEnterTime);
             Color color = Color.Lerp(Mint, Color.white, flash);
@@ -410,7 +396,7 @@ namespace ProtoHarness.ChainRush
 
         private void DrawMiss(float scale)
         {
-            float since = miss.Since(Time.time);
+            float since = feedback.SinceMiss(Time.time);
             float fade = FeedbackLook.Fade(since, FeedbackLook.MissShakeTime);
             if (fade <= 0f) return;
             Vector3 screen = grapple.Candidate != null ? viewCamera.WorldToScreenPoint(grapple.Candidate.position)
@@ -466,7 +452,8 @@ namespace ProtoHarness.ChainRush
             NightUi.Block(bar, Row);
             bar.width *= fill;
             NightUi.Block(bar, Mint);
-            float burst = FeedbackLook.Fade(boost.Since(Time.time), FeedbackLook.GaugeBurstTime);
+            float burst = FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.GaugeBurstTime);
+            int spentBoostSlot = feedback.SpentBoostSlot;
             for (int i = 0; i < boxes; i++)
             {
                 var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);

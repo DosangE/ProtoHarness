@@ -6,7 +6,8 @@ namespace ProtoHarness.ChainRush.Visuals
 {
     // Presentation only: reads the current motor and grapple on each frame and never writes simulation state.
     // A rollback repeating a tick is harmless: these local edges and renderers are never read by the simulation.
-    // GrappleController (150) refreshes its offered pole before this presentation reads it.
+    // GrappleController (150) refreshes its offered pole before this presentation reads it. This is the one place that
+    // notices the control moments; ChainRushHud reads them from here (Since*) for its screen effects.
     [DefaultExecutionOrder(200)]
     public sealed class ControlFeedback : MonoBehaviour
     {
@@ -26,13 +27,34 @@ namespace ProtoHarness.ChainRush.Visuals
         private LineRenderer[] rings;
         private float[] burstAt;
         private TrailRenderer trail;
-        private StateEdge boost;
+        // A booster is either action a gauge slot buys, watched apart: the slingshot can still be pulling when the grapple
+        // it leads into is empowered with a second slot, and that second spend must show too (review 2026-10-29).
+        private StateEdge slingPull;
+        private StateEdge empower;
         private StateEdge hook;
         private StateEdge swing;
         private StateEdge poleReady;
+        private bool boosted;
+        private float boostedAt;
+        private int spentBoostSlot = -1;
+        // A miss is noticed by its mark moving later, not by JustMissed turning on: a second miss while the first still
+        // shows (it lasts 0.75 s and nothing stops another press) must shake again (review 2026-10-29).
+        private int lastMissUntil;
+        private bool missed;
+        private float missedAt;
+        private bool initialized;
 
         public bool PoleReadyShown => rings != null && rings[ReadyRing].enabled;
         public bool TrailEmitting => trail != null && trail.emitting;
+
+        // Seconds since each moment on Time.time, negative when it has not happened in this run.
+        public float SinceBoost(float now) => boosted ? now - boostedAt : -1f;
+        public float SinceHook(float now) => hook.Since(now);
+        public float SinceSwing(float now) => swing.Since(now);
+        public float SinceMiss(float now) => missed ? now - missedAt : -1f;
+        public float SincePoleReady(float now) => poleReady.Since(now);
+        // The gauge slot the last booster emptied (the whole slots left after spending it), -1 before any.
+        public int SpentBoostSlot => spentBoostSlot;
 
         // Allocate every renderer and its geometry once; the HUD adds this component after validating its references.
         public void Initialize(ChainRushGame game, RunnerMotor player, GrappleController grapple)
@@ -106,6 +128,7 @@ namespace ProtoHarness.ChainRush.Visuals
             Color trailColor = NightUi.Accent;
             trailColor.a = 0.35f;
             SetTint(trail, trailColor);
+            initialized = true;
         }
 
         private LineRenderer MakeLine(string name, int points, bool loop)
@@ -126,26 +149,45 @@ namespace ProtoHarness.ChainRush.Visuals
 
         private void Start()
         {
-            if (game != null) return;
-            Debug.LogError("ControlFeedback: call Initialize before the first frame.", this);
+            if (initialized) return;
+            Debug.LogError("ControlFeedback: Initialize was not called, or it failed, before the first frame.", this);
             enabled = false;
         }
 
         private void LateUpdate()
         {
+            if (!initialized)
+            {
+                // Turned back on after a failed Initialize: there is nothing to draw with.
+                Debug.LogError("ControlFeedback: enabled without a successful Initialize.", this);
+                enabled = false;
+                return;
+            }
             if (!game.IsRunning || game.IsPaused)
             {
                 HideAll();
                 // A pause keeps the watched states, so resuming cannot fire a second impact for the same action.
-                if (!game.IsPaused) boost = hook = swing = poleReady = default;
+                if (!game.IsPaused) ForgetRun();
                 return;
             }
             float now = Time.time;
-            if (boost.Update(player.IsSlingPulling || game.Racer.GrappleEmpowered, now))
+            bool fired = slingPull.Update(player.IsSlingPulling, now);
+            bool empowered = empower.Update(game.Racer.GrappleEmpowered, now);
+            if (fired || empowered)
             {
+                boosted = true;
+                boostedAt = now;
+                spentBoostSlot = Mathf.FloorToInt(player.Gauge);
                 Vector3 feet = runner.TransformPoint(capsule.center - Vector3.up * (capsule.height * 0.5f));
                 StartRing(BoostRing, feet + Vector3.up * 0.08f, Quaternion.identity, now);
             }
+            int missUntil = game.Racer.MissUntilTick;
+            if (missUntil > lastMissUntil)
+            {
+                missed = true;
+                missedAt = now;
+            }
+            lastMissUntil = missUntil;
             if (hook.Update(grapple.IsAttached, now))
                 StartRing(AnchorRing, grapple.AnchorPosition, Quaternion.FromToRotation(Vector3.up, -player.Facing), now);
             if (swing.Update(player.IsSwinging, now))
@@ -171,6 +213,16 @@ namespace ProtoHarness.ChainRush.Visuals
             // Only while a booster is on: the slingshot pulling or carrying, or the empowered grapple. Speed left over
             // after it (user 2026-10-29: the trail only for the booster) leaves no trail.
             trail.emitting = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
+        }
+
+        // Between runs: a new run starts with no moments behind it. The miss mark is taken as it stands, so a mark left
+        // from before is not mistaken for a new miss.
+        private void ForgetRun()
+        {
+            slingPull = empower = hook = swing = poleReady = default;
+            boosted = missed = false;
+            spentBoostSlot = -1;
+            lastMissUntil = game.Racer.MissUntilTick;
         }
 
         private void StartRing(int index, Vector3 center, Quaternion rotation, float now)

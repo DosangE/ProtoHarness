@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-29 · main v0.4: M3 "고를 거리" — `dev` 를 `main` 에 병합하고 태그 `v0.4`
+
+- **결정 (사용자, 2026-10-29)**: 아래 "M3 범위 조정" 에서 "지금 닫기"·"태그에 맞추기"를 골랐고, 합의 요청서(`feature/m3-close-v0.4`: 범위 조정·버전 표기·README·이 기록 → `feature → dev`, `dev → main` `--no-ff`, 주석 태그 `v0.4`, 푸시는 지시 때만)에 "ㄱㄱ".
+- **v0.4 에 든 것** (`main` v0.3 뒤): M3 속도 단계 보통·빠름·매우빠름, FINGER LANES(도약대 `Segment.Kicker`, 지름길 2곳·분기 좌표, 왼쪽 변 S자 굽이), 세 트랙의 장식(FINGER LANES 외부 장식과 로비 연결), 봉 스윙 한도(줄과 ↑ 는 달리기 가속까지), 봉 각도는 트랙 진행 방향에서 잰다, HUD 트랙 이름, 화면 설정(창/전체·해상도·VSync), 무한 모드·적 삭제, 리팩토링 RF2·RF3·RF3b·RF4·RF7, 테스트 착지 확인(R8)·영향 범위 테스트 선택, Codex 규칙·훅. 각각 이 문서의 같은 이름 항목. 타이틀 버전 표기 `0.4`.
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `feature/m3-close-v0.4` `f37776a`(뒤 커밋은 `README.md`·`docs/` 만, `Assets/`·`Packages/`·`ProjectSettings/` 에 닿지 않는다), 에디터 **6000.3.25f1**(Unity MCP `Application.unityVersion`), `ProtoHarness.slnx` 는 넣지 않는다. 시각은 UTC(결과 XML):
+  - 컴파일: `Unity_RunCommand` 컴파일 성공(`TitleScreen.Version` 이 `0.4` 로 읽힘), Console Error 0건 (08:23Z 직전). 처음 `AssetDatabase.Refresh()` 를 넣은 호출은 `Could not load file or assembly '…Unity.AI.Assistant.RunCommand.Dynamic.….dll'` 로 실패했고, Refresh 를 빼고 다시 부른 호출이 성공했다.
+  - EditMode (`!Enemy`): `testcasecount="283" result="Passed" passed="283" failed="0" skipped="0"` (08:23:39Z~08:23:43Z). Console Error 4건은 `GameSettingsTests` 가 `LogAssert.Expect` 로 기대한 `GameSettings: …` 로그.
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="200" result="Passed" passed="191" failed="0" skipped="9"` (08:24:16Z~08:36:53Z, 756.3초).
+  - PlayMode 게이트 2회차 (같은 코드): `testcasecount="200" result="Passed" passed="191" failed="0" skipped="9"` (08:37:36Z~08:50:15Z, 759.9초). 두 회차 모두 skipped 9 는 `[Explicit]` — `ChainRushProbeTests` 6건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0x18F31E7A2B4F79B3` (기준과 같다).
+  - ② 의 하한: `select-tests -Range dev...HEAD`(`f37776a`) = EditMode 전체, PlayMode `ChainRushFlowTests.(Lobby|Loop)_*`·`Race_(Skyway|FingerLanes)FromTheLobby_*`(지문 없음) — 위 게이트 전체가 포함한다. 영향 평가: `TitleScreen.Version` → 읽는 곳 `TitleScreen.cs:83`(화면 글자, 시뮬 밖) → 고른 Flow 테스트.
+  - `Run Device Input Tests` 1회 (10초 뒤 시작하게 걸고 사용자가 에디터를 앞으로 가져옴): `testcasecount="3" result="Passed" passed="3" failed="0"` (08:51:09Z~08:51:27Z). 시작 순간 `isApplicationActive` 로그는 테스트 실행이 Console 을 지워 남지 않았다.
+  - 사용자 플레이 확인 (M3 완료 조건 "속도 단계마다 차이가 느껴진다"): "느껴진다." (2026-10-29). "트랙마다 완주" 는 FINGER LANES "잘 구현되었다"(2026-10-27), S자 굽이 "테스트 봤는데 괜찮았다"(2026-10-28)와 `Race_OtherSpeedClasses_BotFinishesEveryTrack`(게이트 안).
+  - 하지 않은 것: 네트워크 레이스(M7 부터).
+- **v0.4 에 없는 것**: 고저차 전용·헤어핀·그래플·종합 맵(M6 "트랙 추가"), 기록·고스트(M4). 사용자 답이 없는 플레이 확인(SKYWAY 2랩·직선 슬라럼, 코너 중간 봉 걸기, ↓ 후진·스윙 중 ↑, 그래플 거는 구간, 화면 설정 플레이어 빌드)은 v0.4 조건이 아니라 그대로 남는다. README 이미지는 v0.3 캡처 그대로다.
+
 ## 2026-10-29 · M3 범위 조정: 남은 트랙을 M6 "트랙 추가" 로 — v0.4 를 트랙 3개로 닫는다 · 타이틀 버전 표기를 태그에 맞춘다 (`feature/m3-close-v0.4`)
 
 - **결정 (사용자, 2026-10-29)**: HANDOFF 1절의 "M3 범위 결정" 질문에 "지금 닫기"(트랙 3개 + 장식으로 v0.4)와 "태그에 맞추기"(`TitleScreen.Version` 을 태그 번호로)를 골랐다. 이어 합의 요청서(남은 트랙은 M6 앞 "트랙 추가" 로 — 추천안)에 "ㄱㄱ".

@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-10-29 · main v0.5: M4 "다시 할 이유" — `dev` 를 `main` 에 병합하고 태그 `v0.5`
+
+- **결정 (사용자, 2026-10-29)**: M4 마지막 항목(조작 피드백 이펙트)을 `dev` 에 병합한 뒤 "M4 를 마감(v0.5)할까요?" 에 "확인햇다 병합 ㄱㄱ". 절차는 "main v0.4" 와 같다: `feature/m4-close-v0.5`(타이틀 버전 표기·README·이 기록) → `dev` → `main` `--no-ff`, 주석 태그 `v0.5`, 푸시는 지시 때만.
+- **v0.5 에 든 것** (`main` v0.4 뒤): 트랙 × 속도의 최고 기록과 그 판의 고스트(틱마다 위치·방향 기록 재생, 어느 러너든 같은 트랙·속도면 겨룬다), 결과 화면 기록 비교, 낙하 복귀 연출, 조작 피드백 이펙트(스윙 가능 봉 표시·화면 밖 봉 가장자리 + 화살표, 부스터·걸림·빗나감), 로비 순서 속도 → 트랙 → 러너. 각각 이 문서의 같은 이름 항목. 타이틀 버전 표기 `0.5`. README 를 v0.5 에 맞췄다(상태 줄, 진행 표, 로비 순서).
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `feature/m4-close-v0.5` `8a48938`(뒤 커밋은 `docs/` 만), 에디터 **6000.3.25f1**(Unity MCP `Application.unityVersion`), `ProtoHarness.slnx` 는 넣지 않는다. 시각은 UTC(결과 XML):
+  - 컴파일: `scriptCompilationFailed=False`, `TitleScreen.Version` 이 `0.5` 로 읽힘.
+  - EditMode (`!Enemy`): `testcasecount="296" result="Passed" passed="296" failed="0" skipped="0"` (13:59:58Z~13:59:59Z).
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="209" result="Passed" passed="200" failed="0" skipped="9"` (14:00:15Z~14:12:12Z, 717.0초).
+  - PlayMode 게이트 2회차 (같은 코드): `testcasecount="209" result="Passed" passed="200" failed="0" skipped="9"` (14:12:41Z~14:24:39Z, 717.9초). 두 회차 모두 skipped 9 는 `[Explicit]` — `ChainRushProbeTests` 6건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0x18F31E7A2B4F79B3` (기준과 같다).
+  - ② 의 하한: 이 브랜치의 `Assets/` 변경은 `TitleScreen.Version` 한 줄 — 읽는 곳 `TitleScreen.cs:83`(화면 글자, 시뮬 밖). 게이트 전체가 포함한다.
+  - `Run Device Input Tests` 1회 (20초 뒤 시작하게 걸고 사용자가 에디터를 앞으로 가져옴, 시작 순간 `editor focused=True`): `testcasecount="3" result="Passed" passed="3" failed="0"` (14:25:24Z~14:25:40Z).
+  - 사용자 플레이 확인 (M4 완료 조건 "고스트와 겨뤄 기록을 갱신할 수 있다"): "확인햇다" (2026-10-29, M4 마감 질문에 대한 답). 그 전 받은 확인: "고스트 좋다", 복귀 연출 "괜찮다", 조작 피드백 "확인했다".
+  - 실패한 실행 없음. 하지 않은 것: 네트워크 레이스(M7 부터).
+- **v0.5 에 없는 것**: 아직 답이 없는 확인 — 다른 러너로 매우빠름·STADIUM 고스트, 플레이어 빌드에서 고스트·이펙트 런타임 머티리얼(투명·발광)이 보이는지, 결과 화면 두 줄. v0.4 때 남은 플레이 확인(SKYWAY 2랩·직선 슬라럼 등)도 그대로다. README 이미지는 v0.3 캡처 그대로다. README 테스트 절의 `Run Long Tests`·`Run Course Sweep`·`Sweep`·`Long`·`Endless` 는 2026-10-25 무한 모드 삭제 때 없어진 것이라 낡았다(이번에 고치지 않았다).
+
 ## 2026-10-29 · M4 조작 피드백 이펙트: 상태 글자 대신 이펙트 — 스윙 가능·부스터·걸림·빗나감 (`feature/m4-control-feedback`)
 
 - **결정 (사용자, 2026-10-29)**: 초안(상태 글자 "BOOST!"·"HOOKED!"·"POLE HOOK!")에 "상태를 명시할필욘없고 이펙트로 표현하자. 스윙가능할때에 대해서도 화면에서 명확히 알수있게도하고 부스트나 그래플에 대해서도 사용시 이펙트". 수정본에 "네추천대로 ㄱㄱ"(상태 상자 전부 삭제, `StateEdge` 정리 포함), 이어 "gpt에게 구현을 맡겨라".

@@ -24,6 +24,7 @@
   - PlayMode `testcasecount="51" result="Passed" passed="50" failed="0" skipped="1"` (11:27:13Z~11:33:21Z, 368.3초). skipped 1 은 `[Explicit]` Probe. 결승 테스트(`Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`: 최고 기록의 고스트 저장, 다시 달리기에서 그 고스트를 불러옴), 고스트 따라가기·깨진 파일, 지문 통과.
   - Probe 를 `testNames` 로 1회: `testcasecount="1" result="Passed" passed="1" failed="0"` (11:34:03Z~11:35:41Z, 97.6초).
   - 화면(다른 러너로 매우빠름·STADIUM 에서 OMEGA 의 고스트가 보이는지)은 사용자 확인 전이다(검증 안 됨).
+  - **병합 조건 ②** (사용자 "커밋 병합 ㄱㄱ", `06ad587`): `select-tests -Range dev...HEAD` 가 위와 같은 테스트(EditMode 전체, PlayMode 클래스 2개 + Probe 1 + 지문 1)를 골랐다. 위 실행 뒤 `Assets/` 는 바뀌지 않았으므로(그 뒤는 `docs/` 뿐) 위 실행을 병합 근거로 쓴다. 영향 평가: `BestRecords`·`GhostFiles`·`FinishComparison`·`RaceAssembler`·`ChainRushHud` → 읽는 곳 `RaceAssembler`·`ChainRushHud.DrawResult`·`TrackPage.RefreshRecords` → `ChainRushFlowTests`(로비 기록·결승·고스트)·`ChainRushProfileTests`·Probe(테스트 파일 변경). 시뮬은 이 타입들을 읽지 않는다 — 지문 1건.
 
 ## 2026-10-29 · 로비 순서: 속도 → 트랙 → 러너 · 트랙 기록 줄에 속도 이름 (`feature/lobby-speed-first`)
 

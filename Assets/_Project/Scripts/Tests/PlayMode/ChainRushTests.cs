@@ -4,6 +4,7 @@ using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -26,9 +27,29 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { }
         }
 
+        // Scripted edges are consumed once on the next tick, while the throttle stays held like FullThrottleInputSource.
+        private sealed class FeedbackInputSource : IInputSource
+        {
+            private bool primary;
+            private bool boost;
+
+            public void PressPrimary() => primary = true;
+            public void PressBoost() => boost = true;
+            public void Poll() { }
+            public TickInput Consume()
+            {
+                var input = new TickInput(0f, primary, false, false, chainActionPressed: boost);
+                Clear();
+                return input;
+            }
+            public void Clear() { primary = false; boost = false; }
+        }
+
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
+        private ChainRushHud hud;
+        private ControlFeedback feedback;
         private float previousTimeScale;
 
         [UnitySetUp]
@@ -47,10 +68,16 @@ namespace ProtoHarness.Tests.PlayMode
                 if (root.TryGetComponent(out ChainRushGame foundGame)) game = foundGame;
                 if (root.TryGetComponent(out RunnerMotor foundPlayer)) player = foundPlayer;
                 if (root.TryGetComponent(out GrappleController foundGrapple)) grapple = foundGrapple;
+                if (root.TryGetComponent(out ChainRushHud foundHud)) hud = foundHud;
             }
             Assert.That(game, Is.Not.Null);
             Assert.That(player, Is.Not.Null);
             Assert.That(grapple, Is.Not.Null);
+            Assert.That(hud, Is.Not.Null);
+            Assert.That(hud.gameObject, Is.EqualTo(game.gameObject), "The HUD belongs to the game root.");
+            feedback = hud.GetComponent<ControlFeedback>();
+            Assert.That(feedback, Is.Not.Null);
+            Assert.That(feedback.enabled, Is.True);
             yield return null;
         }
 
@@ -100,6 +127,75 @@ namespace ProtoHarness.Tests.PlayMode
             grapple.Release(true);
             Assert.That(grapple.IsAttached, Is.False);
             Assert.That(player.Velocity.y, Is.GreaterThanOrEqualTo(7f));
+        }
+
+        [UnityTest]
+        public IEnumerator ChainRushHud_BoosterSlotSpent_FlashesThenFades()
+        {
+            var input = new FeedbackInputSource();
+            game.SetInputSource(input);
+            game.StartRun();
+            game.Racer.AddGauge(1f);
+            input.PressBoost();
+            float deadline = Time.time + 0.5f;
+            while (hud.BoostFlash <= 0f && Time.time < deadline) yield return null;
+            Assert.That(player.Gauge, Is.EqualTo(0f).Within(0.001f), "The chain action must spend the prepared slot.");
+            Assert.That(hud.BoostFlash, Is.GreaterThan(0f));
+            yield return new WaitForSeconds(FeedbackLook.BoostFlashTime + 0.05f);
+            Assert.That(hud.BoostFlash, Is.Zero);
+        }
+
+        [UnityTest]
+        public IEnumerator ChainRushHud_GrappleAttached_ShowsHookFlash()
+        {
+            var input = new FeedbackInputSource();
+            game.SetInputSource(input);
+            game.StartRun();
+            MovePlayer(new Vector3(0f, 1f, GrappleJumpZ));
+            yield return new WaitForFixedUpdate();
+            input.PressPrimary();
+            yield return WaitForAnchorInReach();
+            Assert.That(player.IsGrounded, Is.False);
+            input.PressPrimary();
+            float deadline = Time.time + 0.5f;
+            while (hud.HookFlash <= 0f && Time.time < deadline) yield return null;
+            Assert.That(grapple.IsAttached, Is.True);
+            Assert.That(hud.HookFlash, Is.GreaterThan(0f));
+        }
+
+        // The bench has no corner poles. Build the same R30 road as its Shift/Ctrl test here, without device events.
+        [UnityTest]
+        public IEnumerator ControlFeedback_PoleWithinReach_ShowsReadyRingAndHidesWhenPaused()
+        {
+            var built = new List<Object>();
+            try
+            {
+                var line = new Centerline(new Vector3(300f, 0f, 0f), 0f);
+                line.AppendStraight(30f);
+                line.AppendArc(30f, 90f);
+                line.AppendStraight(40f);
+                TestRoad.Build(line, -5d, line.EndS, 6f, true, built);
+                game.SetTrack(line);
+                game.SetInputSource(new FullThrottleInputSource());
+                game.StartRun();
+                MovePlayer(line.FrameAt(16d).TransformPoint(new Vector3(0f, 1.2f, 0f)));
+                player.FaceTrack();
+                Physics.SyncTransforms();
+                Assert.That(player.TryFindPole(out _), Is.True, "The R30 road must offer its corner pole here.");
+                float deadline = Time.time + 0.5f;
+                while (!feedback.PoleReadyShown && Time.time < deadline) yield return null;
+                Assert.That(grapple.HasPoleCandidate, Is.True);
+                Assert.That(feedback.PoleReadyShown, Is.True);
+                game.TogglePause();
+                yield return null;
+                Assert.That(feedback.PoleReadyShown, Is.False);
+                Assert.That(feedback.TrailEmitting, Is.False);
+            }
+            finally
+            {
+                if (game.IsPaused) game.TogglePause();
+                for (int i = 0; i < built.Count; i++) if (built[i] != null) Object.Destroy(built[i]);
+            }
         }
 
         [UnityTest]

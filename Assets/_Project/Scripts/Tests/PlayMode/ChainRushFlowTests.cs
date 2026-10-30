@@ -1300,51 +1300,69 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        // ---- Palm Coast (user 2026-10-30, Beach Drive outline and four boost pads) ---------------------------
+        // ---- Palm Coast (user 2026-10-30, Beach Drive outline, five boost pads and a jump over the sea) --------
 
+        // The track as reshaped after play (2026-10-30): sixteen arcs, so sixteen corner poles, each at a real curve; a
+        // steady 12% climb with three pads 30 m apart and a kicker 23 m after the last; the sea 15 m past the crest, 45 m
+        // wide; the climb given back over the beach.
         [Test]
-        public void PalmCoast_Layout_IsTheCoastalLoopWithFourBoostZonesAndAGentleFinishHill()
+        public void PalmCoast_Layout_IsTheCoastalLoopWithAClimbToAJumpOverTheSeaAndAGentleFinishHill()
         {
             TrackDefinition palm = PalmCoast();
             Assert.That(palm.TryValidate(out string error), Is.True, error);
             Assert.That(palm.LapCount, Is.EqualTo(2));
-            Assert.That(palm.LapLength, Is.InRange(1800d, 1830d));
+            Assert.That(palm.LapLength, Is.InRange(1995d, 2012d));
             Assert.That(palm.RoadHalfWidth, Is.EqualTo(7.2f).Within(1e-4f));
-            Assert.That(palm.Gaps(), Is.Empty);
+            Assert.That(palm.Gaps().Count, Is.EqualTo(1), "The sea under the jump.");
             Assert.That(palm.Anchors, Is.Empty);
             Assert.That(palm.Poles, Is.Empty);
             Assert.That(palm.Shortcuts, Is.Empty);
             var turns = new System.Collections.Generic.List<TrackDefinition.Segment>();
             float total = 0f;
+            int kickers = 0;
+            double s = 0d, lipS = 0d;
             foreach (TrackDefinition.Segment segment in palm.Segments)
             {
-                Assert.That(segment.Launch, Is.Zero);
-                Assert.That(Mathf.Abs(segment.EndGrade), Is.LessThanOrEqualTo(0.03f));
+                s += segment.Length;
+                if (segment.Launch > 0f)
+                {
+                    kickers++;
+                    lipS = s;
+                    Assert.That(segment.Launch, Is.EqualTo(0.3f).Within(1e-6f));
+                }
+                Assert.That(Mathf.Abs(segment.EndGrade), Is.LessThanOrEqualTo(TrackDefinition.MaxGrade));
                 if (!segment.IsArc) continue;
                 turns.Add(segment);
                 total += segment.Degrees;
             }
-            Assert.That(turns.Count, Is.EqualTo(18), "Fourteen corners and the beach's four gentle arcs.");
+            Assert.That(kickers, Is.EqualTo(1), "Only the jump's kicker throws.");
+            Assert.That(turns.Count, Is.EqualTo(16), "Fourteen corners and the beach's two long bends: a pole at each.");
             Assert.That(total, Is.EqualTo(-360f).Within(0.001f), "Right is positive: this loop turns counterclockwise.");
             for (int i = 0; i < turns.Count; i++)
                 Assert.That(turns[i].Radius, Is.GreaterThanOrEqualTo(TrackDefinition.MinRadius), "corner " + i);
-            for (int i = 3; i <= 6; i++)
-            {
-                Assert.That(turns[i].Radius, Is.GreaterThanOrEqualTo(60f), "beach arc " + i);
-                Assert.That(turns[i].Degrees, Is.EqualTo(i == 3 || i == 6 ? -10f : 10f).Within(0.001f));
-            }
-            Assert.That(turns[8].Radius, Is.EqualTo(48f), "P5");
-            Assert.That(turns[10].Degrees, Is.EqualTo(-96.3402f).Within(0.001f), "P7 from its two diagonal edges.");
-            Assert.That(turns[11].Degrees, Is.EqualTo(-38.6598f).Within(0.001f), "P8 from the diagonal onto the southbound edge.");
-            Assert.That(turns[11].Radius, Is.EqualTo(60f));
+            Assert.That(turns[0].Radius, Is.EqualTo(45f), "P1, met at Z1's speed");
+            Assert.That(turns[1].Radius, Is.EqualTo(60f), "P2, met after the landing");
+            Assert.That(turns[3].Radius, Is.EqualTo(220f), "the beach's first long bend");
+            Assert.That(turns[3].Degrees, Is.EqualTo(-23.11f).Within(0.01f));
+            Assert.That(turns[4].Radius, Is.EqualTo(220f), "and the second, back to west");
+            Assert.That(turns[4].Degrees, Is.EqualTo(23.11f).Within(0.01f));
+            Assert.That(turns[8].Degrees, Is.EqualTo(-96.3402f).Within(0.001f), "P7 from its two diagonal edges.");
+            Assert.That(turns[9].Degrees, Is.EqualTo(-38.6598f).Within(0.001f), "P8 from the diagonal onto the southbound edge.");
+            Assert.That(turns[15].Radius, Is.EqualTo(50f), "P14, met at Z4's carried speed");
             Centerline line = palm.BuildCenterline(Vector3.zero, 0f);
             Assert.That(line.IsLoop, Is.True);
-            Assert.That(line.BoostZoneCount, Is.EqualTo(4));
-            Assert.That(line.LaunchCount, Is.Zero);
+            Assert.That(line.BoostZoneCount, Is.EqualTo(5), "One on the start straight, three on the climb, one before the finish.");
+            Assert.That(line.LaunchCount, Is.EqualTo(1));
             var zones = new System.Collections.Generic.List<double>();
             line.GetBoostZones(zones);
-            double[] expectedS = { 110d, 313.26991d, 426.53982d, 1645.71288d };
-            Vector2[] expectedPositions = { new Vector2(0f, 110f), new Vector2(76f, 248f), new Vector2(152f, 296f), new Vector2(-112f, -68f) };
+            double[] expectedS = { 110d, 260.6858d, 290.6858d, 320.6858d, 1822.7102d };
+            Vector2[] expectedPositions = { new Vector2(0f, 110f), new Vector2(70f, 210f), new Vector2(100f, 210f), new Vector2(130f, 210f), new Vector2(-132f, -68f) };
+            (double start, double end) = palm.Gaps()[0];
+            Assert.That(zones[2] - zones[1], Is.EqualTo(30d).Within(1e-3d), "The pads of the climb are 30 m apart.");
+            Assert.That(zones[3] - zones[2], Is.EqualTo(30d).Within(1e-3d));
+            Assert.That(lipS - zones[3], Is.EqualTo(23d).Within(1e-3d), "The last pad to the crest.");
+            Assert.That(start - lipS, Is.EqualTo(15d).Within(1e-3d), "The crest to the sea: the flat run.");
+            Assert.That(end - lipS, Is.EqualTo(60d).Within(1e-3d), "The crest to the far side of the sea.");
             for (int i = 0; i < zones.Count; i++)
             {
                 Assert.That(zones[i], Is.EqualTo(expectedS[i]).Within(0.03d), "zone " + i);
@@ -1352,21 +1370,26 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(frame.Curvature, Is.Zero, "Every zone is on a straight.");
                 Assert.That(Vector2.Distance(new Vector2(frame.Position.x, frame.Position.z), expectedPositions[i]), Is.LessThan(0.03f));
             }
+            for (int i = 1; i <= 3; i++)
+                Assert.That(line.FrameAt(zones[i]).Grade, Is.EqualTo(0.12f).Within(1e-5f), "Every pad of the climb sits on the full 12%.");
             float low = 0f, high = 0f;
             Vector2 min = Vector2.positiveInfinity, max = Vector2.negativeInfinity;
-            for (double s = 0d; s < line.EndS; s += 0.5d)
+            for (double at = 0d; at < line.EndS; at += 0.5d)
             {
-                Vector3 position = line.FrameAt(s).Position;
+                Vector3 position = line.FrameAt(at).Position;
                 low = Mathf.Min(low, position.y);
                 high = Mathf.Max(high, position.y);
                 min = Vector2.Min(min, new Vector2(position.x, position.z));
                 max = Vector2.Max(max, new Vector2(position.x, position.z));
             }
             Assert.That(Vector2.Distance(min, new Vector2(-360f, -68f)), Is.LessThan(0.1f));
-            Assert.That(Vector2.Distance(max, new Vector2(152f, 344f)), Is.LessThan(0.1f));
-            Assert.That(high - low, Is.EqualTo(2f).Within(0.01f));
+            Assert.That(Vector2.Distance(max, new Vector2(325f, 330f)), Is.LessThan(0.1f));
+            Assert.That(low, Is.EqualTo(-2f).Within(0.01f), "The start's descent and the beach's end meet at -2 m.");
+            Assert.That(high - low, Is.EqualTo(11.88f).Within(0.02f), "The climb: 0.12 over 10/2 + 90 + 8/2 m.");
+            Assert.That(line.FrameAt(lipS).Position.y, Is.EqualTo(high).Within(0.01f), "The crest is the top, flat from there.");
+            Assert.That(line.FrameAt(end + 1d).Position.y, Is.EqualTo(high).Within(0.01f), "The landing is as high as the crest.");
             Assert.That(line.FrameAt(100d).Position.y, Is.EqualTo(-2f).Within(0.01f), "Descent just after the start.");
-            Assert.That(line.FrameAt(zones[3]).Grade, Is.EqualTo(0.03f).Within(1e-5f), "The finish approach climbs gently.");
+            Assert.That(line.FrameAt(zones[4]).Grade, Is.EqualTo(0.03f).Within(1e-5f), "The finish approach climbs gently.");
             Assert.That(line.FrameAt(line.EndS - 0.001d).Position.magnitude, Is.LessThan(0.01f), "The position and height meet the start.");
             Assert.That(palm.CheckpointCount, Is.EqualTo(3));
             for (int i = 0; i < 3; i++)
@@ -1401,7 +1424,7 @@ namespace ProtoHarness.Tests.PlayMode
             CircuitRace circuit = Find<CircuitRace>(raceScene);
             Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("PALM COAST"));
             Assert.That(circuit.Definition, Is.SameAs(palm));
-            Assert.That(game.Track.BoostZoneCount, Is.EqualTo(4));
+            Assert.That(game.Track.BoostZoneCount, Is.EqualTo(5));
             float assemblyDeadline = Time.realtimeSinceStartup + 20f;
             while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
             Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
@@ -1470,9 +1493,9 @@ namespace ProtoHarness.Tests.PlayMode
             CircuitRace circuit = Find<CircuitRace>(scene);
             var zones = new System.Collections.Generic.List<double>();
             game.Track.GetBoostZones(zones);
-            Assert.That(zones.Count, Is.EqualTo(4));
+            Assert.That(zones.Count, Is.EqualTo(5));
             Assert.That(zones[0], Is.EqualTo(110d).Within(0.01d));
-            Assert.That(player.BoostZoneSpeed, Is.EqualTo(34f * SpeedScale.Of(speed)).Within(1e-4f));
+            Assert.That(player.BoostZoneSpeed, Is.EqualTo(55f), "The same pad speed in every class (user 2026-10-30).");
             Assert.That(player.BoostZoneSpeed, Is.GreaterThan(player.SlingTopSpeed));
             float scale = Time.timeScale;
             try
@@ -1522,12 +1545,98 @@ namespace ProtoHarness.Tests.PlayMode
                     Assert.That(circuit.Laps.Progress, Is.EqualTo(after.Circuit.Laps.Progress));
                     float boosted = player.ForwardSpeed;
                     game.StepTick(bot);
-                    Assert.That(player.ForwardSpeed, Is.LessThan(boosted).And.GreaterThan(player.RunSpeed), "Existing overspeed falloff resumes on the next tick.");
+                    Assert.That(player.ForwardSpeed, Is.LessThan(boosted).And.GreaterThan(player.RunSpeed), "The pad's speed starts to wear off on the next tick.");
                     Assert.That(game.Racer.SlingTicks, Is.Zero);
+                    // The speed is carried as a swing's is, falling off by swingCarryFalloff (3 m/s) a second: the faster
+                    // overspeedFalloff (8) would leave about 49 m/s after 0.8 s, this leaves about 52 (user 2026-10-30, "too soon").
+                    Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(player.RunSpeed), "The pad's speed is the carried speed.");
+                    for (int hold = Ticks.FromSeconds(0.8f); hold > 0; hold--) game.StepTick(bot);
+                    Assert.That(player.ForwardSpeed, Is.GreaterThan(50f), "After 0.8 s the pad's speed has worn off by about 2.4 m/s.");
                     break;
                 }
                 Assert.That(crossed, Is.True, "The bot did not reach Z1.");
                 Assert.That(fired, Is.EqualTo(booster));
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(palm.name, speed);
+            }
+        }
+
+        // The jump over the sea (user 2026-10-30): in every class the bot takes the climb's three pads, leaves the crest near the pad's
+        // speed and lands past the sea without a fall. Then a fall into the sea (the runner put down in it, having last stood
+        // just before it) comes back before the last pad of the climb, and from rest that pad carries the runner over.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Jump_PalmCoast_ThePadsCarryOverTheSea_AndAFallComesBackBeforeTheLastPad(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed)
+        {
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            var zones = new System.Collections.Generic.List<double>();
+            game.Track.GetBoostZones(zones);
+            (double seaStart, double seaEnd) = palm.Gaps()[0];
+            double lipS = 0d;
+            foreach (TrackDefinition.Segment segment in palm.Segments)
+            {
+                lipS += segment.Length;
+                if (segment.Launch > 0f) break;
+            }
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                float lipSpeed = 0f;
+                int tick = 0;
+                for (; tick < 2000 && game.IsRunning && circuit.Laps.Progress < seaEnd + 20d; tick++)
+                {
+                    double before = game.Track.Project(player.transform.position).S;
+                    game.StepTick(bot);
+                    Assert.That(player.IsRespawning, Is.False, $"The bot fell at tick {tick}, S {before:F1}.");
+                    double s = game.Track.Project(player.transform.position).S;
+                    if (before < lipS && s >= lipS) lipSpeed = player.ForwardSpeed;
+                }
+                Assert.That(circuit.Laps.Progress, Is.GreaterThanOrEqualTo(seaEnd + 20d), $"The bot did not get past the sea in {tick} ticks.");
+                Assert.That(lipSpeed, Is.GreaterThan(50f), "The climb's pads leave the crest at their speed.");
+                Debug.Log($"ChainRush Palm Coast jump at {speed}: {lipSpeed:F2} m/s at the crest, past the sea by tick {tick}.");
+
+                // A fall into the sea, having last stood on the flat run just before it.
+                SimSnapshot now = game.CaptureSnapshot();
+                RacerState.Snapshot racer = now.Racer;
+                racer.LastGroundedS = seaStart - 1d;
+                racer.Grounded = false;
+                racer.Velocity = Vector3.zero;
+                TrackFrame sea = game.Track.FrameAt((seaStart + seaEnd) * 0.5d);
+                game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, sea.Position + Vector3.down * 40f, now.Circuit));
+                game.StepTick(bot);
+                Assert.That(player.IsRespawning, Is.True, "The runner in the sea comes back.");
+                double back = game.Track.Project(player.transform.position).S;
+                Assert.That(back, Is.EqualTo(zones[3] - 4d).Within(0.5d), "Back before the last pad, not at rest past it.");
+                Assert.That(player.ForwardSpeed, Is.Zero);
+                bool crossed = false;
+                for (int more = 0; more < 1000 && game.IsRunning; more++)
+                {
+                    bool held = player.IsRespawning;
+                    game.StepTick(bot);
+                    Assert.That(held || !player.IsRespawning, Is.True, $"It fell again, {more} ticks after coming back.");
+                    if (game.Track.Project(player.transform.position).S >= seaEnd + 20d)
+                    {
+                        crossed = true;
+                        break;
+                    }
+                }
+                Assert.That(crossed, Is.True, "From rest before the last pad that pad carries the runner over the sea.");
             }
             finally
             {

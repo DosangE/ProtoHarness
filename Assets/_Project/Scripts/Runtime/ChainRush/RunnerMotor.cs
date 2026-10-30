@@ -79,8 +79,11 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float slingTurnRate = 90f;
         [SerializeField] private float slingCarryTime = 0.8f;
         [SerializeField] private float slingCarrySpeed = 16f;
-        // A road pad's instant forward speed, stronger than the slingshot; the extra speed falls off as any overspeed.
-        [SerializeField] private float boostZoneSpeed = 34f;
+        // A road pad's instant forward speed, far above the slingshot. It is the same for every runner and speed class
+        // (user 2026-10-30 "55까지만"), so a jump that needs the pads (Palm Coast) flies as far in every class. The speed
+        // then falls off as a swing's carried speed does, swingCarryFalloff a second (user 2026-10-30, the first
+        // overspeedFalloff left the pad's speed "too soon").
+        [SerializeField] private float boostZoneSpeed = 55f;
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
@@ -108,6 +111,9 @@ namespace ProtoHarness.ChainRush
         // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
         [SerializeField] private float respawnBackoff = 4f;
         [SerializeField] private float respawnHoldTime = 1f;
+        // A fall within respawnPadReach metres after a boost pad comes back respawnBackoff before that pad instead: a jump
+        // only a pad's speed clears (Palm Coast) would otherwise put the runner back past the pad, at rest, to fall again.
+        [SerializeField] private float respawnPadReach = 50f;
         // The runner's character and the race's speed class (Configure): scales on the values above, all 1 until given.
         private RunnerProfile profile;
         private float topSpeedScale = 1f;
@@ -152,7 +158,7 @@ namespace ProtoHarness.ChainRush
         public float RunAcceleration => runAcceleration * accelerationScale * speedClassScale;
         public float SlingTopSpeed => slingTopSpeed * topSpeedScale * speedClassScale;
         public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale * speedClassScale;
-        public float BoostZoneSpeed => boostZoneSpeed * topSpeedScale * speedClassScale;
+        public float BoostZoneSpeed => boostZoneSpeed;
         public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale * speedClassScale;
         public float SwingMetersPerSlot => swingMetersPerSlot / gaugeChargeScale;
 
@@ -214,8 +220,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: the swing speed scale range must be within (0, 1] .. [1, inf), the metres per slot and carry falloff positive.", this);
             if (swingThrottleSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: the swing throttle speed scale must be at least 1 (the run speed).", this);
-            if (respawnBackoff < 0f || respawnHoldTime < 0f)
-                Debug.LogError("RunnerMotor: respawn backoff and hold time cannot be negative.", this);
+            if (respawnBackoff < 0f || respawnHoldTime < 0f || !(respawnPadReach >= 0f))
+                Debug.LogError("RunnerMotor: respawn backoff, hold time and pad reach cannot be negative.", this);
         }
 
         public void PrimaryAction()
@@ -327,15 +333,18 @@ namespace ProtoHarness.ChainRush
             if (grounded && !swinging && !grapple.IsAttached
                 && game.Track.TryLaunchBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward), out float lift))
                 velocity.y = Mathf.Max(velocity.y, lift * Mathf.Max(0f, velocity.x * frame.Forward.x + velocity.z * frame.Forward.z));
-            // A pad uses the same S moved as a kicker, without keeping anything between ticks. Only the horizontal
-            // facing component rises; sideways and vertical speed stay, and the next tick's drive sheds the overspeed.
+            // A pad uses the same S moved as a kicker. Only the horizontal facing component rises; sideways and vertical
+            // speed stay. The speed it gives is also the swing's carried speed (RacerState.SwingCarrySpeed, kept by
+            // snapshots already), so the next ticks' drive lets it fall off as a swing's does and no new state is kept.
             if (grounded && !swinging && !grapple.IsAttached
                 && game.Track.TryBoostBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward)))
             {
                 Slingshot.Cut(racer);
                 Vector3 facing = Facing;
                 float forwardSpeed = Vector3.Dot(velocity, facing);
-                velocity += facing * (Mathf.Max(forwardSpeed, BoostZoneSpeed) - forwardSpeed);
+                float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
+                velocity += facing * (boosted - forwardSpeed);
+                racer.SwingCarrySpeed = boosted;
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
@@ -414,11 +423,14 @@ namespace ProtoHarness.ChainRush
         // Puts a fallen runner on the centerline respawnBackoff metres before where it last stood, as high as the start
         // slot, facing along the track and at rest, and starts the hold. The chain gauge is kept; a grapple, slingshot or
         // swing ends without its boost. LastGroundedS stays, so a second fall before landing comes back to the same place.
+        // Just after a boost pad it comes back before the pad (respawnPadReach).
         private void RespawnOnTrack()
         {
             RacerState racer = game.Racer;
             grapple.Release(false);
-            TrackFrame frame = game.Track.FrameAt(racer.LastGroundedS - respawnBackoff);
+            double s = racer.LastGroundedS - respawnBackoff;
+            if (game.Track.TryBoostZoneBehind(s, respawnPadReach, out double pad)) s = pad - respawnBackoff;
+            TrackFrame frame = game.Track.FrameAt(s);
             controller.enabled = false;
             transform.position = frame.TransformPoint(new Vector3(0f, 1.05f, 0f));
             controller.enabled = true;

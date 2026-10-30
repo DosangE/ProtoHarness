@@ -413,6 +413,31 @@ namespace ProtoHarness.Tests.EditMode
             Assert.Throws<ArgumentNullException>(() => line.GetBoostZones(null));
         }
 
+        // Where a fall just after a pad comes back (RunnerMotor's respawn, Palm Coast's jump, 2026-10-30): the nearest pad
+        // at or behind S within the reach, across a loop's seam too; none ahead, none farther back, none on a plain track.
+        [Test]
+        public void TryBoostZoneBehind_FindsTheNearestPadBackWithinTheReach()
+        {
+            Centerline plain = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(plain.TryBoostZoneBehind(100d, 1000d, out _), Is.False);
+            var segments = Stadium();
+            segments[1] = TrackDefinition.Segment.BoostStraight(20f, 10f, 0.1f);
+            SetSegments(segments);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            line.AddBoostZone(15d);
+            Assert.That(line.TryBoostZoneBehind(40d, 35d, out double pad), Is.True);
+            Assert.That(pad, Is.EqualTo(25d), "The nearer of the two pads behind.");
+            Assert.That(line.TryBoostZoneBehind(25d, 35d, out pad), Is.True, "A pad right at S counts.");
+            Assert.That(pad, Is.EqualTo(25d));
+            Assert.That(line.TryBoostZoneBehind(61d, 35d, out _), Is.False, "Both pads are more than 35 m back.");
+            Assert.That(line.TryBoostZoneBehind(10d, 35d, out _), Is.False, "Pads ahead do not count.");
+            line.AddBoostZone(line.EndS - 2d);
+            Assert.That(line.TryBoostZoneBehind(3d, 35d, out pad), Is.True, "Back across the seam.");
+            Assert.That(pad, Is.EqualTo(-2d).Within(1e-9d), "The pad's S on this side of the seam, so S minus a backoff stays on the lap behind.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.TryBoostZoneBehind(double.NaN, 35d, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.TryBoostZoneBehind(10d, -1d, out _));
+        }
+
         // A shortcut across the stadium's infield (user 2026-10-25, Finger Lanes' nails): off straight A at S 96 (flat, after
         // the hill) a right quarter turn of R15, 74 m east, another one onto straight C at the same height (z 96), 44 m into
         // C. C starts at 140 + pi x 11 + 60 + pi x 11.

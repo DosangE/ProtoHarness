@@ -40,7 +40,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 146.33333
+  - length: 88.33333
     radius: 0
     degrees: 0
     endGrade: 0
@@ -50,7 +50,7 @@ MonoBehaviour:
     boostZone: 1
     boostAt: 33.33333
   - length: 0
-    radius: 25
+    radius: 45
     degrees: 90
     endGrade: 0
     endHalfWidth: 0
@@ -58,35 +58,80 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 102
+  - length: 10
     radius: 0
     degrees: 0
-    endGrade: 0
+    endGrade: 0.12
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 30
+    radius: 0
+    degrees: 0
+    endGrade: 0.12
     endHalfWidth: 0
     gap: 0
     launch: 0
     boostZone: 1
-    boostAt: 51
-  - length: 0
-    radius: 25
-    degrees: -90
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 46
+    boostAt: 15
+  - length: 30
     radius: 0
     degrees: 0
-    endGrade: 0
+    endGrade: 0.12
     endHalfWidth: 0
     gap: 0
     launch: 0
     boostZone: 1
-    boostAt: 23
+    boostAt: 15
+  - length: 30
+    radius: 0
+    degrees: 0
+    endGrade: 0.12
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 1
+    boostAt: 15
+  - length: 8
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0.3
+    boostZone: 0
+    boostAt: 0
+  - length: 15
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 45
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 1
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 52
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
   - length: 0
-    radius: 25
+    radius: 60
     degrees: -90
     endGrade: 0
     endHalfWidth: 0
@@ -94,7 +139,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 50.77481
+  - length: 20
     radius: 0
     degrees: 0
     endGrade: 0
@@ -104,61 +149,7 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 60
-    degrees: -10
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 0
-    radius: 60
-    degrees: 10
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 50.77481
-    radius: 0
-    degrees: 0
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 0
-    radius: 60
-    degrees: 10
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 0
-    radius: 60
-    degrees: -10
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 50.77481
-    radius: 0
-    degrees: 0
-    endGrade: 0
-    endHalfWidth: 0
-    gap: 0
-    launch: 0
-    boostZone: 0
-    boostAt: 0
-  - length: 0
-    radius: 25
+    radius: 40
     degrees: -90
     endGrade: 0
     endHalfWidth: 0
@@ -166,7 +157,61 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 147
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 40.027878
+    radius: 0
+    degrees: 0
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 220
+    degrees: -23.106323
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 73.138535
+    radius: 0
+    degrees: 0
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 220
+    degrees: 23.10633
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 27.027866
+    radius: 0
+    degrees: 0
+    endGrade: -0.036259517
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 10
     radius: 0
     degrees: 0
     endGrade: 0
@@ -176,7 +221,25 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 48
+    radius: 50
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 47
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 45
     degrees: 90
     endGrade: 0
     endHalfWidth: 0
@@ -184,7 +247,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 37.64466
+  - length: 40.64466
     radius: 0
     degrees: 0
     endGrade: 0
@@ -202,7 +265,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 114.44809
+  - length: 75.3438
     radius: 0
     degrees: 0
     endGrade: 0
@@ -212,7 +275,7 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 25
+    radius: 60
     degrees: -96.34021
     endGrade: 0
     endHalfWidth: 0
@@ -220,7 +283,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 53.471504
+  - length: 14.367218
     radius: 0
     degrees: 0
     endGrade: 0
@@ -238,7 +301,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 33.953148
+  - length: 28.953148
     radius: 0
     degrees: 0
     endGrade: 0
@@ -248,7 +311,7 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 25
+    radius: 30
     degrees: -90
     endGrade: 0
     endHalfWidth: 0
@@ -256,7 +319,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 106
+  - length: 66
     radius: 0
     degrees: 0
     endGrade: 0
@@ -266,7 +329,7 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 25
+    radius: 40
     degrees: 90
     endGrade: 0
     endHalfWidth: 0
@@ -274,7 +337,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 30
+  - length: 15
     radius: 0
     degrees: 0
     endGrade: 0
@@ -355,7 +418,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 25.333328
+  - length: 20.333328
     radius: 0
     degrees: 0
     endGrade: 0
@@ -365,7 +428,7 @@ MonoBehaviour:
     boostZone: 0
     boostAt: 0
   - length: 0
-    radius: 25
+    radius: 50
     degrees: -90
     endGrade: 0
     endHalfWidth: 0
@@ -373,7 +436,7 @@ MonoBehaviour:
     launch: 0
     boostZone: 0
     boostAt: 0
-  - length: 43
+  - length: 18
     radius: 0
     degrees: 0
     endGrade: 0

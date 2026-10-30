@@ -443,6 +443,25 @@ namespace ProtoHarness.ChainRush.Track
             return false;
         }
 
+        // The nearest pad at or behind s, no more than within metres back (across a loop's seam too): where a runner that
+        // fell after a pad comes back so it can take the pad again (RunnerMotor's respawn).
+        public bool TryBoostZoneBehind(double s, double within, out double zoneS)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            if (!(within >= 0d)) throw new ArgumentOutOfRangeException(nameof(within), within, "The reach cannot be negative.");
+            zoneS = 0d;
+            double best = double.PositiveInfinity;
+            for (int i = 0; i < boostZones.Count; i++)
+            {
+                double behind = s - boostZones[i];
+                if (isLoop) behind -= Math.Floor(behind / endS) * endS;
+                if (behind < 0d || behind > within || behind >= best) continue;
+                best = behind;
+                zoneS = s - behind;
+            }
+            return !double.IsPositiveInfinity(best);
+        }
+
         // The first launch (AddLaunch order) a runner crosses moving forward from fromS to toS, S as Frame and Project
         // give it: past fromS and no farther than toS. On a loop the move may wrap the seam and so may the launch's S. A move
         // backward or nowhere crosses none.

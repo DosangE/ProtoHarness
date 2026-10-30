@@ -37,6 +37,7 @@ namespace ProtoHarness.ChainRush.Motion
             racer.SwingHookRadius = radial.magnitude;
             racer.SwingHookSpeed = velocity.magnitude;
             racer.SwingCarrySpeed = 0f;
+            racer.BoostZoneCarrySpeed = 0f;
             racer.SwingTicks = 1;
         }
 

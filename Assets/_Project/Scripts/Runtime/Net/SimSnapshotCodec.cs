@@ -74,6 +74,7 @@ namespace ProtoHarness.Net
             w.Write(s.SwingHookSpeed);
             w.Write(s.SwingHookRadius);
             w.Write(s.SwingCarrySpeed);
+            w.Write(s.BoostZoneCarrySpeed);
             w.Write(s.GrappleEmpowered);
             w.Write(s.AirGrappleUsed);
             w.Write(s.Health);
@@ -106,6 +107,7 @@ namespace ProtoHarness.Net
             SwingHookSpeed = r.ReadSingle(),
             SwingHookRadius = r.ReadSingle(),
             SwingCarrySpeed = r.ReadSingle(),
+            BoostZoneCarrySpeed = r.ReadSingle(),
             GrappleEmpowered = r.ReadBoolean(),
             AirGrappleUsed = r.ReadBoolean(),
             Health = r.ReadInt32(),

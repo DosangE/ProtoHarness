@@ -10,6 +10,7 @@
 - ~~**M4 남은 것**: 부스터 발동 시각 효과 하나 … 그때까지 v0.5 태그는 미룬다.~~ → **M4 는 끝났다 (2026-10-30 확인)**: 사용자가 기억한 부스터 효과는 다른 PC 에서 2026-10-29 에 한 `feature/m4-control-feedback`(부스터 충격 고리·가장자리 빛줄기·게이지 칸 터짐·잔상 꼬리, 그래플·봉 걸림, 빗나감)이고, 그 PC 에서 `main` v0.5 태그까지 달았으나 푸시하지 않았던 것이다. `docs/sync-two-pc` 에서 `origin/dev` 와 합쳤다(문서 3개만 충돌, 코드 겹침 없음). 다음은 그대로 M6.
 - **M6 첫 트랙 PALM COAST (비치 드라이브 기반, 2026-10-30, `feature/m6-track-beach`, DECISIONS "PALM COAST"·"PALM COAST 개선")**: 네 번째 서킷 + 새 기능 **부스트존**(밟으면 부스터를 끊고 앞 속도 55 m/s, 이어서 스윙 이어달리기처럼 초당 3 m/s 로 감속). 12% 오르막 위 부스트존 3개 → 턱 → 바다 45 m 를 건너는 점프, 큰 곡선 2개의 해변, 원호 16개, 한 바퀴 2001 m, 부스트존 5개. 첫 구현은 Codex, 개선은 Claude 가 직접. 사용자 플레이 확인은 첫 단계만("부스터 존의 효과가 있는거 확인했고 트랙이 완성 된 것 확인했다"), 오르막 점프·곡선 배치는 확인 전.
   - **열린 문제 — 게이트 2건이 `dev` 에서 계속 실패한다**: 랩 타임 하한 검사(`Race_OtherSpeedClasses_BotFinishesEveryTrack(Normal,"PALM COAST")` 99.12 s < 하한 100.06 s, `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` lap 2 80.0 s < 하한 80.05 s). 부스트존이 속도를 길게 이어 줘서 봇이 "랩 길이 ÷ 달리기 속도 ±20%" 보다 빠르다 — 사용자가 선택지(부스트존 있는 트랙만 하한 −35% / PALM COAST 만 제외 / 부스트존 줄이기)에 "일단 병합하라" 고만 답해 **고치지 않았다**. 다음 게이트를 돌리기 전에 정한다(§0: 테스트를 통과시키려고 고치지 않는다 — 기준 변경이면 DECISIONS 에 이유를 남긴다).
+    - 2026-10-30 부스트존 감속을 비례로 빠르게 바꾼 뒤(`feature/m6-boost-zone-falloff`, DECISIONS "부스트존 감속") `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` 는 통과한다. `Race_OtherSpeedClasses_*(Normal,"PALM COAST")` 는 돌리지 않았다(범위 밖). 사용자 플레이 확인(존 뒤 감속, 점프) 대기.
   - 사용자에게 알린 것: 바다에 빠지면 마지막 부스트존 앞으로 돌아오는 복귀 규칙(`respawnPadReach`)은 요청 밖으로 더했다.
 - 아래는 2026-10-29 까지의 기록이다.
 

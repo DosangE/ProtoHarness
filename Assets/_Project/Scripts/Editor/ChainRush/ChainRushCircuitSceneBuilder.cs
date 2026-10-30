@@ -88,11 +88,14 @@ namespace ProtoHarness.Editor.ChainRush
         // The jump over the sea after the first corner (user 2026-10-30, the reference's ramp past the yacht: "쭉 오르막
         // 경사에 부스터존이 3개"): a steady climb with three pads PalmRampPadSpacing apart, so each one comes as the last
         // one's speed wears off, ending in a kicker at the top, then a flat run and the sea. Only a pad's 55 m/s flies the
-        // sea: the crest leaves at about 54 m/s, a flight of 2 x launch x v^2 / gravity (22) of about 78 m against the 60 m
-        // from the crest to the far side; the slingshot or a swing (28 to 42 m/s) flies 21 to 48 m and drops in. The landing
-        // holds the overshoot before the next corner. The beach gives the climb back as a gentle descent.
+        // sea, a flight of 2 x launch x v^2 / gravity (22) against the 60 m from the crest to the far side (at least
+        // 46.9 m/s): the pad's speed wears off fast (RunnerMotor.boostZoneFalloff), so the last pad sits PalmPadBeforeKicker
+        // before the kicker, 10 m before the crest (user 2026-10-30, A); the slingshot or a swing (28 to 42 m/s) flies 21 to
+        // 48 m and drops in. The landing holds the overshoot before the next corner. The beach gives the climb back as a
+        // gentle descent.
         private const float PalmRampGrade = 0.12f;
         private const float PalmRampPadSpacing = 30f;
+        private const float PalmPadBeforeKicker = 2f;
         private const float PalmKickerLength = 8f;
         private const float PalmJumpLaunch = 0.3f;
         private const float PalmJumpGap = 45f;
@@ -384,13 +387,13 @@ namespace ProtoHarness.Editor.ChainRush
                         break;
                     case 1:
                     {
-                        // The climb: an ease in, a pad in the middle of each of three stretches, the kicker at the top
+                        // The climb: an ease in, a pad near the end of each of three stretches, the kicker at the top
                         // (its crest is the lip), the flat run and the sea, the landing.
                         float landing = length - PalmGradeEase - 3f * PalmRampPadSpacing - PalmKickerLength - TrackDefinition.MinGapRunway - PalmJumpGap;
                         if (!(landing >= PalmJumpLanding)) throw new InvalidOperationException($"Palm Coast's jump leaves {landing:F1} m to land (at least {PalmJumpLanding}).");
                         segments.Add(TrackDefinition.Segment.Straight(PalmGradeEase, PalmRampGrade));
                         for (int pad = 0; pad < 3; pad++)
-                            segments.Add(TrackDefinition.Segment.BoostStraight(PalmRampPadSpacing, PalmRampPadSpacing * 0.5f, PalmRampGrade));
+                            segments.Add(TrackDefinition.Segment.BoostStraight(PalmRampPadSpacing, PalmRampPadSpacing - PalmPadBeforeKicker, PalmRampGrade));
                         segments.Add(TrackDefinition.Segment.Kicker(PalmKickerLength, 0f, PalmJumpLaunch));
                         segments.Add(TrackDefinition.Segment.Straight(TrackDefinition.MinGapRunway));
                         segments.Add(TrackDefinition.Segment.Gap(PalmJumpGap));

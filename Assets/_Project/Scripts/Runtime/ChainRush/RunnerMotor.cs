@@ -80,10 +80,11 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float slingCarryTime = 0.8f;
         [SerializeField] private float slingCarrySpeed = 16f;
         // A road pad's instant forward speed, far above the slingshot. It is the same for every runner and speed class
-        // (user 2026-10-30 "55까지만"), so a jump that needs the pads (Palm Coast) flies as far in every class. The speed
-        // then falls off as a swing's carried speed does, swingCarryFalloff a second (user 2026-10-30, the first
-        // overspeedFalloff left the pad's speed "too soon").
+        // (user 2026-10-30 "55까지만"), so a jump that needs the pads (Palm Coast) flies as far in every class. On the
+        // ground the part above running speed then falls off by boostZoneFalloff of itself a second (user 2026-10-30
+        // "순간에 폭발적인 부스트만": hard at first, easing near running speed; about 5 s from 55 to running speed).
         [SerializeField] private float boostZoneSpeed = 55f;
+        [SerializeField] private float boostZoneFalloff = 0.8f;
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
@@ -212,8 +213,8 @@ namespace ProtoHarness.ChainRush
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < ReleaseSpeed)
                 Debug.LogError($"RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal {ReleaseSpeed}.", this);
-            if (!(boostZoneSpeed > slingTopSpeed) || float.IsInfinity(boostZoneSpeed))
-                Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed.", this);
+            if (!(boostZoneSpeed > slingTopSpeed) || float.IsInfinity(boostZoneSpeed) || !(boostZoneFalloff > 0f) || float.IsInfinity(boostZoneFalloff))
+                Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed, its falloff positive and finite.", this);
             if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || ropeRate < 0f || minRopeLength <= 0f)
                 Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the shortest rope positive.", this);
             if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
@@ -334,8 +335,8 @@ namespace ProtoHarness.ChainRush
                 && game.Track.TryLaunchBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward), out float lift))
                 velocity.y = Mathf.Max(velocity.y, lift * Mathf.Max(0f, velocity.x * frame.Forward.x + velocity.z * frame.Forward.z));
             // A pad uses the same S moved as a kicker. Only the horizontal facing component rises; sideways and vertical
-            // speed stay. The speed it gives is also the swing's carried speed (RacerState.SwingCarrySpeed, kept by
-            // snapshots already), so the next ticks' drive lets it fall off as a swing's does and no new state is kept.
+            // speed stay. The speed it gives is kept as the pad's carry (RacerState.BoostZoneCarrySpeed), which the next
+            // ticks' drive wears off (RunDrive.BoostZoneTarget).
             if (grounded && !swinging && !grapple.IsAttached
                 && game.Track.TryBoostBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward)))
             {
@@ -344,7 +345,7 @@ namespace ProtoHarness.ChainRush
                 float forwardSpeed = Vector3.Dot(velocity, facing);
                 float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
                 velocity += facing * (boosted - forwardSpeed);
-                racer.SwingCarrySpeed = boosted;
+                racer.BoostZoneCarrySpeed = boosted;
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
@@ -393,6 +394,7 @@ namespace ProtoHarness.ChainRush
             MaxSlopeSpeedScale = maxSlopeSpeedScale,
             OverspeedFalloff = overspeedFalloff,
             SwingCarryFalloff = swingCarryFalloff,
+            BoostZoneFalloff = boostZoneFalloff,
             Gravity = gravity,
         };
 
@@ -443,6 +445,7 @@ namespace ProtoHarness.ChainRush
             racer.SlingTicks = 0;
             racer.SwingTicks = 0;
             racer.SwingCarrySpeed = 0f;
+            racer.BoostZoneCarrySpeed = 0f;
             racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
             racer.TurnRate = 0f;
             racer.RespawnHoldTicks = Ticks.FromSeconds(respawnHoldTime);

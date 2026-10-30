@@ -10,6 +10,8 @@ namespace ProtoHarness.ChainRush.Motion
         // Forward acceleration while hanging from a grapple in the air.
         private const float GrappleAirAcceleration = 5f;
         private const float MaxFallSpeed = 28f;
+        // A boost pad's carry ends once it is this close to the running speed (its falloff only nears it).
+        private const float BoostZoneCarryEnd = 0.5f;
 
         // The values the rules run on (RunnerMotor's, the speeds already scaled by the runner's profile and the speed
         // class). Treat it as read-only.
@@ -36,6 +38,8 @@ namespace ProtoHarness.ChainRush.Motion
             public float MaxSlopeSpeedScale;
             public float OverspeedFalloff;
             public float SwingCarryFalloff;
+            // The share of a boost pad's speed above running speed lost each second, on the ground.
+            public float BoostZoneFalloff;
             public float Gravity;
         }
 
@@ -98,9 +102,15 @@ namespace ProtoHarness.ChainRush.Motion
             Vector3 right = RightOf(racer.Heading);
             float grip = now.Grounded ? settings.SideGrip : settings.AirSideGrip;
             float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
-            float runTarget = Slingshot.RaiseTarget(RunTarget(racer, grade, now, turnLimit, dt, settings), now.Pulling, now.Carrying, sling);
+            float baseTarget = RunTarget(racer, grade, now, turnLimit, dt, settings);
+            float runTarget = Slingshot.RaiseTarget(BoostZoneTarget(racer, baseTarget, dt, settings), now.Pulling, now.Carrying, sling);
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = ForwardAcceleration(currentForward, runTarget, now, settings, sling);
+            // A pad's speed wears off in proportion to what is left above running speed (user 2026-10-30, the inverse of
+            // the slingshot's pull): hard just after the pad, easing as it nears running speed. In the air it keeps, so a
+            // jump flies on the speed it left with.
+            if (racer.BoostZoneCarrySpeed > 0f && now.Grounded && !now.Swinging && !now.GrappleAttached && currentForward > runTarget)
+                acceleration = Mathf.Max(acceleration, settings.BoostZoneFalloff * (currentForward - baseTarget));
             // A grapple reels at GrappleReelSpeed, or at running speed when that is faster.
             float forwardSpeed = Mathf.MoveTowards(currentForward, now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) : runTarget,
                 acceleration * dt);
@@ -125,6 +135,18 @@ namespace ProtoHarness.ChainRush.Motion
                 if (swingCarry > runTarget) runTarget = swingCarry;
                 else swingCarry = 0f;
             }
+            return runTarget;
+        }
+
+        // A boost pad's carried speed falls off in proportion to its part above runTarget and holds the target up while
+        // it lasts; within BoostZoneCarryEnd of running speed it is gone.
+        private static float BoostZoneTarget(RacerState racer, float runTarget, float dt, in Settings settings)
+        {
+            ref float padCarry = ref racer.BoostZoneCarrySpeed;
+            if (padCarry <= 0f) return runTarget;
+            padCarry -= settings.BoostZoneFalloff * Mathf.Max(0f, padCarry - runTarget) * dt;
+            if (padCarry > runTarget + BoostZoneCarryEnd) return padCarry;
+            padCarry = 0f;
             return runTarget;
         }
 

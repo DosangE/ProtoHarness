@@ -75,7 +75,7 @@ MonoBehaviour:
     gap: 0
     launch: 0
     boostZone: 1
-    boostAt: 15
+    boostAt: 28
   - length: 30
     radius: 0
     degrees: 0
@@ -84,7 +84,7 @@ MonoBehaviour:
     gap: 0
     launch: 0
     boostZone: 1
-    boostAt: 15
+    boostAt: 28
   - length: 30
     radius: 0
     degrees: 0
@@ -93,7 +93,7 @@ MonoBehaviour:
     gap: 0
     launch: 0
     boostZone: 1
-    boostAt: 15
+    boostAt: 28
   - length: 8
     radius: 0
     degrees: 0

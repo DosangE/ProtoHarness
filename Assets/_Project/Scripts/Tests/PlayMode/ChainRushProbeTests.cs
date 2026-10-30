@@ -354,8 +354,10 @@ namespace ProtoHarness.Tests.PlayMode
         // Finger Lanes' nails at Fast and Very Fast, first with the bot steering straight through each swing, then holding
         // the key toward the pole the whole swing (ShortcutBot.HoldInnerKey): for each swing the speed before the hook, the
         // hook's speed at the end (the throttle raises it), the rope from hook to letting go, the top speed and the speed
-        // it lets go at. "Steering in a shortcut swing speeds the runner up far too much" (user 2026-10-27).
-        [UnityTest, Timeout(300000)]
+        // it lets go at. "Steering in a shortcut swing speeds the runner up far too much" (user 2026-10-27). Since 2026-10-30
+        // ("손가락 맵에서 지름길쪽으로 갈 시 … 가속이 너무 심하다 … 겹쳐서 가속") also with a booster fired on each swing's
+        // first tick (BoosterOnHook), with and without the inner key, and the carried speed each swing leaves.
+        [UnityTest, Timeout(600000)]
         public IEnumerator Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld()
         {
 #if UNITY_EDITOR
@@ -372,8 +374,9 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 foreach (SpeedClass speed in new[] { SpeedClass.Fast, SpeedClass.VeryFast })
                 foreach (bool inner in new[] { false, true })
+                foreach (bool booster in new[] { false, true })
                 {
-                    string run = speed + (inner ? ", inner key held" : ", no steering");
+                    string run = speed + (inner ? ", inner key held" : ", no steering") + (booster ? ", booster on hook" : "");
                     records.Clear(finger.name, speed);
                     RaceLaunch.Clear();
                     RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, speed, neutral));
@@ -395,7 +398,8 @@ namespace ProtoHarness.Tests.PlayMode
                     while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
                     Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
 
-                    var bot = new ShortcutBot(game, player, finger) { HoldInnerKey = inner };
+                    var shortcutBot = new ShortcutBot(game, player, finger) { HoldInnerKey = inner };
+                    IInputSource bot = booster ? new BoosterOnHook(game, shortcutBot) : shortcutBot;
                     int swings = 0, hookTick = -1;
                     float before = 0f, last = 0f, hookSpeed = 0f, hookRope = 0f, minRope = 0f, top = 0f, lapTop = 0f;
                     double hookS = 0d;
@@ -423,7 +427,7 @@ namespace ProtoHarness.Tests.PlayMode
                             swings++;
                             Debug.Log($"ChainRush probe shortcut swing [{run}] swing {swings}: hooked at s {hookS:0.0} tick {hookTick} from {before:0.00} m/s, " +
                                       $"hook speed at the end {hookSpeed:0.00} m/s, rope {hookRope:0.00} -> {minRope:0.00} m, top {top:0.00} m/s, " +
-                                      $"let go at {now:0.00} m/s after {(tick - hookTick) * Ticks.Seconds:0.00} s.");
+                                      $"let go at {now:0.00} m/s after {(tick - hookTick) * Ticks.Seconds:0.00} s, carrying {game.Racer.SwingCarrySpeed:0.00} m/s.");
                             hookTick = -1;
                         }
                         last = now;
@@ -432,11 +436,11 @@ namespace ProtoHarness.Tests.PlayMode
                     yield return RunUntil(bot, () => circuit.Laps.CompletedLaps >= 1 || game.HasFailed, 60f, () => { });
                     game.TickCompleted -= sample;
                     Debug.Log($"ChainRush probe shortcut swing [{run}]: lap 1 {(circuit.Laps.CompletedLaps >= 1 ? Ticks.ToSeconds(circuit.Laps.LapTicks(1)).ToString("0.00") + " s" : "not finished")}, " +
-                              $"shortcuts taken {bot.Taken}, hooks missed {bot.Missed}, failed {game.HasFailed}, top speed {lapTop:0.00} m/s, run speed {player.RunSpeed:0.00} m/s.");
-                    if (!inner)
+                              $"shortcuts taken {shortcutBot.Taken}, hooks missed {shortcutBot.Missed}, failed {game.HasFailed}, top speed {lapTop:0.00} m/s, run speed {player.RunSpeed:0.00} m/s.");
+                    if (!inner && !booster)
                     {
                         Assert.That(game.HasFailed, Is.False, "The plain shortcut run fell. " + run);
-                        Assert.That(bot.Missed, Is.EqualTo(0), "The plain shortcut run missed a hook. " + run);
+                        Assert.That(shortcutBot.Missed, Is.EqualTo(0), "The plain shortcut run missed a hook. " + run);
                     }
                     Assert.That(swings, Is.GreaterThan(0), "No swing was measured. " + run);
                     game.FailRun();
@@ -453,6 +457,36 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private static float Level(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+
+        // Another bot's input with the chain action pressed on the first tick of each swing, a full gauge slot given for it,
+        // as a player firing a booster in a shortcut's swing would.
+        private sealed class BoosterOnHook : IInputSource
+        {
+            private readonly ChainRushGame game;
+            private readonly IInputSource inner;
+            private bool wasSwinging;
+
+            public BoosterOnHook(ChainRushGame game, IInputSource inner)
+            {
+                this.game = game;
+                this.inner = inner;
+            }
+
+            public void Poll() => inner.Poll();
+            public void Clear() => inner.Clear();
+
+            public TickInput Consume()
+            {
+                TickInput input = inner.Consume();
+                bool swinging = game.Racer.SwingTicks > 0;
+                bool fire = swinging && !wasSwinging;
+                wasSwinging = swinging;
+                if (!fire) return input;
+                game.Racer.AddGauge(1f);
+                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, input.SwingHeld,
+                    true, input.SwingPressed, input.Coasting, input.Reversing);
+            }
+        }
 
         // ProbeBot's inside line, with one swing: pressed at the first tick past hookAt (0: as soon as a pole is in reach)
         // with a pole in reach, held 10 ticks with a fixed steer, then let go; a booster fired at boostAt (negative: none).

@@ -336,6 +336,108 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(Error(), Does.Contain("segment 0").And.Contain("launch"));
         }
 
+        // A pad is inside its straight, not at its end as a kicker is. Crossing uses the same forward interval and loop
+        // seam rules as the launch; a track without pads offers none.
+        [Test]
+        public void BuildCenterline_ABoostZone_OffersOnlyForwardCrossingsIncludingTheSeam()
+        {
+            Centerline plain = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(plain.BoostZoneCount, Is.Zero);
+            Assert.That(plain.TryBoostBetween(0d, 100d), Is.False);
+            var segments = Stadium();
+            segments[1] = TrackDefinition.Segment.BoostStraight(20f, 10f, 0.1f);
+            SetSegments(segments);
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.BoostZoneCount, Is.EqualTo(1));
+            Assert.That(line.TryBoostBetween(24.6d, 25d), Is.True, "The pad is 10 m inside the second straight.");
+            Assert.That(line.TryBoostBetween(24d, 24.9d), Is.False, "Short of it.");
+            Assert.That(line.TryBoostBetween(25d, 25.4d), Is.False, "Already passed.");
+            Assert.That(line.TryBoostBetween(25.4d, 24.6d), Is.False, "Backward.");
+            Assert.That(line.TryBoostBetween(24.6d, 24.6d), Is.False, "Nowhere.");
+            line.AddBoostZone(line.EndS - 0.2d);
+            Assert.That(line.TryBoostBetween(line.EndS - 0.5d, 0.3d), Is.True, "Across the seam, before it.");
+            line.AddBoostZone(line.EndS + 0.1d);
+            Assert.That(line.TryBoostBetween(line.EndS - 0.05d, 0.3d), Is.True, "The pad S wraps too.");
+            var zones = new List<double> { -1d };
+            line.GetBoostZones(zones);
+            Assert.That(zones, Is.EqualTo(new[] { -1d, 25d, line.EndS - 0.2d, line.EndS + 0.1d }), "Append in pad order.");
+            line.ShiftOrigin(new Vector3(100f, 5f, -20f));
+            Assert.That(line.TryBoostBetween(24.6d, 25d), Is.True, "S stays through an origin shift.");
+            line.Clear();
+            Assert.That(line.BoostZoneCount, Is.Zero);
+            Assert.That(line.TryBoostBetween(24.6d, 25d), Is.False, "Clear removes pads too.");
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        [TestCase(15f)]
+        [TestCase(16f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void TryValidate_BoostAtOutsideItsStraight_IsRejected(float at)
+        {
+            var segments = Stadium();
+            segments[0] = TrackDefinition.Segment.BoostStraight(15f, at);
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("boost zone"));
+        }
+
+        // Serialized malformed pieces cannot be made by the factories: exercise the same fields the inspector saves.
+        [TestCase("radius", 25f)]
+        [TestCase("gap", true)]
+        [TestCase("launch", 0.3f)]
+        public void TryValidate_BoostOnAnArcGapOrKicker_IsRejected(string name, object value)
+        {
+            object malformed = TrackDefinition.Segment.BoostStraight(15f, 10f);
+            FieldInfo field = typeof(TrackDefinition.Segment).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "no segment field " + name);
+            field.SetValue(malformed, value);
+            var segments = Stadium();
+            segments[0] = (TrackDefinition.Segment)malformed;
+            SetSegments(segments);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("boost zone"));
+        }
+
+        [Test]
+        public void BoostZones_OnAnOpenLine_KeepTheirSAndRejectNonfinitePositions()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(50f);
+            line.AddBoostZone(25d);
+            line.TrimBefore(10d);
+            Assert.That(line.TryBoostBetween(24d, 26d), Is.True);
+            Assert.That(line.TryBoostBetween(26d, 24d), Is.False);
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AddBoostZone(double.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.AddBoostZone(double.PositiveInfinity));
+            Assert.Throws<ArgumentNullException>(() => line.GetBoostZones(null));
+        }
+
+        // Where a fall just after a pad comes back (RunnerMotor's respawn, Palm Coast's jump, 2026-10-30): the nearest pad
+        // at or behind S within the reach, across a loop's seam too; none ahead, none farther back, none on a plain track.
+        [Test]
+        public void TryBoostZoneBehind_FindsTheNearestPadBackWithinTheReach()
+        {
+            Centerline plain = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(plain.TryBoostZoneBehind(100d, 1000d, out _), Is.False);
+            var segments = Stadium();
+            segments[1] = TrackDefinition.Segment.BoostStraight(20f, 10f, 0.1f);
+            SetSegments(segments);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            line.AddBoostZone(15d);
+            Assert.That(line.TryBoostZoneBehind(40d, 35d, out double pad), Is.True);
+            Assert.That(pad, Is.EqualTo(25d), "The nearer of the two pads behind.");
+            Assert.That(line.TryBoostZoneBehind(25d, 35d, out pad), Is.True, "A pad right at S counts.");
+            Assert.That(pad, Is.EqualTo(25d));
+            Assert.That(line.TryBoostZoneBehind(61d, 35d, out _), Is.False, "Both pads are more than 35 m back.");
+            Assert.That(line.TryBoostZoneBehind(10d, 35d, out _), Is.False, "Pads ahead do not count.");
+            line.AddBoostZone(line.EndS - 2d);
+            Assert.That(line.TryBoostZoneBehind(3d, 35d, out pad), Is.True, "Back across the seam.");
+            Assert.That(pad, Is.EqualTo(-2d).Within(1e-9d), "The pad's S on this side of the seam, so S minus a backoff stays on the lap behind.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.TryBoostZoneBehind(double.NaN, 35d, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() => line.TryBoostZoneBehind(10d, -1d, out _));
+        }
+
         // A shortcut across the stadium's infield (user 2026-10-25, Finger Lanes' nails): off straight A at S 96 (flat, after
         // the hill) a right quarter turn of R15, 74 m east, another one onto straight C at the same height (z 96), 44 m into
         // C. C starts at 140 + pi x 11 + 60 + pi x 11.

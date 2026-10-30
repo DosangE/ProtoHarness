@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush.Track;
 using UnityEditor;
@@ -79,6 +80,26 @@ namespace ProtoHarness.Editor.ChainRush
         // One checkpoint before, between and after the two shortcut stretches.
         private static readonly float[] FingerCheckpoints = { 0.15f, 0.5f, 0.75f };
 
+        public const string PalmCoastPath = "Assets/_Project/Data/Circuit_PalmCoast.asset";
+        private const float PalmCornerRadius = 25f;
+        private const float PalmRoadHalfWidth = FingerRoadHalfWidth;
+        private const float PalmBeachRadius = 60f;
+        private const float PalmBeachDegrees = 10f;
+        private const float PalmFinishGrade = 0.03f;
+        private const float PalmFinishRise = 2f;
+        private const float PalmGradeEase = 10f;
+        private static readonly float[] PalmCheckpoints = { 0.15f, 0.5f, 0.75f };
+
+        // Palm Coast from the Beach Drive outline (user 2026-10-30, 4 m a pixel): P0 is the start heading north,
+        // x east and z north. Corners replace each vertex by its tangent arc; no leg lengths need closure adjustments.
+        private static readonly Vector2[] PalmVertices =
+        {
+            new Vector2(0f, 0f), new Vector2(0f, 248f), new Vector2(152f, 248f), new Vector2(152f, 344f),
+            new Vector2(-92f, 344f), new Vector2(-92f, 124f), new Vector2(-188f, 124f), new Vector2(-296f, 232f),
+            new Vector2(-360f, 152f), new Vector2(-360f, 72f), new Vector2(-204f, 72f), new Vector2(-204f, -8f),
+            new Vector2(-152f, -8f), new Vector2(-152f, -68f), new Vector2(0f, -68f),
+        };
+
         // Makes the Skyway Loop definition (DECISIONS 2026-10-21 "SKYWAY LOOP", reshaped 2026-10-22): the layout of
         // KartRider's Village Highway traced from its track outline at 0.5 m a pixel, heights from a record run.
         // Clockwise from the start line heading north: the bump's half turn, a jog and the climb (0 -> 12 m), the elevated
@@ -118,6 +139,13 @@ namespace ProtoHarness.Editor.ChainRush
             SaveTrack(FingerLanesPath, "Finger Lanes", segments, Array.Empty<TrackDefinition.Pole>(), FingerCheckpoints, 2, FingerRoadHalfWidth, shortcuts);
         }
 
+        // Four road pads, no gaps or kickers, two counterclockwise laps. SaveTrack prints every pad's S after validation.
+        [MenuItem("ProtoHarness/Chain Rush/Create Palm Coast Track")]
+        public static void CreatePalmCoastTrack()
+        {
+            SaveTrack(PalmCoastPath, "PALM COAST", PalmCoastSegments(), Array.Empty<TrackDefinition.Pole>(), PalmCheckpoints, 2, PalmRoadHalfWidth);
+        }
+
         // Builds the definition on a new instance, checks it (TryValidate) and only then writes it to path: a new asset, or
         // over the existing one in place so its GUID (the lobby's reference) and best records stay. Null checkpoints and a
         // road half width of 0 keep the definition's defaults; no shortcuts leaves none.
@@ -143,6 +171,8 @@ namespace ProtoHarness.Editor.ChainRush
                 element.FindPropertyRelative("endHalfWidth").floatValue = segments[i].EndHalfWidth;
                 element.FindPropertyRelative("gap").boolValue = segments[i].IsGap;
                 element.FindPropertyRelative("launch").floatValue = segments[i].Launch;
+                element.FindPropertyRelative("boostZone").boolValue = segments[i].HasBoostZone;
+                element.FindPropertyRelative("boostAt").floatValue = segments[i].BoostAt;
             }
             data.FindProperty("anchors").arraySize = 0;
             SerializedProperty poleList = data.FindProperty("poles");
@@ -189,7 +219,15 @@ namespace ProtoHarness.Editor.ChainRush
                 EditorUtility.SetDirty(definition);
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("ChainRush: " + label + " track saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.", definition);
+            if (path == PalmCoastPath)
+            {
+                var zones = new List<double>(4);
+                definition.BuildCenterline(Vector3.zero, 0f).GetBoostZones(zones);
+                string positions = string.Join(", ", zones.ConvertAll(s => "S" + s.ToString("0.00")));
+                bool valid = definition.TryValidate(out _);
+                Debug.Log($"ChainRush: {label} segments={segments.Length} lap={definition.LapLength:F2} laps={definition.LapCount} boostZones: {positions} valid={valid}", definition);
+            }
+            else Debug.Log("ChainRush: " + label + " track saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.", definition);
         }
 
         private static TrackDefinition.Segment[] SkywaySegments() => new[]
@@ -280,6 +318,68 @@ namespace ProtoHarness.Editor.ChainRush
                 // The top-left corner and the top row east to the line, longer by the S bend's step west.
                 TrackDefinition.Segment.Arc(corner, 90f), TrackDefinition.Segment.Straight(FingerX(FingerStartColumn) - corner + jogWest),
             };
+        }
+
+        private static TrackDefinition.Segment[] PalmCoastSegments()
+        {
+            int count = PalmVertices.Length;
+            var turns = new float[count];
+            var radii = new float[count];
+            var tangents = new float[count];
+            for (int i = 1; i < count; i++)
+            {
+                Vector2 incoming = PalmVertices[i] - PalmVertices[i - 1];
+                Vector2 outgoing = PalmVertices[(i + 1) % count] - PalmVertices[i];
+                turns[i] = Mathf.DeltaAngle(Mathf.Atan2(incoming.x, incoming.y) * Mathf.Rad2Deg,
+                    Mathf.Atan2(outgoing.x, outgoing.y) * Mathf.Rad2Deg);
+                radii[i] = i == 5 ? 48f : i == 8 ? 60f : PalmCornerRadius;
+                tangents[i] = radii[i] * Mathf.Tan(Mathf.Abs(turns[i]) * Mathf.Deg2Rad * 0.5f);
+            }
+            // In the centerline's convention right is positive: P7 is -96.3402 degrees, P8 -38.6598, total -360.
+            // Even P11 -> P12 keeps 2 m between its R25 tangencies, so no radius reduction is needed.
+            float plateau = PalmFinishRise / PalmFinishGrade - PalmGradeEase;
+            float hill = plateau + 2f * PalmGradeEase;
+            var segments = new List<TrackDefinition.Segment>(48);
+            for (int i = 0; i < count; i++)
+            {
+                int next = (i + 1) % count;
+                float length = Vector2.Distance(PalmVertices[i], PalmVertices[next]) - tangents[i] - tangents[next];
+                if (length < 0f) throw new InvalidOperationException($"Palm Coast P{i} -> P{next} has overlapping corner tangencies ({length:F3} m).");
+                if (i == 0)
+                {
+                    // The finish's 2 m rise unwinds after the line, easing to -3%, holding it and easing flat again.
+                    segments.Add(TrackDefinition.Segment.Straight(PalmGradeEase, -PalmFinishGrade));
+                    segments.Add(TrackDefinition.Segment.Straight(plateau, -PalmFinishGrade));
+                    segments.Add(TrackDefinition.Segment.Straight(PalmGradeEase));
+                    segments.Add(TrackDefinition.Segment.BoostStraight(length - hill, 110f - hill));
+                }
+                else if (i == 1 || i == 2) segments.Add(TrackDefinition.Segment.BoostStraight(length, length * 0.5f));
+                else if (i == 3)
+                {
+                    // Two mirrored S bends (left-right, right-left) keep both beach endpoints at z 344 and head west.
+                    // Their forward run replaces exactly 4 R sin(10 degrees) of the trimmed 194 m leg: no closure fix.
+                    float straight = (length - 4f * PalmBeachRadius * Mathf.Sin(PalmBeachDegrees * Mathf.Deg2Rad)) / 3f;
+                    if (!(straight > 0f)) throw new InvalidOperationException("Palm Coast's beach is too short for its S bends.");
+                    segments.Add(TrackDefinition.Segment.Straight(straight));
+                    segments.Add(TrackDefinition.Segment.Arc(PalmBeachRadius, -PalmBeachDegrees));
+                    segments.Add(TrackDefinition.Segment.Arc(PalmBeachRadius, PalmBeachDegrees));
+                    segments.Add(TrackDefinition.Segment.Straight(straight));
+                    segments.Add(TrackDefinition.Segment.Arc(PalmBeachRadius, PalmBeachDegrees));
+                    segments.Add(TrackDefinition.Segment.Arc(PalmBeachRadius, -PalmBeachDegrees));
+                    segments.Add(TrackDefinition.Segment.Straight(straight));
+                }
+                else if (i == 13)
+                {
+                    // Z4 is 15 m past P13's corner exit, on the +3% stretch before the finish, rising exactly 2 m.
+                    segments.Add(TrackDefinition.Segment.Straight(PalmGradeEase, PalmFinishGrade));
+                    segments.Add(TrackDefinition.Segment.BoostStraight(plateau, 15f - PalmGradeEase, PalmFinishGrade));
+                    segments.Add(TrackDefinition.Segment.Straight(PalmGradeEase));
+                    segments.Add(TrackDefinition.Segment.Straight(length - hill));
+                }
+                else if (length > 0f) segments.Add(TrackDefinition.Segment.Straight(length));
+                if (next != 0) segments.Add(TrackDefinition.Segment.Arc(radii[next], turns[next]));
+            }
+            return segments.ToArray();
         }
 
         // Metres east of the left edge's centreline for an outline column.

@@ -64,6 +64,7 @@ namespace ProtoHarness.ChainRush.Track
         private readonly List<Piece> pieces = new List<Piece>(16);
         private readonly List<ExtraPole> extraPoles = new List<ExtraPole>(8);
         private readonly List<Launch> launches = new List<Launch>(4);
+        private readonly List<double> boostZones = new List<double>(4);
         private readonly List<Branch> branches = new List<Branch>(2);
         private readonly Vector3 origin;
         private readonly float originYaw;
@@ -104,13 +105,14 @@ namespace ProtoHarness.ChainRush.Track
             }
         }
 
-        // Back to the construction origin with no pieces, no added poles, no launches and no branches; S restarts at zero
+        // Back to the construction origin with no pieces, added poles, launches, boost zones or branches; S restarts at zero
         // and the grade at flat.
         public void Clear()
         {
             pieces.Clear();
             extraPoles.Clear();
             launches.Clear();
+            boostZones.Clear();
             branches.Clear();
             end = origin;
             endYaw = originYaw;
@@ -406,6 +408,40 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         public int LaunchCount => launches.Count;
+
+        // A boost pad at s (TrackDefinition.Segment.BoostStraight): a runner on the road crossing it forward cuts its
+        // booster and takes the zone's speed (RunnerMotor). Like a launch it stays by S through ShiftOrigin and is cleared.
+        public void AddBoostZone(double s)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            boostZones.Add(s);
+        }
+
+        public int BoostZoneCount => boostZones.Count;
+
+        // Appends the pads' S in AddBoostZone order, for presentation to lay a pad on each.
+        public void GetBoostZones(List<double> zones)
+        {
+            if (zones == null) throw new ArgumentNullException(nameof(zones));
+            for (int i = 0; i < boostZones.Count; i++) zones.Add(boostZones[i]);
+        }
+
+        // A pad crossed moving forward: past fromS and no farther than toS, including a move across a loop's seam,
+        // as TryLaunchBetween. A move backward or nowhere crosses none.
+        public bool TryBoostBetween(double fromS, double toS)
+        {
+            if (boostZones.Count == 0) return false;
+            double moved = toS - fromS;
+            if (isLoop && moved < -endS * 0.5d) moved += endS;
+            if (!(moved > 0d)) return false;
+            for (int i = 0; i < boostZones.Count; i++)
+            {
+                double ahead = boostZones[i] - fromS;
+                if (isLoop) ahead -= Math.Floor(ahead / endS) * endS;
+                if (ahead > 0d && ahead <= moved) return true;
+            }
+            return false;
+        }
 
         // The first launch (AddLaunch order) a runner crosses moving forward from fromS to toS, S as Frame and Project
         // give it: past fromS and no farther than toS. On a loop the move may wrap the seam and so may the launch's S. A move

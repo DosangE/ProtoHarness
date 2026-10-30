@@ -79,6 +79,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float slingTurnRate = 90f;
         [SerializeField] private float slingCarryTime = 0.8f;
         [SerializeField] private float slingCarrySpeed = 16f;
+        // A road pad's instant forward speed, stronger than the slingshot; the extra speed falls off as any overspeed.
+        [SerializeField] private float boostZoneSpeed = 34f;
         // Empowered grapple (chain action while attached): the release throws harder along the facing.
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
@@ -150,6 +152,7 @@ namespace ProtoHarness.ChainRush
         public float RunAcceleration => runAcceleration * accelerationScale * speedClassScale;
         public float SlingTopSpeed => slingTopSpeed * topSpeedScale * speedClassScale;
         public float SlingCarrySpeed => slingCarrySpeed * topSpeedScale * speedClassScale;
+        public float BoostZoneSpeed => boostZoneSpeed * topSpeedScale * speedClassScale;
         public float EmpoweredReleaseSpeed => empoweredReleaseSpeed * topSpeedScale * speedClassScale;
         public float SwingMetersPerSlot => swingMetersPerSlot / gaugeChargeScale;
 
@@ -203,6 +206,8 @@ namespace ProtoHarness.ChainRush
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
                 || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < ReleaseSpeed)
                 Debug.LogError($"RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal {ReleaseSpeed}.", this);
+            if (!(boostZoneSpeed > slingTopSpeed) || float.IsInfinity(boostZoneSpeed))
+                Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed.", this);
             if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || ropeRate < 0f || minRopeLength <= 0f)
                 Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the shortest rope positive.", this);
             if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
@@ -322,6 +327,16 @@ namespace ProtoHarness.ChainRush
             if (grounded && !swinging && !grapple.IsAttached
                 && game.Track.TryLaunchBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward), out float lift))
                 velocity.y = Mathf.Max(velocity.y, lift * Mathf.Max(0f, velocity.x * frame.Forward.x + velocity.z * frame.Forward.z));
+            // A pad uses the same S moved as a kicker, without keeping anything between ticks. Only the horizontal
+            // facing component rises; sideways and vertical speed stay, and the next tick's drive sheds the overspeed.
+            if (grounded && !swinging && !grapple.IsAttached
+                && game.Track.TryBoostBetween(frame.S, frame.S + Vector3.Dot(transform.position - before, frame.Forward)))
+            {
+                Slingshot.Cut(racer);
+                Vector3 facing = Facing;
+                float forwardSpeed = Vector3.Dot(velocity, facing);
+                velocity += facing * (Mathf.Max(forwardSpeed, BoostZoneSpeed) - forwardSpeed);
+            }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
             if (racer.Grounded) racer.ClearAirGrapple();

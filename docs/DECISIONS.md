@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-10-30 · PALM COAST — 비치 드라이브 기반 네 번째 서킷 · 부스트존(밟으면 부스터보다 센 순간 가속) (`feature/m6-track-beach`)
+
+- **결정 (사용자, 2026-10-30)**: M6 "트랙 추가" 의 첫 트랙. "이번 트랙 기반은 비치 드라이브다. 중간에 부스트존도 있으니 확인해봐. 구현은 codex에게 맡겨라"(기록 영상 `youtu.be/GN3MvHluTvQ`, 매우빠름 2랩 1:45.84). 부스트존은 "부스터보다 더 센 순간 가속을 받게 된다(부스터중이면 부스터가 끊기고 부스터존의 가속을 받는다)". 배치 자료는 "도구 설치 후 읽기"(추천안), Codex 는 "코드만, 검증은 Claude"(추천안). 요청서에 "ㄱㄱ" — 이름·부스트존 위치·수치 질문에는 따로 답하지 않아 추천값(`PALM COAST`, 후보 4곳, 4 m/px, 34 m/s)으로 진행했다.
+  - **배치를 읽은 곳**: 나무위키 "크레이지레이싱 카트라이더/트랙/비치" 의 비치 해변 드라이브 항목(반시계, 2랩, 넓은 도로, 부스터 존 여러 개 — "출발선 기준 1·4번째", 결승 전 완만한 오르막 감속 구간)과 러쉬플러스판 윤곽 이미지(500×256)를 픽셀로 읽었다(Pillow 로 6배 확대 + 5 px 격자). 영상은 yt-dlp·ffmpeg 로 1·2 fps 프레임을 뽑아 장면 순서(도시 출발 직선 → 바다 옆 → 모래 해변길 → 빨간 다리 → 분홍 돌길 마을 → 흰 화살표 코너 → 해변 → 다리 → 계단 코너 → 난간 직선)를 랩 시간 비율로 윤곽에 맞췄다 — 1랩 7.0 → 60.0 s. 출발선은 오른쪽 긴 세로 직선 아래쪽(윤곽의 작은 틈은 출발선이 아니다).
+  - **부스트존 위치**: 초록 바닥 + 화살표(1랩 약 10.0 / 15.5 / 18.0 / 52.0 s) → 랩의 약 6 / 16 / 21 / 85 %. 초록 바닥 위 아이템 상자 자리와 섞여 있어 **어느 것이 부스트존인지 확정하지 못했다** — 플레이 확인으로 옮긴다.
+  - **축척·배치**: 4 m/px, 꼭짓점 15개(미터, 출발선 원점·북쪽 출발)를 반시계로. 90° 코너 R25, P5 R48, P8 R60, 윗변 해변길 S자 굽이 2개(R ≥ 60), 계단 3단은 R25 를 연달아(P11→P12 사이 직선 2 m). 도로 반폭 7.2, 결승 앞 +3% 약 2 m 오르막(P0→P1 에서 내려와 닫힘). 41조각, 한 바퀴 **1814.98 m**, 2랩. 원본은 `ChainRushCircuitSceneBuilder.PalmCoastSegments`, 메뉴 `Create Palm Coast Track`. 닫기 위한 직선 보정 0 m(Codex 계산, Claude 메뉴 실행 `valid=True`).
+  - **이름**: 원작 이름을 쓰지 않는다(SKYWAY·FINGER 와 같다). `PALM COAST`, 에셋 `Circuit_PalmCoast`. 로비 네 번째 트랙(장식 씬 없음 — 다음 단계), `NEON HARBOR` 자리표시는 그 뒤로. 로비 씬 항목은 `Unity_RunCommand` 로 넣고 저장은 사용자가 했다(§0).
+- **부스트존 (새 기능)**: 도약대(`Segment.Kicker`, 2026-10-25 "FINGER LANES")와 같은 꼴.
+  - `TrackDefinition.Segment.BoostStraight(length, boostAt, …)` — 직선 조각 안 `boostAt` m 에 존. 원호·틈·도약대 조각, 범위 밖은 검증 실패. `Centerline.AddBoostZone`·`TryBoostBetween`(앞으로 지날 때만, 랩 이음매 포함)·`GetBoostZones`.
+  - `RunnerMotor`: 땅에 붙어 있고 스윙·그래플 중이 아닐 때 이번 틱 이동 전후 S 로 존을 지나면 `Slingshot.Cut`(돌던 부스터를 끊는다) + 앞(러너 방향) 속도를 `max(지금, BoostZoneSpeed)` 로 **즉시**. 그 뒤는 기존 초과 속도 감속(`overspeedFalloff` 8 m/s²). `boostZoneSpeed` 34(서킷 부스터 최고 28 의 약 1.2배), 러너·속도 단계 배율을 따른다.
+  - **틱 사이 새 상태 없음** — 롤백·리플레이 그대로, 부스트존이 없는 트랙은 `TryBoostBetween` 이 바로 거짓이라 스타디움 지문 그대로.
+  - 표현: `CircuitScenery.PlaceBoostZones` — 존마다 도로 폭 × 6 m 초록 패드, 충돌체 없음, 머티리얼은 런타임 생성·파괴.
+- **Codex 분담 (처음)**: Codex(`task --write`)가 런타임·빌더·테스트 8개 파일을 썼다(새 파일 없음, 금지 파일 손대지 않음 — `git status` 로 확인). Claude 가 메뉴 실행·로비 항목·테스트·리뷰를 했고, 아래 두 곳을 고쳤다:
+  - `TrackPage.DescriptionOf` 의 PALM COAST 설명 — 요청서 범위에 있었으나 Codex 지시서에서 빠뜨렸다(Claude 실수). 게이트 1회차 로비 테스트 19건 실패의 원인.
+  - Codex 의 부스트존 테스트가 레이스 씬 안에서 되감아 고스트 기록기(`RaceAssembler.RecordTick`)의 설계된 에러가 났다 → 그 되감기 앞에 `LogAssert.Expect`(시뮬만 확인하는 되감기). 자리표시 테스트 행 3 → 4(트랙이 하나 늘었다, FINGER 때 2 → 3 과 같다).
+- **버린 대안**: 부스트존을 타이머 상태(부스터처럼 몇 초)로 — 새 저장 상태가 생겨 스냅샷·지문이 바뀐다. 1:1 축척 — 한 바퀴 약 5 km. 존 위치를 윤곽의 작은 틈에 — 영상 시간과 맞지 않았다.
+- **검증** (에디터 6000.3.19f1 — 이 머신의 버전 차이, 커밋 전 작업 트리, ① 빠른 확인 겸 게이트 전체):
+  - 컴파일 `Tundra build success (24.73 seconds)`, `error CS` 없음. 메뉴: `ChainRush: PALM COAST segments=41 lap=1814.98 laps=2 boostZones: S110.00, S313.27, S426.54, S1645.71 valid=True`, GUID `2c1535d5a14c1ce4482711f1d89f08cd`(Unity 발급).
+  - EditMode `!Enemy`: `testcasecount="307" result="Passed" passed="307" failed="0" skipped="0"` (04:07:46Z~04:07:51Z), TrackPage 수정 뒤 다시 `testcasecount="307" result="Passed" passed="307" failed="0"` (04:54:17Z~04:54:21Z). 296 → 307(부스트존 판정·검증 11건).
+  - PlayMode 부분(모양·부스트존·지문) 1회차 `testcasecount="8" result="Failed(Child)" passed="2" failed="6"` (04:08:23Z~04:09:11Z) — 부스트존 6건 모두 `Unhandled log message: '[Error] RaceAssembler: tick 399 came after 399; this run will keep no ghost.'`(위 "Codex 분담" 의 되감기). 고친 뒤 부스트존 `testcasecount="6" result="Passed" passed="6" failed="0"` (04:12:51Z~04:13:03Z).
+  - 게이트 `Run PlayMode Tests` 1회차 `testcasecount="214" result="Failed(Child)" passed="186" failed="19" skipped="9"` (04:22:15Z~04:35:16Z, 780.6초) — 로비를 거치는 19건 모두 `… PALM COAST) has no description in TrackPage.DescriptionOf.`(위). 설명을 넣고 2회차 `testcasecount="214" result="Passed" passed="205" failed="0" skipped="9"` (04:38:52Z~04:53:48Z, 895.6초). skipped 9 = `[Explicit]` Probe 6 + 네트워크 레이스 3.
+  - **스타디움 지문 그대로** `ChainRush replay circuit: 1700 ticks identical, hash 0x18F31E7A2B4F79B3`. PALM COAST 봇 2랩 `1815.0 m a lap, total 193.98 s … max offset 6.45 m at S 1633.1 (segment 35)` — 가드 판정 6.8 m(반폭 7.2 − 0.4) 안이지만 계단 코너에서 여유 0.35 m. 보통 랩 122.20 / 120.94 s(기준 113.44 s), 매우빠름 81.18 / 79.84 s(기준 75.62 s).
+  - 리뷰: `unity-reviewer` 치명·중대·보통 0, 제안 3(그중 DECISIONS 항목은 이 항목으로 해결). Codex 설계 리뷰 `needs-attention` 1건 — 작업 트리의 에디터 버전 차이(`ProjectVersion.txt`·`ProjectSettings.asset`·`packages-lock.json`)로, 커밋에 넣지 않는다. 부스트존·직렬화·닫힘에는 지적 없음(랩 1814.983 m·닫힘·존 S 를 따로 계산해 일치).
+  - 병합 조건 ②(`select-tests -Range dev...HEAD`)는 커밋 뒤에 적는다.
+- **남은 것**: 사용자 플레이 확인(부스트존 위치·세기, 계단 코너, 헤어핀). 장식 씬. 부스트존 이펙트·효과음. 리뷰 제안(`boostZone` 없이 `boostAt` 만 있는 구간도 거부, 빌더 로그 분기 정리)은 사용자 결정 대기.
+
 ## 2026-10-30 · 멀티 개발 순서: 물리가 있는 AI 상대부터 (MP1~MP5) · 진행 순서 M4 → M6 → M5 → M7 · 고스트는 정지 자세로 충분 (`docs/mp-roadmap`)
 
 - **결정 (사용자, 2026-10-30)**: "여러 레이서에 대해선 추후에 작업하자. 멀티플레이 개념이 들어갈 때 같이 작업하겠다", "고스트는 그냥 존재하는 것으로 충분할 듯 하다. 멀티플레이에서 상대가 있을시 그 상대의 모션은 보여야 한다", "멀티플레이를 개발하는 과정 또한 실제 멀티플레이가 아닌 물리값이 존재하는 AI 상대부터 개발하고 다음 과정을 진행하는 등 순서를 정해놓자". 순서 초안에 "초안 기록하고".

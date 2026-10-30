@@ -1,0 +1,396 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd293ac35c2905e46b4f39e20f0df22b, type: 3}
+  m_Name: Circuit_PalmCoast
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Track.TrackDefinition
+  segments:
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: -0.03
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 56.66667
+    radius: 0
+    degrees: 0
+    endGrade: -0.03
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 146.33333
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 1
+    boostAt: 33.33333
+  - length: 0
+    radius: 25
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 102
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 1
+    boostAt: 51
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 46
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 1
+    boostAt: 23
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 50.77481
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 60
+    degrees: -10
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 60
+    degrees: 10
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 50.77481
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 60
+    degrees: 10
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 60
+    degrees: -10
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 50.77481
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 147
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 48
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 37.64466
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: 45
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 114.44809
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -96.34021
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 53.471504
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 60
+    degrees: -38.65979
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 33.953148
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 106
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 30
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 2
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: 90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: 0.03
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 56.66667
+    radius: 0
+    degrees: 0
+    endGrade: 0.03
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 1
+    boostAt: 5
+  - length: 10
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 25.333328
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 0
+    radius: 25
+    degrees: -90
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  - length: 43
+    radius: 0
+    degrees: 0
+    endGrade: 0
+    endHalfWidth: 0
+    gap: 0
+    launch: 0
+    boostZone: 0
+    boostAt: 0
+  anchors: []
+  poles: []
+  shortcuts: []
+  checkpointFractions:
+  - 0.15
+  - 0.5
+  - 0.75
+  startSlots:
+  - 0
+  lapCount: 2
+  roadHalfWidth: 7.2000003
+  roadThickness: 1.2

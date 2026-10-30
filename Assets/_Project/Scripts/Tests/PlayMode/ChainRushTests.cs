@@ -145,6 +145,30 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(hud.BoostFlash, Is.Zero);
         }
 
+        // A boost pad (user 2026-10-30): the wind is full the moment the pad's carry jumps up, then only as strong as the
+        // pad's speed is above running speed, and gone with it. This scene has no pad, so the carry is set as a pad sets it,
+        // and cut as letting go of the throttle cuts it (Slingshot.Cut): at a pad's speed the bench's road ends within a few
+        // seconds, before the carry wears off by itself (the Palm Coast pad test follows that in the simulation).
+        [UnityTest]
+        public IEnumerator ChainRushHud_BoostPad_BlowsWindThatDiesWithItsSpeed()
+        {
+            var input = new FeedbackInputSource();
+            game.SetInputSource(input);
+            game.StartRun();
+            yield return new WaitForSeconds(0.2f);
+            Assert.That(hud.PadWind, Is.Zero, "No wind before a pad.");
+            game.Racer.BoostZoneCarrySpeed = player.BoostZoneSpeed;
+            yield return null;
+            yield return null;
+            Assert.That(hud.PadWind, Is.GreaterThan(0.9f), "Full at the pad.");
+            yield return new WaitForSeconds(1.5f);
+            Assert.That(hud.PadWind, Is.GreaterThan(0f).And.LessThan(0.5f), "It wears off with the pad's speed.");
+            Assert.That(game.IsRunning, Is.True, "precondition: the run is still on.");
+            game.Racer.BoostZoneCarrySpeed = 0f;
+            yield return null;
+            Assert.That(hud.PadWind, Is.Zero, "Gone with the pad's speed.");
+        }
+
         [UnityTest]
         public IEnumerator ChainRushHud_GrappleAttached_ShowsHookFlash()
         {

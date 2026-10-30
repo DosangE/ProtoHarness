@@ -82,6 +82,9 @@ namespace ProtoHarness.ChainRush
         public float HookFlash => game.IsRunning ? Mathf.Max(
             FeedbackLook.Fade(feedback.SinceHook(Time.time), FeedbackLook.HookRingTime),
             FeedbackLook.Fade(feedback.SinceSwing(Time.time), FeedbackLook.HookRingTime)) : 0f;
+        // 1 at a boost pad, then as strong as the pad's speed still is above running speed, 0 once it is gone.
+        public float PadWind => game.IsRunning ? Mathf.Max(FeedbackLook.Fade(feedback.SincePad(Time.time), FeedbackLook.PadBurstTime),
+            FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed)) : 0f;
         // 1 the moment a grapple misses, 0 once the shake is over.
         public float MissShake => game.IsRunning ? FeedbackLook.Fade(feedback.SinceMiss(Time.time), FeedbackLook.MissShakeTime) : 0f;
 
@@ -286,6 +289,7 @@ namespace ProtoHarness.ChainRush
             }
             if (player.IsSwinging || grapple.HasPoleCandidate) DrawPoleCandidate(width, height, scale);
             DrawMiss(scale);
+            DrawPadWind(width, height);
             DrawBoostFlash(width, height);
             if (game.DamageFlash)
             {
@@ -405,6 +409,31 @@ namespace ProtoHarness.ChainRush
             Color color = Coral;
             color.a = fade;
             DrawBracket(screen.x / scale + FeedbackLook.ShakeOffset(since), (Screen.height - screen.y) / scale, 1f, color);
+        }
+
+        // Boost pad wind: thin white streaks on the screen's own ellipse, each running out from 62% of the way to the rim to
+        // past the edge and starting again, longer and brighter with PadWind. Each streak's angle, phase and length are a
+        // fixed scatter of its index, so nothing is allocated.
+        private void DrawPadWind(float width, float height)
+        {
+            float wind = PadWind;
+            if (wind <= 0f) return;
+            var middle = new Vector2(width * 0.5f, height * 0.5f);
+            Matrix4x4 previous = GUI.matrix;
+            for (int i = 0; i < FeedbackLook.PadWindStreaks; i++)
+            {
+                float around = (i + 0.4f * Mathf.Sin(i * 12.9898f)) * (Mathf.PI * 2f / FeedbackLook.PadWindStreaks);
+                float phase = Mathf.Repeat(Time.time / FeedbackLook.PadWindCycle + i * 0.618f, 1f);
+                Vector2 rim = new Vector2(Mathf.Cos(around) * middle.x, Mathf.Sin(around) * middle.y);
+                Vector2 at = middle + rim * Mathf.Lerp(0.62f, 1.08f, phase);
+                float length = (60f + 70f * Mathf.Repeat(i * 0.37f, 1f)) * (0.5f + 0.5f * wind);
+                Color color = Color.white;
+                color.a = wind * 0.55f * Mathf.Sin(phase * Mathf.PI);
+                float angle = Mathf.Atan2(rim.y, rim.x) * Mathf.Rad2Deg;
+                GUI.matrix = previous * Matrix4x4.TRS(new Vector3(at.x, at.y, 0f), Quaternion.Euler(0f, 0f, angle), Vector3.one);
+                NightUi.Block(new Rect(0f, -1f, length, 2f), color);
+            }
+            GUI.matrix = previous;
         }
 
         // Layered edge strips fall off toward the view, with short lines moving inward as the burst fades.

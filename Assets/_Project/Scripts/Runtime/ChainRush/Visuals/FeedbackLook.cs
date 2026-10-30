@@ -27,6 +27,12 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float BracketStartScale = 1.6f;
         public const float MissShakeTime = 0.3f;
         public const float MissShakeSize = 12f;
+        // Boost pad wind (user 2026-10-30 "화면상 외곽에 바람을 가르는 듯한"): white streaks round the screen's rim, each
+        // running out past the edge in PadWindCycle seconds; full for PadBurstTime after a pad, then as strong as the
+        // pad's speed still is above running speed (PadShare), so the wind dies with the speed.
+        public const float PadBurstTime = 0.35f;
+        public const int PadWindStreaks = 28;
+        public const float PadWindCycle = 0.22f;
 
         // One at the event, zero once its duration has passed or before it has ever happened.
         public static float Fade(float since, float duration)
@@ -74,6 +80,16 @@ namespace ProtoHarness.ChainRush.Visuals
             float across = direction.x != 0f ? (center.x - EdgeInset) / Mathf.Abs(direction.x) : float.PositiveInfinity;
             float down = direction.y != 0f ? (center.y - EdgeInset) / Mathf.Abs(direction.y) : float.PositiveInfinity;
             return center + direction * Mathf.Min(across, down);
+        }
+
+        // How much of a boost pad's speed above running speed its carry still holds: 1 at the pad, 0 once it is gone.
+        public static float PadShare(float carry, float runSpeed, float padSpeed)
+        {
+            RequireFinite(carry, nameof(carry));
+            RequireFinite(runSpeed, nameof(runSpeed));
+            RequireFinite(padSpeed, nameof(padSpeed));
+            if (!(padSpeed > runSpeed)) throw new ArgumentOutOfRangeException(nameof(padSpeed), padSpeed, "The pad's speed must be above running speed.");
+            return Mathf.Clamp01((carry - runSpeed) / (padSpeed - runSpeed));
         }
 
         private static void RequireFinite(float value, string name)

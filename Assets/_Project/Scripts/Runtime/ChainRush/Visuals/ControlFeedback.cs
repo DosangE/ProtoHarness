@@ -42,6 +42,11 @@ namespace ProtoHarness.ChainRush.Visuals
         private int lastMissUntil;
         private bool missed;
         private float missedAt;
+        // A boost pad is noticed by its carry jumping up, not turning on: the climb's pads come 30 m apart, before the
+        // last one's carry is gone (Palm Coast).
+        private float lastPadCarry;
+        private bool padHit;
+        private float padAt;
         private bool initialized;
 
         public bool PoleReadyShown => rings != null && rings[ReadyRing].enabled;
@@ -53,6 +58,7 @@ namespace ProtoHarness.ChainRush.Visuals
         public float SinceSwing(float now) => swing.Since(now);
         public float SinceMiss(float now) => missed ? now - missedAt : -1f;
         public float SincePoleReady(float now) => poleReady.Since(now);
+        public float SincePad(float now) => padHit ? now - padAt : -1f;
         // The gauge slot the last booster emptied (the whole slots left after spending it), -1 before any.
         public int SpentBoostSlot => spentBoostSlot;
 
@@ -188,6 +194,13 @@ namespace ProtoHarness.ChainRush.Visuals
                 missedAt = now;
             }
             lastMissUntil = missUntil;
+            float padCarry = game.Racer.BoostZoneCarrySpeed;
+            if (padCarry > lastPadCarry + 0.5f)
+            {
+                padHit = true;
+                padAt = now;
+            }
+            lastPadCarry = padCarry;
             if (hook.Update(grapple.IsAttached, now))
                 StartRing(AnchorRing, grapple.AnchorPosition, Quaternion.FromToRotation(Vector3.up, -player.Facing), now);
             if (swing.Update(player.IsSwinging, now))
@@ -220,9 +233,10 @@ namespace ProtoHarness.ChainRush.Visuals
         private void ForgetRun()
         {
             slingPull = empower = hook = swing = poleReady = default;
-            boosted = missed = false;
+            boosted = missed = padHit = false;
             spentBoostSlot = -1;
             lastMissUntil = game.Racer.MissUntilTick;
+            lastPadCarry = game.Racer.BoostZoneCarrySpeed;
         }
 
         private void StartRing(int index, Vector3 center, Quaternion rotation, float now)

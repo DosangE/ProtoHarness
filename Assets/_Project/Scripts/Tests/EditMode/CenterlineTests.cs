@@ -396,6 +396,34 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(line.TryFindPole(frame.Position, heading, 91f, 5f, out _), Is.True, "Only the angle keeps it out.");
         }
 
+        // A corner already passed is not offered (user 2026-10-30): an arc's pole up to the share of the arc asked for,
+        // none past it and none past the arc's end, though the pole there is still inside the angle.
+        [Test]
+        public void TryFindPole_PastTheShareOfItsArc_FindsNone()
+        {
+            Centerline line = QuarterTurn();
+            double arcLength = 30d * Math.PI / 2d;
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 16f), 0f, 95f, 5f, out _, 0.5f), Is.True, "Before the arc.");
+            TrackFrame early = line.FrameAt(30d + 0.4d * arcLength);
+            Assert.That(line.TryFindPole(early.Position, Heading(early), 95f, 5f, out _, 0.5f), Is.True, "40% round, within half.");
+            TrackFrame late = line.FrameAt(30d + 0.6d * arcLength);
+            Assert.That(line.TryFindPole(late.Position, Heading(late), 95f, 5f, out _, 0.5f), Is.False, "60% round, past half.");
+            Assert.That(line.TryFindPole(late.Position, Heading(late), 95f, 5f, out _), Is.True, "The whole arc when no share is asked.");
+            TrackFrame past = line.FrameAt(30d + arcLength + 2d);
+            Assert.That(line.TryFindPole(past.Position, Heading(past), 95f, 5f, out _), Is.False, "2 m past the arc's end: 93.8 degrees aside, inside 95, but passed.");
+        }
+
+        // An added pole is not offered once it is behind, though inside a wider angle (user 2026-10-30).
+        [Test]
+        public void AddPole_JustPassed_FindsNone()
+        {
+            Centerline line = StraightAlongZ(200f);
+            line.AddPole(new Vector3(-5f, 0f, 50f), 8f);
+            Assert.That(line.TryFindPole(new Vector3(0f, 0f, 50.3f), 0f, 95f, 2f, out _), Is.False, "0.3 m past abeam: 93.4 degrees, inside 95, but behind.");
+        }
+
+        private static float Heading(TrackFrame frame) => Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+
         [Test]
         public void TryFindPole_PastRadiusPlusReach_FindsNone()
         {
@@ -513,6 +541,14 @@ namespace ProtoHarness.Tests.EditMode
         public void TryFindPole_InvalidAngleOrReach_Throws(float maxAngle, float reach)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => QuarterTurn().TryFindPole(Vector3.zero, 0f, maxAngle, reach, out _));
+        }
+
+        [TestCase(0f)]
+        [TestCase(1.1f)]
+        [TestCase(float.NaN)]
+        public void TryFindPole_InvalidArcShare_Throws(float share)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => QuarterTurn().TryFindPole(Vector3.zero, 0f, 75f, 5f, out _, share));
         }
 
         private static Centerline StraightAlongZ(float length, float toGrade)

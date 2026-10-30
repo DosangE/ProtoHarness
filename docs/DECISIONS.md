@@ -7,6 +7,18 @@
 
 ---
 
+## 2026-10-30 · 봉 걸기: 이미 지나간 코너에는 새로 걸지 않는다 — 원호의 절반까지 (`feature/m6-pole-hook-ahead`)
+
+- **결정 (사용자, 2026-10-30)**: "이미 지나간 봉에도 스윙연결이 되는 범위가 과한 것 같다 … 스윙 중이지 않은 상태에선 기존 범위보다 줄여 이미 지나간 코너 같은 곳에 연결하지 않도록", "모든 트랙에서 발생한다 … 반지름이 커질수록 이 문제가 더 큰 거 같아서". 원호의 절반까지(추천안)에 "ㄱㄱ".
+- **원인**: 2026-10-25 "봉 각도는 트랙 진행 방향에서 잰다" 뒤로 원호 봉은 원호 안 어디서나 진행 방향의 옆(90°)이라 원호 전체에서 걸렸고, 95° 허용 때문에 출구 뒤 약 `0.087 × R` m 까지 걸렸다(R25 약 2 m, R220 약 19 m). 원호 길이도 반지름에 비례한다 — 반지름이 클수록 커진 까닭. 각도만 좁히면 원호 안에서 아예 못 건다(10-25 문제).
+- **한 것**: `Centerline.TryFindPole` 에 `maxArcShare`(기본 1). 원호 중심에서 본 러너의 각도로 원호를 돈 몫을 재어(`BeforeShare`, 원호는 180° 이하 — `TrackDefinition.cs:363`) 원호 앞(−90° 초과)부터 그 몫까지만 원호 봉을 내놓는다. 출구 뒤는 없다. 지름길 조각도 같다. 직선 옆 봉(`AddPole`)은 90° 를 넘으면(지나가면) 내놓지 않는다. `RunnerMotor.poleHookArcShare` 0.5. 스윙 중에는 그대로(키를 뗄 때까지, 범위 검사 없음). HUD 봉 타겟·고리는 같은 `TryFindPole` 을 읽어 함께 바뀐다(`GrappleController.cs:83`).
+- **테스트**: 새 EditMode `TryFindPole_PastTheShareOfItsArc_FindsNone`(40% 걸림 / 60% 안 걸림 / 몫 없으면 전체 / 출구 2 m 뒤 93.8° 는 안 걸림), `AddPole_JustPassed_FindsNone`(0.3 m 지남, 93.4°), `TryFindPole_InvalidArcShare_Throws`. **사양이 바뀌어 고친 것**: `ChainRushCircuitTests.Swing_RoundTheFirstCorner_ItsPoleIsOfferedThroughTheWholeArc` → `…OfferedUpToHalfwayRound`(앞 45% 는 모든 틱, 55% 부터 0, 경계 ±5% 는 보지 않는다). `ChainRushCornerSwingTests.Swing_PoleBesideAStraight_*` 는 "옆(S 50)" 에서 걸었는데 `RunTo` 가 S 를 넘은 틱(약 0.3 m 지남)에 멈춰 새 사양에서 실패했다(`Abeam, 11 m aside, the pole is in reach. Expected: True But was: False`) → 1 m 앞에서 확인.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, 바뀐 부분만): 컴파일 `scriptCompilationFailed=False`.
+  - EditMode `CenterlineTests`·`TrackDefinitionTests` `testcasecount="109" result="Passed" passed="109" failed="0"` (09:04:36Z~09:04:38Z).
+  - PlayMode `ChainRushCornerSwingTests`(13)·첫 코너 1·`ControlFeedback_PoleWithinReach_*` 1·`Rollback_DuringSlingCornerSwingRopeAndCarry_*` 1·스타디움 지문 1: `testcasecount="17" result="Failed(Child)" passed="16" failed="1"` (09:05:34Z~09:07:08Z) — 실패는 위 직선 옆 봉 1건. 테스트를 고친 뒤 그 1건 `testcasecount="1" result="Passed" passed="1" failed="0"` (09:08:34Z~09:08:39Z).
+  - 첫 코너(S 140.5~175.0): 앞 45% 의 지면 틱 47/47 에서 봉을 내놓고, 55% 부터 56틱 중 0. 지문 `hash 0x18F31E7A2B4F79B3` 그대로.
+- **남은 것**: 사용자 플레이 확인(코너 앞·중간에 거는 느낌, 큰 곡선). 걸 수 있는 거리 "반지름 + 6 m"(R220 은 226 m)는 손대지 않았다 — 필요하면 따로.
+
 ## 2026-10-30 · 부스트존 감속: 넘친 속도에 비례해 빨리 — 마지막 존을 턱 바로 앞으로 (`feature/m6-boost-zone-falloff`)
 
 - **결정 (사용자, 2026-10-30)**: "부스터 존 이후 감속되는 수준이 적다. 더 빨리 줄어야한다(기존 부스트의 역으로 부스트존으로 인한 속도가 높으면 감속 수준 높게 정상속도에 다가갈수록 감속 수준 조금씩 천천히). 말그대로 순간에 폭발적인 부스트만 받는것." 바로 아래 "PALM COAST 개선" 의 이어달리기(초당 3 m/s, Claude 가 "감속이 적다"를 거꾸로 읽은 것)를 되돌린다. 점프 처리 선택지 A(비례 감속 k = 0.8/s + 마지막 존을 턱 바로 앞으로)에 "A, ㄱㄱ".

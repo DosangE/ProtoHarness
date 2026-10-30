@@ -490,7 +490,11 @@ namespace ProtoHarness.ChainRush.Track
         // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level; ties
         // go to the earlier piece, and arcs come before added poles. False when there is none. An arc's pole sits at the
         // arc's start height. All poles are searched, focus or not: a runner asks only when it acts.
-        public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole)
+        // A corner already passed is not offered (user 2026-10-30): an arc's pole only from before the arc up to
+        // maxArcShare of the way round it, by the angle about its center (ArcSwept), so a wide arc holds back as much of
+        // itself as a tight one; past its end, none. An added pole, never once it is behind (more than 90 degrees).
+        public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole,
+            float maxArcShare = 1f)
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
             if (!IsFinite(headingDegrees)) throw new ArgumentOutOfRangeException(nameof(headingDegrees), headingDegrees, "Heading must be finite.");
@@ -498,13 +502,15 @@ namespace ProtoHarness.ChainRush.Track
                 throw new ArgumentOutOfRangeException(nameof(maxAngleDegrees), maxAngleDegrees, "The angle must be within [0, 180] degrees.");
             if (!(extraReach >= 0f) || float.IsInfinity(extraReach))
                 throw new ArgumentOutOfRangeException(nameof(extraReach), extraReach, "The extra reach must be finite and not negative.");
+            if (!(maxArcShare > 0f && maxArcShare <= 1f))
+                throw new ArgumentOutOfRangeException(nameof(maxArcShare), maxArcShare, "The arc share must be within (0, 1].");
             pole = default;
             bool found = false;
             float bestDistance = float.MaxValue;
             for (int i = 0; i < pieces.Count; i++)
             {
                 Piece piece = pieces[i];
-                if (piece.Curvature == 0f) continue;
+                if (piece.Curvature == 0f || !BeforeShare(piece, world, maxArcShare)) continue;
                 if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
                 pole = piece.Center;
                 found = true;
@@ -513,18 +519,31 @@ namespace ProtoHarness.ChainRush.Track
                 for (int i = 0; i < branches[b].Pieces.Count; i++)
                 {
                     Piece piece = branches[b].Pieces[i];
-                    if (piece.Curvature == 0f) continue;
+                    if (piece.Curvature == 0f || !BeforeShare(piece, world, maxArcShare)) continue;
                     if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
                     pole = piece.Center;
                     found = true;
                 }
             for (int i = 0; i < extraPoles.Count; i++)
             {
-                if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
+                if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, Mathf.Min(maxAngleDegrees, 90f), ref bestDistance)) continue;
                 pole = extraPoles[i].Position;
                 found = true;
             }
             return found;
+        }
+
+        // Whether world is no more than share of the way round an arc: the angle swept about its center from the arc's
+        // start, in its turning direction, at most share of its turn, and more than -90 degrees (before the arc). Arcs
+        // turn at most 180 degrees (TrackDefinition), so a point past a half turn's end reads below -90 and is out.
+        private static bool BeforeShare(in Piece piece, Vector3 world, float share)
+        {
+            Vector3 from = piece.Start - piece.Center;
+            Vector3 to = world - piece.Center;
+            from.y = 0f;
+            to.y = 0f;
+            float swept = Vector3.SignedAngle(from, to, Vector3.up) * Mathf.Sign(piece.Curvature);
+            return swept > -90f && swept <= share * piece.Length * Mathf.Abs(piece.Curvature) * Mathf.Rad2Deg;
         }
 
         // Whether a pole is within reach, nearer than the best so far and inside the angle; if so it becomes the best.

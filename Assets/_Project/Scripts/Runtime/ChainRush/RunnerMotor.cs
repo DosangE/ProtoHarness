@@ -89,7 +89,8 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float empoweredReleaseSpeed = 18f;
         // Corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): every arc has a pole at its center. Pressing
         // the swing key on the ground hooks the nearest pole within poleMaxAngle either side of the track's direction and no farther than its arc's
-        // radius plus poleReach (holding the key into reach does not); the runner circles it for as long as the key is
+        // radius plus poleReach (holding the key into reach does not), and only up to poleHookArcShare of the way round its
+        // arc, never a corner already passed (user 2026-10-30); the runner circles it for as long as the key is
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
         // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
         // hook's speed times the hooked rope length over the rope length now, kept within minSwingSpeedScale ..
@@ -101,6 +102,7 @@ namespace ProtoHarness.ChainRush
         // Touching a guard, or a grapple taking hold, ends the swing; a guard ends it without the carry.
         [SerializeField] private float poleMaxAngle = 95f;
         [SerializeField] private float poleReach = 6f;
+        [SerializeField] private float poleHookArcShare = 0.5f;
         [SerializeField] private float ropeRate = 6f;
         [SerializeField] private float minRopeLength = 2f;
         [SerializeField] private float minSwingSpeedScale = 0.8f;
@@ -215,8 +217,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError($"RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal {ReleaseSpeed}.", this);
             if (!(boostZoneSpeed > slingTopSpeed) || float.IsInfinity(boostZoneSpeed) || !(boostZoneFalloff > 0f) || float.IsInfinity(boostZoneFalloff))
                 Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed, its falloff positive and finite.", this);
-            if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || ropeRate < 0f || minRopeLength <= 0f)
-                Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the shortest rope positive.", this);
+            if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || !(poleHookArcShare > 0f && poleHookArcShare <= 1f) || ropeRate < 0f || minRopeLength <= 0f)
+                Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the hook's arc share within (0, 1], the shortest rope positive.", this);
             if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
                 Debug.LogError("RunnerMotor: the swing speed scale range must be within (0, 1] .. [1, inf), the metres per slot and carry falloff positive.", this);
             if (swingThrottleSpeedScale < 1f)
@@ -481,14 +483,14 @@ namespace ProtoHarness.ChainRush
             game.PlayCue(RaceCue.Action);
         }
 
-        // The corner pole a swing key press would hook from here and now, if any (see poleMaxAngle and poleReach). The
+        // The corner pole a swing key press would hook from here and now, if any (see poleMaxAngle, poleReach and poleHookArcShare). The
         // angle is taken from the track's direction here, not the facing: in a corner the facing falls behind the track (the
         // turn limit), which put the pole past the angle halfway round (measured 2026-10-25, DECISIONS "측정: 코너 중간에 …").
         // The simulation asks it on a press; presentation and bots may ask it any time, since it only reads.
         public bool TryFindPole(out Vector3 pole)
         {
             Vector3 forward = game.Track.Frame(transform.position).Forward;
-            return game.Track.TryFindPole(transform.position, Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, poleMaxAngle, poleReach, out pole);
+            return game.Track.TryFindPole(transform.position, Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, poleMaxAngle, poleReach, out pole, poleHookArcShare);
         }
 
         // Downhill the road can drop away faster than one tick of grounded fall. When ground is still within

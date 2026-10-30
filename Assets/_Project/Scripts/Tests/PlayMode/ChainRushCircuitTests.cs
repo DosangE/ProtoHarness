@@ -413,9 +413,10 @@ namespace ProtoHarness.Tests.PlayMode
         // Halfway round a corner the pole must still hook (play report 2026-10-19; measured 2026-10-25, DECISIONS "측정: 코너
         // 중간에 …"): the runner's facing falls 5 to 17 degrees behind the track in an R22 corner (the turn limit of speed / 25 m),
         // which put the pole past 95 degrees of the facing from about 7% of the arc on. The angle is the track's direction's,
-        // so through the whole arc, on the ground, the corner's pole is offered.
+        // so on the ground the corner's pole is offered up to halfway round; past that the corner counts as passed and it is
+        // not (user 2026-10-30, RunnerMotor.poleHookArcShare 0.5). 5% either side of halfway is left unchecked.
         [UnityTest, Timeout(60000)]
-        public IEnumerator Swing_RoundTheFirstCorner_ItsPoleIsOfferedThroughTheWholeArc()
+        public IEnumerator Swing_RoundTheFirstCorner_ItsPoleIsOfferedUpToHalfwayRound()
         {
             double arcStart = -1d;
             for (double s = 100d; s < 250d && arcStart < 0d; s += 0.5d)
@@ -426,7 +427,7 @@ namespace ProtoHarness.Tests.PlayMode
             var feet = new System.Collections.Generic.List<Vector3>();
             game.Track.GetPoles(feet);
             Vector3 pole = feet[0];
-            int inArc = 0, offered = 0;
+            int inArc = 0, early = 0, offered = 0, late = 0, offeredLate = 0;
             string firstMiss = null;
             System.Action<int> sample = tick =>
             {
@@ -434,7 +435,17 @@ namespace ProtoHarness.Tests.PlayMode
                 TrackCoord here = game.Track.Project(now);
                 if (here.S < arcStart || here.S > arcEnd || !player.IsGrounded) return;
                 inArc++;
-                if (player.TryFindPole(out Vector3 got) && Vector3.Distance(got, pole) < 1e-3f) offered++;
+                double share = (here.S - arcStart) / (arcEnd - arcStart);
+                bool found = player.TryFindPole(out Vector3 got) && Vector3.Distance(got, pole) < 1e-3f;
+                if (share >= 0.55d)
+                {
+                    late++;
+                    if (found) offeredLate++;
+                    return;
+                }
+                if (share > 0.45d) return;
+                early++;
+                if (found) offered++;
                 else if (firstMiss == null)
                 {
                     Vector3 toward = pole - now;
@@ -451,9 +462,13 @@ namespace ProtoHarness.Tests.PlayMode
             while (game.IsRunning && circuit.Laps.Progress < arcEnd + 2d && Time.realtimeSinceStartup < deadline) yield return null;
             Time.timeScale = timeScale;
             game.TickCompleted -= sample;
-            Debug.Log($"ChainRush first corner (S {arcStart:F1}..{arcEnd:F1}): its pole offered on {offered} of {inArc} grounded ticks in the arc.");
+            Debug.Log($"ChainRush first corner (S {arcStart:F1}..{arcEnd:F1}): its pole offered on {offered} of {early} grounded ticks " +
+                      $"in the first 45% of the arc, on {offeredLate} of {late} from 55% on ({inArc} in the arc).");
             Assert.That(inArc, Is.GreaterThan(30), "The bot must run through the corner on the ground. " + State());
-            Assert.That(offered, Is.EqualTo(inArc), "First tick without the corner's pole: " + firstMiss);
+            Assert.That(early, Is.GreaterThan(10), "The bot must run the first part of the corner on the ground. " + State());
+            Assert.That(late, Is.GreaterThan(10), "and the last part.");
+            Assert.That(offered, Is.EqualTo(early), "First tick without the corner's pole: " + firstMiss);
+            Assert.That(offeredLate, Is.Zero, "Past halfway round the corner counts as passed.");
         }
 
         // ---- helpers ------------------------------------------------------------------------------------

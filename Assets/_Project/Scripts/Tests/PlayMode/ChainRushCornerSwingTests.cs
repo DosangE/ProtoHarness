@@ -474,8 +474,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // A pole beside a straight (Centerline.AddPole, user 2026-10-22, the Skyway's wide straight) hooks like a corner pole:
-        // on a road 30 m across, abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
-        // fills the gauge by the distance swung; letting go ends the swing.
+        // on a road 30 m across, coming abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
+        // fills the gauge by the distance swung; letting go ends the swing. A pole once passed is not offered (user 2026-10-30):
+        // RunTo stops on the tick past its S, so the hook is checked 1 m before abeam.
         [UnityTest]
         public IEnumerator Swing_PoleBesideAStraight_HooksAbeamCirclesTowardItAndFillsTheGauge()
         {
@@ -489,8 +490,8 @@ namespace ProtoHarness.Tests.PlayMode
             yield return StartOn(line, bot, sideHalfWidth, true);
             yield return RunTo(line, poleS - 25d);
             Assert.That(player.TryFindPole(out _), Is.False, "27 m away the pole is past 10 + 6 m.");
-            yield return RunTo(line, poleS);
-            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "Abeam, 11 m aside, the pole is in reach.");
+            yield return RunTo(line, poleS - 1d);
+            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "1 m before abeam, 11 m aside, the pole is in reach.");
             Assert.That(Level(offered - sidePole), Is.LessThan(1e-3f));
 
             float headingFrom = player.Heading;

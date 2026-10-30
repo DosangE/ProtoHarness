@@ -34,11 +34,12 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
-        // speed a swing let go with. The speed already gained then falls off like any coasting.
+        // speed a swing or a boost pad left. The speed already gained then falls off like any coasting.
         public static void Cut(RacerState racer)
         {
             racer.SlingTicks = 0;
             racer.SwingCarrySpeed = 0f;
+            racer.BoostZoneCarrySpeed = 0f;
         }
 
         // While the slingshot pulls, the facing turns toward the hook point, which rides the centerline ahead so the pull

@@ -1303,7 +1303,8 @@ namespace ProtoHarness.Tests.PlayMode
         // ---- Palm Coast (user 2026-10-30, Beach Drive outline, five boost pads and a jump over the sea) --------
 
         // The track as reshaped after play (2026-10-30): sixteen arcs, so sixteen corner poles, each at a real curve; a
-        // steady 12% climb with three pads 30 m apart and a kicker 23 m after the last; the sea 15 m past the crest, 45 m
+        // steady 12% climb with three pads 30 m apart and the crest 10 m after the last (A, 2026-10-30: the pad's speed now
+        // wears off fast, so the last pad sits just before the kicker); the sea 15 m past the crest, 45 m
         // wide; the climb given back over the beach.
         [Test]
         public void PalmCoast_Layout_IsTheCoastalLoopWithAClimbToAJumpOverTheSeaAndAGentleFinishHill()
@@ -1355,12 +1356,12 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(line.LaunchCount, Is.EqualTo(1));
             var zones = new System.Collections.Generic.List<double>();
             line.GetBoostZones(zones);
-            double[] expectedS = { 110d, 260.6858d, 290.6858d, 320.6858d, 1822.7102d };
-            Vector2[] expectedPositions = { new Vector2(0f, 110f), new Vector2(70f, 210f), new Vector2(100f, 210f), new Vector2(130f, 210f), new Vector2(-132f, -68f) };
+            double[] expectedS = { 110d, 273.6858d, 303.6858d, 333.6858d, 1822.7102d };
+            Vector2[] expectedPositions = { new Vector2(0f, 110f), new Vector2(83f, 210f), new Vector2(113f, 210f), new Vector2(143f, 210f), new Vector2(-132f, -68f) };
             (double start, double end) = palm.Gaps()[0];
             Assert.That(zones[2] - zones[1], Is.EqualTo(30d).Within(1e-3d), "The pads of the climb are 30 m apart.");
             Assert.That(zones[3] - zones[2], Is.EqualTo(30d).Within(1e-3d));
-            Assert.That(lipS - zones[3], Is.EqualTo(23d).Within(1e-3d), "The last pad to the crest.");
+            Assert.That(lipS - zones[3], Is.EqualTo(10d).Within(1e-3d), "The last pad to the crest.");
             Assert.That(start - lipS, Is.EqualTo(15d).Within(1e-3d), "The crest to the sea: the flat run.");
             Assert.That(end - lipS, Is.EqualTo(60d).Within(1e-3d), "The crest to the far side of the sea.");
             for (int i = 0; i < zones.Count; i++)
@@ -1547,11 +1548,20 @@ namespace ProtoHarness.Tests.PlayMode
                     game.StepTick(bot);
                     Assert.That(player.ForwardSpeed, Is.LessThan(boosted).And.GreaterThan(player.RunSpeed), "The pad's speed starts to wear off on the next tick.");
                     Assert.That(game.Racer.SlingTicks, Is.Zero);
-                    // The speed is carried as a swing's is, falling off by swingCarryFalloff (3 m/s) a second: the faster
-                    // overspeedFalloff (8) would leave about 49 m/s after 0.8 s, this leaves about 52 (user 2026-10-30, "too soon").
-                    Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(player.RunSpeed), "The pad's speed is the carried speed.");
-                    for (int hold = Ticks.FromSeconds(0.8f); hold > 0; hold--) game.StepTick(bot);
-                    Assert.That(player.ForwardSpeed, Is.GreaterThan(50f), "After 0.8 s the pad's speed has worn off by about 2.4 m/s.");
+                    Assert.That(game.Racer.BoostZoneCarrySpeed, Is.GreaterThan(player.RunSpeed), "The pad's speed is its carry.");
+                    Assert.That(game.Racer.SwingCarrySpeed, Is.Zero, "A pad is not a swing's carry.");
+                    // The part above running speed wears off in proportion to itself (user 2026-10-30, "순간에 폭발적인
+                    // 부스트만"): the first 0.4 s takes off more than the next 0.4 s, and 0.8 s leaves well under the old
+                    // falloffs (52 m/s at 3 m/s a second, 49 at 8).
+                    int half = Ticks.FromSeconds(0.4f);
+                    for (int hold = half; hold > 0; hold--) game.StepTick(bot);
+                    float atHalf = player.ForwardSpeed;
+                    for (int hold = half; hold > 0; hold--) game.StepTick(bot);
+                    float atFull = player.ForwardSpeed;
+                    Debug.Log($"ChainRush pad falloff at {speed}: {boosted:F2} -> {atHalf:F2} (0.4 s) -> {atFull:F2} (0.8 s), run {player.RunSpeed:F2}.");
+                    Assert.That(boosted - atHalf, Is.GreaterThan(atHalf - atFull), "Harder at first, easing as it nears running speed.");
+                    Assert.That(atFull, Is.LessThan(45f), "After 0.8 s most of the pad's speed is gone.");
+                    Assert.That(atFull, Is.GreaterThan(player.RunSpeed), "but not all of it.");
                     break;
                 }
                 Assert.That(crossed, Is.True, "The bot did not reach Z1.");
@@ -1608,7 +1618,8 @@ namespace ProtoHarness.Tests.PlayMode
                     if (before < lipS && s >= lipS) lipSpeed = player.ForwardSpeed;
                 }
                 Assert.That(circuit.Laps.Progress, Is.GreaterThanOrEqualTo(seaEnd + 20d), $"The bot did not get past the sea in {tick} ticks.");
-                Assert.That(lipSpeed, Is.GreaterThan(50f), "The climb's pads leave the crest at their speed.");
+                // The sea's far side is 60 m from the crest: a flight of 2 x 0.3 x v^2 / 22 needs at least 46.9 m/s.
+                Assert.That(lipSpeed, Is.GreaterThan(46.9f), "The last pad leaves the crest fast enough to fly the sea.");
                 Debug.Log($"ChainRush Palm Coast jump at {speed}: {lipSpeed:F2} m/s at the crest, past the sea by tick {tick}.");
 
                 // A fall into the sea, having last stood on the flat run just before it.

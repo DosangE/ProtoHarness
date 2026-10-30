@@ -64,6 +64,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
                 case "STADIUM": return "야간 조명 아래의 경기장 서킷.\n지금 달릴 수 있는 트랙입니다.";
                 case "SKYWAY LOOP": return "마을을 지나 고가도로를 달리는 2바퀴 코스.\n긴 고가 직선 뒤 급한 내리막이 기다립니다.";
                 case "FINGER LANES": return "손가락처럼 뻗은 일곱 줄을 U턴으로 잇는 2바퀴 코스.\n봉 스윙으로 U턴을 끊고 좁은 시계탑 통로를 지납니다.";
+                case "PALM COAST": return "야자수 해변과 다리를 도는 넓은 2바퀴 코스.\n초록 부스트존을 밟으면 부스터보다 빠르게 튀어 나갑니다.";
                 default: return "";
             }
         }

@@ -24,6 +24,7 @@ namespace ProtoHarness.ChainRush.Race
         private readonly List<RoadPiece> pieces = new List<RoadPiece>(16);
         private readonly List<GameObject> markers = new List<GameObject>(8);
         private readonly List<GameObject> poles = new List<GameObject>(8);
+        private Material boostMaterial;
         // Where the main road has no right guard: the shortcuts' crossings (TrackDefinition.ShortcutGuardGaps).
         private readonly List<(double From, double To)> guardGaps;
 
@@ -124,10 +125,35 @@ namespace ProtoHarness.ChainRush.Race
             }
         }
 
-        // Destroys the road pieces' objects and meshes. The bands and poles go with the parent.
+        // Green pads across almost the full road, 6 m long and 3 cm above it. Visual only, like the corner poles.
+        public void PlaceBoostZones()
+        {
+            if (track.BoostZoneCount == 0) return;
+            var zones = new List<double>(track.BoostZoneCount);
+            track.GetBoostZones(zones);
+            if (boostMaterial == null)
+            {
+                boostMaterial = new Material(lightMaterial) { name = "Boost pad", color = new Color(0.1f, 1f, 0.25f) };
+                if (boostMaterial.HasProperty("_EmissionColor")) boostMaterial.SetColor("_EmissionColor", new Color(0.1f, 1f, 0.25f));
+            }
+            for (int i = 0; i < zones.Count; i++)
+            {
+                TrackFrame frame = track.FrameAt(zones[i]);
+                var pad = new GameObject("Boost zone " + i);
+                pad.transform.SetParent(parent, false);
+                Vector3 forward = frame.Forward + Vector3.up * frame.Grade;
+                Quaternion rotation = Quaternion.LookRotation(forward);
+                pad.transform.SetPositionAndRotation(frame.Position + rotation * Vector3.up * 0.045f, rotation);
+                VisualPart(PrimitiveType.Cube, "Pad", pad.transform, boostMaterial, Vector3.zero,
+                    new Vector3(definition.HalfWidthAt(zones[i]) * 1.9f, 0.03f, 6f));
+            }
+        }
+
+        // Destroys the road pieces' objects and meshes and the pads' material. The bands, poles and pads go with the parent.
         public void Destroy()
         {
             for (int i = 0; i < pieces.Count; i++) pieces[i].Destroy();
+            if (boostMaterial != null) Object.Destroy(boostMaterial);
         }
 
         // Pieces from from to to, the half width going linearly from fromWidth to toWidth. A piece that a guard gap

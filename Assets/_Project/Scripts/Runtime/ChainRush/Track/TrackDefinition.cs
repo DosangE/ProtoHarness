@@ -36,6 +36,8 @@ namespace ProtoHarness.ChainRush.Track
         // leaves it climbing at Launch times its forward speed, so the faster it comes the farther it flies (user
         // 2026-10-25, Finger Lanes: the bridge and the clock tower throw a kart by its speed). Without it the ground snap
         // holds a runner to any crest (RunnerMotor).
+        // A boost zone is BoostAt metres inside a road straight, without a kicker; crossing it cuts the runner's booster
+        // and raises its forward speed (user 2026-10-30, Palm Coast). Its flag also lets validation reject a pad at zero.
         [Serializable]
         public struct Segment
         {
@@ -46,8 +48,10 @@ namespace ProtoHarness.ChainRush.Track
             [SerializeField] private float endHalfWidth;
             [SerializeField] private bool gap;
             [SerializeField] private float launch;
+            [SerializeField] private bool boostZone;
+            [SerializeField] private float boostAt;
 
-            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap, float launch)
+            private Segment(float length, float radius, float degrees, float endGrade, float endHalfWidth, bool gap, float launch, bool boostZone = false, float boostAt = 0f)
             {
                 this.length = length;
                 this.radius = radius;
@@ -56,12 +60,15 @@ namespace ProtoHarness.ChainRush.Track
                 this.endHalfWidth = endHalfWidth;
                 this.gap = gap;
                 this.launch = launch;
+                this.boostZone = boostZone;
+                this.boostAt = boostAt;
             }
 
             public static Segment Straight(float length, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, 0f);
             public static Segment Gap(float length) => new Segment(length, 0f, 0f, 0f, 0f, true, 0f);
             public static Segment Arc(float radius, float degrees, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(0f, radius, degrees, endGrade, endHalfWidth, false, 0f);
             public static Segment Kicker(float length, float endGrade, float launch, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, launch);
+            public static Segment BoostStraight(float length, float boostAt, float endGrade = 0f, float endHalfWidth = 0f) => new Segment(length, 0f, 0f, endGrade, endHalfWidth, false, 0f, true, boostAt);
 
             public bool IsArc => radius != 0f;
             public bool IsGap => gap;
@@ -70,6 +77,8 @@ namespace ProtoHarness.ChainRush.Track
             public float EndGrade => endGrade;
             public float EndHalfWidth => endHalfWidth;
             public float Launch => launch;
+            public bool HasBoostZone => boostZone;
+            public float BoostAt => boostAt;
 
             // The same float expression as Centerline.AppendArc, so the S values match exactly.
             public float Length => IsArc ? radius * Mathf.Abs(degrees) * Mathf.Deg2Rad : length;
@@ -227,7 +236,7 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles, the
-        // kickers' crests and the shortcuts added.
+        // kickers' crests, boost zones and the shortcuts added.
         public Centerline BuildCenterline(Vector3 origin, float yawDegrees)
         {
             if (!TryValidate(out string error)) throw new InvalidOperationException(error);
@@ -239,6 +248,7 @@ namespace ProtoHarness.ChainRush.Track
             double s = 0d;
             for (int i = 0; i < segments.Count; i++)
             {
+                if (segments[i].HasBoostZone) line.AddBoostZone(s + segments[i].BoostAt);
                 s += segments[i].Length;
                 if (segments[i].Launch > 0f) line.AddLaunch(s, segments[i].Launch);
             }
@@ -344,6 +354,8 @@ namespace ProtoHarness.ChainRush.Track
                 if (float.IsNaN(segment.EndGrade) || Mathf.Abs(segment.EndGrade) > MaxGrade) return Fail($"segment {i}: the end grade {segment.EndGrade} must be within +-{MaxGrade}.", out error);
                 if (segment.Launch != 0f && (segment.IsArc || segment.IsGap || !(segment.Launch > 0f && segment.Launch <= MaxLaunch)))
                     return Fail($"segment {i}: a launch ({segment.Launch}) must be on a road straight and within (0, {MaxLaunch}].", out error);
+                if (segment.HasBoostZone && (segment.IsArc || segment.IsGap || segment.Launch != 0f || !(segment.BoostAt > 0f && segment.BoostAt < segment.Length)))
+                    return Fail($"segment {i}: a boost zone ({segment.BoostAt}) must be inside a road straight (0, {segment.Length}), without a launch.", out error);
                 if (segment.IsArc)
                 {
                     if (segment.IsGap) return Fail($"segment {i}: a gap must be a straight.", out error);

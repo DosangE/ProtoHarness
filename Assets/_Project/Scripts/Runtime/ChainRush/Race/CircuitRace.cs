@@ -85,6 +85,17 @@ namespace ProtoHarness.ChainRush.Race
             definition = replacement;
         }
 
+        // Lays the road and walls with a track's own materials (the lobby's choice, RaceAssembler) instead of the scene's.
+        // Like the definition, before the circuit is built.
+        public void UseLook(TrackLook look)
+        {
+            if (look == null) throw new ArgumentNullException(nameof(look));
+            if (!look.TryValidate(out string error)) throw new ArgumentException(error, nameof(look));
+            if (initialized) throw new InvalidOperationException("CircuitRace: the circuit is already built; set the look before the scene's Awake.");
+            roadMaterial = look.Road;
+            railMaterial = look.Rail;
+        }
+
         // The game asks for the centerline in its Awake, which can run before this Awake, so the circuit is
         // made on the first call of either.
         public Centerline BuildTrack()

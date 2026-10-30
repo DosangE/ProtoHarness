@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush.Flow
@@ -17,8 +18,11 @@ namespace ProtoHarness.ChainRush.Flow
         public RaceMode Mode { get; }
         public SpeedClass Speed { get; }
         public RunnerProfile Runner { get; }
+        // The track's own road and wall materials; null keeps the race scene's.
+        public TrackLook Look { get; }
 
-        public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner)
+        public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner,
+            TrackLook look = null)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A race needs the track's title for the HUD.", nameof(title));
@@ -32,6 +36,7 @@ namespace ProtoHarness.ChainRush.Flow
             Mode = mode;
             Speed = speed;
             Runner = runner;
+            Look = look;
         }
     }
 }

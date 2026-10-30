@@ -7,6 +7,18 @@
 
 ---
 
+## 2026-10-30 · PALM COAST 장식과 트랙별 도로·벽(TrackLook) (`feature/m6-palm-coast-exterior`)
+
+- **결정 (사용자, 2026-10-30)**: "PALM COAST 맵 디자인도 추가했으면 좋겠다", "트랙 서킷의 바닥이나 벽도 디자인해줬으면 한다. 레퍼런스로 삼은 트랙인 카트라이더 비치 해변 드라이브 참고해서" → 요청서(트랙별 모습 SO + 장식 빌더, 영상 프레임으로 색·소재) "승인", 선언(§1-1) 뒤 "장식 작업ㄱㄱ". 구간별 바닥(마을 돌길·다리 콘크리트)은 2단계로 미뤘다.
+- **레퍼런스에서 읽은 것** (기록 영상 `youtu.be/GN3MvHluTvQ` 1랩 7~61 s 를 1 s 간격 접촉 시트로, yt-dlp·OpenCV 는 scratchpad 에만): 짙은 아스팔트와 흰 가장자리 선, 바다 쪽 오르막·마을의 보라색 낮은 벽, 크림색 턱, 해변 모래와 야자수, 청록 바다와 요트, 보라·흰 줄무늬 파라솔과 선베드, 빨간 철골 다리(25~28·43~47 s), 분홍 테라코타 돌길 마을(30~34·48 s), 파스텔 고층 건물, 체크무늬 출발 아치, 코너의 노랑·검정 화살표. 원작의 이름·간판·캐릭터·에셋은 쓰지 않고 색과 소재의 분위기만.
+- **런타임** (표현만, 시뮬은 읽지 않는다): `Race/TrackLook`(SO, 도로·벽 머티리얼, `TryValidate`·`OnValidate`, 메뉴 `ProtoHarness/ChainRush/Track Look`). 로비 `LobbyMenu.TrackChoice.look` → `RaceSetup.Look`(생성자 끝 선택 인자, 기본 null) → `RaceAssembler` → `CircuitRace.UseLook`(서킷을 짓기 전에 도로·벽 머티리얼을 바꾼다, 짓고 나면 예외). 모습이 없는 트랙은 씬의 `M_Deck`·`M_Frame` 그대로.
+- **장식 빌더** `Editor/ChainRush/PalmCoastEnvironmentBuilder` (FINGER LANES 빌더와 같은 형식, 메뉴 `Create/Rebuild Palm Coast Exterior`): `Data/TrackLook_PalmCoast.asset`(도로 `M_PalmRoad` 따뜻한 짙은 아스팔트, 벽 `M_PalmWall` 라벤더), 머티리얼 `M_Palm*` 16개, `Prefabs/PalmCoastExterior.prefab`. 영상의 장면 순서를 랩 비율로: 도시 0~11% · 바다 옆 오르막 ~23% · 해변 ~34% · 빨간 다리 ~40% · 분홍 마을 ~53% · 항구 ~60% · 파라솔 해변 ~68% · 다리 ~75% · 계단 코너 ~87% · 도시. 바다(−4.2 m)와 도로 밑 땅 띠(−2.6 m, 점프 틈 ±14 m 는 비워 바다가 보인다), 시작 아치·"PALM COAST" 글자, 다리 21, 요트 10, 건물 78, 야자수 54, 파라솔 51, 코너 화살표 14 — 렌더러 2728, 충돌체 0, 도로 침범 검사(도로 가장자리 0.7 m, 도로 위 9 m 이상은 예외) 통과.
+  - 침범 검사에 막힌 것과 고친 것: 다리 가새(0.31~0.70 m — 곡선 위 대각선 가새의 축 정렬 경계가 부푼다) 두 번 → 낮은 곳은 곧은 기둥만(가장자리 3 m 밖), 가새·트러스는 9 m 위로. 야자수는 놓는 거리(+4.2 m)가 놓기 전 검사(+4.5 m)보다 짧아 0그루 → 그 뒤 잎(약 4.6 m)이 0.46~0.70 m 로 들어와 → 반경 5.2 m, 가장자리 +7 m.
+- **사용자 몫으로 한 것**: 장식 씬 `Scenes/ChainRushTrackPalmCoast.unity` 저장, 로비 PALM COAST 항목(장식 씬 이름·TrackLook — 값은 `Unity_RunCommand` 로 넣었다) 저장, 빌드 씬 목록에 장식 씬 추가(에디터의 목록에는 있고 — `EditorBuildSettings.scenes` 확인 — `ProjectSettings/EditorBuildSettings.asset` 은 Save Project 때 기록된다. §9-2 에 따라 그것만 담은 브랜치로 커밋).
+- **테스트** `ChainRushFlowTests.Race_WithATrackLook_LaysTheRoadAndWallsWithItsMaterials`: 모습을 준 레이스의 서킷 렌더러 중 모습의 도로·벽 머티리얼을 쓰는 것이 있고 `M_Deck` 은 없다.
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, 바뀐 부분만): 컴파일 `scriptCompilationFailed=False`. PlayMode 2건(위 테스트, `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` — 로비에서 장식 씬·모습과 함께) `testcasecount="2" result="Passed" passed="2" failed="0"` (11:28:41Z~11:29:17Z), PALM COAST 2랩 193.62 s.
+- **남은 것**: 사용자 플레이 확인(장식·도로·벽). 구간별 바닥(2단계). 장식 빌드 시간·렌더러 수(2728)가 플레이어 빌드 성능에 주는 영향은 재지 않았다.
+
 ## 2026-10-30 · 스윙: 줄은 회전 반경만 — 줄을 감아도 빨라지지 않는다(A) · 부스터 최고 32 m/s 를 0.4 s 안에 (`feature/m6-swing-carry-falloff`)
 
 - **결정 (사용자, 2026-10-30)**: S1·S2 뒤 플레이 "아직 스윙에서 여전히 꺾이는 정도에 따라 가속 수준이 차이나는거같다" → 원인 두 가지(줄 감기 배율, 스윙 중 ↑ 1.2배)와 A·B·C 중 "A 추천대로하고 부스트로 속도 한계를 좀 더 올려보자 10~15", 단위는 "m/s 로 말한거였다".

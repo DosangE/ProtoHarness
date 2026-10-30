@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f7a884f16a18d8489528e5fd8a42fd3, type: 3}
+  m_Name: TrackLook_PalmCoast
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Race.TrackLook
+  road: {fileID: 2100000, guid: e574290c2b79444428464df23db4616e, type: 2}
+  rail: {fileID: 2100000, guid: 4330cd818db1de4438e95e4d70ee8f71, type: 2}

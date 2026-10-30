@@ -152,15 +152,19 @@ MonoBehaviour:
   - title: STADIUM
     definition: {fileID: 11400000, guid: 702ef438f9e269f4ea3bc55c61e1d4f5, type: 2}
     environmentScene: ChainRushTrackStadium
+    look: {fileID: 0}
   - title: SKYWAY LOOP
     definition: {fileID: 11400000, guid: 1b518dfd3292dce47904e7b029d0c925, type: 2}
     environmentScene: ChainRushTrackSkyway
+    look: {fileID: 0}
   - title: FINGER LANES
     definition: {fileID: 11400000, guid: b7b22479ac1b36b4380d58c44abcb726, type: 2}
     environmentScene: ChainRushTrackFingerLanes
+    look: {fileID: 0}
   - title: PALM COAST
     definition: {fileID: 11400000, guid: 2c1535d5a14c1ce4482711f1d89f08cd, type: 2}
-    environmentScene: 
+    environmentScene: ChainRushTrackPalmCoast
+    look: {fileID: 11400000, guid: eef08cb38284416449ae4abea4e7cd9b, type: 2}
   runners:
   - {fileID: 11400000, guid: 70e8d84855df5114182dddd9a937357d, type: 2}
   - {fileID: 11400000, guid: 25ffae7fda0824f4ebdf655e4c2a5fd0, type: 2}

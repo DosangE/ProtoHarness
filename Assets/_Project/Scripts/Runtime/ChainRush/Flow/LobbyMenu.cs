@@ -1,6 +1,7 @@
 using System;
 using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Flow.Lobby;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -27,10 +28,13 @@ namespace ProtoHarness.ChainRush.Flow
             [SerializeField] private TrackDefinition definition;
             [Tooltip("Scene loaded additively around the race for looks; empty for none. It must be in the build's scene list.")]
             [SerializeField] private string environmentScene;
+            [Tooltip("The track's own road and wall materials; empty keeps the race scene's.")]
+            [SerializeField] private TrackLook look;
 
             public string Title => title;
             public TrackDefinition Definition => definition;
             public string EnvironmentScene => environmentScene;
+            public TrackLook Look => look;
         }
 
         [SerializeField] private TrackChoice[] tracks;
@@ -232,7 +236,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             TrackChoice track = tracks[context.Track];
             return new RaceSetup(track.Definition, track.Title, track.EnvironmentScene, RaceMode.Single,
-                SpeedPage.ClassAt(context.Speed), runners[context.Runner]);
+                SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look);
         }
 
         private void Go(LobbyPage.Step step)

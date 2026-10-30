@@ -198,6 +198,7 @@ namespace ProtoHarness.ChainRush.Race
             PlaceAnchors();
             scenery.PlaceMarkers(checkpoints);
             scenery.PlacePoles();
+            scenery.PlaceBoostZones();
             Physics.SyncTransforms();
             initialized = true;
             ResetRace();

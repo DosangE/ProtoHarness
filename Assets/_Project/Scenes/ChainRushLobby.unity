@@ -158,6 +158,9 @@ MonoBehaviour:
   - title: FINGER LANES
     definition: {fileID: 11400000, guid: b7b22479ac1b36b4380d58c44abcb726, type: 2}
     environmentScene: ChainRushTrackFingerLanes
+  - title: PALM COAST
+    definition: {fileID: 11400000, guid: 2c1535d5a14c1ce4482711f1d89f08cd, type: 2}
+    environmentScene: 
   runners:
   - {fileID: 11400000, guid: 70e8d84855df5114182dddd9a937357d, type: 2}
   - {fileID: 11400000, guid: 25ffae7fda0824f4ebdf655e4c2a5fd0, type: 2}

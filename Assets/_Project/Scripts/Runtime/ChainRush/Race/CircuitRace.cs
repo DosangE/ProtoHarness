@@ -24,6 +24,8 @@ namespace ProtoHarness.ChainRush.Race
         [SerializeField] private Material railMaterial;
         [SerializeField] private Material lightMaterial;
         [SerializeField] private float maxPieceLength = 50f;
+        // A track look's lane markings (UseLook); none without one.
+        private Material markingsMaterial;
 
         private readonly Stopwatch stepWatch = new Stopwatch();
         private Centerline track;
@@ -94,6 +96,7 @@ namespace ProtoHarness.ChainRush.Race
             if (initialized) throw new InvalidOperationException("CircuitRace: the circuit is already built; set the look before the scene's Awake.");
             roadMaterial = look.Road;
             railMaterial = look.Rail;
+            markingsMaterial = look.Markings;
         }
 
         // The game asks for the centerline in its Awake, which can run before this Awake, so the circuit is
@@ -206,6 +209,7 @@ namespace ProtoHarness.ChainRush.Race
             gaps = definition.Gaps();
             scenery = new CircuitScenery(definition, track, transform, roadMaterial, railMaterial, lightMaterial, maxPieceLength);
             scenery.LayRoad();
+            if (markingsMaterial != null) scenery.PaintMarkings(markingsMaterial);
             PlaceAnchors();
             scenery.PlaceMarkers(checkpoints);
             scenery.PlacePoles();

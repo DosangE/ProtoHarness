@@ -1121,11 +1121,11 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Holding the key toward the pole through each shortcut swing (user 2026-10-27, "steering in a shortcut swing speeds
-        // the runner up far too much"; DECISIONS "측정: 지름길 스윙의 가속은 …"): the rope still speeds the swing up, but
-        // with the throttle no faster than running does — every swinging tick the speed rises by at most the run
-        // acceleration (no booster here). Before the fix a quarter turn went from 19.9 to 30.3 m/s in 0.54 s.
+        // the runner up far too much"; 2026-10-30 "꺾이는 정도에 따라 가속 수준이 차이나는 것 같다"): the rope adds no speed
+        // at all now; only the throttle raises the swing, to 1.2 times the run speed, no faster than running (no booster
+        // here). Before 2026-10-27 a quarter turn went from 19.9 to 30.3 m/s in 0.54 s, before 2026-10-30 to 27.4 m/s.
         [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeSpeedsUpNoFasterThanRunning()
+        public IEnumerator Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeAddsNoSpeed()
         {
             var store = TestRecords();
             TrackDefinition finger = FingerLanes();
@@ -1177,9 +1177,9 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(bot.Taken, Is.EqualTo(2), "Both shortcuts, the inner key held. " + where);
                 Assert.That(swingTicks, Is.GreaterThan(0), "No swing was sampled. " + where);
                 Assert.That(steepestTick, Is.GreaterThanOrEqualTo(0), "No two swinging ticks in a row were sampled. " + where);
-                // The inner key really worked the rope, and the rope still added speed above the throttle's 1.2 times.
+                // The inner key really worked the rope, and the swing went no faster than the throttle's 1.2 times.
                 Assert.That(shortened, Is.True, "The inner key never shortened the rope by a metre. " + where);
-                Assert.That(top, Is.GreaterThan(player.RunSpeed * 1.2f + 1f), "The shortened rope added no speed. " + where);
+                Assert.That(top, Is.LessThanOrEqualTo(player.RunSpeed * 1.2f + 0.05f), "The shortened rope added speed. " + where);
                 Assert.That(steepest, Is.LessThanOrEqualTo(limit + 1e-3f), $"The swing sped up faster than running at tick {steepestTick}. " + where);
             }
             finally

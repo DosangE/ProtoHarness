@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-10-30 · 스윙: 줄은 회전 반경만 — 줄을 감아도 빨라지지 않는다(A) · 부스터 최고 32 m/s 를 0.4 s 안에 (`feature/m6-swing-carry-falloff`)
+
+- **결정 (사용자, 2026-10-30)**: S1·S2 뒤 플레이 "아직 스윙에서 여전히 꺾이는 정도에 따라 가속 수준이 차이나는거같다" → 원인 두 가지(줄 감기 배율, 스윙 중 ↑ 1.2배)와 A·B·C 중 "A 추천대로하고 부스트로 속도 한계를 좀 더 올려보자 10~15", 단위는 "m/s 로 말한거였다".
+- **A** (`PoleSwing.Step`): 스윙 속도 = 건 순간 속도. 줄 배율(건 줄 / 지금 줄, 0.8 .. 1.5)과 그 오르는 빠르기 한도(10-27)를 지웠다 — 줄은 원의 반경만 바꾼다. 건 순간 속도는 전처럼 ↑(달리기 속도의 1.2배까지, 10-22)와 부스터가 올린다(`SpeedUp`). `RunnerMotor.minSwingSpeedScale`·`maxSwingSpeedScale` 와 `PoleSwing.Settings.MinSpeedScale`·`MaxSpeedScale` 을 지웠다(씬에 저장된 0.8·1.5 는 쓰이지 않고 남는다). 위 S2(부스터 몫 한도)는 배율이 없어져 따로 할 일이 없다.
+- **부스터** (서킷 씬 `ChainRushCircuit.unity` 오브젝트 `Runner` 의 직렬화 값, 사용자가 에디터에서 바꾸고 저장 — §0. 작업대 씬은 그대로):
+  - 처음 `slingTopSpeed` 28 → 40 으로 바꾼 뒤 사용자 "순간만 26을 잠시 넘고 40까지 가질 않는다" — 당김 0.4 s 의 가속이 `slingPullAcceleration × (1 − 속도/최고)`(`Slingshot.BoostAcceleration`)라 30 으로는 20 → 약 25.2 m/s 에 그치고, 이어지는 유지(`slingCarryTime` 2.6 s)의 목표가 `slingCarrySpeed` 26 이었다. 최고 속도는 당김의 목표일 뿐이다.
+  - 사용자 "부스트 최대 속도 32" 에 추천값으로 저장: `slingTopSpeed` **32**, `slingPullAcceleration` 30 → **240**, `slingCarrySpeed` 26 → **32**, 당김 0.4 s·유지 2.6 s 그대로. 사용자 "플레이감 좋은거같은데".
+  - 저장 때 Unity 가 이 브랜치의 새 필드(`boostZoneSpeed` 55, `boostZoneFalloff` 0.8, `poleHookArcShare` 0.5, `swingCarryDecay` 0.8, `respawnPadReach` 50 — 코드 기본값)를 씬에 쓰고 지운 필드(`minSwingSpeedScale`·`maxSwingSpeedScale`·`swingCarryFalloff`)를 뺐다(`git diff`).
+  - **측정** `ChainRushProbeTests.Probe_Booster_SpeedOnAStraight`(`[Explicit]`, 새 메서드: FINGER LANES 에서 앞 110 m 가 곧은길이고 부스트존이 없는 곳에서 부스터 한 번, 0.1 s 마다 4 s), `testcasecount="1" result="Passed"` (11:02:20Z~11:03:35Z): 보통 15.27 → 25.6 m/s(최고의 95% 까지 0.20 s), 빠름 19.11 → 32.0(0.24 s), 매우빠름 22.85 → 38.4(0.30 s). 세 단계 모두 3.0 s 까지 최고 속도를 유지하고 그 뒤 약 8 m/s² 로 줄었다. 빠름은 3.7 s 부터 26.4, 매우빠름은 3.1 s 부터 38.1 로 일정해졌다 — 측정 봇(`CircuitBot`)은 스윙하지 않으므로 공중(턱) 구간일 수 있으나 **확인하지 않았다**.
+  - 부스트존 55 > 32 검사 그대로. 부스터만으로는 PALM COAST 바다를 건너지 못한다(32 m/s → 약 28 m, 계산).
+- **테스트를 고친 것 (사양 변경)**: `ChainRushCornerSwingTests` — `Swing_InsideKeyShortensTheRopeAndSpeedsUp_OutsideKeyLetsItOut_WithinTheSpeedLimits` → `…_TheSpeedStaysTheHooks`(감아도 풀어도 건 순간 속도), `Swing_BoosterOnAShortenedRope_SpeedsUpNoFasterThanRunning` → `…_GoesAtTheHooksSpeed`, 놓은 뒤 감속 테스트는 스윙 속도를 줄 대신 ↑ 로 달리기 위로 올린다, `AssertSwingSpeed` 는 건 순간 속도만 본다. `ChainRushFlowTests.Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeSpeedsUpNoFasterThanRunning` → `…_TheRopeAddsNoSpeed`(최고 ≤ 달리기 속도 × 1.2 + 0.05).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, 바뀐 부분만): PlayMode 17건(코너 스윙 클래스, FINGER 지름길 레이스, 롤백(스윙), 스타디움 지문) `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"` (10:42:54Z~10:45:05Z). 지름길 안쪽 키 유지: `157 swinging ticks, top 24.00 m/s, steepest rise 0.1600 m/s a tick (limit 0.1600)` — 27.42 → 24.00. 지문 `0x18F31E7A2B4F79B3` 그대로.
+- **남은 것**: 커밋(지시 때). 부스터 측정 뒤 속도가 일정해진 원인은 확인하지 않았다.
+
+## 2026-10-30 · 스윙: 놓은 뒤 속도도 비례로 빨리 줄고(S1), 줄 감은 채 부스터는 줄 몫 한도 안에서(S2) (`feature/m6-swing-carry-falloff`)
+
+- **결정 (사용자, 2026-10-30)**: 아래 측정 뒤 고칠 방향 S1(놓은 뒤 남는 속도 비례 감속) + S2(스윙 중 부스터 상승분도 줄 몫 한도 안에)에 "추천대로". S3(스윙 중 ↑ 1.2배 규칙)은 하지 않았다.
+- **S1**: `RunDrive.CarryTarget` 하나로 스윙의 `SwingCarrySpeed` 와 부스트존의 `BoostZoneCarrySpeed` 를 같이 다룬다 — 남는 속도가 `k × (남는 속도 − 달리기 목표)` 로 줄고 목표 0.5 m/s 안이면 끝(`CarryEnd`), 땅에서는 실제 감속도 `max(기존, k × (지금 − 달리기 목표))`, 공중은 그대로. 스윙 k = `RunnerMotor.swingCarryDecay` 0.8(새 이름 — 옛 `swingCarryFalloff` 는 "초당 3 m/s" 였고 서킷·작업대 씬에 3 이 저장되어 있어, 같은 이름이면 3 을 비율로 읽는다. 씬의 옛 값은 쓰이지 않고 남는다).
+- **S2**: `PoleSwing.Step` 의 한도에서 부스터 상승분(`boostRise`)을 뺐다 — 줄 배율이 만드는 속도는 부스터 몫까지 `직전 속도 + RunAcceleration·dt` 를 넘지 않는다. 부스터가 올린 건 순간 속도까지는 바로 오른다(아래로 내려가지 않는 바닥이 건 순간 속도). `RunnerMotor` 의 `boostRise` 계산·인자를 지웠다. 2026-10-27 리뷰 수정("줄 감은 채 부스터를 깎는다")을 사용자 결정으로 되돌린 것이다.
+- **테스트를 고친 것 (사양 변경)**: `ChainRushCornerSwingTests.Swing_LettingGo_…_ThenTheExtraFallsOffByThreeASecond` → `…_ThenTheExtraWearsOffInProportion`(놓은 틱 = 스윙 속도 − k·넘친 몫·dt, 처음 0.5 s 감속 > 다음 0.5 s, 1 s 뒤 넘친 몫 0.446 ± 0.03, 그때도 달리기 속도 위). `Swing_BoosterOnAShortenedRope_SpeedsUpByTheRopesRatio` → `…_SpeedsUpNoFasterThanRunning`(부스터 10틱 동안 틱마다 `max(건 순간 속도, 직전 + RunAcceleration·dt)` 이하, 건 순간 속도 × 배율에는 곧바로 닿지 않는다).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, 바뀐 부분만): 컴파일 `scriptCompilationFailed=False`. PlayMode 28건 `testcasecount="28" result="Passed" passed="28" failed="0" skipped="0"` (10:22:19Z~10:24:36Z) — 코너 스윙 클래스, `ChainRushDriftTests.Sling_ThrottleLetGo_*`, `Race_FingerLanesShortcuts_*`, 롤백(스윙·놓은 뒤) 1, PALM COAST 부스트존 6·점프 3(같은 함수로 옮긴 부스트존 감속 — 수치가 전과 같다: 빠름 55.00 → 44.94 → 38.07, 턱 49.50 / 49.47 / 50.01), 바람 1, 스타디움 지문 `0x18F31E7A2B4F79B3` 그대로.
+  - 측정 다시 (`Probe_ShortcutSwing_*`, 10:25:23Z~10:28:37Z, `Passed`) — 둘째 스윙 최고(빠름 / 매우빠름): 안쪽 키 + 부스터 31.54 / 36.41 → **29.14 / 33.06**, 안쪽 키만 27.42 / 31.07 그대로, 조향 안 함 그대로. 요청서의 예상(약 27)보다 덜 줄었다 — 부스터로 건 순간 속도가 약 2 m/s 높은 데서(21.68) 줄 몫 한도 8 m/s² 로 0.94 s 오른다(≈ 29.2). 예상은 같은 출발 속도를 가정했다.
+  - 놓은 뒤 남는 속도는 측정이 놓는 순간까지만 적어 재지 않았다. 29 m/s 로 놓으면 1 s 뒤 약 24, 2 s 뒤 약 21.8 m/s(계산; 전에는 26, 23).
+- **남은 것**: 사용자 플레이 확인. 더 줄이려면 줄 몫 한도(달리기 가속)나 S3.
+
 ## 2026-10-30 · 부스트존 바람 이펙트: 밟는 순간 화면 외곽에 바람 줄기 — 존 속도와 함께 사라진다
 
 - **결정 (사용자, 2026-10-30)**: "부스트존 밟으면 급 가속 되는 이펙트가 필요할것같다. 화면상 외곽에 바람을 가르는 듯한?" → 요청서(흰빛, 세기 = 남은 존 속도 비율)에 "ㄱㄱ".

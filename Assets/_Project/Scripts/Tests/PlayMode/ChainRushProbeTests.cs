@@ -458,6 +458,124 @@ namespace ProtoHarness.Tests.PlayMode
 
         private static float Level(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
+        // The booster on a straight in the circuit scene, every speed class (user 2026-10-30, "부스트 최대 속도 32" with the
+        // pull acceleration 240 and the carry speed 32 saved in ChainRushCircuit.unity): Finger Lanes' bot runs until it is
+        // at running speed with 110 m of straight and no pad ahead, fires one booster there, and the speed is logged every
+        // 0.1 s for 4 s with the top and the time to 95% of the booster's top speed.
+        [UnityTest, Timeout(300000)]
+        public IEnumerator Probe_Booster_SpeedOnAStraight()
+        {
+#if UNITY_EDITOR
+            var finger = AssetDatabase.LoadAssetAtPath<TrackDefinition>(FingerLanesPath);
+#else
+            TrackDefinition finger = null;
+#endif
+            Assert.That(finger, Is.Not.Null, FingerLanesPath);
+            RunnerProfile neutral = ScriptableObject.CreateInstance<RunnerProfile>();
+            neutral.name = "Neutral";
+            var records = new BestRecords("ChainRush.Test.ProbeTests.");
+            var ghosts = new GhostFiles(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ProtoHarnessTests", "ProbeGhosts"));
+            try
+            {
+                foreach (SpeedClass speed in new[] { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast })
+                {
+                    records.Clear(finger.name, speed);
+                    RaceLaunch.Clear();
+                    RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, speed, neutral));
+                    RaceAssembler assembler = null;
+#if UNITY_EDITOR
+                    yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
+#endif
+                    foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+                    {
+                        if (root.TryGetComponent(out RaceAssembler a)) assembler = a;
+                        if (root.TryGetComponent(out ChainRushGame g)) game = g;
+                        if (root.TryGetComponent(out RunnerMotor p)) player = p;
+                        if (root.TryGetComponent(out CircuitRace c)) circuit = c;
+                    }
+                    Assert.That(assembler, Is.Not.Null);
+                    assembler.Records = records;
+                    assembler.Ghosts = ghosts;
+                    float assemblyDeadline = Time.realtimeSinceStartup + 20f;
+                    while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
+                    Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+
+                    var bot = new BoosterOnStraight(game, player, new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
+                    var line = new System.Text.StringBuilder();
+                    float top = 0f, reached = -1f;
+                    Action<int> sample = tick =>
+                    {
+                        if (!bot.Fired) return;
+                        int since = tick - bot.FiredTick;
+                        if (since < 0 || since > Ticks.FromSeconds(4f)) return;
+                        float now = player.HorizontalSpeed;
+                        top = Mathf.Max(top, now);
+                        if (reached < 0f && now >= 0.95f * player.SlingTopSpeed) reached = since * Ticks.Seconds;
+                        if (since % Ticks.FromSeconds(0.1f) == 0) line.Append(now.ToString("0.0")).Append(' ');
+                    };
+                    game.TickCompleted += sample;
+                    yield return RunUntil(bot, () => bot.Fired && game.Tick - bot.FiredTick > Ticks.FromSeconds(4f) + 1, 60f, () => { });
+                    game.TickCompleted -= sample;
+                    Debug.Log($"ChainRush probe booster [{speed}]: run {player.RunSpeed:0.0}, booster top {player.SlingTopSpeed:0.0}, carry {player.SlingCarrySpeed:0.0} m/s; " +
+                              $"fired at s {bot.FiredS:0.0} from {bot.FiredSpeed:0.00} m/s; top {top:0.00} m/s, 95% of the booster's top after " +
+                              $"{(reached < 0f ? "never" : reached.ToString("0.00") + " s")}; every 0.1 s: {line}");
+                    Assert.That(bot.Fired, Is.True, "No straight long enough was found. " + speed);
+                    game.FailRun();
+                }
+            }
+            finally
+            {
+                RaceLaunch.Clear();
+                records.Clear(finger.name, SpeedClass.Normal);
+                records.Clear(finger.name, SpeedClass.Fast);
+                records.Clear(finger.name, SpeedClass.VeryFast);
+                if (System.IO.Directory.Exists(ghosts.Folder)) System.IO.Directory.Delete(ghosts.Folder, true);
+                UnityEngine.Object.Destroy(neutral);
+            }
+        }
+
+        // Another bot's input with one booster fired, a gauge slot given for it, the first tick the runner is on the ground
+        // at running speed with 110 m of straight and no boost pad ahead.
+        private sealed class BoosterOnStraight : IInputSource
+        {
+            private const double Ahead = 110d;
+            private readonly ChainRushGame game;
+            private readonly RunnerMotor player;
+            private readonly IInputSource inner;
+
+            public BoosterOnStraight(ChainRushGame game, RunnerMotor player, IInputSource inner)
+            {
+                this.game = game;
+                this.player = player;
+                this.inner = inner;
+            }
+
+            public bool Fired { get; private set; }
+            public int FiredTick { get; private set; }
+            public double FiredS { get; private set; }
+            public float FiredSpeed { get; private set; }
+
+            public void Poll() => inner.Poll();
+            public void Clear() => inner.Clear();
+
+            public TickInput Consume()
+            {
+                TickInput input = inner.Consume();
+                if (Fired || !player.IsGrounded || player.HorizontalSpeed < 0.95f * player.RunSpeed) return input;
+                double s = game.Track.Project(player.transform.position).S;
+                if (s + Ahead >= game.Track.EndS || game.Track.TryBoostBetween(s, s + Ahead)) return input;
+                for (double d = 0d; d <= Ahead; d += 5d)
+                    if (game.Track.FrameAt(s + d).Curvature != 0f) return input;
+                game.Racer.AddGauge(1f);
+                Fired = true;
+                FiredTick = game.Tick;
+                FiredS = s;
+                FiredSpeed = player.HorizontalSpeed;
+                return new TickInput(input.Steer, input.PrimaryPressed, input.ReleasePressed, input.AttackPressed, input.SwingHeld,
+                    true, input.SwingPressed, input.Coasting, input.Reversing);
+            }
+        }
+
         // Another bot's input with the chain action pressed on the first tick of each swing, a full gauge slot given for it,
         // as a player firing a booster in a shortcut's swing would.
         private sealed class BoosterOnHook : IInputSource

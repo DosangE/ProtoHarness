@@ -92,24 +92,23 @@ namespace ProtoHarness.ChainRush
         // radius plus poleReach (holding the key into reach does not), and only up to poleHookArcShare of the way round its
         // arc, never a corner already passed (user 2026-10-30); the runner circles it for as long as the key is
         // held, with no running force and no time limit. Steering works the rope instead of the facing: the key toward
-        // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength. The speed is the
-        // hook's speed times the hooked rope length over the rope length now, kept within minSwingSpeedScale ..
-        // maxSwingSpeedScale of the hook's speed, the rope and the throttle together adding no faster than the run
-        // acceleration above it (user 2026-10-27); a booster while swinging raises the hook's speed toward its own (PoleSwing.SpeedUp), and
+        // the pole shortens it, the other lets it out, by ropeRate a second, never below minRopeLength; the rope only sets
+        // how tight the circle is, the swing goes at the hook's speed (user 2026-10-30). A booster while swinging raises the
+        // hook's speed toward its own (PoleSwing.SpeedUp), and
         // without one the throttle held raises it toward swingThrottleSpeedScale times the run speed by the run acceleration
         // (user 2026-10-22); let go, the hook's speed stays. Every swingMetersPerSlot swung fills one gauge slot. Letting go carries
-        // the runner straight on at that speed, the part above running speed falling off by swingCarryFalloff a second.
+        // the runner straight on at that speed, the part above running speed falling off by swingCarryDecay of itself a
+        // second on the ground, as a boost pad's does (user 2026-10-30; it was 3 m/s a second under the name
+        // swingCarryFalloff, so the field has a new name rather than read the scenes' 3 as a share).
         // Touching a guard, or a grapple taking hold, ends the swing; a guard ends it without the carry.
         [SerializeField] private float poleMaxAngle = 95f;
         [SerializeField] private float poleReach = 6f;
         [SerializeField] private float poleHookArcShare = 0.5f;
         [SerializeField] private float ropeRate = 6f;
         [SerializeField] private float minRopeLength = 2f;
-        [SerializeField] private float minSwingSpeedScale = 0.8f;
-        [SerializeField] private float maxSwingSpeedScale = 1.5f;
         [SerializeField] private float swingThrottleSpeedScale = 1.2f;
         [SerializeField] private float swingMetersPerSlot = 35f;
-        [SerializeField] private float swingCarryFalloff = 3f;
+        [SerializeField] private float swingCarryDecay = 0.8f;
         // Falling in a circuit race (KartRider style): the runner comes back on the centerline respawnBackoff metres
         // before where it last stood, at rest, and stands there for respawnHoldTime. The time lost is the penalty.
         [SerializeField] private float respawnBackoff = 4f;
@@ -219,8 +218,8 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed, its falloff positive and finite.", this);
             if (!(poleMaxAngle > 0f && poleMaxAngle < 180f) || poleReach < 0f || !(poleHookArcShare > 0f && poleHookArcShare <= 1f) || ropeRate < 0f || minRopeLength <= 0f)
                 Debug.LogError("RunnerMotor: the pole angle must be within (0, 180) degrees, the pole reach and rope rate not negative, the hook's arc share within (0, 1], the shortest rope positive.", this);
-            if (!(minSwingSpeedScale > 0f && minSwingSpeedScale <= 1f) || maxSwingSpeedScale < 1f || swingMetersPerSlot <= 0f || swingCarryFalloff <= 0f)
-                Debug.LogError("RunnerMotor: the swing speed scale range must be within (0, 1] .. [1, inf), the metres per slot and carry falloff positive.", this);
+            if (swingMetersPerSlot <= 0f || !(swingCarryDecay > 0f) || float.IsInfinity(swingCarryDecay))
+                Debug.LogError("RunnerMotor: the swing's metres per slot and carry decay must be positive.", this);
             if (swingThrottleSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: the swing throttle speed scale must be at least 1 (the run speed).", this);
             if (respawnBackoff < 0f || respawnHoldTime < 0f || !(respawnPadReach >= 0f))
@@ -273,9 +272,7 @@ namespace ProtoHarness.ChainRush
             bool pulling = Slingshot.IsPulling(racer.SlingTicks, sling);
             bool carrying = racer.SlingTicks > 0 && !pulling;
             float turnLimit = RunDrive.Turn(racer, grounded, swinging, reversing, dt, drive);
-            float hookSpeedBefore = racer.SwingHookSpeed;
             PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling);
-            float boostRise = pulling || carrying ? racer.SwingHookSpeed - hookSpeedBefore : 0f;
             if (pulling && !swinging) slingTarget = Slingshot.SteerToward(racer, game.Track, frame, transform.position, dt, sling);
             var now = new RunDrive.Conditions
             {
@@ -288,7 +285,7 @@ namespace ProtoHarness.ChainRush
                 GrappleAttached = grapple.IsAttached,
             };
             RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);
-            MoveAndCollide(racer, frame, grounded, swinging, boostRise, dt);
+            MoveAndCollide(racer, frame, grounded, swinging, dt);
             CountDownAndCheckFall(racer);
         }
 
@@ -311,14 +308,14 @@ namespace ProtoHarness.ChainRush
 
         // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
         // the ceiling, a guard, a kicker's crest, the ground and the grapple.
-        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float boostRise, float dt)
+        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float dt)
         {
             ref Vector3 velocity = ref racer.Velocity;
             ref float heading = ref racer.Heading;
             Vector3 before = transform.position;
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
-            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, boostRise, dt, SwingSettings(), out swingAnchor);
+            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, dt, SwingSettings(), out swingAnchor);
             hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
             SyncGrounded();
@@ -395,7 +392,7 @@ namespace ProtoHarness.ChainRush
             MinSlopeSpeedScale = minSlopeSpeedScale,
             MaxSlopeSpeedScale = maxSlopeSpeedScale,
             OverspeedFalloff = overspeedFalloff,
-            SwingCarryFalloff = swingCarryFalloff,
+            SwingCarryFalloff = swingCarryDecay,
             BoostZoneFalloff = boostZoneFalloff,
             Gravity = gravity,
         };
@@ -416,8 +413,6 @@ namespace ProtoHarness.ChainRush
         {
             RopeRate = ropeRate,
             MinRopeLength = minRopeLength,
-            MinSpeedScale = minSwingSpeedScale,
-            MaxSpeedScale = maxSwingSpeedScale,
             ThrottleSpeedScale = swingThrottleSpeedScale,
             MetersPerSlot = SwingMetersPerSlot,
             RunSpeed = RunSpeed,

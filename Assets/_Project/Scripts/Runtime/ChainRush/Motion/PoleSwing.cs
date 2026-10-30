@@ -4,11 +4,10 @@ namespace ProtoHarness.ChainRush.Motion
 {
     // The corner pole swing, the drift of this game (NEXT_REQUESTS.md R4b): the runner circles a pole for as long as the
     // swing key is held, with no running force. Steering works the rope instead of the facing: the key toward the pole
-    // shortens it, the other lets it out, by RopeRate a second, never below MinRopeLength. The speed is the hook's speed
-    // times the hooked rope length over the rope length now, kept within MinSpeedScale .. MaxSpeedScale of the hook's
-    // speed; above the hook's speed the rope and the throttle together add no faster than RunAcceleration, a booster's
-    // rise on top (user 2026-10-27). Every
-    // MetersPerSlot swung fills one gauge slot. The swing's state is RacerState's Swing* values.
+    // shortens it, the other lets it out, by RopeRate a second, never below MinRopeLength. The rope only sets how tight
+    // the circle is: the swing goes at the hook's speed, which the throttle and a booster raise (SpeedUp), however much
+    // the rope is worked (user 2026-10-30). Every MetersPerSlot swung fills one gauge slot. The swing's state is
+    // RacerState's Swing* values.
     public static class PoleSwing
     {
         // The values the rules run on (RunnerMotor's, the speeds already scaled by the runner's profile). Treat it as
@@ -17,8 +16,6 @@ namespace ProtoHarness.ChainRush.Motion
         {
             public float RopeRate;
             public float MinRopeLength;
-            public float MinSpeedScale;
-            public float MaxSpeedScale;
             public float ThrottleSpeedScale;
             public float MetersPerSlot;
             public float RunSpeed;
@@ -46,8 +43,8 @@ namespace ProtoHarness.ChainRush.Motion
         {
             if (!swinging) return;
             ref float hookSpeed = ref racer.SwingHookSpeed;
-            // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, which the rope's ratio
-            // multiplies (Step), rises toward the booster's speed by the same push a booster gives on the ground.
+            // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, the swing's speed (Step),
+            // rises toward the booster's speed by the same push a booster gives on the ground.
             // The rope keeps the facing, so the slingshot's pull does not turn it.
             if (pulling || carrying)
             {
@@ -64,11 +61,10 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // Circles the pole: heading and velocity turn onto the tangent on the side the runner already faces, steering
-        // works the rope, the speed follows the rope, the step is pulled onto the circle, and the distance swung fills
-        // the gauge. anchor is where presentation draws the rope's end. boostRise is how much a booster raised the hook's
-        // speed this tick (SpeedUp; 0 without one): it comes through on top of the limit below.
+        // works the rope, the speed is the hook's, the step is pulled onto the circle, and the distance swung fills the
+        // gauge. anchor is where presentation draws the rope's end.
         public static void Step(RacerState racer, Vector3 position, ref Vector3 velocity, ref float heading, ref Vector3 displacement,
-            float boostRise, float dt, in Settings settings, out Vector3 anchor)
+            float dt, in Settings settings, out Vector3 anchor)
         {
             Vector3 center = racer.SwingCenter;
             center.y = position.y;
@@ -83,17 +79,10 @@ namespace ProtoHarness.ChainRush.Motion
             // +1 when the pole is on the right of the new facing (a right-hand corner, where D is the key toward it).
             float poleSide = Vector3.Dot(-outward, RunDrive.RightOf(heading)) >= 0f ? 1f : -1f;
             racer.SwingRadius = Mathf.Max(settings.MinRopeLength, racer.SwingRadius - racer.Steer * poleSide * settings.RopeRate * dt);
-            float scale = Mathf.Clamp(racer.SwingHookRadius / racer.SwingRadius, settings.MinSpeedScale, settings.MaxSpeedScale);
-            float speed = racer.SwingHookSpeed * scale;
-            // Above the hook's speed, the rope and the throttle together speed the swing up by the run acceleration at most
-            // (user 2026-10-27: a quarter turn in a shortcut went from 19.9 to 30.3 m/s in 0.54 s): a long swing still
-            // reaches the rope's speed, a quick one gains less. A booster's rise comes through on top (review 2026-10-27: a
-            // booster on a short rope was cut), a longer rope slows the swing at once, and it never drops below the hook's.
-            if (speed > racer.SwingHookSpeed)
-            {
-                float was = new Vector2(velocity.x, velocity.z).magnitude;
-                speed = Mathf.Min(speed, Mathf.Max(racer.SwingHookSpeed, was + boostRise + settings.RunAcceleration * dt));
-            }
+            // The rope does not change the speed (user 2026-10-30, "꺾이는 정도에 따라 가속 수준이 차이나는 것 같다"): it was
+            // the hook's speed times hooked rope / rope now, 0.8 .. 1.5, so steering harder round a corner sped it up, and
+            // limiting how fast that came (2026-10-27) still left more for more steering.
+            float speed = racer.SwingHookSpeed;
             velocity = tangent * speed + Vector3.up * velocity.y;
             displacement = velocity * dt;
             Vector3 next = position + displacement - center;
@@ -104,7 +93,7 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // Ends the swing: the runner goes straight on along its facing at the speed it swung with, and what that is above
-        // running speed falls off by RunDrive.Settings.SwingCarryFalloff a second.
+        // running speed falls off by RunDrive.Settings.SwingCarryFalloff of itself a second.
         public static void End(RacerState racer, Vector3 velocity, float heading)
         {
             racer.SwingTicks = 0;

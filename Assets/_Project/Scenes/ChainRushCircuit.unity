@@ -1969,23 +1969,25 @@ MonoBehaviour:
   groundSnapDistance: 0.3
   slingLead: 18
   slingPullTime: 0.4
-  slingPullAcceleration: 30
-  slingTopSpeed: 28
+  slingPullAcceleration: 240
+  slingTopSpeed: 32
   slingTurnRate: 90
   slingCarryTime: 2.6
-  slingCarrySpeed: 26
+  slingCarrySpeed: 32
+  boostZoneSpeed: 55
+  boostZoneFalloff: 0.8
   empoweredReleaseSpeed: 26
   poleMaxAngle: 95
   poleReach: 6
+  poleHookArcShare: 0.5
   ropeRate: 6
   minRopeLength: 2
-  minSwingSpeedScale: 0.8
-  maxSwingSpeedScale: 1.5
   swingThrottleSpeedScale: 1.2
   swingMetersPerSlot: 35
-  swingCarryFalloff: 3
+  swingCarryDecay: 0.8
   respawnBackoff: 4
   respawnHoldTime: 1
+  respawnPadReach: 50
 --- !u!143 &1925527728
 CharacterController:
   m_ObjectHideFlags: 0

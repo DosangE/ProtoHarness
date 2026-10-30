@@ -1397,6 +1397,55 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(palm.CheckpointS(i) / palm.LapLength, Is.EqualTo(new[] { 0.15d, 0.5d, 0.75d }[i]).Within(1e-6d));
         }
 
+        // A track's own look (user 2026-10-30, Palm Coast's road and walls): the race lays the road and the guard walls with
+        // the look's materials instead of the race scene's, and none with the scene's road material is left.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLook_LaysTheRoadAndWallsWithItsMaterials()
+        {
+#if UNITY_EDITOR
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            Assert.That(shader, Is.Not.Null);
+            var road = new Material(shader) { name = "Test look road" };
+            var rail = new Material(shader) { name = "Test look rail" };
+            TrackLook look = ScriptableObject.CreateInstance<TrackLook>();
+            var data = new SerializedObject(look);
+            data.FindProperty("road").objectReferenceValue = road;
+            data.FindProperty("rail").objectReferenceValue = rail;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            try
+            {
+                RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+                RaceAssembler assembler = null;
+                yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+                assembler.Records = store;
+                assembler.Ghosts = ghosts;
+                CircuitRace circuit = Find<CircuitRace>(assembler.gameObject.scene);
+                Assert.That(circuit.PieceCount, Is.GreaterThan(0), "The road was laid.");
+                int roads = 0, rails = 0;
+                foreach (Renderer renderer in circuit.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (renderer.sharedMaterial == road) roads++;
+                    if (renderer.sharedMaterial == rail) rails++;
+                    Assert.That(renderer.sharedMaterial.name, Is.Not.EqualTo("M_Deck"), $"{renderer.name} kept the scene's road material.");
+                }
+                Assert.That(roads, Is.GreaterThan(0), "The road pieces use the look's road.");
+                Assert.That(rails, Is.GreaterThan(0), "The guard walls use the look's rail.");
+            }
+            finally
+            {
+                store.Clear(palm.name, SpeedClass.Fast);
+                UnityEngine.Object.Destroy(look);
+                UnityEngine.Object.Destroy(road);
+                UnityEngine.Object.Destroy(rail);
+            }
+#else
+            Assert.Fail("This test requires the Unity Editor.");
+            yield break;
+#endif
+        }
+
         // Requires Palm Coast as the lobby's fourth unlocked track. Its environment choice, if any, is the scene's.
         [UnityTest, Timeout(120000)]
         public IEnumerator Race_PalmCoastFromTheLobby_BotFinishesTwoLaps()

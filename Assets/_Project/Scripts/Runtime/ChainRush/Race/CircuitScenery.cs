@@ -25,6 +25,8 @@ namespace ProtoHarness.ChainRush.Race
         private readonly List<GameObject> markers = new List<GameObject>(8);
         private readonly List<GameObject> poles = new List<GameObject>(8);
         private Material boostMaterial;
+        private Material boostArrowMaterial;
+        private readonly List<Mesh> markingMeshes = new List<Mesh>(48);
         // Where the main road has no right guard: the shortcuts' crossings (TrackDefinition.ShortcutGuardGaps).
         private readonly List<(double From, double To)> guardGaps;
 
@@ -125,7 +127,9 @@ namespace ProtoHarness.ChainRush.Race
             }
         }
 
-        // Green pads across almost the full road, 6 m long and 3 cm above it. Visual only, like the corner poles.
+        // Dark green pads across almost the full road, 6 m long and 3 cm above it, with bright ">>>" arrows in three
+        // lanes pointing the way to go (user 2026-10-30: "초록색 판 띡 하나 놓는게 아닌 화살표"). Visual only, like the
+        // corner poles.
         public void PlaceBoostZones()
         {
             if (track.BoostZoneCount == 0) return;
@@ -133,8 +137,10 @@ namespace ProtoHarness.ChainRush.Race
             track.GetBoostZones(zones);
             if (boostMaterial == null)
             {
-                boostMaterial = new Material(lightMaterial) { name = "Boost pad", color = new Color(0.1f, 1f, 0.25f) };
-                if (boostMaterial.HasProperty("_EmissionColor")) boostMaterial.SetColor("_EmissionColor", new Color(0.1f, 1f, 0.25f));
+                boostMaterial = new Material(lightMaterial) { name = "Boost pad", color = new Color(0.04f, 0.42f, 0.16f) };
+                if (boostMaterial.HasProperty("_EmissionColor")) boostMaterial.SetColor("_EmissionColor", new Color(0.02f, 0.25f, 0.08f));
+                boostArrowMaterial = new Material(lightMaterial) { name = "Boost pad arrow", color = new Color(0.55f, 1f, 0.45f) };
+                if (boostArrowMaterial.HasProperty("_EmissionColor")) boostArrowMaterial.SetColor("_EmissionColor", new Color(0.4f, 1f, 0.35f));
             }
             for (int i = 0; i < zones.Count; i++)
             {
@@ -144,16 +150,133 @@ namespace ProtoHarness.ChainRush.Race
                 Vector3 forward = frame.Forward + Vector3.up * frame.Grade;
                 Quaternion rotation = Quaternion.LookRotation(forward);
                 pad.transform.SetPositionAndRotation(frame.Position + rotation * Vector3.up * 0.045f, rotation);
-                VisualPart(PrimitiveType.Cube, "Pad", pad.transform, boostMaterial, Vector3.zero,
-                    new Vector3(definition.HalfWidthAt(zones[i]) * 1.9f, 0.03f, 6f));
+                float half = definition.HalfWidthAt(zones[i]);
+                VisualPart(PrimitiveType.Cube, "Pad", pad.transform, boostMaterial, Vector3.zero, new Vector3(half * 1.9f, 0.03f, 6f));
+                for (int lane = -1; lane <= 1; lane++)
+                    for (int row = -1; row <= 1; row++)
+                        Chevron(pad.transform, new Vector3(lane * half * 0.6f, 0.025f, row * 1.8f), 1f, 0f, boostArrowMaterial);
             }
         }
 
-        // Destroys the road pieces' objects and meshes and the pads' material. The bands, poles and pads go with the parent.
+        // A ">" of two flat bars in the pad's plane, its point at tip, pointing along direction (degrees round the
+        // pad's up; 0 is forward), the arms span wide either side.
+        private static void Chevron(Transform parent, Vector3 tip, float span, float direction, Material material)
+        {
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Quaternion arm = Quaternion.Euler(0f, direction + side * 135f, 0f);
+                Vector3 middle = tip + arm * Vector3.forward * span * 0.5f;
+                GameObject bar = VisualPart(PrimitiveType.Cube, "Arrow bar", parent, material, middle, new Vector3(0.35f, 0.02f, span * 1.05f));
+                bar.transform.localRotation = arm;
+            }
+        }
+
+        // Lane markings painted on the main road (a track look's, TrackLook.Markings): a line inside each edge, a dashed
+        // middle line, and three white arrows before every corner of 30 degrees or more, pointing the way it turns. Flat
+        // strips 2 cm above the road on the centerline's own frames, so they follow every bend and slope; none over a
+        // gap. One mesh per stretch of maxPieceLength; no colliders.
+        public void PaintMarkings(Material markings)
+        {
+            if (markings == null) throw new ArgumentNullException(nameof(markings));
+            List<(double Start, double End)> gaps = definition.Gaps();
+            var vertices = new List<Vector3>(4096);
+            var triangles = new List<int>(6144);
+            double lap = track.EndS;
+            int chunk = 0;
+            for (double from = 0d; from < lap; from += maxPieceLength)
+            {
+                double to = Math.Min(lap, from + maxPieceLength);
+                Vector3 origin = track.FrameAt(from).Position;
+                vertices.Clear();
+                triangles.Clear();
+                for (double s = from; s < to - 1e-6; s += 1d)
+                {
+                    double next = Math.Min(to, s + 1d);
+                    if (InGap(gaps, s) || InGap(gaps, next)) continue;
+                    float half = definition.HalfWidthAt(s);
+                    Strip(s, next, half - 0.65f, half - 0.4f, origin, vertices, triangles);
+                    Strip(s, next, -half + 0.4f, -half + 0.65f, origin, vertices, triangles);
+                    // Dashes 3 m on, 3 m off.
+                    if ((int)(s / 3d) % 2 == 0) Strip(s, next, -0.1f, 0.1f, origin, vertices, triangles);
+                }
+                PaintCornerArrows(from, to, gaps, origin, vertices, triangles);
+                if (vertices.Count == 0) continue;
+                var mesh = new Mesh { name = "Road markings " + chunk };
+                mesh.SetVertices(vertices);
+                mesh.SetTriangles(triangles, 0);
+                mesh.RecalculateNormals();
+                markingMeshes.Add(mesh);
+                var painted = new GameObject("Road markings " + chunk++);
+                painted.transform.SetParent(parent, false);
+                painted.transform.position = origin;
+                painted.AddComponent<MeshFilter>().sharedMesh = mesh;
+                painted.AddComponent<MeshRenderer>().sharedMaterial = markings;
+            }
+        }
+
+        // Three arrows across the road 4, 8 and 12 m before each corner's start, pointing to its inside.
+        private void PaintCornerArrows(double from, double to, List<(double Start, double End)> gaps, Vector3 origin, List<Vector3> vertices, List<int> triangles)
+        {
+            double s = 0d;
+            foreach (TrackDefinition.Segment segment in definition.Segments)
+            {
+                double start = s;
+                s += segment.Length;
+                if (!segment.IsArc || Mathf.Abs(segment.Degrees) < 30f) continue;
+                // Right is positive: an arrow for a right-hand corner points to the right (+x across the road).
+                float point = segment.Degrees > 0f ? 1f : -1f;
+                for (int k = 1; k <= 3; k++)
+                {
+                    double at = start - 4d * k;
+                    if (at < from || at >= to || at < 0d || InGap(gaps, at)) continue;
+                    TrackFrame frame = track.FrameAt(at);
+                    for (int arm = -1; arm <= 1; arm += 2)
+                    {
+                        Vector3 a = new Vector3(-point * 0.8f, 0.02f, arm * 1.4f), b = new Vector3(point * 0.8f, 0.02f, 0f);
+                        Vector3 across = Vector3.Cross(Vector3.up, b - a).normalized * 0.25f;
+                        Quad(frame.TransformPoint(a - across) - origin, frame.TransformPoint(a + across) - origin,
+                            frame.TransformPoint(b + across) - origin, frame.TransformPoint(b - across) - origin, vertices, triangles);
+                    }
+                }
+            }
+        }
+
+        // A flat strip from left to right across the road (metres right of the centerline) between two S, 2 cm up.
+        private void Strip(double fromS, double toS, float left, float right, Vector3 origin, List<Vector3> vertices, List<int> triangles)
+        {
+            TrackFrame a = track.FrameAt(fromS), b = track.FrameAt(toS);
+            Quad(a.TransformPoint(new Vector3(left, 0.02f, 0f)) - origin, b.TransformPoint(new Vector3(left, 0.02f, 0f)) - origin,
+                b.TransformPoint(new Vector3(right, 0.02f, 0f)) - origin, a.TransformPoint(new Vector3(right, 0.02f, 0f)) - origin, vertices, triangles);
+        }
+
+        // Corners in order round the quad; both windings, so it shows from above whichever way the corners go round.
+        private static void Quad(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, List<Vector3> vertices, List<int> triangles)
+        {
+            int first = vertices.Count;
+            vertices.Add(p0);
+            vertices.Add(p1);
+            vertices.Add(p2);
+            vertices.Add(p3);
+            triangles.Add(first); triangles.Add(first + 1); triangles.Add(first + 2);
+            triangles.Add(first); triangles.Add(first + 2); triangles.Add(first + 3);
+            triangles.Add(first); triangles.Add(first + 2); triangles.Add(first + 1);
+            triangles.Add(first); triangles.Add(first + 3); triangles.Add(first + 2);
+        }
+
+        private static bool InGap(List<(double Start, double End)> gaps, double s)
+        {
+            for (int i = 0; i < gaps.Count; i++) if (s >= gaps[i].Start && s <= gaps[i].End) return true;
+            return false;
+        }
+
+        // Destroys the road pieces' objects and meshes, the markings' meshes and the pads' materials. The bands, poles,
+        // pads and markings' objects go with the parent.
         public void Destroy()
         {
             for (int i = 0; i < pieces.Count; i++) pieces[i].Destroy();
+            for (int i = 0; i < markingMeshes.Count; i++) Object.Destroy(markingMeshes[i]);
             if (boostMaterial != null) Object.Destroy(boostMaterial);
+            if (boostArrowMaterial != null) Object.Destroy(boostArrowMaterial);
         }
 
         // Pieces from from to to, the half width going linearly from fromWidth to toWidth. A piece that a guard gap
@@ -237,7 +360,7 @@ namespace ProtoHarness.ChainRush.Race
             markers.Add(marker);
         }
 
-        private static void VisualPart(PrimitiveType shape, string name, Transform parent, Material material, Vector3 localPosition, Vector3 localScale)
+        private static GameObject VisualPart(PrimitiveType shape, string name, Transform parent, Material material, Vector3 localPosition, Vector3 localScale)
         {
             GameObject part = GameObject.CreatePrimitive(shape);
             part.name = name;
@@ -249,6 +372,7 @@ namespace ProtoHarness.ChainRush.Race
             part.transform.SetParent(parent, false);
             part.transform.localPosition = localPosition;
             part.transform.localScale = localScale;
+            return part;
         }
     }
 }

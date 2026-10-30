@@ -1398,7 +1398,8 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // A track's own look (user 2026-10-30, Palm Coast's road and walls): the race lays the road and the guard walls with
-        // the look's materials instead of the race scene's, and none with the scene's road material is left.
+        // the look's materials instead of the race scene's, and none with the scene's road material is left; with markings
+        // it paints the lane markings too (CircuitScenery.PaintMarkings).
         [UnityTest]
         public IEnumerator Race_WithATrackLook_LaysTheRoadAndWallsWithItsMaterials()
         {
@@ -1409,10 +1410,12 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(shader, Is.Not.Null);
             var road = new Material(shader) { name = "Test look road" };
             var rail = new Material(shader) { name = "Test look rail" };
+            var markings = new Material(shader) { name = "Test look markings" };
             TrackLook look = ScriptableObject.CreateInstance<TrackLook>();
             var data = new SerializedObject(look);
             data.FindProperty("road").objectReferenceValue = road;
             data.FindProperty("rail").objectReferenceValue = rail;
+            data.FindProperty("markings").objectReferenceValue = markings;
             data.ApplyModifiedPropertiesWithoutUndo();
             try
             {
@@ -1423,15 +1426,18 @@ namespace ProtoHarness.Tests.PlayMode
                 assembler.Ghosts = ghosts;
                 CircuitRace circuit = Find<CircuitRace>(assembler.gameObject.scene);
                 Assert.That(circuit.PieceCount, Is.GreaterThan(0), "The road was laid.");
-                int roads = 0, rails = 0;
+                int roads = 0, rails = 0, painted = 0;
                 foreach (Renderer renderer in circuit.GetComponentsInChildren<Renderer>(true))
                 {
                     if (renderer.sharedMaterial == road) roads++;
                     if (renderer.sharedMaterial == rail) rails++;
+                    if (renderer.sharedMaterial == markings) painted++;
                     Assert.That(renderer.sharedMaterial.name, Is.Not.EqualTo("M_Deck"), $"{renderer.name} kept the scene's road material.");
                 }
                 Assert.That(roads, Is.GreaterThan(0), "The road pieces use the look's road.");
                 Assert.That(rails, Is.GreaterThan(0), "The guard walls use the look's rail.");
+                // One mesh per 50 m stretch: 2001 m a lap is 41 stretches, the one over the sea and its neighbours aside.
+                Assert.That(painted, Is.GreaterThan(30), "The main road's stretches have their markings.");
             }
             finally
             {
@@ -1439,6 +1445,7 @@ namespace ProtoHarness.Tests.PlayMode
                 UnityEngine.Object.Destroy(look);
                 UnityEngine.Object.Destroy(road);
                 UnityEngine.Object.Destroy(rail);
+                UnityEngine.Object.Destroy(markings);
             }
 #else
             Assert.Fail("This test requires the Unity Editor.");

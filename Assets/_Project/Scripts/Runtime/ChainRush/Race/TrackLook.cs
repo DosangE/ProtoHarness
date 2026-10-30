@@ -12,9 +12,12 @@ namespace ProtoHarness.ChainRush.Race
         [SerializeField] private Material road;
         [Tooltip("The guard walls on both edges of the road.")]
         [SerializeField] private Material rail;
+        [Tooltip("Lane markings painted on the road (edge lines, a dashed middle line, arrows before corners); empty paints none.")]
+        [SerializeField] private Material markings;
 
         public Material Road => road;
         public Material Rail => rail;
+        public Material Markings => markings;
 
         // Whether both materials are set; CircuitRace.UseLook refuses a look that is not.
         public bool TryValidate(out string error)

@@ -55,14 +55,17 @@ namespace ProtoHarness.Editor.ChainRush
 
         // Grey asphalt and concrete barriers (user 2026-11-02, "실제 아스팔트 도로 같은 디자인"); 3.6 m lanes, and a two-way
         // highway's double yellow middle line on the 30 m viaduct only (its half width 15; the 12 m roads have three
-        // lanes round the middle).
-        private static void BuildLook()
+        // lanes round the middle). A hazier day over the city, the outer blocks fading into it.
+        // The look and its sky only, the decoration left as it is (user 2026-11-02, the track skies).
+        [MenuItem("ProtoHarness/Chain Rush/Rebuild Skyway Look")]
+        public static void BuildLook()
             => ExteriorAssets.BuildLook(LookPath,
                 ExteriorAssets.Surface("Skyway", "Road", new Color(0.26f, 0.27f, 0.29f), ExteriorAssets.Grain.Asphalt, 4f, 0.12f),
                 ExteriorAssets.Surface("Skyway", "Wall", new Color(0.74f, 0.74f, 0.71f), ExteriorAssets.Grain.Concrete, 3f, 0.08f),
                 ExteriorAssets.Palette("Skyway", "Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f),
                 ExteriorAssets.Palette("Skyway", "Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
-                new ExteriorAssets.Lanes(3.6f, 14f, true, false));
+                new ExteriorAssets.Lanes(3.6f, 14f, true, false),
+                ExteriorAssets.BuildSky("Skyway", new Color(0.33f, 0.55f, 0.86f), new Color(0.80f, 0.85f, 0.91f), new Color(0.98f, 0.98f, 0.97f), 0.5f, false, 180f, 620f));
 
         private static Material Require(string name) => ExteriorAssets.Require<Material>(ExteriorAssets.MaterialFolder + name);
 

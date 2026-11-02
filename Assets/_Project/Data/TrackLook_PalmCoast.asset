@@ -20,3 +20,7 @@ MonoBehaviour:
   laneWidth: 3.6
   centreFromHalfWidth: 0
   solidLanes: 0
+  sky: {fileID: 2100000, guid: f7ea3cc83d81e434b89c1eb23fb0fbe1, type: 2}
+  horizon: {r: 0.84, g: 0.89, b: 0.93, a: 1}
+  fogStart: 170
+  fogEnd: 560

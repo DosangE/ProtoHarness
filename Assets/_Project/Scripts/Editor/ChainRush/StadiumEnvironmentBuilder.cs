@@ -48,14 +48,19 @@ namespace ProtoHarness.Editor.ChainRush
         }
 
         // A running track (user 2026-11-02, "계주용 (레인이 많은) 디자인"): red rubber with solid white lines 1.22 m apart
-        // and no middle line, pale walls that read under the floodlights, yellow take-off boards at the water jumps.
-        private static void BuildLook()
+        // and no middle line, pale walls that read under the floodlights, yellow take-off boards at the water jumps. The
+        // sky stays the race scene's night (the title's "AFTER DARK"; user 2026-11-02, night for the stadium only) with
+        // stars and a few dark clouds over a navy horizon, the fog a little further out than the scene's 45-210 m.
+        // The look and its sky only, the decoration left as it is (user 2026-11-02, the track skies).
+        [MenuItem("ProtoHarness/Chain Rush/Rebuild Stadium Look")]
+        public static void BuildLook()
             => ExteriorAssets.BuildLook(LookPath,
                 ExteriorAssets.Surface("Stadium", "Road", new Color(0.60f, 0.24f, 0.17f), ExteriorAssets.Grain.Rubber, 2f, 0.06f),
                 ExteriorAssets.Surface("Stadium", "Wall", new Color(0.80f, 0.83f, 0.82f), ExteriorAssets.Grain.Concrete, 3f, 0.08f),
                 ExteriorAssets.Palette("Stadium", "Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f),
                 ExteriorAssets.Palette("Stadium", "Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
-                new ExteriorAssets.Lanes(1.22f, 99f, false, true));
+                new ExteriorAssets.Lanes(1.22f, 99f, false, true),
+                ExteriorAssets.BuildSky("Stadium", new Color(0.012f, 0.016f, 0.05f), new Color(0.06f, 0.06f, 0.13f), new Color(0.11f, 0.11f, 0.19f), 0.22f, true, 60f, 300f));
 
         private static GameObject BuildPrefab()
         {

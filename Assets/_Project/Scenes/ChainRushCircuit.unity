@@ -2792,6 +2792,7 @@ MonoBehaviour:
   game: {fileID: 2105445612}
   circuit: {fileID: 1927120373}
   player: {fileID: 1925527727}
+  viewCamera: {fileID: 493584858}
 --- !u!1001 &1256964004434069242
 PrefabInstance:
   m_ObjectHideFlags: 0

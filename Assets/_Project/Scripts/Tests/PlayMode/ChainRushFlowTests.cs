@@ -1425,6 +1425,9 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(roads, Is.GreaterThan(0), $"The road pieces use {look.name}'s road.");
             Assert.That(rails, Is.GreaterThan(0), $"The guard walls use {look.name}'s rail.");
             Assert.That(painted, Is.GreaterThan(0), $"The road has {look.name}'s lane markings.");
+            if (look.Sky == null) return;
+            Assert.That(RenderSettings.skybox, Is.SameAs(look.Sky), $"The race draws {look.name}'s sky.");
+            Assert.That(RenderSettings.fogColor, Is.EqualTo(look.Horizon), $"The fog is {look.name}'s horizon.");
         }
 
         // A track's own look (user 2026-10-30, Palm Coast's road and walls): the race lays the road and the guard walls with
@@ -1476,6 +1479,63 @@ namespace ProtoHarness.Tests.PlayMode
                 UnityEngine.Object.Destroy(road);
                 UnityEngine.Object.Destroy(rail);
                 UnityEngine.Object.Destroy(markings);
+            }
+#else
+            Assert.Fail("This test requires the Unity Editor.");
+            yield break;
+#endif
+        }
+
+        // A track look's sky (user 2026-11-02, "하늘 … 서킷 공통적으로"): the race camera draws it behind everything instead of
+        // the scene's flat colour, the fog thickens linearly to its horizon colour between its distances, and the camera
+        // draws no further than the fog's end.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLookSky_DrawsTheSkyAndFogsToItsHorizon()
+        {
+#if UNITY_EDITOR
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            Shader panorama = Shader.Find("Skybox/Panoramic");
+            Assert.That(lit, Is.Not.Null);
+            Assert.That(panorama, Is.Not.Null);
+            var road = new Material(lit) { name = "Test look road" };
+            var rail = new Material(lit) { name = "Test look rail" };
+            var sky = new Material(panorama) { name = "Test look sky" };
+            var horizon = new Color(0.7f, 0.8f, 0.9f, 1f);
+            TrackLook look = ScriptableObject.CreateInstance<TrackLook>();
+            var data = new SerializedObject(look);
+            data.FindProperty("road").objectReferenceValue = road;
+            data.FindProperty("rail").objectReferenceValue = rail;
+            data.FindProperty("sky").objectReferenceValue = sky;
+            data.FindProperty("horizon").colorValue = horizon;
+            data.FindProperty("fogStart").floatValue = 120f;
+            data.FindProperty("fogEnd").floatValue = 430f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            try
+            {
+                RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+                RaceAssembler assembler = null;
+                yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+                assembler.Records = store;
+                assembler.Ghosts = ghosts;
+                Camera view = Find<FollowCamera>(assembler.gameObject.scene).GetComponent<Camera>();
+                Assert.That(RenderSettings.skybox, Is.SameAs(sky), "The race draws the look's sky.");
+                Assert.That(view.clearFlags, Is.EqualTo(CameraClearFlags.Skybox), "The camera clears to the sky, not the scene's flat colour.");
+                Assert.That(RenderSettings.fog, Is.True);
+                Assert.That(RenderSettings.fogMode, Is.EqualTo(FogMode.Linear));
+                Assert.That(RenderSettings.fogColor, Is.EqualTo(horizon), "The far land fades into the horizon's colour.");
+                Assert.That(RenderSettings.fogStartDistance, Is.EqualTo(120f));
+                Assert.That(RenderSettings.fogEndDistance, Is.EqualTo(430f));
+                Assert.That(view.farClipPlane, Is.EqualTo(430f), "Nothing past the fog's end is drawn.");
+            }
+            finally
+            {
+                store.Clear(palm.name, SpeedClass.Fast);
+                UnityEngine.Object.Destroy(look);
+                UnityEngine.Object.Destroy(road);
+                UnityEngine.Object.Destroy(rail);
+                UnityEngine.Object.Destroy(sky);
             }
 #else
             Assert.Fail("This test requires the Unity Editor.");

@@ -18,6 +18,8 @@ namespace ProtoHarness.ChainRush.Flow
         [SerializeField] private ChainRushGame game;
         [SerializeField] private CircuitRace circuit;
         [SerializeField] private RunnerMotor player;
+        [Tooltip("The race camera, which draws the track look's sky (UseSky).")]
+        [SerializeField] private Camera viewCamera;
         private RaceSetup setup;
         private bool launched;
         private bool countedIn;
@@ -67,9 +69,9 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Awake()
         {
-            if (game == null || circuit == null || player == null)
+            if (game == null || circuit == null || player == null || viewCamera == null)
             {
-                Debug.LogError("RaceAssembler: game, circuit and player are required.", this);
+                Debug.LogError("RaceAssembler: game, circuit, player and the view camera are required.", this);
                 enabled = false;
                 return;
             }
@@ -156,6 +158,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (!launched) return;
             started = true;
+            if (setup.Look != null && setup.Look.Sky != null) UseSky(setup.Look);
             ShowGhost();
             if (setup.EnvironmentScene.Length == 0)
             {
@@ -171,6 +174,22 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             load.completed += _ => CountIn();
+        }
+
+        // The track look's sky behind everything and its horizon colour as the fog (user 2026-11-02, "최외곽이 살짝
+        // 비어보인다"), so the far land fades into the sky; the camera draws no further than the fog's end, where nothing
+        // but fog is left. Set in Start, once the race scene is the active one: these render settings are the race
+        // scene's and go with it when the lobby loads. Presentation only.
+        private void UseSky(TrackLook look)
+        {
+            RenderSettings.skybox = look.Sky;
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = look.Horizon;
+            RenderSettings.fogStartDistance = look.FogStart;
+            RenderSettings.fogEndDistance = look.FogEnd;
+            viewCamera.clearFlags = CameraClearFlags.Skybox;
+            viewCamera.farClipPlane = look.FogEnd;
         }
 
         // The best run on this track at this speed, whichever runner set it, loaded before the start and again when a race

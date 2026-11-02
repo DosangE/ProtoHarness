@@ -86,6 +86,33 @@ namespace ProtoHarness.Tests.EditMode
             StringAssert.Contains("lanes must be at least 1 m wide", error);
         }
 
+        [Test]
+        public void TryValidate_SkyWhoseFogEndsBeforeItBegins_IsRefused()
+        {
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("the sky's fog must begin"));
+            TrackLook look = Look(3.6f, 0f, false, false);
+            var sky = new Material(Shader.Find("Skybox/Panoramic")) { name = "Test sky" };
+            made.Add(sky);
+            var data = new SerializedObject(look);
+            data.FindProperty("sky").objectReferenceValue = sky;
+            data.FindProperty("fogStart").floatValue = 300f;
+            data.FindProperty("fogEnd").floatValue = 200f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(look.TryValidate(out string error), Is.False);
+            StringAssert.Contains("the sky's fog must begin", error);
+        }
+
+        [Test]
+        public void TryValidate_NoSky_DoesNotCheckTheFog()
+        {
+            TrackLook look = Look(3.6f, 0f, false, false);
+            var data = new SerializedObject(look);
+            data.FindProperty("fogStart").floatValue = 300f;
+            data.FindProperty("fogEnd").floatValue = 200f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(look.TryValidate(out string error), Is.True, error);
+        }
+
         private TrackLook Look(float laneWidth, float centreFromHalfWidth, bool doubleCentre, bool solid)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Lit");

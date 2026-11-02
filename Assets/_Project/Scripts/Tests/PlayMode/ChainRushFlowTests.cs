@@ -22,19 +22,16 @@ namespace ProtoHarness.Tests.PlayMode
 {
     // The game's skeleton (DESIGN.md §5-1 M2, DECISIONS 2026-10-19 "M2 씬 구성"): the lobby builds a RaceSetup page by
     // page and refuses locked entries; the race scene takes the setup (RaceLaunch) and assembles itself from it, or runs as
-    // saved when opened directly. Scenes are loaded by path here, so only the last test needs the build's scene list.
+    // saved when opened directly. Lap runs also check the build's scene list and load the race by name.
     public sealed class ChainRushFlowTests
     {
         private const string LobbyPath = "Assets/_Project/Scenes/ChainRushLobby.unity";
         private const string RacePath = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         private const string TitlePath = "Assets/_Project/Scenes/ChainRushTitle.unity";
-        private const string EnvironmentPath = "Assets/_Project/Scenes/ChainRushTrackStadium.unity";
         private const string EnvironmentScene = "ChainRushTrackStadium";
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
         private const string SkywayPath = "Assets/_Project/Data/Circuit_Skyway.asset";
-        private const string SkywayEnvironmentScene = "ChainRushTrackSkyway";
         private const string FingerLanesPath = "Assets/_Project/Data/Circuit_FingerLanes.asset";
-        private const string FingerLanesEnvironmentScene = "ChainRushTrackFingerLanes";
         private const string PalmCoastPath = "Assets/_Project/Data/Circuit_PalmCoast.asset";
 
         private const string TestTitle = "TEST TRACK";
@@ -676,11 +673,10 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt()
         {
             var store = TestRecords();
-            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceSetup setup = default;
+            yield return Load(LobbyPath, loaded => setup = LobbyLapSetup(Find<LobbyMenu>(loaded), "STADIUM", SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
+            yield return LoadLapRace(setup, store, ghosts, loaded => assembler = loaded);
             Scene scene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(scene);
             RunnerMotor player = Find<RunnerMotor>(scene);
@@ -694,7 +690,26 @@ namespace ProtoHarness.Tests.PlayMode
                 float deadline = Time.realtimeSinceStartup + 90f;
                 while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
                 Time.timeScale = scale;
+                // User 2026-11-02: keep the old CircuitTests' exact finish accounting here, in the run that must finish
+                // to save a record and ghost. The Lap matrix stops at lap one and never repeats these three laps.
+                LapCounter laps = circuit.Laps;
+                Assert.That(game.HasFailed, Is.False, "The bot fell or died.");
+                Assert.That(laps.IsFinished, Is.True);
                 Assert.That(game.HasFinished, Is.True, "The bot did not finish three laps.");
+                Assert.That(laps.CompletedLaps, Is.EqualTo(3));
+                double lapSeconds = circuit.Definition.LapLength / 20d;
+                int sum = 0;
+                for (int lap = 1; lap <= 3; lap++)
+                {
+                    Assert.That(Ticks.ToSeconds(laps.LapTicks(lap)), Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
+                    sum += laps.LapTicks(lap);
+                    for (int cp = 0; cp < 3; cp++)
+                        Assert.That(laps.CheckpointTick(lap, cp), Is.GreaterThan(0), $"lap {lap} checkpoint {cp}");
+                }
+                Assert.That(laps.TotalTicks, Is.EqualTo(sum));
+                Assert.That(game.Tick, Is.EqualTo(laps.LapEndTick(3)), "The game ends on the third lap's last tick.");
+                Assert.That(game.Elapsed, Is.EqualTo(Ticks.ToSeconds(laps.TotalTicks)).Within(1e-3f));
+                Assert.That(game.Health, Is.EqualTo(3));
                 yield return null;
                 Assert.That(assembler.LastFinishWasBest, Is.True);
                 // M4-2: compared with what was kept before it — nothing, so a first record.
@@ -716,6 +731,7 @@ namespace ProtoHarness.Tests.PlayMode
                 yield return null;
                 Assert.That(assembler.HasGhost, Is.True, "RUN AGAIN after a new best races its ghost.");
                 Assert.That(assembler.Ghost.Count, Is.EqualTo(saved.Count));
+                yield return LeaveLapRace(assembler, setup.EnvironmentScene);
             }
             finally
             {
@@ -793,172 +809,268 @@ namespace ProtoHarness.Tests.PlayMode
         // ---- the skyway (DECISIONS 2026-10-21 "SKYWAY LOOP") -----------------------------------------------
 
         [UnityTest]
-        public IEnumerator Lobby_SkywayTrack_IsChosenWithItsEnvironment()
+        public IEnumerator Lobby_TrackChoices_AreChosenWithTheirSavedSetup(
+            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST")] string title)
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             menu.Confirm();
-            menu.Highlight(1);
+            int index = title == "STADIUM" ? 0 : title == "SKYWAY LOOP" ? 1 : title == "FINGER LANES" ? 2 : 3;
+            menu.Highlight(index);
             menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "The skyway can be raced.");
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), title + " can be raced.");
             RaceSetup setup = menu.BuildSetup();
-            Assert.That(setup.Track, Is.SameAs(Skyway()));
-            Assert.That(setup.Title, Is.EqualTo("SKYWAY LOOP"));
-            Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
+            RaceSetup saved = LobbyLapSetup(menu, title, SpeedClass.Fast, runner);
+            Assert.That(setup.Track, Is.SameAs(saved.Track));
+            Assert.That(setup.Title, Is.EqualTo(title));
+            Assert.That(setup.EnvironmentScene, Is.EqualTo(saved.EnvironmentScene));
+            Assert.That(setup.Look, Is.SameAs(saved.Look));
         }
 
-        // The elevated stretch (user 2026-10-22): the road is 30 m across from the wide corner before the long straight to
-        // the one after it, and seven swing poles stand along the straight every 40 m, left first, 11 m off the centerline.
+        // Specification changed, user 2026-11-02: a pre-existing 30 m highway, with its middle 9 m left of the
+        // 12 m racing lanes; the corners are separate 12 m ramps. Seven poles stay 40 m apart, +/-11 m from
+        // the HIGHWAY middle, left first (the right pole is now +2 m from the racing line).
         [Test]
         public void Skyway_ElevatedStretch_IsWideWithSevenAlternatingSwingPoles()
         {
             TrackDefinition skyway = Skyway();
             Assert.That(skyway.TryValidate(out string error), Is.True, error);
             System.Collections.Generic.IReadOnlyList<TrackDefinition.Segment> segments = skyway.Segments;
-            const int straight = 10;
+            const int straight = 11;
             Assert.That(segments[straight].IsArc, Is.False);
-            Assert.That(segments[straight].Length, Is.EqualTo(280f));
+            Assert.That(segments[straight].Length, Is.EqualTo(330f));
             double start = 0d;
             for (int i = 0; i < straight; i++) start += segments[i].Length;
             double end = start + segments[straight].Length;
+            TrackDefinition.Bay highway = skyway.Bays[1];
+            Assert.That(highway.StraightDeck, Is.True);
+            Assert.That(highway.FromS, Is.EqualTo(start).Within(0.001d));
+            Assert.That(highway.ToS, Is.EqualTo(end).Within(0.001d));
+            Assert.That(highway.Width + 2f * skyway.HalfWidthAt(start), Is.EqualTo(30f));
+            Assert.That(highway.Extension, Is.EqualTo(50f));
             double cornerBefore = start - segments[straight - 1].Length, cornerAfter = end + segments[straight + 1].Length;
-            for (double s = cornerBefore; s <= cornerAfter; s += 10d) Assert.That(skyway.HalfWidthAt(s), Is.EqualTo(15f).Within(1e-4f), "at S " + s.ToString("0"));
+            for (double s = cornerBefore; s <= cornerAfter; s += 10d) Assert.That(skyway.HalfWidthAt(s), Is.EqualTo(6f).Within(1e-4f), "12 m ramps/racing lanes at S " + s.ToString("0"));
             Assert.That(skyway.HalfWidthAt(0d), Is.EqualTo(RoadProfile.DeckHalfWidth), "The start line keeps the usual road.");
-            Assert.That(skyway.WidestHalfWidth, Is.EqualTo(15f));
+            Assert.That(skyway.WidestHalfWidth, Is.EqualTo(6f), "The separate highway no longer widens the racing road.");
             Assert.That(skyway.Poles.Count, Is.EqualTo(7));
             for (int i = 0; i < skyway.Poles.Count; i++)
             {
                 TrackDefinition.Pole pole = skyway.Poles[i];
                 Assert.That(pole.S, Is.EqualTo(start + 20d + 40d * i).Within(1e-3d), "pole " + i);
-                Assert.That(pole.Offset, Is.EqualTo(i % 2 == 0 ? -11f : 11f), "pole " + i + " alternates, left first");
+                Assert.That(pole.Offset + 9f, Is.EqualTo(i % 2 == 0 ? -11f : 11f), "pole " + i + " alternates about the highway middle, left first");
                 Assert.That(pole.Reach, Is.EqualTo(10f));
                 Assert.That(pole.S, Is.InRange(start, end), "pole " + i + " is on the straight");
             }
         }
 
-        // The real lobby setup loads the decoration-only skyway environment, then the bot runs both laps: no fall,
-        // no guard touched, each lap close to the lap length at 20 m/s. Returning unloads the decoration too.
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Race_SkywayFromTheLobby_BotFinishesTwoLaps()
+        // The on-ramp (user 2026-11-02, "넓은 지상도로에서 고가를 향해 오르막으로 가는게 정식 루트이고 넓은 지상도로의 정면은
+        // 가드로 막혀"): beside the flat approach the bay is road at the road's height with no guard between it and the
+        // race's lanes, it ends square against a guard a runner going straight on meets, and the race's lanes go on.
+        [UnityTest]
+        public IEnumerator Race_SkywayBay_IsOneRoadWithTheLanesAndEndsAgainstAGuard()
         {
-            var store = TestRecords();
             TrackDefinition skyway = Skyway();
-            store.Clear(skyway.name, SpeedClass.Fast);
-            Assert.That(skyway.TryValidate(out string error), Is.True, error);
-            LobbyMenu menu = null;
-            yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
-            menu.Confirm();
-            menu.Confirm();
-            menu.Highlight(1);
-            menu.Confirm();
-            RaceSetup setup = menu.BuildSetup();
-            Assert.That(setup.Track, Is.SameAs(skyway));
-            Assert.That(setup.EnvironmentScene, Is.EqualTo(SkywayEnvironmentScene));
-            RaceLaunch.Request(setup);
+            Assert.That(skyway.Bays.Count, Is.EqualTo(2), "User 2026-11-02: the original ground bay plus the independent highway.");
+            TrackDefinition.Bay bay = skyway.Bays[0];
+            Assert.That(bay.Left, Is.True);
+            RaceLaunch.Request(new RaceSetup(skyway, "SKYWAY LOOP", "", RaceMode.Single, SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return new WaitForFixedUpdate();
+            Physics.SyncTransforms();
+            PhysicsScene physics = assembler.gameObject.scene.GetPhysicsScene();
+            Centerline line = skyway.BuildCenterline(Vector3.zero, 0f);
+            float main = skyway.HalfWidthAt(bay.FromS);
+            TrackFrame frame = line.FrameAt(bay.ToS - 8d);
+            Vector3 left = -frame.Right;
+            Vector3 overBay = frame.Position + left * (main + bay.Width * 0.5f);
+            Assert.That(physics.Raycast(overBay + Vector3.up * 3f, Vector3.down, out RaycastHit ground, 10f), Is.True, "Road under the bay.");
+            Assert.That(ground.point.y, Is.EqualTo(frame.Position.y).Within(0.01f), "The bay is level with the road.");
+            Vector3 lanes = frame.Position + Vector3.up;
+            Assert.That(physics.Raycast(lanes, left, main + bay.Width - 0.5f), Is.False, "No guard between the race's lanes and the bay.");
+            Assert.That(physics.Raycast(overBay + Vector3.up, frame.Forward, out RaycastHit wall, 30f), Is.True, "A runner going straight on in the bay meets the end guard.");
+            Assert.That(Vector3.Dot(wall.point - line.FrameAt(bay.ToS).Position, frame.Forward), Is.EqualTo(-RoadMeshBuilder.GuardThickness).Within(0.05f),
+                "The guard stands square across the bay's end.");
+            Assert.That(physics.Raycast(lanes, frame.Forward, 14f), Is.False, "The race's own lanes go on up the ramp.");
+        }
+
+        // User 2026-11-02: the highway runs straight past both junctions, closed across its full width. Its
+        // racing lanes share the slab with the other lanes; the right ramps have no guard across their join.
+        [UnityTest]
+        public IEnumerator Race_SkywayHighway_ClosesBothEndsAndJoinsRampsWithoutInteriorGuards()
+        {
+            TrackDefinition skyway = Skyway();
+            TrackDefinition.Bay bay = skyway.Bays[1];
+            Assert.That(bay.StraightDeck, Is.True);
+            TrackLook look = null;
+#if UNITY_EDITOR
+            look = AssetDatabase.LoadAssetAtPath<TrackLook>("Assets/_Project/Data/TrackLook_Skyway.asset");
+#endif
+            Assert.That(look, Is.Not.Null);
+            RaceLaunch.Request(new RaceSetup(skyway, "SKYWAY LOOP", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return new WaitForFixedUpdate();
+            Physics.SyncTransforms();
+            PhysicsScene physics = assembler.gameObject.scene.GetPhysicsScene();
+            Centerline line = skyway.BuildCenterline(Vector3.zero, 0f);
+            TrackFrame join = line.FrameAt(bay.FromS);
+            float length = bay.ToS - bay.FromS;
+            foreach (float x in new[] { -23f, -9f, 0f, 5f })
+            {
+                Vector3 behind = join.TransformPoint(new Vector3(x, 1f, -20f));
+                Assert.That(physics.Raycast(behind, -join.Forward, out RaycastHit start, 40f), Is.True, "The whole highway is blocked behind the join, x=" + x);
+                Assert.That(join.InverseTransformPoint(start.point).z, Is.EqualTo(-50f + RoadMeshBuilder.GuardThickness).Within(0.05f));
+                Vector3 beyond = join.TransformPoint(new Vector3(x, 1f, length + 20f));
+                Assert.That(physics.Raycast(beyond, join.Forward, out RaycastHit end, 40f), Is.True, "The whole highway is blocked beyond the exit, x=" + x);
+                Assert.That(join.InverseTransformPoint(end.point).z, Is.EqualTo(length + 50f - RoadMeshBuilder.GuardThickness).Within(0.05f));
+                Vector3 above = join.TransformPoint(new Vector3(x, 3f, 100f));
+                Assert.That(physics.Raycast(above, Vector3.down, out RaycastHit road, 6f), Is.True);
+                Assert.That(road.point.y, Is.EqualTo(join.Position.y).Within(0.01f));
+            }
+            foreach (double s in new[] { bay.FromS - 10d, bay.FromS + 10d, bay.ToS - 10d, bay.ToS + 10d })
+            {
+                TrackFrame frame = line.FrameAt(s);
+                Assert.That(physics.Raycast(frame.Position + Vector3.up, -join.Right, 20f), Is.False, "No interior guard at S " + s);
+            }
+            for (double s = bay.FromS - 50d; s < bay.ToS + 50d; s += 0.5d)
+            {
+                TrackFrame frame = line.FrameAt(s);
+                Assert.That(physics.Raycast(frame.Position + Vector3.up * 2f, Vector3.down, out RaycastHit road, 4f), Is.True, "Continuous ramp/deck surface at S " + s);
+                Assert.That(road.point.y, Is.EqualTo(frame.Position.y).Within(0.015f));
+            }
+            Assert.That(Vector3.Dot(line.FrameAt(bay.FromS - 50d).Position - join.Position, join.Right), Is.GreaterThan(6f), "The join ramp approaches from the north/right.");
+            Assert.That(Vector3.Dot(line.FrameAt(bay.ToS + 50d).Position - line.FrameAt(bay.ToS).Position, join.Right), Is.GreaterThan(6f), "The exit ramp goes north/right.");
+            CircuitRace circuit = Find<CircuitRace>(assembler.gameObject.scene);
+            int centreVertices = 0, joinHatches = 0, exitHatches = 0;
+            foreach (MeshFilter filter in circuit.GetComponentsInChildren<MeshFilter>())
+            {
+                if (filter.name != "Highway accent") continue;
+                foreach (Vector3 vertex in filter.sharedMesh.vertices)
+                {
+                    Vector3 local = join.InverseTransformPoint(filter.transform.TransformPoint(vertex));
+                    if (Mathf.Abs(local.y - 0.025f) < 0.001f)
+                    {
+                        Assert.That(Mathf.Abs(local.x + 9f), Is.EqualTo(0.08f).Within(0.001f).Or.EqualTo(0.2f).Within(0.001f), "Yellow double lines use the highway middle.");
+                        centreVertices++;
+                    }
+                    if (Mathf.Abs(local.y - 0.03f) < 0.001f && local.x > 2f)
+                    {
+                        if (local.z < 0f) joinHatches++;
+                        if (local.z > length) exitHatches++;
+                    }
+                }
+            }
+            Assert.That(centreVertices, Is.GreaterThan(100));
+            Assert.That(joinHatches, Is.GreaterThan(10), "Yellow hatching at the join gore.");
+            Assert.That(exitHatches, Is.GreaterThan(10), "Yellow hatching at the exit gore.");
+        }
+
+        // The altered collision path needs a rollback through each ramp/deck seam, as well as the unchanged
+        // STADIUM fingerprint. Record and restore with the existing StateTrace/InputLog tools, tick by tick.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_SkywayHighway_RollbackAcrossJoinAndExitRepeatsEveryTick()
+        {
+            TrackDefinition skyway = Skyway();
+            TrackDefinition.Bay bay = skyway.Bays[1];
+            RaceLaunch.Request(new RaceSetup(skyway, "SKYWAY LOOP", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
             assembler.Ghosts = ghosts;
             Scene scene = assembler.gameObject.scene;
-            Assert.That(Find<ChainRushHud>(scene).Heading, Is.EqualTo("SKYWAY LOOP"), "Not the stadium's name on the skyway.");
             ChainRushGame game = Find<ChainRushGame>(scene);
             RunnerMotor player = Find<RunnerMotor>(scene);
             CircuitRace circuit = Find<CircuitRace>(scene);
-            Assert.That(circuit.Definition, Is.SameAs(skyway));
-            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
-            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
-            Assert.That(assembler.IsAssembling, Is.False, "The Skyway decoration did not finish loading.");
-            Scene environment = SceneManager.GetSceneByName(SkywayEnvironmentScene);
-            Assert.That(environment.isLoaded, Is.True);
-            Assert.That(environment.rootCount, Is.EqualTo(1), "Only the exterior prefab belongs in the decoration scene.");
-            GameObject exterior = environment.GetRootGameObjects()[0];
-            Assert.That(exterior.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(0));
-            Assert.That(exterior.GetComponentsInChildren<Collider>(true), Is.Empty);
-            Assert.That(exterior.GetComponentsInChildren<Rigidbody>(true), Is.Empty);
-            Assert.That(exterior.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
+            var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
             float scale = Time.timeScale;
             try
             {
-                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
-                Time.timeScale = 6f;
+                Time.timeScale = 0f;
                 game.StartRun();
-                float deadline = Time.realtimeSinceStartup + 90f;
-                float maxOffset = 0f;
-                double maxOffsetS = 0d;
-                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
+                // The race's ghost recorder refuses the first tick out of order and drops this run's ghost
+                // (RaceAssembler.RecordTick), once; the rewinds here check the simulation only.
+                LogAssert.Expect(LogType.Error, new Regex("came after \\d+; this run will keep no ghost"));
+                foreach (double junction in new[] { (double)bay.FromS, bay.ToS })
                 {
-                    TrackCoord coord = game.Track.Project(player.transform.position);
-                    if (Mathf.Abs(coord.D) > maxOffset)
-                    {
-                        maxOffset = Mathf.Abs(coord.D);
-                        maxOffsetS = coord.S;
-                    }
-                    yield return null;
+                    int limit = game.Tick + 10000;
+                    while (game.IsRunning && game.Track.Project(player.transform.position).S < junction - 50d && game.Tick < limit) game.StepTick(bot);
+                    Assert.That(game.IsRunning, Is.True);
+                    Assert.That(game.Tick, Is.LessThan(limit));
+                    SimSnapshot snapshot = game.CaptureSnapshot();
+                    var log = new InputLog();
+                    var original = Trace(new InputRecorder(bot, log));
+                    while (game.IsRunning && game.Track.Project(player.transform.position).S < junction + 55d && game.Tick < limit) game.StepTick(original);
+                    Assert.That(game.IsRunning, Is.True);
+                    Assert.That(game.Tick, Is.LessThan(limit));
+                    Assert.That(log.Count, Is.GreaterThan(100), "The recorded window crosses the whole junction.");
+                    game.RestoreSnapshot(snapshot);
+                    var replay = Trace(new InputReplay(log));
+                    for (int i = 0; i < log.Count && game.IsRunning; i++) game.StepTick(replay);
+                    Assert.That(StateTrace.Compare(original, replay, log.Count), Is.Null, "Junction S " + junction);
                 }
-                Time.timeScale = scale;
-                Assert.That(game.HasFailed, Is.False, "The bot fell or died.");
-                Assert.That(game.HasFinished, Is.True, "The bot did not finish two laps.");
-                LapCounter laps = circuit.Laps;
-                Assert.That(laps.CompletedLaps, Is.EqualTo(2));
-                double lapSeconds = skyway.LapLength / 20d;
-                for (int lap = 1; lap <= 2; lap++)
-                {
-                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                    Debug.Log($"ChainRush skyway lap {lap}: {seconds:F2} s");
-                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
-                }
-                Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), $"The bot touched a guard at S {maxOffsetS:F1} (segment {SegmentAt(skyway, maxOffsetS)}).");
-                Debug.Log($"ChainRush skyway race: {skyway.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
-                assembler.ReturnToLobby();
-                yield return null;
-                yield return null;
-                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
-                Assert.That(SceneManager.GetSceneByName(SkywayEnvironmentScene).isLoaded, Is.False, "The Skyway exterior must leave with the race.");
             }
             finally
             {
                 Time.timeScale = scale;
-                store.Clear(skyway.name, SpeedClass.Fast);
             }
+
+            StateTrace Trace(IInputSource input) => new StateTrace(game, player, input,
+                ("lapProgress", () => circuit.Laps.Progress), ("checkpoints", () => circuit.Laps.CheckpointsPassed),
+                ("lastGroundedS", () => game.Racer.LastGroundedS));
         }
 
-        // The other speed classes finish every track too (M3 완료 조건 "트랙마다 완주", DECISIONS 2026-10-25 "M3 속도 단계"):
-        // the bot runs the whole race without a fall, each lap close to the lap length at 20 m/s times the class's scale.
-        // At Normal it touches no guard either; at VeryFast it brushes the guard coming out of the R22 corners (the turn
-        // radius of 25 m stays while the speed goes up; tight corners are for the pole swing), which is allowed and logged
-        // (user 2026-10-25). No decoration: it does not touch the run.
-        [UnityTest, Timeout(180000)]
-        public IEnumerator Race_OtherSpeedClasses_BotFinishesEveryTrack([Values(SpeedClass.Normal, SpeedClass.VeryFast)] SpeedClass speed,
+        // User 2026-11-02: "장식 테스트도 봇완주에 포함 ... 한바퀴만". Every track at every speed keeps its coverage,
+        // using the saved lobby entry, decoration and look in the same run. The first counted lap is enough here;
+        // Race_FinishFromTheLobby keeps the finish/records/ghost contract. VeryFast may brush a guard (2026-10-25).
+        [UnityTest, Timeout(90000), Category("Lap")]
+        public IEnumerator Race_BotLap_WithLobbyEnvironmentAndLook_CompletesOneLap(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed,
             [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST")] string title)
         {
+            RaceSetup setup = default;
+            yield return Load(LobbyPath, scene => setup = LobbyLapSetup(Find<LobbyMenu>(scene), title, speed, runner));
+            TrackDefinition track = setup.Track;
             var store = TestRecords();
-            TrackDefinition track = title == "STADIUM" ? Stadium() : title == "SKYWAY LOOP" ? Skyway() : title == "FINGER LANES" ? FingerLanes() : PalmCoast();
             store.Clear(track.name, speed);
-            RaceLaunch.Request(new RaceSetup(track, title, "", RaceMode.Single, speed, runner));
             RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
+            yield return LoadLapRace(setup, store, ghosts, loaded => assembler = loaded);
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
             CircuitRace circuit = Find<CircuitRace>(raceScene);
-            Assert.That(circuit.Definition, Is.SameAs(track));
-            Assert.That(player.SpeedClassScale, Is.EqualTo(SpeedScale.Of(speed)));
-            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
-            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
-            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+            if (title == "PALM COAST") Assert.That(game.Track.BoostZoneCount, Is.EqualTo(5));
+
+            // Fast's two FINGER kickers keep the original height and clock-tower/bridge comparison.
+            var crests = new System.Collections.Generic.List<double>();
+            double crestS = 0d;
+            if (title == "FINGER LANES" && speed == SpeedClass.Fast)
+                foreach (TrackDefinition.Segment segment in track.Segments)
+                {
+                    crestS += segment.Length;
+                    if (segment.Launch > 0f) crests.Add(crestS);
+                }
+            var lift = new float[crests.Count];
             float scale = Time.timeScale;
+            bool respawned = false;
+            Action<int> onTick = tick => respawned |= player.IsRespawning;
+            game.TickCompleted += onTick;
             try
             {
                 game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
                 Time.timeScale = 6f;
                 game.StartRun();
-                float deadline = Time.realtimeSinceStartup + 150f;
+                float standing = game.Track.Project(player.transform.position).H;
+                float deadline = Time.realtimeSinceStartup + 60f;
                 float maxOffset = 0f;
                 double maxOffsetS = 0d;
-                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
+                double lastProgress = circuit.Laps.Progress;
+                while (circuit.Laps.CompletedLaps < 1 && !game.HasFailed && Time.realtimeSinceStartup < deadline)
                 {
                     TrackCoord coord = game.Track.Project(player.transform.position);
                     if (Mathf.Abs(coord.D) > maxOffset)
@@ -966,6 +1078,10 @@ namespace ProtoHarness.Tests.PlayMode
                         maxOffset = Mathf.Abs(coord.D);
                         maxOffsetS = coord.S;
                     }
+                    Assert.That(circuit.Laps.Progress, Is.GreaterThanOrEqualTo(lastProgress - 1d), "The bot's progress must not run backwards.");
+                    lastProgress = circuit.Laps.Progress;
+                    for (int k = 0; k < crests.Count; k++)
+                        if (coord.S > crests[k] && coord.S < crests[k] + 25d) lift[k] = Mathf.Max(lift[k], coord.H - standing);
                     yield return null;
                 }
                 Time.timeScale = scale;
@@ -973,21 +1089,29 @@ namespace ProtoHarness.Tests.PlayMode
                 string where = $"{title} at {speed}: tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, " +
                                $"max offset {maxOffset:F2} m at S {maxOffsetS:F1} (segment {SegmentAt(track, maxOffsetS)})";
                 Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + where);
-                Assert.That(game.HasFinished, Is.True, "The bot did not finish. " + where);
+                Assert.That(respawned, Is.False, "The bot fell and respawned. " + where);
+                Assert.That(laps.CompletedLaps, Is.EqualTo(1), "The bot did not complete one lap. " + where);
                 double lapSeconds = track.LapLength / (20d * SpeedScale.Of(speed));
-                for (int lap = 1; lap <= laps.CompletedLaps; lap++)
-                {
-                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                    Debug.Log($"ChainRush {title} at {speed} lap {lap}: {seconds:F2} s (lap length at the class's run speed: {lapSeconds:F2} s)");
-                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
-                }
-                // The guard stands at the track's own road half width (the usual 6 m but Finger Lanes' 7.2 m).
+                float seconds = Ticks.ToSeconds(laps.LapTicks(1));
+                Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), "lap 1 time. " + where);
                 if (speed != SpeedClass.VeryFast)
                     Assert.That(maxOffset, Is.LessThan(track.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
-                Debug.Log($"ChainRush {title} at {speed}: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
+                for (int k = 0; k < crests.Count; k++)
+                {
+                    Debug.Log($"ChainRush Finger Lanes kicker {k} at S {crests[k]:F1}: rose {lift[k]:F2} m above the road");
+                    Assert.That(lift[k], Is.GreaterThan(0.5f), $"The bot was not thrown up past the kicker at S {crests[k]:F1}. " + where);
+                }
+                if (crests.Count > 0)
+                    Assert.That(lift[1], Is.GreaterThanOrEqualTo(lift[0] * 0.9f), "The clock tower's bump throws much less than the bridge's. " + where);
+                if (title == "STADIUM" && speed == SpeedClass.Fast) Assert.That(game.Health, Is.EqualTo(3));
+                for (int cp = 0; cp < track.CheckpointCount; cp++)
+                    Assert.That(laps.CheckpointTick(1, cp), Is.GreaterThan(0), $"lap 1 checkpoint {cp}");
+                Debug.Log($"ChainRush {title} at {speed}: lap 1 {seconds:F2} s (expected {lapSeconds:F2} s), {game.Grapples} grapples. {where}");
+                yield return LeaveLapRace(assembler, setup.EnvironmentScene);
             }
             finally
             {
+                game.TickCompleted -= onTick;
                 Time.timeScale = scale;
                 store.Clear(track.name, speed);
             }
@@ -1072,20 +1196,19 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(line.BranchCount, Is.EqualTo(2));
         }
 
-        // A runner that swings round the nails' corner poles takes both shortcuts on each lap (user 2026-10-25): the laps
-        // count across them and the race finishes. The bot hooks at the junction, lets go a quarter turn on, and again at
+        // A runner that swings round the nails' corner poles takes both shortcuts in one lap (user 2026-11-02): the laps
+        // count across them. The bot hooks at the junction, lets go a quarter turn on, and again at
         // the straight's end (ShortcutBot); the R15 turns are tighter than the runner's own 25 m, so only a swing makes them.
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FingerLanesShortcuts_ASwingingRunnerTakesBothEachLap()
+        [UnityTest, Timeout(90000), Category("Lap")]
+        public IEnumerator Race_FingerLanesShortcuts_ASwingingRunnerTakesBothInOneLap()
         {
             var store = TestRecords();
             TrackDefinition finger = FingerLanes();
             store.Clear(finger.name, SpeedClass.Fast);
-            RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceSetup setup = default;
+            yield return Load(LobbyPath, scene => setup = LobbyLapSetup(Find<LobbyMenu>(scene), "FINGER LANES", SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
+            yield return LoadLapRace(setup, store, ghosts, loaded => assembler = loaded);
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -1101,17 +1224,17 @@ namespace ProtoHarness.Tests.PlayMode
                 game.SetInputSource(bot);
                 Time.timeScale = 6f;
                 game.StartRun();
-                float deadline = Time.realtimeSinceStartup + 90f;
-                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
+                float deadline = Time.realtimeSinceStartup + 60f;
+                while (circuit.Laps.CompletedLaps < 1 && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
                 Time.timeScale = scale;
                 LapCounter laps = circuit.Laps;
                 string where = $"tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}";
                 Assert.That(game.HasFailed, Is.False, "The runner fell or died. " + where);
-                Assert.That(game.HasFinished, Is.True, "The runner did not finish two laps. " + where);
+                Assert.That(laps.CompletedLaps, Is.EqualTo(1), "The runner did not complete one lap. " + where);
                 Assert.That(bot.Missed, Is.EqualTo(0), "A hook found no pole. " + where);
-                Assert.That(bot.Taken, Is.EqualTo(4), "Both shortcuts on both laps. " + where);
-                for (int lap = 1; lap <= 2; lap++)
-                    Debug.Log($"ChainRush Finger Lanes with shortcuts lap {lap}: {Ticks.ToSeconds(laps.LapTicks(lap)):F2} s");
+                Assert.That(bot.Taken, Is.EqualTo(2), "Both shortcuts in one lap. " + where);
+                Debug.Log($"ChainRush Finger Lanes with shortcuts lap 1: {Ticks.ToSeconds(laps.LapTicks(1)):F2} s");
+                yield return LeaveLapRace(assembler, setup.EnvironmentScene);
             }
             finally
             {
@@ -1124,17 +1247,16 @@ namespace ProtoHarness.Tests.PlayMode
         // the runner up far too much"; 2026-10-30 "꺾이는 정도에 따라 가속 수준이 차이나는 것 같다"): the rope adds no speed
         // at all now; only the throttle raises the swing, to 1.2 times the run speed, no faster than running (no booster
         // here). Before 2026-10-27 a quarter turn went from 19.9 to 30.3 m/s in 0.54 s, before 2026-10-30 to 27.4 m/s.
-        [UnityTest, Timeout(120000)]
+        [UnityTest, Timeout(90000), Category("Lap")]
         public IEnumerator Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeAddsNoSpeed()
         {
             var store = TestRecords();
             TrackDefinition finger = FingerLanes();
             store.Clear(finger.name, SpeedClass.Fast);
-            RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceSetup setup = default;
+            yield return Load(LobbyPath, scene => setup = LobbyLapSetup(Find<LobbyMenu>(scene), "FINGER LANES", SpeedClass.Fast, runner));
             RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
+            yield return LoadLapRace(setup, store, ghosts, loaded => assembler = loaded);
             Scene raceScene = assembler.gameObject.scene;
             ChainRushGame game = Find<ChainRushGame>(raceScene);
             RunnerMotor player = Find<RunnerMotor>(raceScene);
@@ -1181,120 +1303,12 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(shortened, Is.True, "The inner key never shortened the rope by a metre. " + where);
                 Assert.That(top, Is.LessThanOrEqualTo(player.RunSpeed * 1.2f + 0.05f), "The shortened rope added speed. " + where);
                 Assert.That(steepest, Is.LessThanOrEqualTo(limit + 1e-3f), $"The swing sped up faster than running at tick {steepestTick}. " + where);
+                Assert.That(bot.Missed, Is.Zero, "A hook found no pole. " + where);
+                yield return LeaveLapRace(assembler, setup.EnvironmentScene);
             }
             finally
             {
                 game.TickCompleted -= sample;
-                Time.timeScale = scale;
-                store.Clear(finger.name, SpeedClass.Fast);
-            }
-        }
-
-        // The real lobby setup loads the village exterior, then the bot runs both laps at Fast: no fall, no guard
-        // touched through the seven half turns, each lap close to the lap length at 20 m/s, and off the road for a moment
-        // past each kicker's crest (user 2026-10-25): the bot only steers, so the kickers alone lift it.
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Race_FingerLanesFromTheLobby_BotFinishesTwoLaps()
-        {
-            var store = TestRecords();
-            TrackDefinition finger = FingerLanes();
-            store.Clear(finger.name, SpeedClass.Fast);
-            LobbyMenu menu = null;
-            yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
-            menu.Confirm();
-            menu.Confirm();
-            menu.Highlight(2);
-            menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "Finger Lanes can be raced.");
-            RaceSetup setup = menu.BuildSetup();
-            Assert.That(setup.Track, Is.SameAs(finger));
-            Assert.That(setup.Title, Is.EqualTo("FINGER LANES"));
-            Assert.That(setup.EnvironmentScene, Is.EqualTo(FingerLanesEnvironmentScene));
-            RaceLaunch.Request(setup);
-            RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
-            Scene raceScene = assembler.gameObject.scene;
-            Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("FINGER LANES"));
-            ChainRushGame game = Find<ChainRushGame>(raceScene);
-            RunnerMotor player = Find<RunnerMotor>(raceScene);
-            CircuitRace circuit = Find<CircuitRace>(raceScene);
-            Assert.That(circuit.Definition, Is.SameAs(finger));
-            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
-            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
-            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
-            Scene environment = SceneManager.GetSceneByName(FingerLanesEnvironmentScene);
-            Assert.That(environment.isLoaded, Is.True, "The village exterior must load through the saved lobby setup.");
-            Assert.That(environment.rootCount, Is.EqualTo(1), "Only the exterior prefab belongs in the decoration scene.");
-            GameObject exterior = environment.GetRootGameObjects()[0];
-            Assert.That(exterior.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(0));
-            Assert.That(exterior.GetComponentsInChildren<Collider>(true), Is.Empty);
-            Assert.That(exterior.GetComponentsInChildren<Rigidbody>(true), Is.Empty);
-            Assert.That(exterior.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
-            // Each kicker's crest S, and the most the runner rose above its height on the flat start line within 25 m past it.
-            var crests = new System.Collections.Generic.List<double>();
-            double crestS = 0d;
-            foreach (TrackDefinition.Segment segment in finger.Segments)
-            {
-                crestS += segment.Length;
-                if (segment.Launch > 0f) crests.Add(crestS);
-            }
-            var lift = new float[crests.Count];
-            float scale = Time.timeScale;
-            try
-            {
-                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
-                Time.timeScale = 6f;
-                game.StartRun();
-                float standing = game.Track.Project(player.transform.position).H;
-                float deadline = Time.realtimeSinceStartup + 90f;
-                float maxOffset = 0f;
-                double maxOffsetS = 0d;
-                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
-                {
-                    TrackCoord coord = game.Track.Project(player.transform.position);
-                    if (Mathf.Abs(coord.D) > maxOffset)
-                    {
-                        maxOffset = Mathf.Abs(coord.D);
-                        maxOffsetS = coord.S;
-                    }
-                    for (int k = 0; k < crests.Count; k++)
-                        if (coord.S > crests[k] && coord.S < crests[k] + 25d) lift[k] = Mathf.Max(lift[k], coord.H - standing);
-                    yield return null;
-                }
-                Time.timeScale = scale;
-                LapCounter laps = circuit.Laps;
-                string where = $"tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, " +
-                               $"max offset {maxOffset:F2} m at S {maxOffsetS:F1} (segment {SegmentAt(finger, maxOffsetS)})";
-                for (int k = 0; k < crests.Count; k++)
-                {
-                    Debug.Log($"ChainRush Finger Lanes kicker {k} at S {crests[k]:F1}: rose {lift[k]:F2} m above the road");
-                    Assert.That(lift[k], Is.GreaterThan(0.5f), $"The bot was not thrown up past the kicker at S {crests[k]:F1}. " + where);
-                }
-                // The bump past the clock tower throws like the bridge's (user 2026-10-28).
-                Assert.That(lift[1], Is.GreaterThanOrEqualTo(lift[0] * 0.9f), "The clock tower's bump throws much less than the bridge's. " + where);
-                Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + where);
-                Assert.That(game.HasFinished, Is.True, "The bot did not finish two laps. " + where);
-                Assert.That(laps.CompletedLaps, Is.EqualTo(2));
-                double lapSeconds = finger.LapLength / 20d;
-                for (int lap = 1; lap <= 2; lap++)
-                {
-                    float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                    Debug.Log($"ChainRush Finger Lanes lap {lap}: {seconds:F2} s");
-                    Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
-                }
-                // The guard stands at the track's own road half width (1.2 times the usual here).
-                Assert.That(maxOffset, Is.LessThan(finger.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
-                Debug.Log($"ChainRush Finger Lanes race: {finger.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s, max offset {maxOffset:F2} m at S {maxOffsetS:F1}.");
-                assembler.ReturnToLobby();
-                yield return null;
-                yield return null;
-                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
-                Assert.That(SceneManager.GetSceneByName(FingerLanesEnvironmentScene).isLoaded, Is.False, "The village exterior must leave with the race.");
-            }
-            finally
-            {
                 Time.timeScale = scale;
                 store.Clear(finger.name, SpeedClass.Fast);
             }
@@ -1397,6 +1411,22 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(palm.CheckpointS(i) / palm.LapLength, Is.EqualTo(new[] { 0.15d, 0.5d, 0.75d }[i]).Within(1e-6d));
         }
 
+        // The race laid its road, walls and lane markings with the look the lobby entry carries (user 2026-11-02, every
+        // track's own road and walls).
+        private static void AssertLaysTheLook(CircuitRace circuit, TrackLook look)
+        {
+            int roads = 0, rails = 0, painted = 0;
+            foreach (Renderer renderer in circuit.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer.sharedMaterial == look.Road) roads++;
+                if (renderer.sharedMaterial == look.Rail) rails++;
+                if (renderer.sharedMaterial == look.Markings) painted++;
+            }
+            Assert.That(roads, Is.GreaterThan(0), $"The road pieces use {look.name}'s road.");
+            Assert.That(rails, Is.GreaterThan(0), $"The guard walls use {look.name}'s rail.");
+            Assert.That(painted, Is.GreaterThan(0), $"The road has {look.name}'s lane markings.");
+        }
+
         // A track's own look (user 2026-10-30, Palm Coast's road and walls): the race lays the road and the guard walls with
         // the look's materials instead of the race scene's, and none with the scene's road material is left; with markings
         // it paints the lane markings too (CircuitScenery.PaintMarkings).
@@ -1451,85 +1481,6 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.Fail("This test requires the Unity Editor.");
             yield break;
 #endif
-        }
-
-        // Requires Palm Coast as the lobby's fourth unlocked track. Its environment choice, if any, is the scene's.
-        [UnityTest, Timeout(120000)]
-        public IEnumerator Race_PalmCoastFromTheLobby_BotFinishesTwoLaps()
-        {
-            var store = TestRecords();
-            TrackDefinition palm = PalmCoast();
-            store.Clear(palm.name, SpeedClass.Fast);
-            LobbyMenu menu = null;
-            yield return Load(LobbyPath, loaded => menu = Find<LobbyMenu>(loaded));
-            menu.Confirm();
-            menu.Confirm();
-            menu.Highlight(3);
-            menu.Confirm();
-            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), "PALM COAST must be registered and unlocked in the lobby.");
-            RaceSetup setup = menu.BuildSetup();
-            Assert.That(setup.Track, Is.SameAs(palm));
-            Assert.That(setup.Title, Is.EqualTo("PALM COAST"));
-            RaceLaunch.Request(setup);
-            RaceAssembler assembler = null;
-            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
-            assembler.Records = store;
-            assembler.Ghosts = ghosts;
-            Scene raceScene = assembler.gameObject.scene;
-            ChainRushGame game = Find<ChainRushGame>(raceScene);
-            RunnerMotor player = Find<RunnerMotor>(raceScene);
-            CircuitRace circuit = Find<CircuitRace>(raceScene);
-            Assert.That(Find<ChainRushHud>(raceScene).Heading, Is.EqualTo("PALM COAST"));
-            Assert.That(circuit.Definition, Is.SameAs(palm));
-            Assert.That(game.Track.BoostZoneCount, Is.EqualTo(5));
-            float assemblyDeadline = Time.realtimeSinceStartup + 20f;
-            while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
-            Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
-            float scale = Time.timeScale;
-            bool respawned = false;
-            Action<int> onTick = tick => respawned |= player.IsRespawning;
-            game.TickCompleted += onTick;
-            try
-            {
-                game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
-                Time.timeScale = 6f;
-                game.StartRun();
-                float deadline = Time.realtimeSinceStartup + 90f;
-                float maxOffset = 0f;
-                double maxOffsetS = 0d;
-                while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline)
-                {
-                    TrackCoord coord = game.Track.Project(player.transform.position);
-                    if (Mathf.Abs(coord.D) > maxOffset)
-                    {
-                        maxOffset = Mathf.Abs(coord.D);
-                        maxOffsetS = coord.S;
-                    }
-                    yield return null;
-                }
-                Time.timeScale = scale;
-                LapCounter laps = circuit.Laps;
-                string where = $"tick {game.Tick}, {laps.CompletedLaps} laps, progress {laps.Progress:F1} m, max offset {maxOffset:F2} m at S {maxOffsetS:F1} (segment {SegmentAt(palm, maxOffsetS)})";
-                Assert.That(game.HasFailed, Is.False, where);
-                Assert.That(respawned, Is.False, "The bot fell and respawned. " + where);
-                Assert.That(game.HasFinished, Is.True, "The bot did not finish. " + where);
-                Assert.That(laps.CompletedLaps, Is.EqualTo(2));
-                double lapSeconds = palm.LapLength / 20d;
-                for (int lap = 1; lap <= 2; lap++)
-                    Assert.That(Ticks.ToSeconds(laps.LapTicks(lap)), Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time. " + where);
-                Assert.That(maxOffset, Is.LessThan(palm.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
-                Debug.Log($"ChainRush Palm Coast race: {palm.LapLength:F1} m a lap, total {Ticks.ToSeconds(laps.TotalTicks):F2} s. {where}");
-                assembler.ReturnToLobby();
-                yield return null;
-                yield return null;
-                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
-            }
-            finally
-            {
-                game.TickCompleted -= onTick;
-                Time.timeScale = scale;
-                store.Clear(palm.name, SpeedClass.Fast);
-            }
         }
 
         // Read every tick directly: no render frame may skip the crossing's immediate speed or the booster's cut.
@@ -1712,35 +1663,91 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
-        // ---- the whole loop, by scene name ---------------------------------------------------------------
+        // ---- helpers -------------------------------------------------------------------------------------
 
-        // Needs the four scenes in the build's scene list (M2-a2); until then it is reported as ignored, not passed.
-        [UnityTest, Timeout(60000)]
-        public IEnumerator Loop_ByName_RaceAssemblesWithItsEnvironmentAndGoesBackToTheLobby()
+        // Read the saved menu's very same tracks array as LobbyMenu.BuildSetup, without navigating its pages on every
+        // lap (user 2026-11-02). A neutral runner keeps the existing 20 m/s baseline; track/title/environment/look are
+        // the real entry's values. Lobby_TrackChoices_AreChosenWithTheirSavedSetup covers the menu path.
+        internal static RaceSetup LobbyLapSetup(LobbyMenu menu, string title, SpeedClass speed, RunnerProfile runner)
         {
-            foreach (string path in new[] { TitlePath, LobbyPath, RacePath, EnvironmentPath })
-                if (SceneUtility.GetBuildIndexByScenePath(path) < 0)
-                    Assert.Ignore("Not in the build's scene list yet (M2-a2): " + path);
-            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", EnvironmentScene, RaceMode.Single, SpeedClass.Fast, runner));
-            SceneManager.LoadScene(RaceLaunch.RaceScene);
-            yield return null;
-            RaceAssembler assembler = Find<RaceAssembler>(SceneManager.GetActiveScene());
-            ChainRushGame game = Find<ChainRushGame>(SceneManager.GetActiveScene());
-            float deadline = Time.realtimeSinceStartup + 20f;
-            while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
-            Assert.That(assembler.IsAssembling, Is.False, "The environment never finished loading.");
-            Assert.That(SceneManager.GetSceneByName(EnvironmentScene).isLoaded, Is.True);
-            Assert.That(game.IsCountingDown, Is.True);
-            game.StartRun();
-            game.FailRun();
-            assembler.ReturnToLobby();
-            yield return null;
-            yield return null;
-            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
-            Assert.That(SceneManager.GetSceneByName(EnvironmentScene).isLoaded, Is.False, "The environment leaves with the race.");
+#if UNITY_EDITOR
+            var data = new SerializedObject(menu);
+            SerializedProperty entries = data.FindProperty("tracks");
+            Assert.That(entries, Is.Not.Null, "LobbyMenu.tracks is the source of lap setups.");
+            RaceSetup setup = default;
+            int matches = 0;
+            for (int i = 0; i < entries.arraySize; i++)
+            {
+                SerializedProperty entry = entries.GetArrayElementAtIndex(i);
+                if (entry.FindPropertyRelative("title").stringValue != title) continue;
+                matches++;
+                var track = (TrackDefinition)entry.FindPropertyRelative("definition").objectReferenceValue;
+                string environment = entry.FindPropertyRelative("environmentScene").stringValue;
+                var look = (TrackLook)entry.FindPropertyRelative("look").objectReferenceValue;
+                Assert.That(track, Is.Not.Null, title);
+                Assert.That(look, Is.Not.Null, title + " needs its road and walls.");
+                Assert.That(track.TryValidate(out string error), Is.True, error);
+                string suffix = title == "STADIUM" ? "Stadium" : title == "SKYWAY LOOP" ? "Skyway" :
+                    title == "FINGER LANES" ? "FingerLanes" : title == "PALM COAST" ? "PalmCoast" : null;
+                Assert.That(suffix, Is.Not.Null, "No expected lobby entry for " + title);
+                Assert.That(track, Is.SameAs(AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_" + suffix + ".asset")));
+                Assert.That(environment, Is.EqualTo("ChainRushTrack" + suffix));
+                Assert.That(look.name, Is.EqualTo("TrackLook_" + suffix));
+                setup = new RaceSetup(track, entry.FindPropertyRelative("title").stringValue, environment,
+                    RaceMode.Single, speed, runner, look);
+            }
+            Assert.That(matches, Is.EqualTo(1), title + " must be registered exactly once in the saved lobby.");
+            return setup;
+#else
+            Assert.Fail("Lap tests require the Unity Editor.");
+            return default;
+#endif
         }
 
-        // ---- helpers -------------------------------------------------------------------------------------
+        internal static IEnumerator LoadLapRace(RaceSetup setup, BestRecords records, GhostFiles ghosts, Action<RaceAssembler> found)
+        {
+            // Keep the old Loop_ByName contract: the shipped scene list and name-based race load are exercised here.
+            string environmentPath = "Assets/_Project/Scenes/" + setup.EnvironmentScene + ".unity";
+            foreach (string path in new[] { TitlePath, LobbyPath, RacePath, environmentPath })
+                Assert.That(SceneUtility.GetBuildIndexByScenePath(path), Is.GreaterThanOrEqualTo(0), "Not in the build's scene list: " + path);
+            RaceLaunch.Request(setup);
+            SceneManager.LoadScene(RaceLaunch.RaceScene);
+            yield return null;
+            Scene scene = SceneManager.GetActiveScene();
+            RaceAssembler assembler = Find<RaceAssembler>(scene);
+            assembler.Records = records;
+            assembler.Ghosts = ghosts;
+            float deadline = Time.realtimeSinceStartup + 20f;
+            while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(assembler.IsAssembling, Is.False, "The decoration never finished loading: " + setup.Title);
+            Assert.That(assembler.IsLaunched, Is.True);
+            Assert.That(Find<ChainRushGame>(scene).IsCountingDown, Is.True);
+            Assert.That(Find<ChainRushHud>(scene).Heading, Is.EqualTo(setup.Title));
+            Assert.That(Find<RunnerMotor>(scene).SpeedClassScale, Is.EqualTo(SpeedScale.Of(setup.Speed)));
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            Assert.That(circuit.Definition, Is.SameAs(setup.Track));
+            AssertLaysTheLook(circuit, setup.Look);
+            Scene environment = SceneManager.GetSceneByName(setup.EnvironmentScene);
+            Assert.That(environment.isLoaded, Is.True);
+            Assert.That(environment.rootCount, Is.EqualTo(1), "Only the exterior prefab belongs in the decoration scene.");
+            GameObject exterior = environment.GetRootGameObjects()[0];
+            if (setup.Title == "STADIUM") Assert.That(exterior.name, Is.EqualTo("StadiumExterior"));
+            Assert.That(exterior.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(0));
+            Assert.That(exterior.GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<Rigidbody>(true), Is.Empty);
+            Assert.That(exterior.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
+            found(assembler);
+        }
+
+        internal static IEnumerator LeaveLapRace(RaceAssembler assembler, string environment)
+        {
+            assembler.ReturnToLobby();
+            float deadline = Time.realtimeSinceStartup + 10f;
+            while ((SceneManager.GetActiveScene().name != RaceLaunch.LobbyScene || SceneManager.GetSceneByName(environment).isLoaded) &&
+                   Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
+            Assert.That(SceneManager.GetSceneByName(environment).isLoaded, Is.False, "The exterior must leave with the race.");
+        }
 
         private static IEnumerator Load(string path, Action<Scene> found)
         {

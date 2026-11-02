@@ -7,6 +7,121 @@
 
 ---
 
+## 2026-11-02 · 병합 때 작업 중 실행을 다시 쓴다
+
+- **결정 (사용자, 2026-11-02)**: "서킷 구조가 바뀌었으면 테스트를 돌려야하잖아? 그 테스트에 대해서 속도별 랩 1회를 돌리면 될거같다. 또한 병합때도 테스트를 한다고 알고있는데 병합때 중복 테스트를 돌릴 필요는 없지 않을까?" → 제안 문구 "ㄱㄱ". 본문은 CLAUDE.md §9-2 병합 조건 아래 "작업 중 실행을 다시 쓴다" 한 곳.
+- **이유**: 작업 중(①) 마지막 실행과 병합(②) 실행이 같은 코드면 같은 신호를 두 번 받는다. 랩 런은 한 칸에 수십 초라 그 비용이 크다.
+- **조건**: 같은 코드라는 근거 둘(그 실행 시각 이후 `Assets/` 에서 바뀐 파일 없음, 커밋 뒤 `git status` 에 `Assets/` 변경 없음). 실행 뒤에 바뀐 것이 있으면 그 부분만 다시. 결과 XML 이 실행마다 덮어쓰이므로 값은 그때 DECISIONS 검증 줄에 남긴다. ③ 마일스톤 조건은 그대로.
+- **버린 대안**: 병합 때 늘 다시 돌리기(지금까지 — 같은 코드의 중복). 결과 XML 을 실행마다 보관하는 도구 추가(검증 줄 기록으로 충분하고 새 도구가 든다).
+
+## 2026-11-02 · 테스트: 랩 런 하나로(장식 포함·한 바퀴·맵 구조 변경 때만)
+
+- **결정 (사용자, 2026-11-02)**: "장식 테스트도 봇완주에 포함시켜서 랩 돌때만 하자. 그리고 한바퀴만 돌아도 되지않겟나. 결과적으로 맵 구조가 바뀌어 테스트런을 돌려야 할때만 돌리자. 또한 서킷과 서킷+장식런을 따로 보지 말고. codex로 구현하라".
+- **선택 규칙의 유일한 본문**: `docs/RULES/VERIFICATION.md` §4-4의 **Lap 선택**. 여기는 구현 이유·단언 이동·조사 근거만 기록한다. 마일스톤 메뉴 코드는 변경하지 않았다.
+- **구현**: `ChainRushFlowTests.Race_BotLap_WithLobbyEnvironmentAndLook_CompletesOneLap(speed, title)` = STADIUM·SKYWAY LOOP·FINGER LANES·PALM COAST × Normal·Fast·VeryFast, 12칸. Fast STADIUM을 추가하고 나머지 기존 속도 칸을 모두 유지했다(속도 때문에 틈/코너를 못 지나는 회귀를 잃지 않기 위해). 테스트의 첫 `circuit.Laps.CompletedLaps == 1`에서 끝내며 에셋의 `lapCount`는 바꾸지 않았다. 일반 랩·FINGER 지름길 2런·명시 실행 진단 프로브 3런에 `[Category("Lap")]`.
+- **실제 설정 원본**: `LobbyMenu.cs:24-37`의 TrackChoice, `:235-239`의 BuildSetup이 읽는 로비 씬 `tracks` 배열을 `LobbyLapSetup`이 `SerializedObject`로 읽는다(메뉴를 누르지 않는다). 트랙 에셋 동일성·제목의 유일성·장식 씬 이름·look 이름/비어 있지 않음·정의 유효성을 단언한다. `Lobby_TrackChoices_AreChosenWithTheirSavedSetup(title)`는 기존 SKYWAY 메뉴 검사를 네 트랙으로 확장하여 Confirm/Highlight/BuildSetup과 같은 원본의 네 값(Track/Title/EnvironmentScene/Look)을 비교한다. 장식은 로드하지 않는 메뉴 테스트다.
+  - 러너는 기존 속도 행렬의 중립 테스트 프로필(모든 배율 1)을 유지한다. 기존 Fast 로비 기본 ALPHA도 `Data/RunnerProfile_Alpha.asset:16-19`의 속도·가속·게이지·무게가 모두 1이다. 기준 20 m/s 및 기존 시간 오차는 그대로다. 이 선택은 트랙/장식/look 원본과 별개이며 러너 프로필별 차이는 기존 ProfileTests가 본다.
+- **같은 런의 조립·해제**: `LoadLapRace`는 빌드 씬 목록 검사 → 실제 이름으로 레이스 로드 → 조립 완료(20초)·countdown·HUD 제목·정의·속도 배율·`AssertLaysTheLook` → 장식 루트 1개·렌더러 있음·Collider/Rigidbody/MonoBehaviour 없음을 검사한다. `LeaveLapRace`는 로비 복귀와 그 장식의 언로드를 검사한다. PALM도 이제 같은 장식/look 단언을 받는다.
+- **랩 검증과 결승 검증의 분리**: 기록·고스트 저장에는 실제 결승이 필요하므로 기존 `Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`의 STADIUM 3랩은 유지한다. 이 테스트는 주행 회귀용 Lap 카테고리에 넣지 않는다(기록 기능만 바꿨을 때도 선택해야 한다). 다만 이 런 역시 로비 원본·장식/look 조립을 사용한다. 중복 `ChainRushCircuitTests.Race_BotRunsThreeLaps_CountsThemAndTimesThemExactly`는 삭제하고 결승에만 의미 있는 단언은 이 기록 테스트에 합쳤다.
+- **옛 → 새 단언 이동** (새 위치의 M = `Race_BotLap_WithLobbyEnvironmentAndLook_CompletesOneLap`, A = `LobbyLapSetup/LoadLapRace`, U = `LeaveLapRace`, F = 위 기록·고스트 결승 테스트):
+
+| 옛 테스트 | 단언 하나하나 → 새 위치 |
+|---|---|
+| `Race_SkywayFromTheLobby_BotFinishesTwoLaps` 삭제 | TryValidate·트랙 동일성·장식 씬·look 존재/이름 → A; HUD 제목·서킷 정의·조립 완료 → A; 도로/벽/차선 머티리얼 → A의 기존 AssertLaysTheLook; 장식 로드·루트 1·렌더러 있음·Collider 없음·Rigidbody 없음·MonoBehaviour 없음 → A; 실패 없음·완료 랩 2 → M의 실패 없음·완료 랩 1; 랩 길이/20 ±20%·최대 옆 거리 < DeckHalfWidth−0.4 → M(Fast SKYWAY, RoadHalfWidth=6으로 동일); 로비 활성·장식 언로드 → U. |
+| `Race_FingerLanesFromTheLobby_BotFinishesTwoLaps` 삭제 | 메뉴 Runner 페이지(잠금 아님) → Lobby_TrackChoices; setup 트랙·제목·환경·look 존재/이름 → A; HUD·정의·조립 완료·AssertLaysTheLook·환경 로드·루트/렌더러/Collider/Rigidbody/MonoBehaviour → A; 각 킥커 뒤 25 m 이내 lift >0.5 m·두 번째 lift ≥첫 번째×0.9 → M(Fast FINGER); 실패 없음·완료 랩 2 → M의 실패 없음·완료 랩 1; 랩 시간 ±20%·최대 옆 거리 < RoadHalfWidth−0.4 → M; 로비 활성·장식 언로드 → U. |
+| `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` 삭제 | 메뉴 Runner 페이지 → Lobby_TrackChoices; setup 트랙·제목·HUD·서킷 정의·조립 완료 → A; BoostZoneCount=5 → M(PALM); 실패 없음·틱마다 리스폰 없음 → M(이제 모든 칸에서 리스폰 감지); 완료 랩 2·각 랩 시간 ±20% → M의 랩 1·시간 ±20%; 최대 옆 거리 < RoadHalfWidth−0.4 → M; 로비 활성 → U(장식 언로드도 추가). |
+| `Race_OtherSpeedClasses_BotFinishesEveryTrack` 삭제 | 트랙 정의·SpeedScale.Of(speed)·조립 완료 → A; 실패 없음·완주 → M의 실패 없음·첫 랩 계수; 각 단계 LapLength/(20×배율) ±20% → M; Normal 가드 거리 < RoadHalfWidth−0.4 유지, VeryFast 가드 접촉 허용/거리 로그 유지 → M. |
+| `Race_StadiumFromTheLobby_LaysItsLookAndLoadsItsExterior` 삭제 | setup 트랙·환경·look 존재/이름·조립 완료 → A; AssertLaysTheLook의 도로·벽·차선 → A; 환경 로드·루트 1·루트 이름 StadiumExterior·렌더러 있음·Collider/Rigidbody/MonoBehaviour 없음 → A. |
+| `Loop_ByName_RaceAssemblesWithItsEnvironmentAndGoesBackToTheLobby` 삭제 | Title/Lobby/Race/Environment의 빌드 인덱스 → A(없으면 Ignore 대신 실패); 실제 이름 로드 → A; 조립 완료·환경 로드·countdown → A; 로비 활성·환경 언로드 → U. StartRun은 각 랩 런에서, 인위적 FailRun 경로는 기존 Pause/Return 및 실패 테스트에서 유지한다. |
+| `Race_BotRunsThreeLaps_CountsThemAndTimesThemExactly` 삭제(CircuitTests) | 진행이 이전−1 m 이상·실패 없음·최대 옆 거리 <6−0.4 → M(STADIUM Fast); IsFinished·HasFinished·완료 3랩·각 시간 ±20%·TotalTicks=각 LapTicks 합·game.Tick=LapEndTick(3)·Elapsed 오차 0.001초·Health=3·3랩×3체크포인트 tick>0 → F. M에서도 첫 랩 체크포인트 tick>0·Health=3 확인. |
+| `Race_FingerLanesShortcuts_ASwingingRunnerTakesBothEachLap` → `...TakesBothInOneLap` | 조립 완료·BranchCount=2·실패 없음·Missed=0 유지; HasFinished → 완료 랩 1; Taken=4(2지름길×2랩) → Taken=2(2지름길×1랩); 장식/look·언로드 A/U 추가. 랩 시간은 원래 로그만 있었으므로 한 랩 로그만 유지. |
+| `Race_FingerLanesShortcuts_InnerKeyHeld_TheRopeAddsNoSpeed` 유지 | 원래부터 1랩. 실패 없음·완료 ≥1·Taken=2·swingTicks>0·연속 swing 표본 있음·로프 1 m 단축·top≤RunSpeed×1.2+0.05·틱 가속≤RunAcceleration×Ticks.Seconds+0.001 그대로. A/U·Missed=0 추가. |
+| `Lobby_SkywayTrack_IsChosenWithItsEnvironment` → `Lobby_TrackChoices_AreChosenWithTheirSavedSetup` | Runner 페이지·트랙·제목·환경 일치 모두 유지, 네 트랙으로 매개변수화·look 원본 일치 추가. 장식 로드 없는 메뉴 검증을 없애지 않았다. |
+| `ChainRushProbeTests.Probe_SwingHook_PositionJumpAtEachCorner`·`Probe_SwingHook_FromTheInsideLine`·`Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld` | 기존 측정·hook/swings 및 plain run의 실패/놓친 hook 단언 그대로. 원래의 1랩 창 유지, A/U·완료 랩=1·Lap 카테고리 추가. [Explicit] 유지(게이트에 새로 넣지 않음). 마지막 프로브의 Fast/VeryFast×inner×booster 8런 유지. |
+
+- **줄인 반복의 의미**: 일반 런의 2랩째(STADIUM 옛 속도 런은 3랩째까지) 시간/가드/킥커 반복은 같은 경로를 다시 도는 검사였다. 이제 첫 랩의 같은 수치 단언만 남긴다. 결승 계시 합·마지막 틱·여러 랩 체크포인트는 F에 모두 보존했고, 랩 경계 되감기는 기존 롤백 테스트가 그대로 본다. 지름길 4회 → 2회는 허용치를 느슨하게 한 것이 아니라 1바퀴당 2개라는 기준을 유지한 것이다.
+- **남긴 별도 표현 테스트**: `Race_WithATrackLook_LaysTheRoadAndWallsWithItsMaterials`는 장식 로드 검사와 다르다. 합성 머티리얼 주입·M_Deck 잔존 없음·PALM 차선 메시 >30개를 검사하므로 유지했다. 구조 레이캐스트·도로 조각·Net*·1700틱 지문·짧은 롤백 창은 수정하지 않았다.
+- **경로 분리의 참조 검색 근거** (PowerShell Select-String, rg 미설치; 낡은 index 헤더 HEAD 불일치로 코드 직접 검색; 아래 Runtime/은 Assets/_Project/Scripts/ 기준):
+  - `Runtime/ChainRush/Flow/RaceAssembler.cs:97-99`: Track 정의·Look·SpeedScale/RunnerProfile 전달. `Race/CircuitRace.cs:205-212`: BuildCenterline → CircuitScenery → LayRoad → PaintMarkings.
+  - `Race/CircuitScenery.cs:64` LayRoad, `:603` LayRange, `:668` LayShortcut이 도로/가드를 깐다. `Track/RoadPiece.cs:101-119`가 roadCollider/wallCollider.sharedMesh를 연결한다. `RunnerMotor.cs:320` controller.Move, `:502` world.SphereCast, `GrappleController.cs:116` world.Raycast가 그 충돌을 읽는다.
+  - `ChainRushGame.cs:192-195` PrepareTick → 입력 소비 → player.Step. `RunnerMotor.cs:252-328` RunDrive·PoleSwing·Slingshot·GuardContact 참조. `Control/TickInput.cs:5-8`는 시뮬이 소비하는 입력이며 InputLatch/KeyboardMouseInputSource가 만든다. 따라서 이들의 주행 변경은 공유 코드 영향이다.
+  - Look의 소비처 검색은 LobbyMenu → RaceSetup → RaceAssembler → CircuitRace.UseLook와 CircuitScenery.PaintMarkings뿐이며 RunnerMotor/GrappleController/Motion에는 TrackLook 참조가 없었다. PaintMarkings와 표현 헬퍼(`CircuitScenery.cs:282-592`)는 MeshFilter/Renderer만 만들고, Collider 추가는 하지 않는다. 환경 빌더·ExteriorKit/Assets/RoadCorridor는 Editor/ 아래이고 시뮬에서 참조하지 않는다. 장식/머티리얼 경로의 지문을 뺀 근거다(장식 런의 무충돌 단언도 A로 보존).
+- **선택 도구 구현 한계**: 표의 전용 장식/look 경로는 Lap·지문을 제안하지 않는다. CircuitScenery는 diff의 삭제 전/후 hunk가 모두 PaintMarkings~Destroy 사이일 때만 표현 변경으로 판정한다. 공용 빌더·도로 파일은 경로만으로 개별 트랙/UV 변경까지 확정하지 못하므로 후보를 내며 §4-4의 영향 평가로 좁힌다. 표에서 범위 미확정이어도 이제 게이트 메뉴를 실행하라고 출력하지 않는다. 일반 선택의 Lap 제외와 대상 트랙 Lap 필터는 별도 호출이다.
+- **예상 시간**: 일반 속도/로비 런 24랩 + CircuitTests 3랩 + 지름길 3랩 = 30랩 → 행렬 12 + 지름길 2 = 14랩. 별도 결승 3랩을 포함하면 33 → 17랩(약 48% 감소). Explicit 진단 10랩은 10랩 그대로다. SKYWAY는 6 → 3랩이며 사용자 실측 합계 약 97~99초의 주행분이 약 절반으로 줄어드는 산술 예상(추가 장식 로드/로비 비용은 미실측)이다. 실제 벽시계 시간이 늘지 않는지는 Claude 실측 필요.
+- **버린 대안**: Fast만 유지(속도별 회귀를 잃음), 장식만 따로 로드(중복 지속), 에셋 lapCount=1(게임 규칙 변경), 테스트용 트랙/환경/look 상수 복제(로비 원본과 어긋날 수 있음), 결승 검증도 첫 랩에서 종료(기록·고스트 저장을 검증할 수 없음).
+- **검증** (Claude, 에디터 6000.3.25f1, 커밋 전 작업 트리, UTC): 컴파일 성공. PlayMode `Race_BotLap_*` 12칸·`Race_FingerLanesShortcuts_*` 2·`Lobby_TrackChoices_*` 4·`Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt` 1 `testcasecount="19" result="Passed" passed="19" failed="0"` (06:57:33Z~07:01:36Z, 243 s). 랩 칸은 칸당 6~23 s(SKYWAY Normal 22.6 · Fast 18.0 · VeryFast 14.9 s — 전에는 2랩 런 셋이 38.7·33.8·26.7 s). 첫 시도(06:37Z)는 사용자가 플레이 중일 때 시작해 러너가 바로 멈췄다(`This cannot be used during play mode`), 테스트는 돌지 않았다. 선택 도구 `tools/select-tests.ps1` 정상 출력(Lap 칸 별도 필터 `^Lap$`, 일반 선택 `!^Lap$`). 돌리지 않은 것: Explicit 진단 3건, `ChainRushCircuitTests` 남은 8건(삭제만 있고 남은 메서드는 그대로), 게이트 메뉴가 Explicit 을 빼는지(메뉴 코드는 바꾸지 않았다).
+- **정적 확인**: 선택기 PowerShell AST 구문 오류 0. 장식/look/메뉴/HUD는 Lap 후보 제외, 트랙/도로/러너/입력은 포함하는 경로 fixture 12개 일치. SKYWAY 정규식은 행렬 12칸 중 SKYWAY 3칸에만 일치. PaintMarkings-only hunk와 LayRoad hunk의 판별 fixture 2개 일치. 수정 C# 3파일의 문자열/주석을 뺀 괄호 짝 일치(컴파일 검증 아님). 6파일 CRLF·선택기 UTF-8 BOM 유지, git diff --check 오류 없음. 기존 2026-11-02 맵 디자인 항목부터 끝까지의 SHA-256이 작업 전과 같아 기존 결정 항목은 바뀌지 않았다.
+- **선택 도구 실행**: 요청한 `powershell.exe -NoProfile -File tools/select-tests.ps1`은 이 머신 실행 정책으로 `UnauthorizedAccess / running scripts is disabled on this system`. 저장소의 기존 실행 방식 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/select-tests.ps1`으로 재실행하여 exit 0. 현재 작업 트리(이번 변경 외 기존 맵 작업 포함) 출력 요약:
+  ```text
+  바뀐 파일: 133개 (dev...HEAD + 커밋하지 않은 변경 + 추적하지 않는 파일)
+  EditMode: 전체 (Enemy 제외)
+  Lap: STADIUM, SKYWAY LOOP, FINGER LANES, PALM COAST × Normal/Fast/VeryFast
+       FINGER 지름길 2건 포함, Explicit 진단 별도
+  categoryNames = new[] { "^Lap$" } 와 트랙 이름 정규식 출력
+  PlayMode: 표에서 범위 확정 못 함. 영향 평가로 이름 선택
+            (게이트 메뉴 실행 금지, 일반 선택은 !^Lap$; 위 Lap 칸은 별도).
+  ```
+  전 트랙 후보는 기존 CircuitSceneBuilder/CircuitRace/Track 공용 변경 때문이다. git의 사용자 ignore 접근 권한 경고와 packages-lock의 LF→CRLF 경고도 출력되었으며 이번 작업에서 그 파일들은 수정하지 않았다.
+
+## 2026-11-02 · 맵 디자인 보강: 장식 빌더 공통 도구 · 네 트랙의 실제 도로(질감·차선) · STADIUM 육상 경기장 · SKYWAY 램프와 막다른 베이 (`feature/m6-exterior-kit`)
+
+- **R4 SKYWAY 장식 디테일 (2026-11-02, Claude 구현)**: 사용자 "skyway 맵 장식 디테일 살려줘. 맵이 너무 휑하다" → 계획(땅·마을 / 도로 가 / 고가 장비 / 스카이라인) 승인 "네가 구현해보아라". 휑한 원인은 740 × 550 m 어두운 바닥 판 하나(`M_City`)와 지상 구간 옆에만 있던 상자 집이었다. 장식만 바꿨다(트랙·도로 메시·가드·차선 칠 그대로).
+  - `SkywayEnvironmentBuilder` 의 `Layout` 을 다시 짰다: 밝은 포장 바닥 + 40 m 격자 잔디 블록, 고가 밑 지상 대로(아스팔트·차선·분홍 보도·주차 차량 — 평평한 것은 모두 땅 위 0.09 m 이하라 어느 도로 슬래브 밑으로도 통과), 회벽 집(기와/슬레이트 박공·덧창·화분·차양·발코니, PALM 의 town house 형식) 두 줄, 둥근 나무·사이프러스·덤불, 교각 노란 띠, 색 아파트 스카이라인(층마다 유리 띠·옥상 물탱크/간판).
+  - 도로 가(레퍼런스 `UZWC4qtamfk` 접촉 시트): 체크무늬 출발 아치(SKYWAY 글자), 고가 긴 직선 위 파란 방향 표지 갠트리(출구 앞은 오른쪽 화살표 하나 더), 45° 이상 코너 바깥의 노랑·검정 화살표판, 지상 직선 가드 뒤 광고판, 36 m 간격 가로등(팔은 도로 위)과 배너. 이 셋은 가드 가까이 서므로 두 번째 `RoadCorridor`(여유 1.2 m)로 자리를 잡고, 도로 위로 넘어가는 부분(가로등 팔·갠트리 보·표지·아치 보)은 근처에서 가장 높은 도로보다 9.4 m 위에서 시작한다(침범 검사의 9 m 위 예외). 광고판은 직선에서만(곡선에서 돌린 판은 축 정렬 경계가 도로 쪽으로 부푼다).
+  - 가드 너머 장식 고가 상판은 무늬 없는 아스팔트 색(`M_SkywayAsphalt`)으로 — 도로 질감이 96 m 상자의 0..1 UV 에 늘어나 보였다. 새 머티리얼 `M_Skyway*` 25개(`ExteriorAssets.Palette`).
+  - **검증**: 컴파일 성공, `RebuildExterior` 의 침범 검사 통과, 렌더러 1151 → **6962**(PALM 5361 보다 많다 — 플레이에서 프레임이 떨어지면 줄인다, 확인 안 됨). 미리보기 렌더 7장(출발·헤어핀·코너·고가·고가 2·내리막·전경). 장식만 바뀌어 랩 런은 돌리지 않았다(§4-4 Lap 선택). 첫 렌더에서 아치 글자가 거울처럼 뒤집혀(`Lettering` 은 랜드마크 쪽에서 읽힌다) 글자 그룹을 X 로 뒤집었다.
+  - **외곽 보강** (사용자 "좋은데 맵 외곽쪽이 부족해보인다. 특히 고가도로쪽"): 기존 고속도로를 가드 너머 양쪽 300 m 까지(96 m 에서) 잇고 차선 칠·양방향 차량·가로등·표지 갠트리·교각을 놓았다(교각·기둥은 낮은 도로를 피한다, `ClearOfLowRoad`). 고가 구간 옆에 고가보다 높은 중층 아파트 줄(고가에서는 낮은 집의 지붕만 보였다)과 고속도로를 향한 대형 기둥 광고판 3개. 바닥을 740 × 550 → 1500 × 1200 m 로 넓히고 남은 땅을 44 m 격자 아파트 블록으로 채웠다(트랙에서 멀수록 높게, 15% 는 공원, 창 띠 2개짜리 단순 블록).
+    - 렌더러 6962 → **10661**(외곽 블록 3756). 플레이 프레임은 확인하지 않았다 — 떨어지면 외곽 블록을 재질별 한 메시로 합치는 것이 다음 수(침범 검사는 정점 단위 그룹으로).
+  - **메시 합치기** (사용자 "메시로 합치고 병합하자"): 땅(바닥·잔디·고가 밑 대로·주차 차량)과 외곽 블록을 재질별 메시 하나로 합쳐 `Art/Models/SkywayExterior_{Land,Outer}_<재질>.asset` 로 저장(`MergeByMaterial`, `ExteriorAssets.SaveMesh` 로 GUID 유지). 렌더러 10661 → **4680**, 프리팹 29.8 → 12.9 MB(합친 메시 에셋 20.7 MB, 바퀴 원기둥이 3.5 MB). 합친 메시는 도로를 둘러싸 경계 검사가 늘 걸리므로 정점 단위로 본다 — `RoadCorridor.ValidateClearance` 에 정점 검사 그룹 여러 개를 받는 오버로드(기존 한 그룹 시그니처는 그대로 넘김). 합친 뒤 렌더 3장이 전과 같았다.
+- **병합 (② `feature/m6-exterior-kit` → `dev`, 2026-11-02, 사용자 "병합시키자", "메시로 합치고 병합하자")**:
+  - 영향 평가: `tools/select-tests.ps1 -Range dev...HEAD` 는 "표에서 범위 확정 못 함 → 영향 평가". 도로 메시(`RoadMeshBuilder`·`RoadPiece`·`RoadProfile`)·도로 깔기(`CircuitScenery`)·정의(`TrackDefinition` 베이)를 읽는 클래스를 골랐다. `Net*`·`RaceOrder`·`RaceStandings*` 는 뺐다(바뀐 것은 베이뿐, 스냅샷·랩 길이 그대로), `World`·`ControllerCost` 도(CircuitRace 는 look 인자만), Flow 의 로비·설정 화면도(레이스 조립은 랩 런 12칸이 덮는다).
+  - 재사용(CLAUDE.md §9-2, 06:02Z 뒤 런타임 코드 그대로): SKYWAY·지문·도로 조각 16건(06:02:37Z, 롤백 1건은 고친 뒤 06:08:24Z), 랩 런·지름길·로비·결승 19건(06:57:33Z~07:01:36Z).
+  - 새로 돌린 것: EditMode `!Enemy` `testcasecount="333" result="Passed" passed="333" failed="0"` (07:47:02Z~07:47:07Z). PlayMode Curve·Slope·Steering·Drift·CornerSwing·Rollback·Circuit·Presentation `testcasecount="53" result="Failed(Child)" passed="52" failed="1"` (07:47:29Z~07:51:06Z) — 실패 `ChainRushCircuitTests.Scene_CornerPoles_StandOnEveryArcCenter_AndTheOneInReachIsOffered` "On the start line the last arc's pole is still in reach. S 0.00, D 0.00, H 0.94 … Expected: True But was: False". **원인: dev 에 있던 낡은 단언** — 2026-10-30 "봉 걸기"(f93cdaf)가 "출구 뒤는 없다"로 바꿨는데 그때 이 테스트를 고르지 않았다. 봉 후보 코드(`Centerline.TryFindPole`·`RunnerMotor`·`GrappleController`)는 이 브랜치에서 바뀌지 않았다. 사용자 "이 브랜치에서 고치고 병합" → 출발선에서는 후보 없음으로 단언을 바꿨다(**사양 변경**, 주석에 근거) → `testcasecount="1" result="Passed"` (07:54:02Z).
+  - 리뷰: `unity-reviewer`(172,276 토큰) 치명·중대 없음, 보통 1(`TrackLookTests` 의 `ignoreFailingMessages` → 기존 `GameSettingsTests` 형식의 `LogAssert.Expect` 로 고침), 제안 2(`TrackLook.LaneLines` 차선 폭 1 m 미만이면 던지게 고침; `ExteriorKit.Flat` 의 0 벡터 보정은 dev 에서 옮긴 코드라 둠). 고친 뒤 `TrackLookTests` 6/6 (07:52:14Z), `Race_WithATrackLook_*` 1/1 (07:52:34Z). **Codex 리뷰 못 함**: "You’ve hit your usage limit … try again at 6:01 PM." — 사용자가 기다리지 않고 병합을 골랐다.
+  - 사용자 플레이 확인: SKYWAY 장식 "좋은데 맵 외곽쪽이 부족해보인다" → 보강 뒤 "좋다. 병합시키자". 렌더러 4680 에서의 프레임은 확인하지 않았다.
+- **SKYWAY 고가 합류·출구 수정 (2026-11-02, Codex 구현 · Claude 검증)**:
+  - **결정·이유**: 사용자 "오르막길을 통해 고가도로에 합류하는거지 고가도로가 만들어지는 것이 아니다", "고가는 출구 너머 서쪽으로 계속". 기존 `Bay` 에 `straightDeck`·`extension` 을 추가했다. 평지 직선 하나를 사이에 둔 오른쪽 R60/R65 90° 램프에만 허용하는 독립 직선 상판이다. 지상 베이의 생성·검증 경로는 그대로다. 별도 트랙 시스템·새 파일은 만들지 않았다.
+  - **값**: 레이스 도로·두 램프 반폭 6 m, 독립 고가는 왼쪽 확장 18 m를 합쳐 30 m. 레이스 중심 기준 가장자리 −24 / +6 m, 고가 중심 −9 m. `Bay.Highway(460.39378, 790.39378, 18, 50)` (S는 에셋에서 float): 직선 주행 330 m, 합류 뒤 동쪽·출구 너머 서쪽에 각각 50 m, 충돌 상판 총 430 m. 양끝 전폭 횡단 가드, 가운데 주행 구간에는 내부 가드 없음. 가드 너머 장식 상판은 양쪽 각 96 m, 충돌체 없이 교각으로 받친다.
+  - **접속**: 직선 상판은 레이스가 굽어도 직진한다. 램프 왼쪽 노면을 고가 오른쪽 경계에서 잘라 겹친 상판을 없애고 그 구간의 왼쪽 가드는 만들지 않는다. 고가 오른쪽 가드는 램프가 만나는 곳만 열린다. R60/R65, 반폭 6의 노면 접속 길이는 램프 축 `r * acos((r - 6)/(r + 6))`, 직선 축 `sqrt(4*r*6)` (약 37.95 / 39.50 m). 실제 가드 틈에는 두 도로의 가드 두께 0.3 m를 더해 램프 축 약 37.14 / 38.75 m, 직선 축 약 38.88 / 40.47 m를 연다. 가드 끝이 상대 노면에 튀어나오지 않게 하기 위해서다. 램프 끝의 0폭 삼각 꼭짓점은 양수 폭 계약과 월드 좌표 정밀도를 위해 1 mm 슬리버로 만든다.
+  - **차선·봉**: `TrackLook.LaneLines(15)` 의 3.6 m 격자를 고가 중심 −9 m 기준으로 옮기고 노란 이중선도 그곳에 둔다. 램프는 반폭 6의 기존 격자, 양 접속부는 노란 삼각 빗금. 봉 7개는 S `480.39378 + 40*i`, reach 10, **고가 중심에서** 왼쪽부터 ±11 m (레이스 중심 기준 −20 / +2 m). 봉 검증은 이 독립 상판의 전체 폭도 인정한다.
+  - **조각·길이**: 중심선·높이·방향은 유지, 폭 테이퍼만 제거. 총 32조각, 한 바퀴 **1599.37 m** (Unity 실측 1599.4 m, 전과 같다). 조각 7·8·9·10·11·12·13·14 의 `EndHalfWidth` 는 모두 기본값 0(반폭 6)으로 바뀐다. 0 직선20.5 / 1 R28 +180° / 2 직선56 / 3 R26 −90° / 4 직선50 / 5 직선15(+0.15) / 6 R26 +90°(+0.15) / 7 직선24.22(+0.15) / 8 직선15(0) / 9 직선15.78 / 10 R60 +90° / 11 직선330 / 12 R65 +90° / 13 직선15(−0.1) / 14 직선15(−0.1) / 15 직선15(0) / 16 직선10.56 / 17 R26 −90° / 18 R30 +120° / 19 R30 +105° / 20 R28 −135° / 21 직선62.5 / 22 R22 +90° / 23 직선7.5 / 24 R30 +45° / 25 R30 −45° / 26 직선83.06 / 27 R22 +90° / 28 직선15(−0.2) / 29 직선30(−0.2) / 30 직선15(0) / 31 R31 −180°. 괄호는 끝 경사, 생략은 0. 지상 베이는 `FromS=205.80530, ToS=255.30530, Width=10.8, Taper=22, Left=true` 그대로다.
+  - **버린 대안**: 대칭 폭 6→15→6 (레이스 도로가 고가가 되는 기존 문제). 기존 베이를 곡선 따라 연장 (출구에서 고가까지 북쪽으로 꺾인다). 독립 고가를 장식으로만 (공유 차선·횡단 가드의 충돌을 보장하지 못한다). 일반 베이의 taper=0을 무조건 허용 (접속 근거 없는 수직 확장). 램프 방향·전체 중심선 재배치 (기존 두 곡선이 이미 북쪽으로 합류·분기하며 불필요한 랩 변경).
+  - **영향·테스트**: 새 모드는 SKYWAY 에만 설정한다. 베이 없는 트랙의 노면·가드 생성식과 FINGER 오른쪽 지름길 틈은 유지했다. `StartGuard` 는 기본 false라 기존 프로필은 기존 메시 순서 그대로다. EditMode `TrackDefinitionTests` 에 독립 축·전체 폭 봉·잘못된 길이/범위/겹침/폭/램프 방향·접속 공식, `RoadMeshBuilderTests` 에 시작 가드와 조명 검사 추가. 기존 SKYWAY 모양 테스트는 바뀐 사양(30 m 독립 상판, 12 m 램프, 고가 중심 기준 봉)에 맞게 주석과 단언을 수정. PlayMode `Race_SkywayHighway_ClosesBothEndsAndJoinsRampsWithoutInteriorGuards`(전폭 양끝 가드·공유 노면·중앙선·빗금·접속 연속성), `Race_SkywayHighway_RollbackAcrossJoinAndExitRepeatsEveryTick` 추가. 2랩 봇의 최대 옆 거리 단언은 바꾸지 않았다.
+  - **검증** (Claude, 에디터 6000.3.25f1, 커밋 전 작업 트리, UTC): 컴파일 성공 → `CreateSkywayTrack`(`TryValidate` 통과, 조각 32·베이 2·봉 7) → `RebuildExterior`(침범 검사 통과, 렌더러 1113 → 1151, 콘솔 오류 0).
+    - EditMode `TrackDefinitionTests`·`RoadMeshBuilderTests`·`TrackLookTests` `testcasecount="77" result="Passed" passed="77" failed="0"` (06:02:03Z).
+    - PlayMode 16건 `testcasecount="16" result="Failed(Child)" passed="15" failed="1"` (06:02:37Z~06:06:38Z). 실패: `Race_SkywayHighway_RollbackAcrossJoinAndExitRepeatsEveryTick` — `Unhandled log message: '[Error] RaceAssembler: tick 1271 came after 1545; this run will keep no ghost.'`. 되감기에 고스트 기록기가 내는 정해진 에러(`RaceAssembler.RecordTick`)를 새 테스트가 받지 않았다. 기존 되감기 테스트(`ChainRushFlowTests` 의 부스트존 되감기)와 같게 `LogAssert.Expect` 한 줄을 넣었다(시험하는 틱별 비교는 그대로). 다시 돌려 `testcasecount="1" result="Passed" passed="1"` (06:08:24Z).
+    - 나머지 15건 통과: SKYWAY 모양·지상 베이·고가 양끝 가드/접속·로비 2랩(91.04 / 89.84 s, 최대 옆 4.97 m — 전과 같다: 봇이 따르는 중심선은 그대로)·속도 단계 Normal(최대 옆 4.37 m)/VeryFast(5.61 m), 서킷 지문 `0x18F31E7A2B4F79B3` 그대로, FINGER 지름길 2·로비, 도로 조각 4, TrackLook 1. 다른 트랙의 메시 바이트 비교는 하지 않았고 지문·FINGER 테스트로만 봤다.
+    - 미리보기 렌더(합류·출구 위에서, 램프에서, 고가 위에서 뒤쪽 가드): 8차로 고가에 가운데 노란 이중선, 오른쪽 램프 합류·분기 삼각부 빗금, 양끝 가로 가드와 그 너머 장식 상판. 장식 상판은 `ExteriorKit.Box` 의 0..1 UV 라 아스팔트 질감이 늘어나 보인다(남은 것).
+- **발광 키워드 (2026-11-02)**: URP 는 머티리얼을 다시 검사할 때 `_EMISSION` 을 `globalIlluminationFlags` 로 다시 정한다. 그래서 `ExteriorAssets.Palette` 가 발광이 있으면 `RealtimeEmissive`, 없으면 `EmissiveIsBlack` 을 함께 설정한다. 처음에는 이 설정이 빠져 PALM 바다·유리가 재가져오기 뒤 빛을 잃었다. 강제 재가져오기 뒤에도 빛나는 머티리얼 13개가 모두 키워드를 유지하는 것을 확인했다.
+
+- **결정 (사용자, 2026-11-02)**: "맵 디자인 보강 … 해변 서킷처럼 디테일과 서킷 도로와 벽에 대한 디자인이 있어야한다" → 요청서(도로·벽 먼저, 디테일은 한 트랙씩, 원작 영상) 추천대로. STADIUM 빌더를 묻자 "확장성과 재사용성을 생각해서 … 구조개선이 필요하다면 바꿔야" → 공통 도구 분리안 "추천대로 하겠다". 플레이 뒤 피드백 4가지(STADIUM 낙사 구간 식별·명분, 계주용 레인과 미식축구장, SKYWAY "실제 아스팔트 도로" 와 오른쪽 램프·차선, FINGER·PALM 도 아스팔트) → 추천(물웅덩이 + 장대 가로대, 미식축구장, 양방향 고속도로 고가)과 램프 그림 "비슷한데 … 정면은 가드로 막혀있어야", "정면 가드는 지상도로에서 수직으로 일직선", P1~P4 "ㄱㄱ", P3 설계 "ㄱㄱ".
+- **R1 공통 도구** (`Editor/ChainRush/`): `ExteriorAssets`(머티리얼 `Palette`·질감 `Surface`·`Grains`·TrackLook·메시 저장·장식 검사·미리보기 씬에서 프리팹 저장과 GUID 지키기), `RoadCorridor`(본선·지름길·베이 샘플, `Clear`/`Available`/`Reserve`, 침범 검사), `ExteriorKit`(도형·`Hash`/`Pick`, static class — 요청서의 sealed class 에서 바꿨다: 상태가 메시 캐시뿐이고 `using static` 으로 빌더의 호출을 그대로 둔다). 세 빌더의 사본을 지웠고, 리팩토링 뒤 다시 지은 세 프리팹의 렌더러(경로·메시·머티리얼·그림자·변환) 지문이 전과 같았다(SKYWAY 1046 · FINGER 3179 · PALM 5361, 다른 줄 0).
+  - **SKYWAY 에 침범 검사를 처음 켰더니** 고가 교각이 걸렸다 — 비탈진 대각선 구간에서 캡의 축 정렬 경계가 낮은 도로 점에 닿은 오판(회전한 바닥면으로 재면 교각 꼭대기와 슬래브 밑의 최소 간격 0.000 m). 사용자 "1번 추천대로": 도로 밑 구조물 그룹은 경계 대신 **회전한 바닥면 위 슬래브 밑** 검사(`ValidateUnderRoad`).
+  - FINGER 머티리얼의 발광 0.22 는 저장된 키워드가 없어(`m_ValidKeywords: []`) 원래 꺼져 있었다 — 처음 요청서에서 "형광이 남아 있다"고 한 것은 틀렸다. 통합 `Palette` 는 발광 0 으로 같은 화면.
+- **R2·P1 실제 도로** (런타임은 표현만, 시뮬 불변):
+  - `RoadPiece` 메시에 월드 m 단위 UV(면마다 주축 투영). 충돌은 정점·삼각형만 써서 지문 그대로.
+  - 질감: 빌더가 시드 고정으로 만드는 `Art/Textures/T_{Asphalt,Concrete,Rubber}Grain(_Normal).png`(512², 이음매 없는 값 노이즈 + 골재·기공 점, 밝기 맵은 linear, 바이트가 바뀔 때만 씀). 트랙 색은 머티리얼의 색(`GrainMean` 0.82 로 나눔).
+  - `TrackLook`: `accent`(노란 페인트)·`laneWidth`·`centreFromHalfWidth`·`doubleCentre`·`solidLanes`, `LaneLines` — 차선은 중심에서 고정 간격이라 **좁아지면 바깥 선이 가장자리에 먹혀 끝나고(차로 감소), 넓어지면 자리가 날 때 생긴다**. 바깥 차로가 반 차로 미만이면 선을 그리지 않는다.
+  - `CircuitScenery.PaintMarkings(TrackLook)`: 가장자리 실선, 차선(점선 3 m/5 m 또는 실선), 중앙선(이중 노란 실선 또는 흰 점선), 틈 앞뒤 **이륙판**(1.2 m, 0.8 m 노란 줄), 코너 화살표, 베이(아래).
+  - **고친 버그**: 차선 사각형이 같은 정점에 양쪽 감김 삼각형을 두어 `RecalculateNormals` 가 법선을 0 으로 만들고 차선이 검게 그려졌다(PALM 은 약한 발광으로 가려졌던 것으로 본다). 위를 향하는 감김 하나만(`Quad`).
+  - 트랙별(원작 기록 영상을 scratchpad 접촉 시트로 읽음, SKYWAY `UZWC4qtamfk`·FINGER `hWCUj3y0nzM`): SKYWAY 회색 아스팔트·콘크리트 방호벽·3.6 m 차선·고가(반폭 15)만 노란 이중 중앙선(사용자 "양방향 고속도로"), FINGER 슬레이트 아스팔트·파란 벽·노란 이중 중앙선, PALM 따뜻한 아스팔트·라벤더 벽·흰 점선 중앙선 4차선(노란 이륙판), STADIUM 붉은 탄성 트랙·1.22 m 흰 실선 레인. 로비 세 항목의 look 은 `Unity_RunCommand` 로 넣고 사용자가 저장.
+- **R3·P2 STADIUM**: `StadiumEnvironmentBuilder` · `Prefabs/StadiumExterior.prefab`. 장식 씬은 손으로 놓은 것이었고(활성인 것은 아트 패스가 구운 메시 11개 `Art/Models/StadiumSports_*`, 나머지 58개는 비활성 루트) 생성 코드가 리포에 없어, 구운 메시를 그대로 참조하고 사용자가 장식 씬의 세 루트를 프리팹 하나로 바꿔 저장했다.
+  - 안쪽 타원 육상 트랙·작은 축구장을 걷고 **미식축구장**(120 × 53⅓ 야드: 5야드 줄무늬·엔드존 남색/민트·야드 선·해시·골포스트): `Clay`·`TurfLight` 를 빼고 `White`·`Ink`·`Amber` 에서 안쪽 삼각형만 뺀 파생 메시와 안쪽 잔디 메시를 빌더가 저장(`StadiumExterior_*.asset`).
+  - **낙사 구간 → 육상 종목** (사용자 "단순히 낙사구간이라기 보단 스타디움에서 어떠한 구간"): 6 m 틈 = 장애물 경주 물웅덩이(청록 물·옆의 흑백 장애물), 16 m 그래플 틈 = 물웅덩이 + **장대높이뛰기 가로대**(앵커 높이에서 도로를 가로지름, 9 m 위라 침범 검사 예외). 틈 앞뒤 노란 이륙판(위). 트랙 모양 그대로.
+  - 구운 메시는 서킷을 감싸 경계 검사가 늘 걸려 **정점 단위 검사**(`ValidateByVertex`, 노면 위 0.05 m ~ 9 m 사이, 가장자리 0.7 m 안의 정점을 잡는다; 도로 위 상자로 잡히는 것을 확인; 꼭짓점이 모두 밖이고 면만 도로를 지나는 경우는 못 잡는다).
+- **P3 SKYWAY 램프 — 시뮬 변경**: 넓은 지상 도로에서 오른쪽 차선이 그대로 오르막(정식 루트), 왼쪽 차선은 진행 방향에 **수직인 가드**로 막힌다.
+  - 새 기능 **베이** `TrackDefinition.Bay`(시작·끝 S, 폭, 벌어지는 길이, 쪽): 본선 옆에 붙는 막다른 확장부. 본선 쪽 가드 없음(본선의 그 쪽 가드도 그 구간에서 연다 — 지름길이 오른쪽 가드를 여는 것을 양쪽으로 일반화, `CircuitScenery.LayRange`), 바깥 가드, 끝에 수직 가드(보이는 벽 + 4 m 충돌체, `RoadProfile.EndGuard`). `RoadProfile` 에 가로 오프셋(`Offset`·`EndOffset`). 검증: 한 폭의 평지 직선, 틈·같은 쪽 다른 베이·지름길 교차와 겹치지 않음, 바깥 가장자리는 한쪽에 `2 × MaxWidthChange` 이하로 벌어짐.
+  - `Circuit_Skyway`(빌더 `CreateSkywayTrack` 로 제자리 덮어씀, GUID 유지): 왼쪽 커브 뒤 평지 진입 직선 **50 m** 를 넣고 왼쪽에 베이(폭 10.8 m = 3차선, 벌어짐 22 m, S 205.81..255.31), 고리가 닫히게 고가 직선 280 → **330 m**(조각 10 → 11), 직선 봉 7개는 +50 m 로 같은 상대 위치. 한 바퀴 1499.37 → **1599.37 m**, 조각 31 → 32.
+  - 차선: 베이 위로 차선 격자가 이어지고(본선 왼쪽 가장자리 선 대신 베이 바깥 선), 끝 15 m 는 차선을 멈추고 노란 사선 빗금 + 본선 가장자리 흰 실선. 장식: 가드 뒤에 노랑·검정 화살표 표지판(침범 검사가 베이 끝을 반폭 원으로 보므로 반폭 + 0.8 m 뒤).
+  - **테스트를 고친 것 (사양 변경)**: `Skyway_ElevatedStretch_IsWideWithSevenAlternatingSwingPoles` — 고가 직선이 조각 11, 330 m. 새로: `Race_SkywayBay_IsOneRoadWithTheLanesAndEndsAgainstAGuard`(베이는 노면 높이의 도로, 본선과 사이에 가드 없음, 곧게 달리면 끝의 수직 가드, 본선은 이어짐), `Race_StadiumFromTheLobby_LaysItsLookAndLoadsItsExterior`, EditMode `TrackLookTests`(6), `TrackDefinitionTests` 베이 2건, `RoadMeshBuilderTests` 오프셋·끝 가드 1건. SKYWAY·FINGER 로비 레이스 테스트에 look 확인(`AssertLaysTheLook`).
+- **검증** (에디터 6000.3.25f1, 커밋 전 작업 트리, 바뀐 부분만, UTC):
+  - EditMode `TrackDefinitionTests`·`RoadMeshBuilderTests`·`TrackLookTests` `testcasecount="66" result="Passed" passed="66" failed="0"` (05:32:54Z~05:32:55Z).
+  - PlayMode 14건 `testcasecount="14" result="Passed" passed="14" failed="0"` (05:33:11Z~05:37:03Z): 도로 조각 4, 서킷 지문 1(`0x18F31E7A2B4F79B3` 그대로), SKYWAY 모양·베이·로비 2랩(91.04 / 89.84 s, 최대 옆 4.97 m)·속도 단계 보통/매우빠름, FINGER 지름길 2·로비 2랩(가드 틈 일반화), TrackLook 1.
+  - 앞선 실행: PlayMode 10건(P1, 05:14:02Z~05:16:46Z, 지문 그대로), STADIUM 로비 1건(05:21:24Z, P2 뒤), EditMode `TrackLookTests` 6건(05:10:37Z).
+  - 장식 빌더 네 개 모두 침범 검사 통과(SKYWAY 교각 108개 슬래브 밑, STADIUM 정점 약 20만 개).
+- **남은 것**: 사용자 플레이 확인(네 트랙의 도로·차선, STADIUM 경기장·물웅덩이·가로대, SKYWAY 램프와 정면 가드). R4 디테일(SKYWAY → FINGER → STADIUM). 게이트 전체는 마일스톤(③)에서 — 다른 트랙 영향은 지문·네 트랙 로비 레이스로만 봤다. 레인 번호(출발선 숫자)는 하지 않았다. 커밋은 지시 때.
+- **버린 대안**: STADIUM 은 추가 프리팹만(구운 메시가 검사 밖에 남는다). 수직 가드를 대각 테이퍼로(사용자 "수직으로 일직선"). 넓은 도로를 장식 도로로 계속 잇기(사용자 "정면은 가드로 막혀"). 교각 그룹만 검사에서 빼기(뚫어도 못 잡는다). 차선 수를 폭으로 나눠 고르게(폭이 바뀌면 선이 모두 움직인다).
+
 ## 2026-10-30 · 테스트 범위: 작업 중·병합은 바뀐 부분만, 게이트 전체는 마일스톤에서만 (`docs/test-scope-handoff`)
 
 - **결정 (사용자, 2026-10-30)**: "개발된 부분에 대해서만 테스트를 돌릴 것. 모든 테스트, 서킷을 다 돌리는 것 보고 경악을 금치 못했다"(다른 PC 의 PALM COAST 작업 중 고칠 때마다 게이트 전체를 돌린 것), 이어 규칙과 실제가 어긋난 것을 어떻게 할지 묻자 개정안(아래)에 "권장대로 진행".

@@ -504,11 +504,140 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(Error(), Does.Contain("shortcut 0").And.Contain("half width"));
         }
 
+        // A bay (user 2026-11-02, the Skyway's on-ramp) on the default's second straight (S 174.6 .. 234.6, flat), on its left:
+        // it widens over its taper, opens the main road's left guard over its whole length.
+        [Test]
+        public void Bay_OnAFlatStraight_IsValid_WidensOverItsTaper_AndOpensTheGuardOnItsSide()
+        {
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(180f, 230f, 6f, 20f, true) });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            TrackDefinition.Bay bay = definition.Bays[0];
+            Assert.That(bay.WidthAt(170d), Is.EqualTo(0f));
+            Assert.That(bay.WidthAt(190d), Is.EqualTo(3f).Within(1e-4f));
+            Assert.That(bay.WidthAt(220d), Is.EqualTo(6f).Within(1e-4f));
+            Assert.That(bay.WidthAt(231d), Is.EqualTo(0f));
+            List<(double From, double To, bool Left)> gaps = definition.BayGuardGaps();
+            Assert.That(gaps.Count, Is.EqualTo(1));
+            Assert.That(gaps[0], Is.EqualTo((180d, 230d, true)));
+        }
+
+        [Test]
+        public void TryValidate_BayOverACornerTooSharpOrOffTheLap_IsRejected()
+        {
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(160f, 230f, 6f, 20f, true) });
+            Assert.That(Error(), Does.Contain("bay 0").And.Contain("flat straight of one width"));
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(180f, 230f, 6f, 10f, true) });
+            Assert.That(Error(), Does.Contain("bay 0").And.Contain("taper"));
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(180f, 900f, 6f, 20f, true) });
+            Assert.That(Error(), Does.Contain("bay 0").And.Contain("within the lap"));
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(180f, 230f, 2f, 20f, true) });
+            Assert.That(Error(), Does.Contain("bay 0").And.Contain("width"));
+        }
+
         [Test]
         public void CheckpointS_BadIndex_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => definition.CheckpointS(3));
             Assert.Throws<ArgumentOutOfRangeException>(() => definition.StartSlot(1));
+        }
+
+        // User 2026-11-02: the highway is an existing straight, not a widening racing road. This small closed
+        // circuit isolates that definition rule from the saved SKYWAY asset and its editor rebuild.
+        private TrackDefinition.Bay SetHighway(float extension = 50f)
+        {
+            SetSegments(TrackDefinition.Segment.Arc(60f, 90f), TrackDefinition.Segment.Straight(100f),
+                TrackDefinition.Segment.Arc(65f, 90f), TrackDefinition.Segment.Straight(100f),
+                TrackDefinition.Segment.Arc(30f, 90f), TrackDefinition.Segment.Straight(165f),
+                TrackDefinition.Segment.Arc(30f, 90f), TrackDefinition.Segment.Straight(105f));
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            float start = definition.Segments[0].Length;
+            var bay = TrackDefinition.Bay.Highway(start, start + 100f, 18f, extension);
+            SetField("bays", new List<TrackDefinition.Bay> { bay });
+            return bay;
+        }
+
+        [Test]
+        public void Bay_StraightHighway_UsesItsOwnAxisAndAllowsPolesAcrossItsFullWidth()
+        {
+            TrackDefinition.Bay bay = SetHighway();
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(bay.FromS + 20f, -20f, 10f) });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline main = definition.BuildCenterline(Vector3.zero, 0f), deck = bay.DeckLine(main);
+            Assert.That(deck.EndS, Is.EqualTo(200d).Within(0.001d));
+            TrackFrame join = main.FrameAt(bay.FromS);
+            Assert.That(Vector3.Distance(deck.FrameAt(50d).Position, join.Position), Is.LessThan(0.001f));
+            Assert.That(Vector3.Dot(deck.FrameAt(deck.EndS).Forward, join.Forward), Is.GreaterThan(0.9999f));
+            Assert.That(Vector3.Distance(deck.FrameAt(0d).Position, join.Position - join.Forward * 50f), Is.LessThan(0.001f));
+            Assert.That(definition.BayGuardGaps(), Is.Empty, "A highway opens only its ramp crossings, not the legacy bay guard gap.");
+            SetField("poles", new List<TrackDefinition.Pole> { new TrackDefinition.Pole(bay.FromS + 20f, -25f, 10f) });
+            Assert.That(Error(), Does.Contain("pole 0").And.Contain("within the road"));
+        }
+
+        [TestCase(0f)]
+        [TestCase(39f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void TryValidate_HighwayEndGuardInsideARampCrossingOrInvalidExtension_IsRejected(float extension)
+        {
+            SetHighway(extension);
+            Assert.That(Error(), Does.Contain("bay 0").And.Contain("extension"));
+        }
+
+        [Test]
+        public void TryValidate_HighwayOffItsStraightOrWithAnOverlappingBay_IsRejected()
+        {
+            TrackDefinition.Bay bay = SetHighway();
+            SetField("bays", new List<TrackDefinition.Bay> { TrackDefinition.Bay.Highway(bay.FromS + 1f, bay.ToS, 18f, 50f) });
+            Assert.That(Error(), Does.Contain("span exactly one flat straight"));
+            SetField("bays", new List<TrackDefinition.Bay> { bay, new TrackDefinition.Bay(bay.FromS + 10f, bay.ToS - 10f, 6f, 20f, true) });
+            Assert.That(Error(), Does.Contain("overlaps"));
+        }
+
+        [Test]
+        public void TryValidate_HighwayWhoseRacingStraightChangesWidth_IsRejected()
+        {
+            SetHighway();
+            var pieces = new List<TrackDefinition.Segment>(definition.Segments);
+            pieces[1] = TrackDefinition.Segment.Straight(100f, endHalfWidth: 7f);
+            SetField("segments", pieces);
+            Assert.That(Error(), Does.Contain("all of one width"));
+        }
+
+        [Test]
+        public void TryValidate_HighwayWhoseRampsAreNotFlat_IsRejected()
+        {
+            SetHighway();
+            var pieces = new List<TrackDefinition.Segment>(definition.Segments);
+            float rise = 0.05f;
+            float fall = -rise * (pieces[0].Length + 100f) / (pieces[2].Length + 100f);
+            pieces[0] = TrackDefinition.Segment.Arc(60f, 90f, rise);
+            pieces[2] = TrackDefinition.Segment.Arc(65f, 90f, fall);
+            SetField("segments", pieces);
+            Assert.That(Error(), Does.Contain("flat quarter-turn ramps"));
+        }
+
+        [Test]
+        public void TryValidate_HighwayBetweenRampsOnTheWrongSide_IsRejected()
+        {
+            // Mirror the whole fixture so closure and widths remain valid, while both ramps move left.
+            SetHighway();
+            var pieces = new List<TrackDefinition.Segment>(definition.Segments);
+            for (int i = 0; i < pieces.Count; i++)
+                if (pieces[i].IsArc) pieces[i] = TrackDefinition.Segment.Arc(pieces[i].Radius, -pieces[i].Degrees);
+            SetField("segments", pieces);
+            Assert.That(Error(), Does.Contain("quarter-turn ramps to its right"));
+        }
+
+        [Test]
+        public void Bay_DeckJunction_MeetsTheSameEdgeAlongRampAndHighway()
+        {
+            TrackDefinition.Bay.DeckJunction(60f, 6f, out float ramp, out float deck);
+            Assert.That(60f - 66f * Mathf.Cos(ramp / 60f), Is.EqualTo(6f).Within(0.0001f));
+            Assert.That(66f * Mathf.Sin(ramp / 60f), Is.EqualTo(deck).Within(0.0001f));
+            TrackDefinition.Bay.DeckJunction(60f, 6f, out float guardedRamp, out float guardedDeck, RoadMeshBuilder.GuardThickness);
+            Assert.That(guardedRamp, Is.GreaterThan(ramp), "Open the guard before its outer face reaches the other road.");
+            Assert.That(guardedDeck, Is.GreaterThan(deck));
+            Assert.Throws<ArgumentException>(() => TrackDefinition.Bay.DeckJunction(6f, 6f, out _, out _));
         }
     }
 }

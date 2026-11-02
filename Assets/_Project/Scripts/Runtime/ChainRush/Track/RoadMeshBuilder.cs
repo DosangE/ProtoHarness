@@ -33,22 +33,37 @@ namespace ProtoHarness.ChainRush.Track
             List<Vector3> vertices, List<int> triangles)
         {
             Require(line, fromS, toS, profile, vertices, triangles);
-            AppendSweep(line, fromS, toS, -profile.HalfWidth, profile.HalfWidth, -profile.EndHalfWidth, profile.EndHalfWidth,
-                -profile.Thickness, 0f, origin, vertices, triangles);
+            AppendSweep(line, fromS, toS, profile.Offset - profile.HalfWidth, profile.Offset + profile.HalfWidth,
+                profile.EndOffset - profile.EndHalfWidth, profile.EndOffset + profile.EndHalfWidth, -profile.Thickness, 0f, origin, vertices, triangles);
         }
 
         // A guard on each guarded edge, just outside the road, from the road top up to height: the visible
-        // rail uses GuardRailHeight, the collider GuardBlockHeight. Open edges get nothing.
+        // rail uses GuardRailHeight, the collider GuardBlockHeight. Open edges get nothing. An end guard stands square
+        // across the road's last GuardThickness metres, a start guard across its first; both reach out over the side
+        // guards so the corners close (user 2026-11-02, the highway blocked behind the join too).
         public static void AppendGuards(Centerline line, double fromS, double toS, RoadProfile profile, float height, Vector3 origin,
             List<Vector3> vertices, List<int> triangles)
         {
             Require(line, fromS, toS, profile, vertices, triangles);
             if (!(height > 0f) || float.IsInfinity(height))
                 throw new ArgumentOutOfRangeException(nameof(height), height, "Guard height must be positive and finite.");
+            float o = profile.Offset, endO = profile.EndOffset;
             float inner = profile.HalfWidth, endInner = profile.EndHalfWidth;
             float outer = profile.HalfWidth + GuardThickness, endOuter = profile.EndHalfWidth + GuardThickness;
-            if (profile.LeftGuard) AppendSweep(line, fromS, toS, -outer, -inner, -endOuter, -endInner, 0f, height, origin, vertices, triangles);
-            if (profile.RightGuard) AppendSweep(line, fromS, toS, inner, outer, endInner, endOuter, 0f, height, origin, vertices, triangles);
+            if (profile.LeftGuard) AppendSweep(line, fromS, toS, o - outer, o - inner, endO - endOuter, endO - endInner, 0f, height, origin, vertices, triangles);
+            if (profile.RightGuard) AppendSweep(line, fromS, toS, o + inner, o + outer, endO + endInner, endO + endOuter, 0f, height, origin, vertices, triangles);
+            if (profile.EndGuard)
+            {
+                RequireEndGuardRoom(fromS, toS);
+                float left = endO - (profile.LeftGuard ? endOuter : endInner), right = endO + (profile.RightGuard ? endOuter : endInner);
+                AppendSweep(line, toS - GuardThickness, toS, left, right, left, right, 0f, height, origin, vertices, triangles);
+            }
+            if (profile.StartGuard)
+            {
+                RequireEndGuardRoom(fromS, toS);
+                float left = o - (profile.LeftGuard ? outer : inner), right = o + (profile.RightGuard ? outer : inner);
+                AppendSweep(line, fromS, fromS + GuardThickness, left, right, left, right, 0f, height, origin, vertices, triangles);
+            }
         }
 
         // The light strip along the top of each rail.
@@ -56,14 +71,37 @@ namespace ProtoHarness.ChainRush.Track
             List<Vector3> vertices, List<int> triangles)
         {
             Require(line, fromS, toS, profile, vertices, triangles);
+            float o = profile.Offset, endO = profile.EndOffset;
             float center = profile.HalfWidth + GuardThickness * 0.5f, endCenter = profile.EndHalfWidth + GuardThickness * 0.5f;
             float half = GuardLightWidth * 0.5f;
             const float bottom = GuardRailHeight;
             const float top = GuardRailHeight + GuardLightHeight;
             if (profile.LeftGuard)
-                AppendSweep(line, fromS, toS, -center - half, -center + half, -endCenter - half, -endCenter + half, bottom, top, origin, vertices, triangles);
+                AppendSweep(line, fromS, toS, o - center - half, o - center + half, endO - endCenter - half, endO - endCenter + half, bottom, top, origin, vertices, triangles);
             if (profile.RightGuard)
-                AppendSweep(line, fromS, toS, center - half, center + half, endCenter - half, endCenter + half, bottom, top, origin, vertices, triangles);
+                AppendSweep(line, fromS, toS, o + center - half, o + center + half, endO + endCenter - half, endO + endCenter + half, bottom, top, origin, vertices, triangles);
+            if (profile.EndGuard)
+            {
+                RequireEndGuardRoom(fromS, toS);
+                float left = endO - (profile.LeftGuard ? endCenter + half : profile.EndHalfWidth);
+                float right = endO + (profile.RightGuard ? endCenter + half : profile.EndHalfWidth);
+                double middle = toS - GuardThickness * 0.5d;
+                AppendSweep(line, middle - half, middle + half, left, right, left, right, bottom, top, origin, vertices, triangles);
+            }
+            if (profile.StartGuard)
+            {
+                RequireEndGuardRoom(fromS, toS);
+                float left = o - (profile.LeftGuard ? center + half : profile.HalfWidth);
+                float right = o + (profile.RightGuard ? center + half : profile.HalfWidth);
+                double middle = fromS + GuardThickness * 0.5d;
+                AppendSweep(line, middle - half, middle + half, left, right, left, right, bottom, top, origin, vertices, triangles);
+            }
+        }
+
+        private static void RequireEndGuardRoom(double fromS, double toS)
+        {
+            if (!(toS - fromS > GuardThickness))
+                throw new ArgumentOutOfRangeException(nameof(toS), toS, "A road with an end guard must be longer than the guard.");
         }
 
         // Corners go clockwise around the section seen looking forward: top-left, top-right, bottom-right,

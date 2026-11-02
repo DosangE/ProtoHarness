@@ -14,8 +14,8 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // The circuit race scene (COURSE.md T4): a bot runs three laps of the stadium and the lap counter is
-    // exact; going backwards over the line is not a lap, a fall into a gap puts the runner back before it, a restart
+    // The circuit race scene (COURSE.md T4): first-lap driving is in FlowTests' Lap matrix, exact finish accounting
+    // in its record/ghost test (user 2026-11-02). Here: backwards over the line is not a lap, a fall respawns, a restart
     // starts over.
     public sealed class ChainRushCircuitTests
     {
@@ -55,54 +55,6 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = timeScale;
             yield return null;
             LogAssert.NoUnexpectedReceived();
-        }
-
-        // ---- the bot runs three laps --------------------------------------------------------------------
-
-        [UnityTest, Timeout(180000)]
-        public IEnumerator Race_BotRunsThreeLaps_CountsThemAndTimesThemExactly()
-        {
-            game.SetInputSource(new CircuitBot(game, player, grapple, circuit));
-            Time.timeScale = 3f;
-            game.StartRun();
-            LapCounter laps = circuit.Laps;
-            float started = Time.realtimeSinceStartup;
-            float deadline = started + 150f;
-            float maxOffset = 0f;
-            double lastProgress = laps.Progress;
-            while (game.IsRunning && !laps.IsFinished && Time.realtimeSinceStartup < deadline)
-            {
-                maxOffset = Mathf.Max(maxOffset, Mathf.Abs(game.Track.Project(player.transform.position).D));
-                Assert.That(laps.Progress, Is.GreaterThanOrEqualTo(lastProgress - 1d), "The bot's progress must not run backwards. " + State());
-                lastProgress = laps.Progress;
-                yield return null;
-            }
-            Time.timeScale = timeScale;
-            Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + State());
-            Assert.That(laps.IsFinished, Is.True, "Timed out after " + (Time.realtimeSinceStartup - started).ToString("F0") + " s. " + State());
-            Assert.That(game.HasFinished, Is.True, State());
-            Assert.That(laps.CompletedLaps, Is.EqualTo(3));
-            // ChainRushCircuit.unity's runner runs at 20 m/s (M1-T, 2026-10-18).
-            double lapSeconds = circuit.Definition.LapLength / 20d;
-            int sum = 0;
-            for (int lap = 1; lap <= 3; lap++)
-            {
-                float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                Debug.Log($"ChainRush circuit lap {lap}: {seconds:F2} s");
-                Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
-                sum += laps.LapTicks(lap);
-            }
-            Assert.That(laps.TotalTicks, Is.EqualTo(sum));
-            Assert.That(game.Tick, Is.EqualTo(laps.LapEndTick(3)), "The game ends the race on the tick the third lap is completed.");
-            Assert.That(game.Elapsed, Is.EqualTo(Ticks.ToSeconds(laps.TotalTicks)).Within(1e-3f));
-            Assert.That(game.Health, Is.EqualTo(3));
-            Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), "The bot touched a guard.");
-            for (int cp = 0; cp < 3; cp++)
-            {
-                for (int lap = 1; lap <= 3; lap++) Assert.That(laps.CheckpointTick(lap, cp), Is.GreaterThan(0), $"lap {lap} checkpoint {cp}");
-            }
-            Debug.Log($"ChainRush circuit race: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, slowest step {circuit.MaxStepMilliseconds:F2} ms, " +
-                      $"{circuit.PieceCount} road pieces, real time {Time.realtimeSinceStartup - started:F0} s, max offset {maxOffset:F2} m.");
         }
 
         // ---- direction and gaps -------------------------------------------------------------------------
@@ -389,11 +341,11 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             yield return LandOnRoad();
             yield return null;
-            // The start line is the last arc's end: its pole is 90 degrees aside and 40 m away, in reach since R4b (95 degrees,
-            // 40 + 6 m; until R4b, 75 degrees, it was not). It stays in reach for about 3.5 m past the arc (R4b, 2026-10-18:
-            // kept, to be judged in play at M1-T).
-            Assert.That(grapple.HasPoleCandidate, Is.True, "On the start line the last arc's pole is still in reach. " + State());
-            Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[feet.Count - 1]), Is.LessThan(1e-3f), "The candidate is the pole of the arc just left.");
+            // The start line is the last arc's end. Specification changed (user 2026-10-30, "이미 지나간 코너 같은 곳에 연결하지
+            // 않도록"; DECISIONS "봉 걸기"): on the ground an arc's pole is offered only up to halfway round it and never past its
+            // exit, so the pole of the arc just left is no longer in reach here (R4b's 95 degrees had kept it for about 3.5 m).
+            // The 2026-10-30 change did not run this test; found at the 2026-11-02 merge.
+            Assert.That(grapple.HasPoleCandidate, Is.False, "On the start line the arc just left offers no pole. " + State());
 
             // Mid-straight both poles are out of reach: the last arc's 72 m behind-aside, the first arc's 80 m ahead.
             Teleport(60d);

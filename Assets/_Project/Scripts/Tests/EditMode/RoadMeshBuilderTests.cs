@@ -242,6 +242,39 @@ namespace ProtoHarness.Tests.EditMode
             for (int i = triangles.Count / 2; i < triangles.Count; i++) Assert.That(triangles[i], Is.GreaterThanOrEqualTo(firstCount));
         }
 
+        // A bay's section (user 2026-11-02, TrackDefinition.Bay): offset to the left, its edges follow the offset, its left
+        // guard stands just outside its left edge, and its end guard closes its last 0.3 m square across, out over that
+        // guard, with no guard on its right (the main road's side).
+        [Test]
+        public void AppendRoadAndGuards_OffsetWithAnEndGuard_SitsBesideTheCenterlineAndClosesItsEnd()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(20f);
+            var profile = new RoadProfile(5f, 5f, -11f, -11f, Thickness, true, false, true);
+            Assert.That(profile.HasGuard, Is.True);
+            RoadMeshBuilder.AppendRoad(line, 0d, 20d, profile, Vector3.zero, vertices, triangles);
+            foreach (Vector3 vertex in vertices)
+                Assert.That(vertex.x, Is.EqualTo(-16f).Within(Tolerance).Or.EqualTo(-6f).Within(Tolerance));
+            vertices.Clear();
+            triangles.Clear();
+            RoadMeshBuilder.AppendGuards(line, 0d, 20d, profile, RoadMeshBuilder.GuardBlockHeight, Vector3.zero, vertices, triangles);
+            int side = SweepVertices(20);
+            Assert.That(vertices.Count, Is.EqualTo(side + SweepVertices(1)), "The left guard, then the end guard; none on the right.");
+            for (int i = 0; i < side; i++)
+                Assert.That(vertices[i].x, Is.EqualTo(-16.3f).Within(Tolerance).Or.EqualTo(-16f).Within(Tolerance));
+            float minX = float.MaxValue, maxX = float.MinValue;
+            for (int i = side; i < vertices.Count; i++)
+            {
+                Assert.That(vertices[i].z, Is.InRange(19.7f - Tolerance, 20f + Tolerance), "The end guard is the last 0.3 m.");
+                Assert.That(vertices[i].y, Is.InRange(-Tolerance, RoadMeshBuilder.GuardBlockHeight + Tolerance));
+                minX = Mathf.Min(minX, vertices[i].x);
+                maxX = Mathf.Max(maxX, vertices[i].x);
+            }
+            Assert.That(minX, Is.EqualTo(-16.3f).Within(Tolerance), "Out over the left guard.");
+            Assert.That(maxX, Is.EqualTo(-6f).Within(Tolerance), "To the bay's open edge.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => RoadMeshBuilder.AppendGuards(line, 0d, 0.2d, profile, 1f, Vector3.zero, vertices, triangles));
+        }
+
         [Test]
         public void AppendRoad_InvalidInput_Throws()
         {
@@ -255,6 +288,36 @@ namespace ProtoHarness.Tests.EditMode
             Assert.Throws<ArgumentNullException>(() => RoadMeshBuilder.AppendRoad(line, 0d, 5d, guarded, Vector3.zero, null, triangles));
             Assert.Throws<ArgumentOutOfRangeException>(() => RoadMeshBuilder.AppendGuards(line, 0d, 5d, guarded, 0f, Vector3.zero, vertices, triangles));
             Assert.That(vertices, Is.Empty, "A rejected call must not append anything.");
+        }
+
+        // User 2026-11-02: the existing highway is blocked behind the join as well as beyond the exit.
+        [Test]
+        public void AppendGuardsAndLights_StartGuard_ClosesTheFirstGuardThicknessAcrossTheOffsetDeck()
+        {
+            var line = new Centerline(Vector3.zero, 0f);
+            line.AppendStraight(20f);
+            var profile = new RoadProfile(15f, 15f, -9f, -9f, Thickness, false, false, false, true);
+            Assert.That(profile.HasGuard, Is.True);
+            RoadMeshBuilder.AppendGuards(line, 0d, 20d, profile, 4f, Vector3.zero, vertices, triangles);
+            float minX = float.MaxValue, maxX = float.MinValue;
+            foreach (Vector3 vertex in vertices)
+            {
+                Assert.That(vertex.z, Is.InRange(-Tolerance, RoadMeshBuilder.GuardThickness + Tolerance));
+                minX = Mathf.Min(minX, vertex.x);
+                maxX = Mathf.Max(maxX, vertex.x);
+            }
+            Assert.That(minX, Is.EqualTo(-24f).Within(Tolerance));
+            Assert.That(maxX, Is.EqualTo(6f).Within(Tolerance));
+            vertices.Clear();
+            triangles.Clear();
+            RoadMeshBuilder.AppendGuardLights(line, 0d, 20d, profile, Vector3.zero, vertices, triangles);
+            Assert.That(vertices, Is.Not.Empty);
+            foreach (Vector3 vertex in vertices)
+            {
+                Assert.That(vertex.z, Is.InRange(0f, RoadMeshBuilder.GuardThickness));
+                Assert.That(vertex.y, Is.GreaterThanOrEqualTo(RoadMeshBuilder.GuardRailHeight));
+            }
+            Assert.Throws<ArgumentOutOfRangeException>(() => RoadMeshBuilder.AppendGuards(line, 0d, 0.2d, profile, 4f, Vector3.zero, vertices, triangles));
         }
 
         [Test]

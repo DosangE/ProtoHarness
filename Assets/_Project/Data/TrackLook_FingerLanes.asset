@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f7a884f16a18d8489528e5fd8a42fd3, type: 3}
+  m_Name: TrackLook_FingerLanes
+  m_EditorClassIdentifier: ProtoHarness.Runtime::ProtoHarness.ChainRush.Race.TrackLook
+  road: {fileID: 2100000, guid: 395fad2ce0af7bf42a57a17004dee4fb, type: 2}
+  rail: {fileID: 2100000, guid: 0c215d550e9e3484894edb04fa2d91c1, type: 2}
+  markings: {fileID: 2100000, guid: 67167b9a830bc804c955d87c954072b6, type: 2}
+  accent: {fileID: 2100000, guid: 2271d572815ab4441b143c0c903051aa, type: 2}
+  doubleCentre: 1
+  laneWidth: 3.6
+  centreFromHalfWidth: 0
+  solidLanes: 0

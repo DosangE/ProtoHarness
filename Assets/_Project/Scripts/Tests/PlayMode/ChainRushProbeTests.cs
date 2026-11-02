@@ -33,6 +33,11 @@ namespace ProtoHarness.Tests.PlayMode
         private GrappleController grapple;
         private CircuitRace circuit;
         private float timeScale;
+        private RunnerProfile lapRunner;
+        private RaceSetup lapSetup;
+        private RaceAssembler lapAssembler;
+        private BestRecords lapRecords;
+        private GhostFiles lapGhosts;
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -58,6 +63,13 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator TearDown()
         {
             Time.timeScale = timeScale;
+            RaceLaunch.Clear();
+            if (lapRunner != null) UnityEngine.Object.Destroy(lapRunner);
+            if (lapRecords != null)
+            {
+                if (lapSetup.Track != null) lapRecords.Clear(lapSetup.Track.name, lapSetup.Speed);
+                if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
+            }
             yield return null;
             LogAssert.NoUnexpectedReceived();
         }
@@ -100,9 +112,10 @@ namespace ProtoHarness.Tests.PlayMode
 
         // The bot round one lap, hooking each corner's pole as soon as it comes in reach and holding the swing 0.6 s.
         // Per tick: how far the runner moved beyond what its speed allows, and the rope against the real distance.
-        [UnityTest, Timeout(180000)]
+        [UnityTest, Timeout(90000), Category("Lap")]
         public IEnumerator Probe_SwingHook_PositionJumpAtEachCorner()
         {
+            yield return LoadProbeLap("STADIUM", SpeedClass.Fast);
             var bot = new ProbeBot(new CircuitBot(game, player, grapple, circuit), game, player, circuit) { SwingCorners = true };
             Vector3 last = Vector3.zero;
             float lastSpeed = 0f;
@@ -139,7 +152,7 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = 2f;
             game.StartRun();
             last = player.transform.position;
-            float deadline = Time.realtimeSinceStartup + 120f;
+            float deadline = Time.realtimeSinceStartup + 60f;
             bool first = true;
             while (game.IsRunning && circuit.Laps.CompletedLaps < 1 && Time.realtimeSinceStartup < deadline)
             {
@@ -153,14 +166,17 @@ namespace ProtoHarness.Tests.PlayMode
             game.TickCompleted -= sample;
             Debug.Log($"ChainRush probe swing: {hooks} hooks, worst jump beyond speed {worstJump:0.00} m at {worstAt}; camera offset change per frame at most {worstCamera:0.00} m; respawned {player.IsRespawning}, laps {circuit.Laps.CompletedLaps}.");
             Assert.That(hooks, Is.GreaterThan(0), "The bot must hook at least one corner.");
+            Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "The probe did not complete one lap.");
+            yield return ChainRushFlowTests.LeaveLapRace(lapAssembler, lapSetup.EnvironmentScene);
         }
 
         // As the player told it (2026-10-19): "on the inside line, pressing Shift jumped me to the outside". The bot keeps
         // 4 m inside of the centerline through each corner and hooks once it is in the arc. Logs, per hook, the lateral
         // offset D (positive = right) before and after and the rope against the real distance.
-        [UnityTest, Timeout(180000)]
+        [UnityTest, Timeout(90000), Category("Lap")]
         public IEnumerator Probe_SwingHook_FromTheInsideLine()
         {
+            yield return LoadProbeLap("STADIUM", SpeedClass.Fast);
             var bot = new ProbeBot(new CircuitBot(game, player, grapple, circuit), game, player, circuit) { SwingCorners = true, InsideLine = true };
             Vector3 last = Vector3.zero;
             float lastSpeed = 0f, worstJump = 0f;
@@ -202,12 +218,14 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = 2f;
             game.StartRun();
             last = player.transform.position;
-            float deadline = Time.realtimeSinceStartup + 120f;
+            float deadline = Time.realtimeSinceStartup + 60f;
             while (game.IsRunning && circuit.Laps.CompletedLaps < 1 && Time.realtimeSinceStartup < deadline) yield return null;
             Time.timeScale = timeScale;
             game.TickCompleted -= sample;
             Debug.Log($"ChainRush probe inside: {hooks} hooks, worst jump beyond speed {worstJump:0.00} m at {worstAt}; laps {circuit.Laps.CompletedLaps}.");
             Assert.That(hooks, Is.GreaterThan(0), "The bot must hook at least one corner.");
+            Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "The probe did not complete one lap.");
+            yield return ChainRushFlowTests.LeaveLapRace(lapAssembler, lapSetup.EnvironmentScene);
         }
 
         // The first corner, on the inside line, in every combination the player could not recall (2026-10-19): when the swing
@@ -357,7 +375,7 @@ namespace ProtoHarness.Tests.PlayMode
         // it lets go at. "Steering in a shortcut swing speeds the runner up far too much" (user 2026-10-27). Since 2026-10-30
         // ("손가락 맵에서 지름길쪽으로 갈 시 … 가속이 너무 심하다 … 겹쳐서 가속") also with a booster fired on each swing's
         // first tick (BoosterOnHook), with and without the inner key, and the carried speed each swing leaves.
-        [UnityTest, Timeout(600000)]
+        [UnityTest, Timeout(600000), Category("Lap")]
         public IEnumerator Probe_ShortcutSwing_SpeedWithTheInnerKeyHeld()
         {
 #if UNITY_EDITOR
@@ -366,10 +384,6 @@ namespace ProtoHarness.Tests.PlayMode
             TrackDefinition finger = null;
 #endif
             Assert.That(finger, Is.Not.Null, FingerLanesPath);
-            RunnerProfile neutral = ScriptableObject.CreateInstance<RunnerProfile>();
-            neutral.name = "Neutral";
-            var records = new BestRecords("ChainRush.Test.ProbeTests.");
-            var ghosts = new GhostFiles(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ProtoHarnessTests", "ProbeGhosts"));
             try
             {
                 foreach (SpeedClass speed in new[] { SpeedClass.Fast, SpeedClass.VeryFast })
@@ -377,26 +391,7 @@ namespace ProtoHarness.Tests.PlayMode
                 foreach (bool booster in new[] { false, true })
                 {
                     string run = speed + (inner ? ", inner key held" : ", no steering") + (booster ? ", booster on hook" : "");
-                    records.Clear(finger.name, speed);
-                    RaceLaunch.Clear();
-                    RaceLaunch.Request(new RaceSetup(finger, "FINGER LANES", "", RaceMode.Single, speed, neutral));
-                    RaceAssembler assembler = null;
-#if UNITY_EDITOR
-                    yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
-#endif
-                    foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
-                    {
-                        if (root.TryGetComponent(out RaceAssembler a)) assembler = a;
-                        if (root.TryGetComponent(out ChainRushGame g)) game = g;
-                        if (root.TryGetComponent(out RunnerMotor p)) player = p;
-                        if (root.TryGetComponent(out CircuitRace c)) circuit = c;
-                    }
-                    Assert.That(assembler, Is.Not.Null);
-                    assembler.Records = records;
-                    assembler.Ghosts = ghosts;
-                    float assemblyDeadline = Time.realtimeSinceStartup + 20f;
-                    while (assembler.IsAssembling && Time.realtimeSinceStartup < assemblyDeadline) yield return null;
-                    Assert.That(assembler.IsAssembling, Is.False, "The race did not finish assembling.");
+                    yield return LoadProbeLap("FINGER LANES", speed);
 
                     var shortcutBot = new ShortcutBot(game, player, finger) { HoldInnerKey = inner };
                     IInputSource bot = booster ? new BoosterOnHook(game, shortcutBot) : shortcutBot;
@@ -443,16 +438,14 @@ namespace ProtoHarness.Tests.PlayMode
                         Assert.That(shortcutBot.Missed, Is.EqualTo(0), "The plain shortcut run missed a hook. " + run);
                     }
                     Assert.That(swings, Is.GreaterThan(0), "No swing was measured. " + run);
+                    Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), "The probe did not complete one lap.");
                     game.FailRun();
+                    yield return ChainRushFlowTests.LeaveLapRace(lapAssembler, lapSetup.EnvironmentScene);
                 }
             }
             finally
             {
                 RaceLaunch.Clear();
-                records.Clear(finger.name, SpeedClass.Fast);
-                records.Clear(finger.name, SpeedClass.VeryFast);
-                if (System.IO.Directory.Exists(ghosts.Folder)) System.IO.Directory.Delete(ghosts.Folder, true);
-                UnityEngine.Object.Destroy(neutral);
             }
         }
 
@@ -657,6 +650,38 @@ namespace ProtoHarness.Tests.PlayMode
                     x = steer;
                 }
                 return new TickInput(x, driven.PrimaryPressed, false, false, held, chain, press);
+            }
+        }
+
+        // User 2026-11-02: even the explicit one-lap measurements use the saved lobby entry and its decoration/look.
+        // Short-window probes keep their original scene; these three lap probes alone call this.
+        private IEnumerator LoadProbeLap(string title, SpeedClass speed)
+        {
+            if (lapRunner == null)
+            {
+                lapRunner = ScriptableObject.CreateInstance<RunnerProfile>();
+                lapRunner.name = "ProbeLapRunner";
+                lapRecords = new BestRecords("ChainRush.Test.ProbeLapTests.");
+                lapGhosts = new GhostFiles(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ProtoHarnessTests", "ProbeLapGhosts"));
+            }
+#if UNITY_EDITOR
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/ChainRushLobby.unity", new LoadSceneParameters(LoadSceneMode.Single));
+#else
+            Assert.Fail("Lap probes require the Unity Editor.");
+            yield break;
+#endif
+            LobbyMenu menu = null;
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+                if (root.TryGetComponent(out LobbyMenu found)) menu = found;
+            Assert.That(menu, Is.Not.Null);
+            lapSetup = ChainRushFlowTests.LobbyLapSetup(menu, title, speed, lapRunner);
+            lapRecords.Clear(lapSetup.Track.name, speed);
+            yield return ChainRushFlowTests.LoadLapRace(lapSetup, lapRecords, lapGhosts, loaded => lapAssembler = loaded);
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+            {
+                if (root.TryGetComponent(out ChainRushGame g)) game = g;
+                if (root.TryGetComponent(out RunnerMotor p)) { player = p; grapple = p.GetComponent<GrappleController>(); }
+                if (root.TryGetComponent(out CircuitRace c)) circuit = c;
             }
         }
 

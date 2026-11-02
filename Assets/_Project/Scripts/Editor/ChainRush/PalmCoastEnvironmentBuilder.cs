@@ -52,12 +52,16 @@ namespace ProtoHarness.Editor.ChainRush
         // Warm dark asphalt (the reference's road; textured since user 2026-11-02, "아스팔트 기반 실제 도로 느낌"),
         // lavender walls (its low walls by the sea and through the town), white lane markings (CircuitScenery.PaintMarkings):
         // a dashed middle line and a lane either side; yellow take-off boards at the sea jump.
-        private static void BuildLook()
+        // The look and its sky only, the decoration left as it is (user 2026-11-02, the track skies).
+        [MenuItem("ProtoHarness/Chain Rush/Rebuild Palm Coast Look")]
+        public static void BuildLook()
             => ExteriorAssets.BuildLook(LookPath,
                 ExteriorAssets.Surface("Palm", "Road", new Color(0.30f, 0.29f, 0.28f), ExteriorAssets.Grain.Asphalt, 4f, 0.12f),
                 ExteriorAssets.Surface("Palm", "Wall", new Color(0.66f, 0.60f, 0.82f), ExteriorAssets.Grain.Concrete, 3f, 0.08f),
                 Palette("Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f), Palette("Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
-                new ExteriorAssets.Lanes(3.6f, 0f, false, false));
+                new ExteriorAssets.Lanes(3.6f, 0f, false, false),
+                // The reference's bright beach day: deep blue overhead, a few clouds, a pale sea haze at the horizon.
+                ExteriorAssets.BuildSky("Palm", new Color(0.22f, 0.56f, 0.92f), new Color(0.84f, 0.89f, 0.93f), Color.white, 0.3f, false, 170f, 560f));
 
         private static void BuildPrefab()
         {

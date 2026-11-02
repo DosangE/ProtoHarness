@@ -55,14 +55,18 @@ namespace ProtoHarness.Editor.ChainRush
         private static Material Palette(string name, Color color) => ExteriorAssets.Palette("Finger", name, color);
 
         // Slate asphalt and the low blue walls (user 2026-11-02, "아스팔트 기반 실제 도로 느낌"); the reference's double
-        // yellow middle line with a dashed lane either side.
-        private static void BuildLook()
+        // yellow middle line with a dashed lane either side; the reference's clear day of cotton clouds, the far green
+        // fading into a pale horizon.
+        // The look and its sky only, the decoration left as it is (user 2026-11-02, the track skies).
+        [MenuItem("ProtoHarness/Chain Rush/Rebuild Finger Lanes Look")]
+        public static void BuildLook()
             => ExteriorAssets.BuildLook(LookPath,
                 ExteriorAssets.Surface("Finger", "Road", new Color(0.29f, 0.31f, 0.36f), ExteriorAssets.Grain.Asphalt, 4f, 0.12f),
                 ExteriorAssets.Surface("Finger", "Wall", new Color(0.30f, 0.50f, 0.74f), ExteriorAssets.Grain.Concrete, 3f, 0.08f),
                 ExteriorAssets.Palette("Finger", "Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f),
                 ExteriorAssets.Palette("Finger", "Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
-                new ExteriorAssets.Lanes(3.6f, 0f, true, false));
+                new ExteriorAssets.Lanes(3.6f, 0f, true, false),
+                ExteriorAssets.BuildSky("Finger", new Color(0.28f, 0.54f, 0.90f), new Color(0.78f, 0.87f, 0.95f), Color.white, 0.42f, false, 160f, 520f));
 
         private static Material Require(string name) => ExteriorAssets.Require<Material>(ExteriorAssets.MaterialFolder + name);
 

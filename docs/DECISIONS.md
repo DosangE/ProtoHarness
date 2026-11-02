@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-11-02 · 서킷 공통 하늘: TrackLook 의 스카이박스·지평선 안개 (`feature/m6-track-sky`)
+
+- **결정 (사용자, 2026-11-02)**: FINGER 렌더를 보고 "좋은데 최외곽이 살짝 비어보인다. 하늘같은걸 구현해 놓는건 어떤가? 서킷 공통적으로 쓰일만하게" → 요청서(TrackLook 에 하늘·지평선 색·안개 거리, 레이스 시작 때 적용, 내장 Panoramic 셰이더로 커스텀 셰이더 없이) "ㄱㄱ 추천대로, finger 먼저 커밋하고 진행" — FINGER·PALM·SKYWAY 낮, STADIUM 밤.
+- **찾은 것 (요청서 전)**: 레이스 씬(`ChainRushCircuit.unity`)은 카메라를 단색 남색으로 지우고, 같은 색 선형 안개 45 → 210 m, 먼 클리핑 350 m 였다. 런타임에서 트랙별로 바꾸는 코드가 없어 네 트랙 모두 남색 밤에 100 m 부터 건물이 남색으로 묻혔다. 그때까지의 장식 미리보기 렌더(파란 단색, 안개 없음)는 이를 반영하지 못했다.
+- **결과**:
+  - `TrackLook`: `sky`(스카이박스 머티리얼)·`horizon`(안개 색)·`fogStart`·`fogEnd`. 하늘이 있으면 안개 끝이 시작보다 멀어야 한다(`TryValidate`). 하늘이 없는 look 은 씬 그대로.
+  - `RaceAssembler`: 직렬화 참조 `viewCamera`(레이스 씬의 `Main Camera`, 사용자가 씬 저장) — `Awake` 에서 필수. `Start`(레이스 씬이 활성 씬이 된 뒤)에서 `UseSky`: `RenderSettings` 의 스카이박스·선형 안개(지평선 색, 시작·끝), 카메라 Skybox 지우기, 먼 클리핑 = 안개 끝. 이 값들은 레이스 씬의 것이라 로비를 부르면 함께 사라진다. 표현만 — 시뮬은 읽지 않는다.
+  - `ExteriorAssets.BuildSky`: 위도·경도 파노라마 2048×1024 를 고정 시드로 굽는다 — 지평선 아래는 지평선 색(안개와 이음매 없음), 위로 천정 색까지, 하늘 위 평면에 원근으로 놓인 값 노이즈 구름(지평선 쪽은 고도 사인 0.25 → 0.05 에서 사라짐 — 첫 굽기에서 점 구름 띠), 밤에는 별. `T_<prefix>Skybox.png`(sRGB, 밉맵 없음, 가로 반복·세로 클램프, 고품질 압축) + 내장 `Skybox/Panoramic` 머티리얼 `M_<prefix>Skybox`(틴트 회색 0.5 = 원색). `BuildLook` 은 하늘을 반드시 받는다.
+  - 네 빌더: 트랙별 값, 장식은 그대로 두고 look 만 다시 만드는 메뉴 `Rebuild <트랙> Look`(`BuildLook` 을 public 으로 — MCP 가 리플렉션을 막아 계획에 더함). FINGER 낮 구름 42% 안개 160–520 m, PALM 낮 30% 170–560 m, SKYWAY 옅은 낮 50% 180–620 m, STADIUM 밤·별·어두운 구름 22% 60–300 m.
+- **고친 것 (작업 중 내 실수)**: 처음 이름 `M_<prefix>Sky` 가 SKYWAY 빌더의 팔레트 머티리얼 `M_SkywaySky`(옅은 하늘색 Lit, `SkywayExterior.prefab` 이 씀)와 같아 그 셰이더를 스카이박스로 덮어썼다. 그 파일 하나만 `git restore` 로 되돌리고(셰이더 `Universal Render Pipeline/Lit` 확인), 이름을 `Skybox` 로 바꿨다. 셰이더에 없는 키워드 `_MAPPING_LATITUDE_LONGITUDE_LAYOUT`(새 머티리얼이 enum 기본값으로 가짐)도 지운다.
+- **검증** (이 PC 의 에디터 6000.3.19f1 — 프로젝트 버전은 6000.3.25f1, UTC, 커밋 전 작업 트리): 내장 `Skybox/Panoramic`·`Procedural`·`Cubemap` 이 URP(`PC_RPAsset`)에서 지원됨 확인. 영향 평가: `TrackLook` 검증 → `TrackLookTests`; `RaceAssembler.Awake` 의 카메라 필수 → 레이스 씬을 여는 테스트(Flow·Circuit·Presentation·Replay 등) 중 대표로 `ChainRushPresentationTests`; `UseSky` → 새 테스트와 로비 → 레이스. Lap 은 표현만이라 돌리지 않았다(§4-4) — 랩 런의 `AssertLaysTheLook` 에 하늘·안개 단언을 더했지만 돌리지 않았다.
+  - EditMode `TrackLookTests` `testcasecount="8" result="Passed" passed="8" failed="0"` (09:45:05Z).
+  - PlayMode `Race_WithATrackLook*` 2(새 `Race_WithATrackLookSky_DrawsTheSkyAndFogsToItsHorizon` 포함)·`Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`ChainRushPresentationTests` 3 `testcasecount="6" result="Passed" passed="6" failed="0"` (09:45:25Z~09:45:32Z).
+  - 네 트랙 렌더(미리보기 장면, 카메라 `Skybox` 컴포넌트 + 활성 씬 안개를 찍는 동안만 트랙 값으로 바꾸고 되돌림, 씬 dirty 없음): 도로 위·바깥쪽 각 1장.
+- **사용자 플레이 확인**: "확인했다" (렌더 시트·플레이 뒤, 커밋·병합·푸시 지시와 함께). 프레임 수치는 재지 않았다.
+- **지운 것**: 처음 이름으로 만든 고아 생성물 `M_{Finger,Palm,Stadium}Sky.mat`·`T_{Finger,Palm,Skyway,Stadium}Sky.png`(+ .meta, 추적 안 됨, 서로만 참조) — 사용자 "승인한다". 테스트 실행 뒤 `Assets/` 에서 바뀐 것은 이 삭제뿐이고, 이것을 읽는 코드·에셋은 없다.
+- **버린 대안**: 커스텀 하늘 셰이더(프로젝트 첫 셰이더 — 내장 Panoramic + 구운 텍스처로 충분), 내장 Procedural(구름 없음), 구름을 장식 메시로(먼 클리핑 안에 둬야 하고 트랙마다 렌더러가 는다), 레이스 씬에 하늘 하나만(트랙별 낮·밤을 못 나눈다), `Camera.main` 으로 카메라 찾기(§0 런타임 조회 금지).
+
 ## 2026-11-02 · FINGER LANES 장식 디테일 (R4, `feature/m6-finger-detail`)
 
 - **결정 (사용자, 2026-11-02)**: "그래 그럼 finger부터" → 요청서(길가 띠·코너 화살표판·배너 가로등·광고판·출발 게이트·마을과 땅) "ㄱㄱ". 렌더를 본 뒤 "좋은데 최외곽이 살짝 비어보인다" → 하늘은 다음 항목으로 따로("ㄱㄱ 추천대로, finger 먼저 커밋하고 진행").
@@ -17,7 +35,7 @@
   - 40 m 이상 직선의 띠 뒤(+5.2 m)에 눈 모양 포스터 광고판, 출발선 위 체크무늬 게이트(보·글자판은 노면 9.4 m 위부터, 기둥 배너; 옆의 기념비를 대신함).
   - 집: SKYWAY `TownHouse` 형식으로 줄였다(렌더러 약 40 → 20, 주황 기와 70%, 덧창·화분·차양/발코니를 Hash 로). 18 m 마다 양쪽, 앞뒤 9 m 가 직선인 곳에만 — 곡선 위에서 돌아간 집은 경계 상자가 도로 쪽으로 부푼다(첫 재생성 여유 0.43~0.67 m).
   - 땅: 손가락 가운데와 남쪽의 돌길(땅 높이, 도로 슬래브 밑), 꽃밭 정원, 원경 풍차 4개. 머티리얼 13개 추가(`M_Finger{Tile,Apricot,Rose,Sand,Wood,Soil,Tulip,Marigold,Lavender,Hedge,LampGreen,Violet,Chevron}`).
-- **검증** (에디터 6000.3.25f1, UTC): 컴파일 성공, `Rebuild Finger Lanes Exterior` 원문 "Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge (at least 0.7 m below 9 m over the road)" / "FingerLanesExterior: 2865 renderers; physics=0; runtime scripts=0; road corridor clear." (전 3179). 미리보기 렌더 전후 6장 + 게이트. 장식만 바뀌어 테스트는 돌리지 않았다 — 빌더·프리팹을 읽는 테스트가 없고 장식 씬을 부르는 FINGER 테스트는 모두 `Lap`(VERIFICATION §4-4).
+- **검증** (이 PC 의 에디터 6000.3.19f1 — 프로젝트 버전은 6000.3.25f1, UTC): 컴파일 성공, `Rebuild Finger Lanes Exterior` 원문 "Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge (at least 0.7 m below 9 m over the road)" / "FingerLanesExterior: 2865 renderers; physics=0; runtime scripts=0; road corridor clear." (전 3179). 미리보기 렌더 전후 6장 + 게이트. 장식만 바뀌어 테스트는 돌리지 않았다 — 빌더·프리팹을 읽는 테스트가 없고 장식 씬을 부르는 FINGER 테스트는 모두 `Lap`(VERIFICATION §4-4).
 - **찾은 것**: 미리보기 렌더는 파란 단색에 안개가 없었지만, 실제 레이스 씬(`ChainRushCircuit.unity`)은 단색 남색 배경, 같은 색 선형 안개 45 → 210 m, 먼 클리핑 350 m 다(런타임에서 트랙별로 바꾸는 코드 없음). 실제 화면은 렌더와 다르다 — 다음 항목(하늘)에서 다룬다.
 - **확인 못 한 것**: 사용자 플레이(실제 조명·안개에서의 띠 높이·집 크기), 프레임 시간.
 - **버린 대안**: SKYWAY 빌더에서 화살표판·집을 공통 도구로 빼기(SKYWAY 재생성·지문 대조가 따라와 이번 범위 밖), 곡선 위 집을 경계 상자에 맞춰 바깥으로 밀기(검사를 흉내 내는 코드가 `RoadCorridor` 밖에 생긴다).

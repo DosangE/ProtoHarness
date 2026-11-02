@@ -252,6 +252,173 @@ namespace ProtoHarness.Editor.ChainRush
             importer.SaveAndReimport();
         }
 
+        // A track's sky (TrackLook.Sky, user 2026-11-02 "하늘 … 서킷 공통적으로"): the skybox material, its horizon colour
+        // that the fog thickens to, and the metres where the fog begins and ends.
+        public readonly struct Sky
+        {
+            public readonly Material Material;
+            public readonly Color Horizon;
+            public readonly float FogStart;
+            public readonly float FogEnd;
+
+            public Sky(Material material, Color horizon, float fogStart, float fogEnd)
+            {
+                Material = material;
+                Horizon = horizon;
+                FogStart = fogStart;
+                FogEnd = fogEnd;
+            }
+        }
+
+        private const int SkyWidth = 2048;
+        private const int SkyHeight = 1024;
+
+        // A sky panorama (Art/Textures/T_<prefix>Skybox.png, latitude-longitude) and the built-in Skybox/Panoramic material
+        // drawing it (M_<prefix>Skybox; no shader of our own). From the horizon up it fades from horizon to zenith; below
+        // the horizon it stays the horizon colour, the fog's, so land fogged to the horizon meets the sky with no seam.
+        // cover (0..1) of the sky overhead has clouds, on a layer seen in perspective so they shrink toward the horizon
+        // and thin out before it; at night stars. Painted from a fixed seed, so a rebuild writes the same file.
+        public static Sky BuildSky(string prefix, Color zenith, Color horizon, Color cloud, float cover, bool stars, float fogStart, float fogEnd)
+        {
+            if (!(cover >= 0f && cover <= 1f)) throw new ArgumentOutOfRangeException(nameof(cover), cover, "Cloud cover is a share of the sky, 0 to 1.");
+            if (!(fogStart >= 0f && fogEnd > fogStart)) throw new ArgumentOutOfRangeException(nameof(fogEnd), fogEnd, $"The fog must end past its start ({fogStart} m).");
+            int seed = 20261102;
+            foreach (char c in prefix) seed = seed * 31 + c;
+            var pixels = new Color[SkyWidth * SkyHeight];
+            for (int y = 0; y < SkyHeight; y++)
+            {
+                float elevation = ((y + 0.5f) / SkyHeight - 0.5f) * Mathf.PI;
+                float up = Mathf.Sin(elevation), across = Mathf.Cos(elevation);
+                for (int x = 0; x < SkyWidth; x++)
+                {
+                    int i = y * SkyWidth + x;
+                    if (up <= 0f)
+                    {
+                        pixels[i] = horizon;
+                        continue;
+                    }
+                    Color colour = Color.Lerp(horizon, zenith, Mathf.Pow(up, 0.55f));
+                    // Low over the horizon the layer is so far off that the noise breaks into specks (first bake,
+                    // 2026-11-02): the clouds thin out from 0.25 down to 0.05 of the way up and are gone below.
+                    if (cover > 0f && up > 0.05f)
+                    {
+                        float azimuth = (x + 0.5f) / SkyWidth * Mathf.PI * 2f;
+                        // Where this ray meets a flat cloud layer overhead.
+                        float px = across * Mathf.Cos(azimuth) / up * 1.1f, pz = across * Mathf.Sin(azimuth) / up * 1.1f;
+                        float n = Fbm(px, pz, seed);
+                        float edge = n - (1f - cover);
+                        float density = Mathf.SmoothStep(0f, 1f, edge / 0.16f) * Mathf.SmoothStep(0f, 1f, (up - 0.05f) / 0.2f);
+                        Color puff = cloud * (0.84f + 0.16f * Mathf.Clamp01(edge * 4f));
+                        colour = Color.Lerp(colour, puff, density * 0.95f);
+                    }
+                    if (stars && up > 0.06f)
+                    {
+                        float twinkle = Lattice(x, y, seed + 7);
+                        if (twinkle > 0.9975f) colour = Color.Lerp(colour, Color.white, (twinkle - 0.9975f) / 0.0025f * 0.8f + 0.2f);
+                    }
+                    pixels[i] = new Color(colour.r, colour.g, colour.b, 1f);
+                }
+            }
+            // "Skybox", not "Sky": a builder's palette may already have its own M_<prefix>Sky (SKYWAY's pale blue).
+            string texturePath = TextureFolder + "T_" + prefix + "Skybox.png";
+            WriteSkyTexture(texturePath, pixels);
+
+            string materialPath = MaterialFolder + "M_" + prefix + "Skybox.mat";
+            Shader shader = Shader.Find("Skybox/Panoramic");
+            if (shader == null) throw new InvalidOperationException("The built-in Skybox/Panoramic shader is missing.");
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material == null)
+            {
+                material = new Material(shader) { name = "M_" + prefix + "Skybox" };
+                AssetDatabase.CreateAsset(material, materialPath);
+            }
+            else if (material.shader != shader) material.shader = shader;
+            material.SetTexture("_MainTex", Require<Texture2D>(texturePath));
+            // Grey 0.5 is the shader's neutral tint: the panorama's colours as painted, the horizon the fog's.
+            material.SetColor("_Tint", new Color(0.5f, 0.5f, 0.5f, 0.5f));
+            material.SetFloat("_Exposure", 1f);
+            material.SetFloat("_Rotation", 0f);
+            material.SetFloat("_Mapping", 1f);
+            material.SetFloat("_ImageType", 0f);
+            material.SetFloat("_MirrorOnBack", 0f);
+            // Latitude-longitude is the shader's layout without its one keyword (_MAPPING_6_FRAMES_LAYOUT); a new material
+            // also carries the enum's other name, which the shader does not declare (saved as an invalid keyword).
+            material.SetFloat("_Layout", 0f);
+            material.DisableKeyword("_MAPPING_6_FRAMES_LAYOUT");
+            material.DisableKeyword("_MAPPING_LATITUDE_LONGITUDE_LAYOUT");
+            EditorUtility.SetDirty(material);
+            return new Sky(material, horizon, fogStart, fogEnd);
+        }
+
+        // Value noise in five octaves, 0..1, not tiling: the cloud layer is endless.
+        private static float Fbm(float x, float y, int seed)
+        {
+            float sum = 0f, amplitude = 0.5f, total = 0f;
+            for (int octave = 0; octave < 5; octave++)
+            {
+                int x0 = Mathf.FloorToInt(x), y0 = Mathf.FloorToInt(y);
+                float tx = Mathf.SmoothStep(0f, 1f, x - x0), ty = Mathf.SmoothStep(0f, 1f, y - y0);
+                float top = Mathf.Lerp(Lattice(x0, y0, seed + octave), Lattice(x0 + 1, y0, seed + octave), tx);
+                float bottom = Mathf.Lerp(Lattice(x0, y0 + 1, seed + octave), Lattice(x0 + 1, y0 + 1, seed + octave), tx);
+                sum += Mathf.Lerp(top, bottom, ty) * amplitude;
+                total += amplitude;
+                amplitude *= 0.5f;
+                x *= 2.03f;
+                y *= 2.03f;
+            }
+            return sum / total;
+        }
+
+        // A fixed value in 0..1 for a lattice point.
+        private static float Lattice(int x, int y, int seed)
+        {
+            unchecked
+            {
+                uint h = (uint)(x * 374761393 + y * 668265263 + seed * 144665);
+                h = (h ^ (h >> 13)) * 1274126177u;
+                h ^= h >> 16;
+                return (h & 0xFFFFFF) / 16777215f;
+            }
+        }
+
+        // Writes the panorama as a PNG when its bytes differ and imports it as a colour image that wraps round the
+        // horizon and not over the poles, without mipmaps (they seam a panorama), compressed at high quality so the
+        // gradient does not band.
+        private static void WriteSkyTexture(string path, Color[] pixels)
+        {
+            var texture = new Texture2D(SkyWidth, SkyHeight, TextureFormat.RGB24, false);
+            byte[] png;
+            try
+            {
+                texture.SetPixels(pixels);
+                texture.Apply();
+                png = texture.EncodeToPNG();
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+            if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(png))
+            {
+                File.WriteAllBytes(path, png);
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            }
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            if (importer == null) throw new InvalidOperationException("No texture importer for " + path);
+            if (importer.textureType == TextureImporterType.Default && importer.sRGBTexture && !importer.mipmapEnabled
+                && importer.wrapModeU == TextureWrapMode.Repeat && importer.wrapModeV == TextureWrapMode.Clamp
+                && importer.maxTextureSize == SkyWidth && importer.textureCompression == TextureImporterCompression.CompressedHQ) return;
+            importer.textureType = TextureImporterType.Default;
+            importer.sRGBTexture = true;
+            importer.mipmapEnabled = false;
+            importer.wrapModeU = TextureWrapMode.Repeat;
+            importer.wrapModeV = TextureWrapMode.Clamp;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.maxTextureSize = SkyWidth;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            importer.SaveAndReimport();
+        }
+
         // A track's lanes (TrackLook.LaneLines): metres between lines, the half width from which the road has a middle
         // line, whether that is a double line in the accent paint, and solid rather than dashed lines.
         public readonly struct Lanes
@@ -270,9 +437,11 @@ namespace ProtoHarness.Editor.ChainRush
             }
         }
 
-        // The track's road, wall and paint materials and its lanes (CircuitRace.UseLook), made at path or set again.
-        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes)
+        // The track's road, wall and paint materials, its lanes (CircuitRace.UseLook) and its sky (RaceAssembler), made at
+        // path or set again.
+        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes, Sky sky)
         {
+            if (sky.Material == null) throw new ArgumentException("Every track's look has a sky (BuildSky).", nameof(sky));
             TrackLook look = AssetDatabase.LoadAssetAtPath<TrackLook>(path);
             if (look == null)
             {
@@ -288,6 +457,10 @@ namespace ProtoHarness.Editor.ChainRush
             data.FindProperty("centreFromHalfWidth").floatValue = lanes.CentreFromHalfWidth;
             data.FindProperty("doubleCentre").boolValue = lanes.DoubleCentre;
             data.FindProperty("solidLanes").boolValue = lanes.Solid;
+            data.FindProperty("sky").objectReferenceValue = sky.Material;
+            data.FindProperty("horizon").colorValue = sky.Horizon;
+            data.FindProperty("fogStart").floatValue = sky.FogStart;
+            data.FindProperty("fogEnd").floatValue = sky.FogEnd;
             data.ApplyModifiedPropertiesWithoutUndo();
             if (!look.TryValidate(out string error)) throw new InvalidOperationException(error);
             EditorUtility.SetDirty(look);

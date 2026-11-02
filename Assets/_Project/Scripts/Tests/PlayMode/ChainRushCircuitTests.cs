@@ -14,8 +14,8 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // The circuit race scene (COURSE.md T4): a bot runs three laps of the stadium and the lap counter is
-    // exact; going backwards over the line is not a lap, a fall into a gap puts the runner back before it, a restart
+    // The circuit race scene (COURSE.md T4): first-lap driving is in FlowTests' Lap matrix, exact finish accounting
+    // in its record/ghost test (user 2026-11-02). Here: backwards over the line is not a lap, a fall respawns, a restart
     // starts over.
     public sealed class ChainRushCircuitTests
     {
@@ -55,54 +55,6 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = timeScale;
             yield return null;
             LogAssert.NoUnexpectedReceived();
-        }
-
-        // ---- the bot runs three laps --------------------------------------------------------------------
-
-        [UnityTest, Timeout(180000)]
-        public IEnumerator Race_BotRunsThreeLaps_CountsThemAndTimesThemExactly()
-        {
-            game.SetInputSource(new CircuitBot(game, player, grapple, circuit));
-            Time.timeScale = 3f;
-            game.StartRun();
-            LapCounter laps = circuit.Laps;
-            float started = Time.realtimeSinceStartup;
-            float deadline = started + 150f;
-            float maxOffset = 0f;
-            double lastProgress = laps.Progress;
-            while (game.IsRunning && !laps.IsFinished && Time.realtimeSinceStartup < deadline)
-            {
-                maxOffset = Mathf.Max(maxOffset, Mathf.Abs(game.Track.Project(player.transform.position).D));
-                Assert.That(laps.Progress, Is.GreaterThanOrEqualTo(lastProgress - 1d), "The bot's progress must not run backwards. " + State());
-                lastProgress = laps.Progress;
-                yield return null;
-            }
-            Time.timeScale = timeScale;
-            Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + State());
-            Assert.That(laps.IsFinished, Is.True, "Timed out after " + (Time.realtimeSinceStartup - started).ToString("F0") + " s. " + State());
-            Assert.That(game.HasFinished, Is.True, State());
-            Assert.That(laps.CompletedLaps, Is.EqualTo(3));
-            // ChainRushCircuit.unity's runner runs at 20 m/s (M1-T, 2026-10-18).
-            double lapSeconds = circuit.Definition.LapLength / 20d;
-            int sum = 0;
-            for (int lap = 1; lap <= 3; lap++)
-            {
-                float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                Debug.Log($"ChainRush circuit lap {lap}: {seconds:F2} s");
-                Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
-                sum += laps.LapTicks(lap);
-            }
-            Assert.That(laps.TotalTicks, Is.EqualTo(sum));
-            Assert.That(game.Tick, Is.EqualTo(laps.LapEndTick(3)), "The game ends the race on the tick the third lap is completed.");
-            Assert.That(game.Elapsed, Is.EqualTo(Ticks.ToSeconds(laps.TotalTicks)).Within(1e-3f));
-            Assert.That(game.Health, Is.EqualTo(3));
-            Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), "The bot touched a guard.");
-            for (int cp = 0; cp < 3; cp++)
-            {
-                for (int lap = 1; lap <= 3; lap++) Assert.That(laps.CheckpointTick(lap, cp), Is.GreaterThan(0), $"lap {lap} checkpoint {cp}");
-            }
-            Debug.Log($"ChainRush circuit race: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, slowest step {circuit.MaxStepMilliseconds:F2} ms, " +
-                      $"{circuit.PieceCount} road pieces, real time {Time.realtimeSinceStartup - started:F0} s, max offset {maxOffset:F2} m.");
         }
 
         // ---- direction and gaps -------------------------------------------------------------------------

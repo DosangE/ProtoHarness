@@ -10,7 +10,9 @@ namespace ProtoHarness.ChainRush.Track
     // guard rails and lights, and an invisible guard wall collider. The objects and meshes are made once;
     // Build refills the meshes for a new S range so a pool can move pieces down the track without
     // allocating. The root sits at the centerline point at FromS and the meshes are local to it, so an
-    // origin shift only moves the root.
+    // origin shift only moves the root. The meshes carry texture coordinates in world metres (user 2026-11-02, a real
+    // road's asphalt), each face projected along its own main axis (every face has its own vertices), so a texture runs
+    // on across pieces. The colliders read only the vertices and triangles, so the coordinates change nothing they do.
     public sealed class RoadPiece
     {
         private readonly GameObject root;
@@ -25,6 +27,8 @@ namespace ProtoHarness.ChainRush.Track
         private readonly GameObject lights;
         private readonly List<Vector3> vertices = new List<Vector3>(1024);
         private readonly List<int> triangles = new List<int>(2048);
+        private readonly List<Vector3> normals = new List<Vector3>(1024);
+        private readonly List<Vector2> uvs = new List<Vector2>(1024);
 
         public RoadPiece(string name, Transform parent, Material road, Material rail, Material light)
         {
@@ -95,7 +99,7 @@ namespace ProtoHarness.ChainRush.Track
             Clear();
             RoadMeshBuilder.AppendRoad(line, fromS, toS, profile, origin, vertices, triangles);
             roadCollider.sharedMesh = null;
-            Fill(roadMesh);
+            Fill(roadMesh, origin);
             roadCollider.sharedMesh = roadMesh;
 
             bool guarded = profile.HasGuard;
@@ -108,14 +112,14 @@ namespace ProtoHarness.ChainRush.Track
             {
                 Clear();
                 RoadMeshBuilder.AppendGuards(line, fromS, toS, profile, RoadMeshBuilder.GuardRailHeight, origin, vertices, triangles);
-                Fill(railMesh);
+                Fill(railMesh, origin);
                 Clear();
                 RoadMeshBuilder.AppendGuards(line, fromS, toS, profile, RoadMeshBuilder.GuardBlockHeight, origin, vertices, triangles);
-                Fill(wallMesh);
+                Fill(wallMesh, origin);
                 wallCollider.sharedMesh = wallMesh;
                 Clear();
                 RoadMeshBuilder.AppendGuardLights(line, fromS, toS, profile, origin, vertices, triangles);
-                Fill(lightMesh);
+                Fill(lightMesh, origin);
             }
         }
 
@@ -147,13 +151,25 @@ namespace ProtoHarness.ChainRush.Track
             triangles.Clear();
         }
 
-        private void Fill(Mesh mesh)
+        // Texture coordinates in world metres: a face mostly facing up takes x and z, one facing along x takes z and
+        // height, one facing along z takes x and height.
+        private void Fill(Mesh mesh, Vector3 origin)
         {
             mesh.Clear();
             mesh.indexFormat = vertices.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
             mesh.SetVertices(vertices);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateNormals();
+            mesh.GetNormals(normals);
+            uvs.Clear();
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                Vector3 world = vertices[i] + origin;
+                Vector3 n = normals[i];
+                float x = Mathf.Abs(n.x), y = Mathf.Abs(n.y), z = Mathf.Abs(n.z);
+                uvs.Add(y >= x && y >= z ? new Vector2(world.x, world.z) : x >= z ? new Vector2(world.z, world.y) : new Vector2(world.x, world.y));
+            }
+            mesh.SetUVs(0, uvs);
         }
 
         private static Mesh NewMesh(string name) => new Mesh { name = name };

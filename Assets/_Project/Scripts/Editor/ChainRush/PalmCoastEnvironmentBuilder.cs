@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using static ProtoHarness.Editor.ChainRush.ExteriorKit;
 
 namespace ProtoHarness.Editor.ChainRush
 {
@@ -23,7 +21,6 @@ namespace ProtoHarness.Editor.ChainRush
         public const string PrefabPath = "Assets/_Project/Prefabs/PalmCoastExterior.prefab";
         public const string ScenePath = "Assets/_Project/Scenes/ChainRushTrackPalmCoast.unity";
         public const string LookPath = "Assets/_Project/Data/TrackLook_PalmCoast.asset";
-        private const string MaterialFolder = "Assets/_Project/Art/Materials/";
         // The land's top, below the lowest road (the finish hill's -2 m), and the sea's surface.
         private const float Ground = -2.6f;
         private const float Sea = -4.2f;
@@ -34,124 +31,41 @@ namespace ProtoHarness.Editor.ChainRush
         [MenuItem("ProtoHarness/Chain Rush/Create Palm Coast Exterior")]
         public static void CreateExterior()
         {
-            RequireIdle();
+            ExteriorAssets.RequireIdle();
             if (File.Exists(PrefabPath) || File.Exists(ScenePath))
                 throw new InvalidOperationException("Palm Coast exterior already exists; use Rebuild Palm Coast Exterior.");
             BuildLook();
             BuildPrefab();
-            Scene original = SceneManager.GetActiveScene();
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
-            scene.name = "ChainRushTrackPalmCoast";
-            GameObject prefab = Require<GameObject>(PrefabPath);
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
-            Undo.RegisterCreatedObjectUndo(instance, "Create Palm Coast exterior");
-            EditorSceneManager.MarkSceneDirty(scene);
-            if (original.IsValid()) SceneManager.SetActiveScene(original);
-            Selection.activeGameObject = instance;
+            GameObject instance = ExteriorAssets.OpenDecorationScene(PrefabPath, "ChainRushTrackPalmCoast");
             Debug.Log($"Palm Coast exterior created. Save the decoration scene as {ScenePath}, register it in Build Profiles, and give the lobby's PALM COAST entry the scene name and {LookPath}.", instance);
         }
 
         [MenuItem("ProtoHarness/Chain Rush/Rebuild Palm Coast Exterior")]
         public static void RebuildExterior()
         {
-            RequireIdle();
+            ExteriorAssets.RequireIdle();
             if (!File.Exists(PrefabPath)) throw new InvalidOperationException("Create Palm Coast Exterior first.");
             BuildLook();
             BuildPrefab();
         }
 
-        private static void RequireIdle()
-        {
-            if (EditorApplication.isPlaying || EditorApplication.isCompiling)
-                throw new InvalidOperationException("Exit Play mode and wait for compilation first.");
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-                if (SceneManager.GetSceneAt(i).isDirty) throw new InvalidOperationException("Save the open scenes first.");
-        }
-
-        // Warm dark asphalt (the reference's road), lavender walls (its low walls by the sea and through the town) and
-        // white lane markings (CircuitScenery.PaintMarkings).
+        // Warm dark asphalt (the reference's road; textured since user 2026-11-02, "아스팔트 기반 실제 도로 느낌"),
+        // lavender walls (its low walls by the sea and through the town), white lane markings (CircuitScenery.PaintMarkings):
+        // a dashed middle line and a lane either side; yellow take-off boards at the sea jump.
         private static void BuildLook()
-        {
-            Material road = Palette("Road", new Color(0.30f, 0.29f, 0.29f));
-            Material wall = Palette("Wall", new Color(0.66f, 0.60f, 0.82f));
-            Material markings = Palette("Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f);
-            TrackLook look = AssetDatabase.LoadAssetAtPath<TrackLook>(LookPath);
-            if (look == null)
-            {
-                look = ScriptableObject.CreateInstance<TrackLook>();
-                AssetDatabase.CreateAsset(look, LookPath);
-            }
-            var data = new SerializedObject(look);
-            data.FindProperty("road").objectReferenceValue = road;
-            data.FindProperty("rail").objectReferenceValue = wall;
-            data.FindProperty("markings").objectReferenceValue = markings;
-            data.ApplyModifiedPropertiesWithoutUndo();
-            if (!look.TryValidate(out string error)) throw new InvalidOperationException(error);
-            EditorUtility.SetDirty(look);
-            AssetDatabase.SaveAssets();
-        }
+            => ExteriorAssets.BuildLook(LookPath,
+                ExteriorAssets.Surface("Palm", "Road", new Color(0.30f, 0.29f, 0.28f), ExteriorAssets.Grain.Asphalt, 4f, 0.12f),
+                ExteriorAssets.Surface("Palm", "Wall", new Color(0.66f, 0.60f, 0.82f), ExteriorAssets.Grain.Concrete, 3f, 0.08f),
+                Palette("Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f), Palette("Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
+                new ExteriorAssets.Lanes(3.6f, 0f, false, false));
 
         private static void BuildPrefab()
         {
-            TrackDefinition definition = Require<TrackDefinition>(ChainRushCircuitSceneBuilder.PalmCoastPath);
-            if (!definition.TryValidate(out string error)) throw new InvalidOperationException(error);
-            string guid = AssetDatabase.AssetPathToGUID(PrefabPath);
-            Scene preview = EditorSceneManager.NewPreviewScene();
-            try
-            {
-                var layout = new Layout(definition);
-                GameObject root = layout.Build(preview);
-                FingerLanesEnvironmentBuilder.Validate(root);
-                layout.ValidateClearance(root);
-                GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath, out bool success);
-                if (!success || saved == null) throw new IOException("Could not save Palm Coast exterior prefab.");
-                if (guid.Length != 0 && AssetDatabase.AssetPathToGUID(PrefabPath) != guid)
-                    throw new InvalidOperationException("Rebuilding changed the exterior prefab GUID.");
-                AssetDatabase.SaveAssets();
-                Debug.Log($"Palm Coast exterior: {saved.GetComponentsInChildren<Renderer>(true).Length} renderers; physics=0; runtime scripts=0; road corridor clear.", saved);
-            }
-            finally
-            {
-                EditorSceneManager.ClosePreviewScene(preview);
-            }
+            var layout = new Layout(ExteriorAssets.RequireDefinition(ChainRushCircuitSceneBuilder.PalmCoastPath));
+            ExteriorAssets.SavePrefab(PrefabPath, layout.Build, layout.ValidateClearance);
         }
 
-        private static T Require<T>(string path) where T : UnityEngine.Object
-        {
-            T asset = AssetDatabase.LoadAssetAtPath<T>(path);
-            if (asset == null) throw new InvalidOperationException("Required asset is missing: " + path);
-            return asset;
-        }
-
-        // The builder owns these materials: a rebuild makes the missing ones and sets every one's colour and glow again,
-        // keeping its GUID. No glow unless asked: the first build's glow on everything made the town look fluorescent
-        // (user 2026-10-30, "형광색 건물들도 별로다").
-        private static Material Palette(string name, Color color, float glow = 0f)
-        {
-            string path = MaterialFolder + "M_Palm" + name + ".mat";
-            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material == null)
-            {
-                Shader shader = Require<Material>(MaterialFolder + "M_StadiumSportsWhite.mat").shader;
-                material = new Material(shader) { name = "M_Palm" + name };
-                AssetDatabase.CreateAsset(material, path);
-            }
-            material.SetColor("_BaseColor", color);
-            material.SetFloat("_Smoothness", 0.16f);
-            material.SetFloat("_Metallic", 0f);
-            if (glow > 0f)
-            {
-                material.EnableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", color * glow);
-            }
-            else
-            {
-                material.DisableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", Color.black);
-            }
-            EditorUtility.SetDirty(material);
-            return material;
-        }
+        private static Material Palette(string name, Color color, float glow = 0f) => ExteriorAssets.Palette("Palm", name, color, glow);
 
         private enum Scenery { City, Climb, Beach, Bridge, Town, Harbour, Umbrellas, Stairs }
 
@@ -166,12 +80,7 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Centerline line;
             private readonly double lap;
             private readonly List<(double Start, double End)> gaps;
-            private readonly List<Vector3> samples = new List<Vector3>();
-            private readonly List<float> widths = new List<float>();
-            private readonly List<(Vector3 Position, float Radius)> occupied = new List<(Vector3, float)>();
-            private readonly Mesh cube = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
-            private readonly Mesh sphere = Resources.GetBuiltinResource<Mesh>("Sphere.fbx");
-            private readonly Mesh cylinder = Resources.GetBuiltinResource<Mesh>("Cylinder.fbx");
+            private readonly RoadCorridor corridor;
             // Soft, sun-faded colours (user 2026-10-30): no glow except the sea's sparkle and the glass.
             private readonly Material sand = Palette("Sand", new Color(0.90f, 0.82f, 0.64f));
             private readonly Material sea = Palette("Sea", new Color(0.20f, 0.58f, 0.68f), 0.08f);
@@ -195,7 +104,7 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material metal = Palette("Metal", new Color(0.52f, 0.54f, 0.56f));
             private readonly Material wood = Palette("Wood", new Color(0.55f, 0.40f, 0.28f));
             private readonly Material tire = Palette("Tire", new Color(0.12f, 0.12f, 0.13f));
-            private readonly Material dark = Require<Material>(MaterialFolder + "M_ArtStadiumInk.mat");
+            private readonly Material dark = ExteriorAssets.Require<Material>(ExteriorAssets.MaterialFolder + "M_ArtStadiumInk.mat");
 
             internal Layout(TrackDefinition definition)
             {
@@ -203,14 +112,13 @@ namespace ProtoHarness.Editor.ChainRush
                 line = definition.BuildCenterline(Vector3.zero, 0f);
                 lap = definition.LapLength;
                 gaps = definition.Gaps();
-                if (cube == null || sphere == null || cylinder == null) throw new InvalidOperationException("Missing built-in decoration meshes.");
                 if (gaps.Count != 1) throw new InvalidOperationException("Palm Coast layout changed: one sea gap expected; review the sea and the yachts.");
-                for (double s = 0d; s <= lap; s += 0.5d)
-                {
-                    samples.Add(line.FrameAt(s).Position);
-                    widths.Add(definition.HalfWidthAt(s));
-                }
+                corridor = new RoadCorridor(definition, line, 0.5d, 1.5f);
             }
+
+            // Every renderer outside the road corridor, except the land and sea below it and what spans the road above
+            // the runner: the start arch's beam and lettering and the bridges' top beams.
+            internal void ValidateClearance(GameObject root) => corridor.ValidateClearance(root, Ground + 0.01f);
 
             // The record video's lap (7.0 .. 60.0 s, DECISIONS "PALM COAST") read as shares of the lap.
             private Scenery SceneryAt(double s)
@@ -242,8 +150,9 @@ namespace ProtoHarness.Editor.ChainRush
             private void Land(Transform parent)
             {
                 Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
-                foreach (Vector3 p in samples)
+                for (double s = 0d; s <= lap; s += 0.5d)
                 {
+                    Vector3 p = line.FrameAt(s).Position;
                     min = Vector3.Min(min, p);
                     max = Vector3.Max(max, p);
                 }
@@ -292,7 +201,7 @@ namespace ProtoHarness.Editor.ChainRush
                         Box("Checker", arch, new Vector3(-half + 0.6f + i * 1.2f, 10.75f + row * 1.3f, 0.66f), new Vector3(1.2f, 1.3f, 0.1f), (i + row) % 2 == 0 ? dark : white);
                 // The name faces the runners coming to the line (and on the grid), the checkers the ones leaving it.
                 Lettering(arch, "PALM COAST", 14f, -0.68f);
-                occupied.Add((arch.position, half + 2f));
+                corridor.Reserve(arch.position, half + 2f);
             }
 
             private void Bridges(Transform parent)
@@ -337,7 +246,7 @@ namespace ProtoHarness.Editor.ChainRush
                         // Beyond the land under the road (its half width is the road's plus LandReach).
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(gapMiddle) + LandReach + 12f + (k + 2) % 3 * 14f);
                         position.y = Sea;
-                        if (!Available(position, 8f)) continue;
+                        if (!corridor.Available(position, 8f)) continue;
                         Transform yacht = Group("Yacht " + index++, parent);
                         yacht.SetPositionAndRotation(position, Quaternion.Euler(0f, 30f * k + (side < 0 ? 0f : 180f), 0f));
                         Box("Hull", yacht, new Vector3(0f, 0.9f, 0f), new Vector3(3.6f, 1.8f, 12f), white);
@@ -346,7 +255,7 @@ namespace ProtoHarness.Editor.ChainRush
                         Box("Cabin glass", yacht, new Vector3(0f, 2.5f, 1.55f), new Vector3(2.4f, 0.8f, 0.1f), glass);
                         Box("Mast", yacht, new Vector3(0f, 7f, 0.5f), new Vector3(0.25f, 9.5f, 0.25f), white);
                         Beam("Sail", yacht, new Vector3(0f, 3.4f, 1f), new Vector3(0f, 11f, 4.5f), 0.12f, white);
-                        occupied.Add((position, 8f));
+                        corridor.Reserve(position, 8f);
                     }
             }
 
@@ -368,11 +277,11 @@ namespace ProtoHarness.Editor.ChainRush
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 6f + radius);
                         position.y = Footing;
                         Quaternion facing = Flat(-frame.Right * side);
-                        if (Available(position, radius))
+                        if (corridor.Available(position, radius))
                         {
                             if (city) Tower(parent, position, facing, width, depth, 20f + index % 4 * 7f, index);
                             else TownHouse(parent, position, facing, width, depth, 8f + index % 3 * 2.5f, index);
-                            occupied.Add((position, radius));
+                            corridor.Reserve(position, radius);
                         }
                         // The city's skyline: a taller tower behind, half a step along, as dense as the reference's high-rises.
                         if (city)
@@ -380,21 +289,16 @@ namespace ProtoHarness.Editor.ChainRush
                             TrackFrame behind = line.FrameAt(s + 12d);
                             Vector3 back = behind.Position + behind.Right * side * (definition.HalfWidthAt(s) + 6f + radius * 3f + 4f);
                             back.y = Footing;
-                            if (Available(back, radius))
+                            if (corridor.Available(back, radius))
                             {
                                 Tower(parent, back, Flat(-behind.Right * side), width + 2f, depth + 2f, 34f + index % 3 * 9f, index + 1000);
-                                occupied.Add((back, radius));
+                                corridor.Reserve(back, radius);
                             }
                         }
                         index++;
                     }
                 }
             }
-
-            // A fixed scatter in 0..1 from a seed, so every building differs and a rebuild gives the same street.
-            private static float Hash(int seed) => Mathf.Repeat(Mathf.Sin(seed * 12.9898f + 78.233f) * 43758.5453f, 1f);
-
-            private Material Pick(int seed, params Material[] choices) => choices[Mathf.Min(choices.Length - 1, (int)(Hash(seed) * choices.Length))];
 
             // A city tower of one to three tiers, each narrower than the one below, with window bands or columns, a
             // cornice per tier, a shop front with an awning and a blank sign, sometimes balconies, and roof clutter (a
@@ -450,7 +354,7 @@ namespace ProtoHarness.Editor.ChainRush
                 float r = Hash(index * 23 + 8);
                 if (r < 0.4f)
                 {
-                    Shape("Water tank", tower, new Vector3(w * 0.2f, roof + 2.2f, -d * 0.1f), new Vector3(2.4f, 2.4f, 2.4f), metal, cylinder);
+                    Shape("Water tank", tower, new Vector3(w * 0.2f, roof + 2.2f, -d * 0.1f), new Vector3(2.4f, 2.4f, 2.4f), metal, Cylinder);
                     for (int leg = -1; leg <= 1; leg += 2)
                         Box("Tank leg", tower, new Vector3(w * 0.2f + leg * 0.8f, roof + 0.5f, -d * 0.1f), new Vector3(0.2f, 1f, 0.2f), metal);
                 }
@@ -540,7 +444,7 @@ namespace ProtoHarness.Editor.ChainRush
                     Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 2.4f + radius * 1.5f);
                     position.y = Footing;
                     index++;
-                    if (!Available(position, radius)) continue;
+                    if (!corridor.Available(position, radius)) continue;
                     Transform spot = Group("Street " + index, parent);
                     spot.SetPositionAndRotation(position, Flat(frame.Forward));
                     // The land is 2.6 m below the road: a paved kerb block from the footing brings the props up to the road.
@@ -563,14 +467,14 @@ namespace ProtoHarness.Editor.ChainRush
                     else if (pick < 0.85f)
                     {
                         Box("Planter", spot, new Vector3(0f, top + 0.4f, 0f), new Vector3(1.2f, 0.8f, 1.2f), stone);
-                        Shape("Shrub", spot, new Vector3(0f, top + 1.2f, 0f), new Vector3(1.3f, 1.1f, 1.3f), leaf, sphere);
+                        Shape("Shrub", spot, new Vector3(0f, top + 1.2f, 0f), new Vector3(1.3f, 1.1f, 1.3f), leaf, Sphere);
                     }
                     else
                     {
                         Box("Flag pole", spot, new Vector3(0f, top + 3.5f, 0f), new Vector3(0.12f, 7f, 0.12f), white);
                         Box("Flag", spot, new Vector3(0f, top + 6.2f, 0.7f), new Vector3(0.05f, 1.2f, 1.4f), Pick(index * 13 + 102, cyan, violet, yellow, red, mint));
                     }
-                    occupied.Add((position, radius));
+                    corridor.Reserve(position, radius);
                 }
             }
 
@@ -583,7 +487,7 @@ namespace ProtoHarness.Editor.ChainRush
                 for (int x = -1; x <= 1; x += 2)
                     for (int z = -1; z <= 1; z += 2)
                     {
-                        GameObject wheel = Shape("Wheel", spot, new Vector3(x * 0.85f, top + 0.33f, z * 1.35f), new Vector3(0.66f, 0.25f, 0.66f), tire, cylinder);
+                        GameObject wheel = Shape("Wheel", spot, new Vector3(x * 0.85f, top + 0.33f, z * 1.35f), new Vector3(0.66f, 0.25f, 0.66f), tire, Cylinder);
                         wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
                     }
             }
@@ -602,9 +506,9 @@ namespace ProtoHarness.Editor.ChainRush
                         // road's half width + 1.5 m + that radius between the trunk and the road's middle.
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 7f);
                         position.y = Footing;
-                        if (!Available(position, PalmCrown)) continue;
+                        if (!corridor.Available(position, PalmCrown)) continue;
                         Palm(parent, position, 9f + (int)(s + side) % 4, (float)((s + side * 90d) * 37d % 360d));
-                        occupied.Add((position, PalmCrown));
+                        corridor.Reserve(position, PalmCrown);
                     }
                 }
             }
@@ -620,10 +524,10 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     float t = (i + 0.5f) / Rings;
                     Vector3 at = new Vector3(Mathf.Sin(t * 1.2f) * 1.4f, height * t, 0f);
-                    Shape("Trunk ring", palm, at, new Vector3(0.75f - t * 0.2f, height / Rings + 0.1f, 0.75f - t * 0.2f), trunk, cylinder);
+                    Shape("Trunk ring", palm, at, new Vector3(0.75f - t * 0.2f, height / Rings + 0.1f, 0.75f - t * 0.2f), trunk, Cylinder);
                     top = at + Vector3.up * height / Rings * 0.5f;
                 }
-                Shape("Coconuts", palm, top + Vector3.down * 0.3f, Vector3.one * 1f, trunk, sphere);
+                Shape("Coconuts", palm, top + Vector3.down * 0.3f, Vector3.one * 1f, trunk, Sphere);
                 for (int f = 0; f < 7; f++)
                 {
                     float angle = f * 360f / 7f;
@@ -645,15 +549,15 @@ namespace ProtoHarness.Editor.ChainRush
                     {
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 11f + index % 3 * 3f);
                         position.y = Footing;
-                        if (!Available(position, 2.6f)) continue;
+                        if (!corridor.Available(position, 2.6f)) continue;
                         Transform spot = Group("Beach umbrella " + index, parent);
                         spot.SetPositionAndRotation(position, Flat(frame.Forward));
                         Box("Umbrella pole", spot, new Vector3(0f, 1.6f, 0f), new Vector3(0.12f, 3.2f, 0.12f), white);
-                        Shape("Umbrella canopy", spot, new Vector3(0f, 3.3f, 0f), new Vector3(4.2f, 0.35f, 4.2f), index % 2 == 0 ? violet : white, cylinder);
-                        Shape("Canopy crown", spot, new Vector3(0f, 3.55f, 0f), new Vector3(2.2f, 0.3f, 2.2f), index % 2 == 0 ? white : violet, cylinder);
+                        Shape("Umbrella canopy", spot, new Vector3(0f, 3.3f, 0f), new Vector3(4.2f, 0.35f, 4.2f), index % 2 == 0 ? violet : white, Cylinder);
+                        Shape("Canopy crown", spot, new Vector3(0f, 3.55f, 0f), new Vector3(2.2f, 0.3f, 2.2f), index % 2 == 0 ? white : violet, Cylinder);
                         Box("Sun lounger", spot, new Vector3(1.6f, 0.35f, 0.6f), new Vector3(0.9f, 0.25f, 2.2f), white);
                         Box("Lounger back", spot, new Vector3(1.6f, 0.65f, -0.4f), new Vector3(0.9f, 0.6f, 0.2f), white);
-                        occupied.Add((position, 2.6f));
+                        corridor.Reserve(position, 2.6f);
                         index++;
                     }
                 }
@@ -674,7 +578,7 @@ namespace ProtoHarness.Editor.ChainRush
                     // The outside of a right turn (positive degrees) is the left.
                     float outside = segment.Degrees > 0f ? -1f : 1f;
                     Vector3 position = frame.Position + frame.Right * outside * (definition.HalfWidthAt(middle) + 3.4f);
-                    if (!Clear(position, 1.6f)) continue;
+                    if (!corridor.Clear(position, 1.6f)) continue;
                     Transform board = Group("Corner chevrons " + index++, parent);
                     board.SetPositionAndRotation(position, Flat(-frame.Right * outside));
                     for (int side = -1; side <= 1; side += 2)
@@ -688,7 +592,7 @@ namespace ProtoHarness.Editor.ChainRush
                         Beam("Chevron", board, new Vector3(c * 1f - point * 0.3f, 1.45f, 0.12f), new Vector3(c * 1f + point * 0.3f, 1.9f, 0.12f), 0.16f, yellow);
                         Beam("Chevron", board, new Vector3(c * 1f + point * 0.3f, 1.9f, 0.12f), new Vector3(c * 1f - point * 0.3f, 2.35f, 0.12f), 0.16f, yellow);
                     }
-                    occupied.Add((position, 2f));
+                    corridor.Reserve(position, 2f);
                 }
             }
 
@@ -709,94 +613,6 @@ namespace ProtoHarness.Editor.ChainRush
                             if (glyphs[words[i]][row * 3 + col] == '1')
                                 Box("Solid letter " + words[i], parent, new Vector3(-width * 0.5f + i * step + (col + 0.5f) * cell, 11.4f + (2 - row) * cell * 0.9f, z),
                                     new Vector3(cell * 0.9f, cell * 0.8f, 0.14f), violet);
-            }
-
-            private bool Clear(Vector3 position, float radius)
-            {
-                for (int i = 0; i < samples.Count; i++)
-                {
-                    float limit = widths[i] + 1.5f + radius;
-                    float dx = position.x - samples[i].x, dz = position.z - samples[i].z;
-                    if (dx * dx + dz * dz < limit * limit) return false;
-                }
-                return true;
-            }
-
-            private bool Available(Vector3 position, float radius)
-            {
-                if (!Clear(position, radius)) return false;
-                foreach (var other in occupied)
-                {
-                    float limit = radius + other.Radius;
-                    float dx = position.x - other.Position.x, dz = position.z - other.Position.z;
-                    if (dx * dx + dz * dz < limit * limit) return false;
-                }
-                return true;
-            }
-
-            // Every renderer stays outside the road corridor, except the land and sea below it and what spans the road
-            // above the runner: the start arch's beam and lettering and the bridges' top beams (9 m and more above the road).
-            internal void ValidateClearance(GameObject root)
-            {
-                float minimum = float.PositiveInfinity;
-                var intrusions = new List<string>();
-                foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
-                {
-                    Bounds bounds = renderer.bounds;
-                    if (bounds.max.y <= Ground + 0.01f) continue;
-                    for (int i = 0; i < samples.Count; i++)
-                    {
-                        float dx = Mathf.Max(bounds.min.x - samples[i].x, 0f, samples[i].x - bounds.max.x);
-                        float dz = Mathf.Max(bounds.min.z - samples[i].z, 0f, samples[i].z - bounds.max.z);
-                        float margin = Mathf.Sqrt(dx * dx + dz * dz) - widths[i];
-                        if (margin >= 0.7f) continue;
-                        if (bounds.min.y >= samples[i].y + 9f) continue;
-                        minimum = Mathf.Min(minimum, margin);
-                        intrusions.Add($"{renderer.transform.parent.name}/{renderer.name}: margin {margin:F2} m at {samples[i]}");
-                        break;
-                    }
-                }
-                if (intrusions.Count != 0) throw new InvalidOperationException("Decoration intrudes into the road corridor:\n" + string.Join("\n", intrusions));
-                Debug.Log("Palm Coast decoration clearance: no renderer within 0.7 m of the road edge below 9 m over the road.");
-            }
-
-            private static Quaternion Flat(Vector3 forward)
-            {
-                forward.y = 0f;
-                return Quaternion.LookRotation(forward.sqrMagnitude > 1e-6f ? forward : Vector3.forward);
-            }
-
-            private static Transform Group(string name, Transform parent)
-            {
-                var group = new GameObject(name).transform;
-                group.SetParent(parent, false);
-                return group;
-            }
-
-            private GameObject Box(string name, Transform parent, Vector3 position, Vector3 scale, Material material)
-                => Shape(name, parent, position, scale, material, cube);
-
-            private void Beam(string name, Transform parent, Vector3 a, Vector3 b, float width, Material material)
-            {
-                GameObject beam = Box(name, parent, (a + b) * 0.5f, new Vector3(width, (b - a).magnitude, width), material);
-                beam.transform.localRotation = Quaternion.FromToRotation(Vector3.up, b - a);
-            }
-
-            private static GameObject Shape(string name, Transform parent, Vector3 position, Vector3 scale, Material material, Mesh mesh)
-            {
-                var shape = new GameObject(name);
-                shape.transform.SetParent(parent, false);
-                shape.transform.localPosition = position;
-                // Built-in FBX bounds differ: cube is 1 m, sphere/cylinder are 2 m. Callers specify actual dimensions.
-                Vector3 meshSize = mesh.bounds.size;
-                shape.transform.localScale = new Vector3(scale.x / meshSize.x, scale.y / meshSize.y, scale.z / meshSize.z);
-                shape.AddComponent<MeshFilter>().sharedMesh = mesh;
-                MeshRenderer renderer = shape.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = material;
-                renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-                GameObjectUtility.SetStaticEditorFlags(shape, StaticEditorFlags.BatchingStatic);
-                return shape;
             }
         }
     }

@@ -160,6 +160,79 @@ namespace ProtoHarness.ChainRush.Track
             public float Length => Mathf.PI * radius + straight;
         }
 
+        // A dead-end widening beside the road (user 2026-11-02, the Skyway's on-ramp: "넓은 지상도로 … 정면은 가드로
+        // 막혀있어야"): from FromS the road grows Width metres wider on one side over Taper metres, runs on as one wide road
+        // and ends at ToS against a guard square across the widening. The main road's guard on that side opens over it
+        // (BayGuardGaps); the racing line stays the main road's.
+        [Serializable]
+        public struct Bay
+        {
+            [SerializeField] private float fromS;
+            [SerializeField] private float toS;
+            [SerializeField] private float width;
+            [SerializeField] private float taper;
+            [SerializeField] private bool left;
+            [SerializeField] private bool straightDeck;
+            [SerializeField] private float extension;
+
+            public Bay(float fromS, float toS, float width, float taper, bool left)
+            {
+                this.fromS = fromS;
+                this.toS = toS;
+                this.width = width;
+                this.taper = taper;
+                this.left = left;
+                straightDeck = false;
+                extension = 0f;
+            }
+
+            // User 2026-11-02: "기존 넓은 고가도로에 합류". The racing straight uses the rightmost 12 m;
+            // the rest lies on its left. The full deck keeps its own straight beyond both junctions, closed at both ends.
+            public static Bay Highway(float fromS, float toS, float width, float extension)
+            {
+                var bay = new Bay(fromS, toS, width, 0f, true);
+                bay.straightDeck = true;
+                bay.extension = extension;
+                return bay;
+            }
+
+            public float FromS => fromS;
+            public float ToS => toS;
+            public float Width => width;
+            public float Taper => taper;
+            public bool Left => left;
+            public bool StraightDeck => straightDeck;
+            public float Extension => extension;
+
+            public Centerline DeckLine(Centerline main)
+            {
+                if (main == null) throw new ArgumentNullException(nameof(main));
+                if (!straightDeck) throw new InvalidOperationException("Only a straight deck has its own line.");
+                TrackFrame frame = main.FrameAt(fromS);
+                var line = new Centerline(frame.Position - frame.Forward * extension,
+                    Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg);
+                line.AppendStraight(toS - fromS + 2f * extension);
+                return line;
+            }
+
+            // A 12 m quarter-turn ramp meets the deck's right edge. Inner is the ramp distance to the
+            // first touching edge; outer is the distance along the straight to that same point.
+            public static void DeckJunction(float radius, float main, out float inner, out float outer, float margin = 0f)
+            {
+                if (!(margin >= 0f) || !(radius > main + margin) || !(main > 0f) || float.IsInfinity(radius))
+                    throw new ArgumentException("A deck junction needs a finite radius beyond the ramp width and nonnegative margin.");
+                inner = radius * Mathf.Acos((radius - main) / (radius + main + margin));
+                outer = Mathf.Sqrt((radius + main + margin) * (radius + main + margin) - (radius - main - margin) * (radius - main - margin));
+            }
+
+            // How wide the bay is at s (0 outside it): growing linearly over the taper, then Width.
+            public float WidthAt(double s)
+            {
+                if (s < fromS || s > toS) return 0f;
+                return taper > 0f ? width * Mathf.Min(1f, (float)((s - fromS) / taper)) : width;
+            }
+        }
+
         [SerializeField] private List<Segment> segments = new List<Segment>
         {
             // Straight A (140 m): a hill (0 -> +10% -> -10% -> 0, 2 m high) and a jump gap of 6 m.
@@ -179,6 +252,7 @@ namespace ProtoHarness.ChainRush.Track
         [SerializeField] private List<Anchor> anchors = new List<Anchor> { new Anchor(322.12f, 0f, 10f) };
         [SerializeField] private List<Pole> poles = new List<Pole>();
         [SerializeField] private List<Shortcut> shortcuts = new List<Shortcut>();
+        [SerializeField] private List<Bay> bays = new List<Bay>();
         [Tooltip("Checkpoints as fractions of a lap, ascending, strictly between 0 and 1.")]
         [SerializeField] private float[] checkpointFractions = { 0.25f, 0.5f, 0.75f };
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]
@@ -191,6 +265,7 @@ namespace ProtoHarness.ChainRush.Track
         public IReadOnlyList<Anchor> Anchors => anchors;
         public IReadOnlyList<Pole> Poles => poles;
         public IReadOnlyList<Shortcut> Shortcuts => shortcuts;
+        public IReadOnlyList<Bay> Bays => bays;
         public int LapCount => lapCount;
         public float RoadHalfWidth => roadHalfWidth;
         public float RoadThickness => roadThickness;
@@ -295,6 +370,19 @@ namespace ProtoHarness.ChainRush.Track
                 gaps.Add((shortcut.FromS + inner - guard, shortcut.FromS + outer + guard));
                 Junction(shortcut, HalfWidthAt(shortcut.ToS), out inner, out outer, out _, out _);
                 gaps.Add((shortcut.ToS - outer - guard, shortcut.ToS - inner + guard));
+            }
+            return gaps;
+        }
+
+        // The S stretches of the main road with no guard on one side (Left), because a bay widens it there. In the
+        // order of the bays.
+        public List<(double From, double To, bool Left)> BayGuardGaps()
+        {
+            var gaps = new List<(double From, double To, bool Left)>(bays.Count);
+            for (int i = 0; i < bays.Count; i++)
+            {
+                Bay bay = bays[i];
+                if (!bay.StraightDeck) gaps.Add((bay.FromS, bay.ToS, bay.Left));
             }
             return gaps;
         }
@@ -418,7 +506,11 @@ namespace ProtoHarness.ChainRush.Track
             {
                 Pole pole = poles[i];
                 if (!(pole.S >= 0f) || !(pole.S < lap)) return Fail($"pole {i}: S {pole.S} must be within the lap [0, {lap:F1}).", out error);
-                if (!(Mathf.Abs(pole.Offset) <= HalfWidthAt(pole.S))) return Fail($"pole {i}: the offset {pole.Offset} must be within the road ({HalfWidthAt(pole.S):F1} m there).", out error);
+                bool onRoad = Mathf.Abs(pole.Offset) <= HalfWidthAt(pole.S);
+                foreach (Bay bay in bays)
+                    if (bay.StraightDeck && pole.S >= bay.FromS && pole.S <= bay.ToS)
+                        onRoad |= pole.Offset >= -HalfWidthAt(pole.S) - bay.Width && pole.Offset <= HalfWidthAt(pole.S);
+                if (!onRoad) return Fail($"pole {i}: the offset {pole.Offset} must be within the road ({HalfWidthAt(pole.S):F1} m there).", out error);
                 if (!(pole.Reach >= MinPoleReach && pole.Reach <= MaxPoleReach)) return Fail($"pole {i}: the reach {pole.Reach} must be within [{MinPoleReach}, {MaxPoleReach}] m.", out error);
             }
             var line = new Centerline(Vector3.zero, 0f);
@@ -426,6 +518,78 @@ namespace ProtoHarness.ChainRush.Track
             if (!line.TryClose(out string closeError)) return Fail("the circuit does not close: " + closeError, out error);
             for (int i = 0; i < shortcuts.Count; i++)
                 if (!TryValidateShortcut(i, line, lap, out error)) return false;
+            for (int i = 0; i < bays.Count; i++)
+                if (!TryValidateBay(i, line, lap, gaps, out error)) return false;
+            error = null;
+            return true;
+        }
+
+        // A bay lies on a flat straight of one width within the lap, off any gap, its guard square across its end clear
+        // of its taper; its outer edge turns away no faster than a tapering road's guard may (MaxWidthChange per metre
+        // on each side); it overlaps no other bay or shortcut crossing on its side.
+        private bool TryValidateBay(int i, Centerline line, double lap, List<(double Start, double End)> gaps, out string error)
+        {
+            Bay bay = bays[i];
+            const float guard = RoadMeshBuilder.GuardThickness;
+            if (!(bay.FromS >= 0f) || !(bay.ToS > bay.FromS) || !(bay.ToS < lap))
+                return Fail($"bay {i}: it must run from S {bay.FromS} to a later S {bay.ToS} within the lap.", out error);
+            if (!(bay.Width >= MinHalfWidth && bay.Width <= 2f * MaxHalfWidth))
+                return Fail($"bay {i}: the width {bay.Width} must be within [{MinHalfWidth}, {2f * MaxHalfWidth}] m.", out error);
+            if (bay.StraightDeck) return TryValidateDeck(i, out error);
+            if (!(bay.Taper > 0f) || !(bay.Width <= 2f * MaxWidthChange * bay.Taper) || !(bay.FromS + bay.Taper < bay.ToS - guard))
+                return Fail($"bay {i}: the taper {bay.Taper} m must be at least {bay.Width / (2f * MaxWidthChange):F1} m and end before the bay does.", out error);
+            float width = HalfWidthAt(bay.FromS);
+            for (double s = bay.FromS; s <= bay.ToS; s += 0.5d)
+                if (!FlatStraightAt(line, s) || HalfWidthAt(s) != width)
+                    return Fail($"bay {i}: the main road must be a flat straight of one width beside it (S {s:F1}).", out error);
+            for (int g = 0; g < gaps.Count; g++)
+                if (gaps[g].End > bay.FromS && gaps[g].Start < bay.ToS) return Fail($"bay {i}: it is beside a gap.", out error);
+            foreach ((double from, double to, bool left) in BayGuardGaps())
+                if (left == bay.Left && (from != bay.FromS || to != bay.ToS) && to > bay.FromS && from < bay.ToS)
+                    return Fail($"bay {i}: it overlaps another bay on the same side.", out error);
+            if (!bay.Left)
+                foreach ((double from, double to) in ShortcutGuardGaps())
+                    if (to > bay.FromS && from < bay.ToS) return Fail($"bay {i}: it overlaps a shortcut's crossing.", out error);
+            error = null;
+            return true;
+        }
+
+        // Independent decks are deliberately restricted to a flat straight between two flat quarter-turn ramps,
+        // arriving from and leaving to its right. This keeps the clipping plane and open guard intervals exact.
+        private bool TryValidateDeck(int i, out string error)
+        {
+            Bay bay = bays[i];
+            if (!bay.Left || bay.Taper != 0f || !(bay.Extension > 0f) || float.IsInfinity(bay.ToS - bay.FromS + 2f * bay.Extension))
+                return Fail($"bay {i}: a straight deck needs a left widening, zero taper and finite positive extension.", out error);
+            double start = 0d;
+            int straight = -1;
+            for (int k = 0; k < segments.Count; k++)
+            {
+                double end = start + segments[k].Length;
+                if (Math.Abs(start - bay.FromS) < 0.001d && Math.Abs(end - bay.ToS) < 0.001d) straight = k;
+                start = end;
+            }
+            if (straight < 1 || straight >= segments.Count - 1 || segments[straight].IsArc || segments[straight].IsGap)
+                return Fail($"bay {i}: a straight deck must span exactly one flat straight between ramps.", out error);
+            Segment before = segments[straight - 1], after = segments[straight + 1];
+            float main = HalfWidthAt(bay.FromS);
+            if (!before.IsArc || before.Degrees != 90f || !after.IsArc || after.Degrees != 90f ||
+                before.Radius <= main + RoadMeshBuilder.GuardThickness || after.Radius <= main + RoadMeshBuilder.GuardThickness ||
+                (straight > 1 ? segments[straight - 2].EndGrade : segments[segments.Count - 1].EndGrade) != 0f || before.EndGrade != 0f ||
+                segments[straight].EndGrade != 0f || after.EndGrade != 0f ||
+                StartHalfWidth(straight - 1) != main || EndHalfWidth(straight - 1) != main ||
+                EndHalfWidth(straight) != main || EndHalfWidth(straight + 1) != main)
+                return Fail($"bay {i}: a straight deck needs flat quarter-turn ramps to its right, all of one width.", out error);
+            Bay.DeckJunction(before.Radius, main, out _, out float join, RoadMeshBuilder.GuardThickness);
+            Bay.DeckJunction(after.Radius, main, out _, out float leave, RoadMeshBuilder.GuardThickness);
+            if (!(bay.Extension > Mathf.Max(join, leave) + RoadMeshBuilder.GuardThickness))
+                return Fail($"bay {i}: the extension must put both end guards beyond the ramp crossings.", out error);
+            for (int k = 0; k < bays.Count; k++)
+                if (k != i && bays[k].ToS > bay.FromS - before.Length && bays[k].FromS < bay.ToS + after.Length)
+                    return Fail($"bay {i}: another bay overlaps its ramps or straight.", out error);
+            foreach ((double from, double to) in ShortcutGuardGaps())
+                if (to > bay.FromS - before.Length && from < bay.ToS + after.Length)
+                    return Fail($"bay {i}: a shortcut overlaps its ramps or straight.", out error);
             error = null;
             return true;
         }

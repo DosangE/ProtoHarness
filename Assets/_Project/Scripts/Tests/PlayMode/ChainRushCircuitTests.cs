@@ -341,11 +341,11 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             yield return LandOnRoad();
             yield return null;
-            // The start line is the last arc's end: its pole is 90 degrees aside and 40 m away, in reach since R4b (95 degrees,
-            // 40 + 6 m; until R4b, 75 degrees, it was not). It stays in reach for about 3.5 m past the arc (R4b, 2026-10-18:
-            // kept, to be judged in play at M1-T).
-            Assert.That(grapple.HasPoleCandidate, Is.True, "On the start line the last arc's pole is still in reach. " + State());
-            Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[feet.Count - 1]), Is.LessThan(1e-3f), "The candidate is the pole of the arc just left.");
+            // The start line is the last arc's end. Specification changed (user 2026-10-30, "이미 지나간 코너 같은 곳에 연결하지
+            // 않도록"; DECISIONS "봉 걸기"): on the ground an arc's pole is offered only up to halfway round it and never past its
+            // exit, so the pole of the arc just left is no longer in reach here (R4b's 95 degrees had kept it for about 3.5 m).
+            // The 2026-10-30 change did not run this test; found at the 2026-11-02 merge.
+            Assert.That(grapple.HasPoleCandidate, Is.False, "On the start line the arc just left offers no pole. " + State());
 
             // Mid-straight both poles are out of reach: the last arc's 72 m behind-aside, the first arc's 80 m ahead.
             Teleport(60d);

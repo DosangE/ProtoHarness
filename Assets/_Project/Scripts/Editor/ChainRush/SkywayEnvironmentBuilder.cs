@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush.Track;
 using UnityEditor;
@@ -142,6 +143,8 @@ namespace ProtoHarness.Editor.ChainRush
             // How far the unreachable highway runs on past each of its guards.
             private const float Continuation = 300f;
             private const string DeckGroup = "09 Highway continuation";
+            private const string LandGroup = "01 Landscape";
+            private const string OuterGroup = "15 Outer city";
             private readonly double length;
             private readonly RoadCorridor corridor;
             private readonly RoadCorridor near;
@@ -251,14 +254,18 @@ namespace ProtoHarness.Editor.ChainRush
                 if (piers == null) throw new InvalidOperationException("Skyway pier group is missing: " + PierGroup);
                 Transform deck = root.transform.Find(DeckGroup);
                 if (deck == null) throw new InvalidOperationException("Skyway continuation group is missing: " + DeckGroup);
-                corridor.ValidateClearance(root, Ground + 0.01f, piers, deck);
+                Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup);
+                if (land == null || outer == null) throw new InvalidOperationException("Skyway land or outer city group is missing.");
+                // The merged land and outer city spread round the road, so their bounds always hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer });
             }
 
             internal GameObject Build(Scene scene)
             {
                 var root = new GameObject("Skyway Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
-                Land(Group("01 Landscape", root.transform));
+                Transform landscape = Group(LandGroup, root.transform);
+                Land(landscape);
 
                 // The fixed landmarks and the skyline first, so the town fills round them.
                 Transform landmarks = Group("07 Skyway landmarks", root.transform);
@@ -340,7 +347,8 @@ namespace ProtoHarness.Editor.ChainRush
                         Tree(gardens, p + new Vector3(4f, 0f, 5f), x * 3 + z + 40);
                         corridor.Reserve(p, 10f);
                     }
-                Outskirts(Group("15 Outer city", root.transform));
+                Transform outerCity = Group(OuterGroup, root.transform);
+                Outskirts(outerCity);
 
                 // Wherever the road runs high enough over the ground; the cap spans the road's width there.
                 for (float s = 0f; s < length; s += 32f)
@@ -364,7 +372,42 @@ namespace ProtoHarness.Editor.ChainRush
                     Box("Pier band", pier, new Vector3(0f, 2.2f, 0f), new Vector3(2.8f, 0.5f, 3f), yellow);
                     Box("Hammerhead cap", pier, new Vector3(0f, height - 0.45f, 0f), new Vector3(half * 2f - 0.8f, 0.9f, 3.4f), steel);
                 }
+                MergeByMaterial(landscape, "Land");
+                MergeByMaterial(outerCity, "Outer");
                 return root;
+            }
+
+            // The land's and the outer city's thousands of plain parts become one mesh per material, saved as
+            // Art/Models/SkywayExterior_<key>_<material>.asset (user 2026-11-02, "메시로 합치고": 10661 renderers, twice
+            // PALM COAST's). The parts' transforms are baked in; the group keeps its place. A rebuild writes the same
+            // assets over (ExteriorAssets.SaveMesh keeps their GUIDs).
+            private static void MergeByMaterial(Transform group, string key)
+            {
+                var byMaterial = new Dictionary<Material, List<CombineInstance>>();
+                Matrix4x4 toGroup = group.worldToLocalMatrix;
+                foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
+                    if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
+                    parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = toGroup * filter.transform.localToWorldMatrix });
+                }
+                for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
+                foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
+                {
+                    var mesh = new UnityEngine.Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                    mesh.CombineMeshes(pair.Value.ToArray(), true, true);
+                    mesh.RecalculateBounds();
+                    UnityEngine.Mesh saved = ExteriorAssets.SaveMesh(mesh, $"Assets/_Project/Art/Models/SkywayExterior_{key}_{pair.Key.name}.asset");
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                    var merged = new GameObject(key + " " + pair.Key.name);
+                    merged.transform.SetParent(group, false);
+                    merged.AddComponent<MeshFilter>().sharedMesh = saved;
+                    MeshRenderer renderer = merged.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = pair.Key;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    GameObjectUtility.SetStaticEditorFlags(merged, StaticEditorFlags.BatchingStatic);
+                }
             }
 
             // Pale paving over the whole district with lawn blocks on a 40 m grid, and under the high road a town avenue:

@@ -115,20 +115,30 @@ namespace ProtoHarness.Editor.ChainRush
         // byVertex (may be null) holds meshes that surround the road (the stadium's baked complex), whose bounds always
         // hold it: they are checked vertex by vertex instead (ValidateByVertex).
         public void ValidateClearance(GameObject root, float floor, Transform underRoad = null, Transform byVertex = null)
+            => ValidateClearance(root, floor, underRoad, byVertex == null ? Array.Empty<Transform>() : new[] { byVertex });
+
+        // As above with several groups checked vertex by vertex (SKYWAY's highway beyond its guards, and the town meshes
+        // merged one per material, which spread round the road).
+        public void ValidateClearance(GameObject root, float floor, Transform underRoad, IReadOnlyList<Transform> byVertex)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
+            if (byVertex == null) throw new ArgumentNullException(nameof(byVertex));
             if (underRoad != null && !underRoad.IsChildOf(root.transform))
                 throw new ArgumentException($"{underRoad.name} is not part of {root.name}.", nameof(underRoad));
-            if (byVertex != null && !byVertex.IsChildOf(root.transform))
-                throw new ArgumentException($"{byVertex.name} is not part of {root.name}.", nameof(byVertex));
+            foreach (Transform group in byVertex)
+                if (group == null || !group.IsChildOf(root.transform))
+                    throw new ArgumentException($"{(group == null ? "null" : group.name)} is not part of {root.name}.", nameof(byVertex));
             float nearest = float.PositiveInfinity;
             var intrusions = new List<string>();
             int under = underRoad == null ? 0 : ValidateUnderRoad(underRoad, intrusions);
-            int vertices = byVertex == null ? 0 : ValidateByVertex(byVertex, floor, intrusions);
+            int vertices = 0;
+            foreach (Transform group in byVertex) vertices += ValidateByVertex(group, floor, intrusions);
             foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (underRoad != null && renderer.transform.IsChildOf(underRoad)) continue;
-                if (byVertex != null && renderer.transform.IsChildOf(byVertex)) continue;
+                bool checkedByVertex = false;
+                foreach (Transform group in byVertex) checkedByVertex |= renderer.transform.IsChildOf(group);
+                if (checkedByVertex) continue;
                 Bounds bounds = renderer.bounds;
                 if (bounds.max.y <= floor) continue;
                 for (int i = 0; i < samples.Count; i++)

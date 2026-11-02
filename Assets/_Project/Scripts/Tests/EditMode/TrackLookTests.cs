@@ -79,8 +79,8 @@ namespace ProtoHarness.Tests.EditMode
         [Test]
         public void TryValidate_LanesNarrowerThanAMetre_IsRefused()
         {
-            // Setting the bad width may run the look's OnValidate, which logs the same error; that is the point here.
-            LogAssert.ignoreFailingMessages = true;
+            // Applying the bad width runs the look's OnValidate, which logs the same error (as GameSettingsTests expect theirs).
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("lanes must be at least 1 m wide"));
             TrackLook look = Look(0.5f, 0f, false, false);
             Assert.That(look.TryValidate(out string error), Is.False);
             StringAssert.Contains("lanes must be at least 1 m wide", error);

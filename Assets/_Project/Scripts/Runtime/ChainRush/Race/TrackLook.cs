@@ -50,6 +50,8 @@ namespace ProtoHarness.ChainRush.Race
         {
             if (offsets == null) throw new ArgumentNullException(nameof(offsets));
             if (!(halfWidth > EdgeLineInset)) throw new ArgumentOutOfRangeException(nameof(halfWidth), halfWidth, "The road must be wider than its edge lines.");
+            // Below TryValidate's metre the loop would crawl (or never end at 0); refuse rather than rely on the caller.
+            if (!(laneWidth >= 1f)) throw new InvalidOperationException($"TrackLook '{name}': lanes must be at least 1 m wide, not {laneWidth}.");
             offsets.Clear();
             float usable = halfWidth - EdgeLineInset;
             bool centred = halfWidth >= centreFromHalfWidth;

@@ -23,6 +23,7 @@
   - 네 트랙 렌더(미리보기 장면, 카메라 `Skybox` 컴포넌트 + 활성 씬 안개를 찍는 동안만 트랙 값으로 바꾸고 되돌림, 씬 dirty 없음): 도로 위·바깥쪽 각 1장.
 - **사용자 플레이 확인**: "확인했다" (렌더 시트·플레이 뒤, 커밋·병합·푸시 지시와 함께). 프레임 수치는 재지 않았다.
 - **지운 것**: 처음 이름으로 만든 고아 생성물 `M_{Finger,Palm,Stadium}Sky.mat`·`T_{Finger,Palm,Skyway,Stadium}Sky.png`(+ .meta, 추적 안 됨, 서로만 참조) — 사용자 "승인한다". 테스트 실행 뒤 `Assets/` 에서 바뀐 것은 이 삭제뿐이고, 이것을 읽는 코드·에셋은 없다.
+- **병합 (② `feature/m6-finger-detail` → `dev`, 이어서 `feature/m6-track-sky` → `dev`, 2026-11-02, 사용자 "커밋 병합 푸쉬 하라")**: `tools/select-tests.ps1 -Range dev...HEAD`(두 브랜치 합친 60 파일)는 씬 때문에 "전체", `RaceAssembler` 로 `ChainRushFlowTests`·`ChainRushProfileTests`, Lap 4 트랙을 후보로 냈다. 영향 평가로 줄였다 — 씬 diff 는 `viewCamera` 참조 한 줄(시뮬 값 없음), `RaceAssembler` 는 카메라 필수 검사와 표현만(프로필 전달 그대로), 장식·look·머티리얼은 Lap 제외(§4-4). 작업 중 실행 재사용(CLAUDE.md §9-2): 위 EditMode 8건(09:45:05Z)·PlayMode 6건(09:45:25Z~09:45:32Z). 같은 코드 근거 — 그 뒤 `Assets/` 변경은 커밋에 들지 않은 고아 파일 삭제뿐, 커밋 뒤 `git status -- Assets` 비어 있음. FINGER 는 장식만이라 테스트 없이 침범 검사(위 항목). 사용자가 같은 에디터에서 플레이 중이라 체크아웃 없이 `commit-tree` 로 `--no-ff` 와 같은 병합 커밋을 만들었다.
 - **버린 대안**: 커스텀 하늘 셰이더(프로젝트 첫 셰이더 — 내장 Panoramic + 구운 텍스처로 충분), 내장 Procedural(구름 없음), 구름을 장식 메시로(먼 클리핑 안에 둬야 하고 트랙마다 렌더러가 는다), 레이스 씬에 하늘 하나만(트랙별 낮·밤을 못 나눈다), `Camera.main` 으로 카메라 찾기(§0 런타임 조회 금지).
 
 ## 2026-11-02 · FINGER LANES 장식 디테일 (R4, `feature/m6-finger-detail`)

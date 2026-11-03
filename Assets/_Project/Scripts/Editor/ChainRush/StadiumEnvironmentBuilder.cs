@@ -122,14 +122,13 @@ namespace ProtoHarness.Editor.ChainRush
             private const float HurdlePitch = 3f, HurdleOffset = 2f, PadPitch = 1.2f, PadOffset = 1.2f;
             // Both sets are trimmed outside the lower tier and over the infield: the oval's lane lines, its small pitch's
             // lines and goals (user 2026-11-02, the infield becomes a football field). The oval's clay and the pitch's turf
-            // (StadiumSports_Clay, _TurfLight) are left out.
-            private static readonly (string Mesh, string Material)[] Kept =
+            // (StadiumSports_Clay, _TurfLight) are left out, and so is the outer turf (StadiumSports_TurfDark): every one of
+            // its vertices lies 38-45 m outside the road edge (measured 2026-11-03), under the upper bowl, so trimming
+            // left it empty (review 2026-11-03: an empty mesh was saved and an empty renderer kept). An empty result throws.
+            private static readonly (string Mesh, string Material)[] Trimmed =
             {
-                ("Concrete", "M_StadiumSportsConcrete"), ("TurfDark", "M_StadiumSportsTurfDark"), ("SeatBlue", "M_StadiumSportsSeatBlue"),
+                ("Concrete", "M_StadiumSportsConcrete"), ("SeatBlue", "M_StadiumSportsSeatBlue"),
                 ("Steel", "M_ArtStadiumSteel"), ("Mint", "M_ArtStadiumMint"), ("SeatMuted", "M_ArtStadiumSeats"),
-            };
-            private static readonly (string Mesh, string Material)[] Cleared =
-            {
                 ("White", "M_StadiumSportsWhite"), ("Ink", "M_ArtStadiumInk"), ("Amber", "M_ArtStadiumAmber"),
             };
             private readonly TrackDefinition definition;
@@ -849,7 +848,7 @@ namespace ProtoHarness.Editor.ChainRush
             // new infield are saved beside the baked ones (Art/Models/StadiumExterior_*).
             private void SportsComplex(Transform parent)
             {
-                foreach ((string mesh, string material) in BakedParts())
+                foreach ((string mesh, string material) in Trimmed)
                 {
                     Mesh cleared = WithoutInfield(ExteriorAssets.Require<Mesh>(ModelFolder + "StadiumSports_" + mesh + ".asset"), Array.IndexOf(OldBoards, mesh) >= 0);
                     try
@@ -872,11 +871,6 @@ namespace ProtoHarness.Editor.ChainRush
                 }
             }
 
-            private static IEnumerable<(string Mesh, string Material)> BakedParts()
-            {
-                foreach (var part in Kept) yield return part;
-                foreach (var part in Cleared) yield return part;
-            }
 
             private static void Baked(Transform parent, string name, Mesh mesh, Material material)
             {
@@ -941,6 +935,8 @@ namespace ProtoHarness.Editor.ChainRush
                     }
                     submeshes.Add(kept.ToArray());
                 }
+                // Nothing left means the part belongs under the bowl entirely: leave it out of Trimmed, don't save it empty.
+                if (compact.Count == 0) throw new InvalidOperationException("Stadium baked part is empty after trimming: " + source.name);
                 var copy = new Mesh { name = source.name, indexFormat = IndexFormat.UInt32 };
                 copy.SetVertices(compact);
                 // Preserve the baked shading/UVs. Unreferenced vertices must go: RoadCorridor inspects every vertex,

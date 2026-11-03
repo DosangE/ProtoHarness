@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-11-03 · STADIUM 대형 경기장과 장식 디테일 (R4, `feature/m6-stadium-detail`)
+
+- **결정 (사용자, 2026-11-03)**: 다음 후보 중 "스타디움 디테일 작업부터 … codex로 구현해봐" → 요청서(LED 보드·결승 갠트리·조명탑·코너·벤치, 0 단계 렌더에서 이미 있는 전광판·관중은 뺌) "ㄱㄱ". 렌더 뒤 "스타디움을 정말 큰 스타디움으로 … 해외축구 경기장 같이 높이로도 꽤 커서 외부 전경이 잘 안보이는" → 요청서(1층 뒤 위층 고리·지붕 고리·전광판·구운 메시 정리) → "웸블리 스타디움, 서울 종합경기운동장 같은 느낌으로 만들어줘 ㄱㄱ". 렌더 뒤 "2층에 생긴 좌석이 어둡다", "2층 좌석과 1층 좌석의 모양이 달라 괴리감" → 1층과 같은 의자로. 최종 "좋다 확인했고 삭제 승인한다. 이후 커밋 병합 푸시 갱신하라".
+- **찾은 것 (요청서 전, 에디터 실측)**: STADIUM 은 레퍼런스 영상이 없는 원작 트랙이다. 구운 1층 관중석(`SeatBlue`·`SeatMuted`·`Concrete`)은 도로 가장자리 바깥 o ≤ 17 m(옆)~34 m(끝), 높이 ≤ 9 m, 그 바깥 o 36~58 m 에 가는 조명 기둥·옛 양 끝 전광판(23 m)·바깥 건물·나무 — 트랙에서 9 m 너머 바깥이 다 보였다. 1층 의자 = 앉는 판(줄 방향 0.78 × 깊이 0.68 × 0.16) + 등받이(0.78 × 0.13 × 0.64), 간격 1.65 m, 줄마다 0.65 m 오름.
+- **결과** (`StadiumEnvironmentBuilder` 의 `Layout` 만, 트랙·시뮬·TrackLook·하늘 그대로):
+  - `05` 바깥 직선 LED 광고 보드(앞면 가장자리 +1.6 m, 노면 위 0.4~1.2 m, 6 m 조각, 민트·호박·자홍), `06` 결승 갠트리(보·시계 9.4 m 위부터, 기둥 가드 밖 1 m)와 사진 판독 카메라, `07` 코너 바깥 허들 64·안쪽 패딩 76, 팀 벤치 2, 엔드존 깃대 12.
+  - `08` 위층 스탠드 고리: 트랙 바깥 가장자리 오프셋(o) 36 m 콘코스 벽(출입구 불빛) → 6 m 처마 → 계단 32줄(o 30 → 72, 1층과 같은 콘크리트) 위 1층과 같은 의자 14,880개(같은 크기·간격·재질 비율, 12자리마다 통로) → 뒤 통로 → 바깥으로 벌어지는 흰 외벽(o 76 → 82)과 20 m 마다 갈빗대. 높이는 안장형(옆 44 m · 끝 36 m, 잠실식 곡선 지붕선).
+  - `09` 지붕 고리: 위층보다 8 m 위, 안쪽 끝 o 24 까지, 앞 가장자리 아랫면 조명 띠. 그림자를 드리우지 않는다 — 위층 좌석이 지붕 그림자에 묻혀 어두웠다(사용자 "2층 좌석이 어둡다").
+  - `10` 흰 격자 아치(웸블리식): x 축을 가로지르는 포물선, 정점 120 m, 다리는 외벽 50 m 바깥. 지붕 뒤 가장자리 위에서 지붕보다 1 m 이상 높지 않으면 던진다(지금 약 5 m). `11` 양 끝 지붕 아래 전광판(발광 판, 글자 없음).
+  - 구운 메시 정리: 위층에 묻히는 부분(o > 30), 양 끝 1층 지붕 윗부분(o > 20 · 높이 > 12), 옛 전광판 메시(`Mint`·`Ink` 의 o > 20 전부)를 잘라 `StadiumExterior_<Mesh>.asset` 로 저장. 바깥 잔디(`TurfDark`)는 정점 전부가 o 38~45 m 라 목록에서 뺐고, 잘라 낸 결과가 비면 던진다. 처음 놓은 조명탑 4개(`04`)는 위층에 묻혀 지웠다.
+  - 새 메시는 재질별로 합쳐 렌더러 432 → 1051, 정점 약 98만(의자 메시 하나 23 MB). 위층 정점 70만 넘으면 던진다.
+- **구현 분담**: Codex(`task --write --effort high`) 세 번 — 디테일, 대형 볼, 의자. 지시서마다 `승인:`·`브랜치:` 줄, 파일 하나 범위, Unity·git 쓰기·`.meta`·문서 금지. 바뀐 파일은 매번 그 하나뿐(`git status`). Claude 가 메뉴 실행·렌더·리뷰를 했고 렌더를 보고 세 곳을 고쳤다: 아치(첫 95 m · 발 13 m 는 옆 지붕 52 m 에 박힘), 옛 전광판(높이 자르기로 "STADIUM" 글자 아래 절반이 남음), 메시 이름(`Bowl` + 재질 이름 `M_Stadium…` → `Bowl_…`).
+- **검증** (이 PC 의 에디터 6000.3.19f1 — 프로젝트 버전은 6000.3.25f1, UTC):
+  - 최종(리뷰 수정 `eccfe8d` 뒤, 에디터가 닫혀 배치 모드 `-executeMethod …RebuildExterior`): 컴파일 `*** Tundra build success (2.50 seconds), 13 items updated, 1618 evaluated`, 원문 "Stadium Exterior clearance: nearest renderer bounds 0.75 m outside a road edge (at least 0.7 m below 9 m over the road); 0 parts under the slab; 958796 vertices checked one by one." / "StadiumExterior: 1051 renderers; physics=0; runtime scripts=0; road corridor clear." (그 전 에디터 Rebuild 는 1052 renderers — 빈 `TurfDark` 렌더러 포함.)
+  - 영향 평가: 바뀐 것은 장식 빌더와 그 생성물(프리팹·메시·재질)뿐 → 읽는 곳은 레이스 씬의 장식 로드(`RaceAssembler`, `ChainRushTrackStadium.unity` 의 프리팹) → 그것을 불러 검사하는 비-Lap 테스트 `ChainRushFlowTests.Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`(STADIUM 장식 로드 20 s 안, 루트 이름, 렌더러 있음, Collider·Rigidbody·MonoBehaviour 없음, `LoadLapRace` `ChainRushFlowTests.cs:1767-1797`). Lap 은 장식만 바뀌어 돌리지 않았다(VERIFICATION §4-4). 에디터에서 시작한 실행은 사용자가 에디터를 닫아 결과 없이 끊겼고, 배치 모드로 다시 돌렸다(모두 실행):
+    - `e5f61b1`: `testcasecount="1" result="Passed" passed="1" failed="0"` (06:30:43Z~06:31:02Z).
+    - 리뷰 수정 뒤 Rebuild 한 작업 트리(= `eccfe8d`): `testcasecount="1" result="Passed" passed="1" failed="0"` (06:36:51Z~06:37:13Z). 그 뒤 `Assets/` 변경은 참조 0건이 된 `StadiumExterior_TurfDark.asset` 삭제뿐이고, 커밋 뒤 `git status` 에 `Assets/` 없음.
+  - 렌더(미리보기 장면, 밤 하늘·안개, 도로 근사): 트랙에서 위층·지붕 고리가 시야를 감싸 바깥이 안 보인다, 안개 60–300 m 안에서도 맞은편 스탠드가 보여 안개는 그대로.
+  - 병합(② → `dev`, 사용자 "커밋 병합 푸시 갱신하라"): 위 영향 평가의 테스트 1건(두 실행 모두 위에 적음), 컴파일 에러 0. Lap·게이트 전체는 돌리지 않았다(§4-4, §9-2 ②).
+- **사용자 플레이 확인**: "좋다 확인했고" (의자 수정 뒤). 프레임 수치는 재지 않았다.
+- **지운 것**: (사용자 "삭제 승인한다") 작업 중 생겨 아무것도 참조하지 않는 추적 안 된 생성물 18개(+ .meta) — 이름 바꾸기 전 `StadiumExterior_BowlM_*`·`RoofM_*` 10, 색 블록 좌석 메시 `StadiumExterior_Bowl_Bowl{Red,Navy,Pale,Amber}` 4, 재질 `M_StadiumBowl{Red,Navy,Pale,Amber}` 4. (사용자 "지운다") 리뷰 수정으로 고아가 된 빈 메시 `StadiumExterior_TurfDark.asset`. 지우기 전 모두 GUID 참조 0건 확인.
+- **리뷰** (병합 전, CLAUDE.md §7-5, "그 밖" 규모 — 파일 1개 +~800줄):
+  - unity-reviewer(`subagent_tokens` 118462): 치명 0 · 중대 1 · 제안 5. 중대 = 실제 결함: 바깥 잔디 메시가 정점 0개로 저장되고 빈 렌더러가 남음(§5 조용한 실패) → `eccfe8d` 로 고침. 제안: `Kept`/`Cleared` 구분이 의미를 잃음(같은 커밋에서 `Trimmed` 로 합침), 저장 뒤 검사(아래 Codex ①과 같음), 사진 판독 카메라가 왼쪽 타이밍 기둥 바로 뒤라 결승선 쪽 시야가 가림(디자인 — 그대로), `ScreenBottom` 주석 정밀도, UV 를 늘 Vector4 로(원본에 UV 없어 영향 없음). 체크리스트 §0/§1/§2 위반 없음, 결정성·정점 수 주석(690,220) 일치.
+  - Codex 설계 리뷰(비용: `/status` 를 읽지 않아 모름): needs-attention 2건 — ① 메시를 검사 전에 저장해 뒤 검사가 실패하면 메시만 바뀐 채 남는다(실제 위험, 단 이 브랜치 전부터 있는 공통 방식 — `dev` 의 STADIUM `SportsComplex`, `SkywayEnvironmentBuilder.cs:403`. `ExteriorAssets` 공통 수정으로 후속 후보, 실패하면 git 으로 되돌린다). ② 위층 콘코스 벽은 정점이 땅과 12.35 m 에만 있어 정점 단위 침범 검사가 둘 다 높이 예외로 건너뛴다(실제 공백, 단 벽은 도로 가장자리 오프셋 36 m 로 만들어 볼록 루프에서는 도로와 만날 수 없다 — 빌더가 왼쪽 회전을 던진다. 면 단위 검사는 후속 후보). 둘이 겹친 지적은 ①뿐이고, 빈 메시는 unity-reviewer 만, 벽 검사 공백은 Codex 만 찾았다.
+- **버린 대안**: 위층을 o 60 m 바깥에(구운 바깥 장식과 안 겹치지만 1층과 위층 사이 땅이 보인다), 위층 좌석을 색 블록으로(사용자 "괴리감"), 안개를 120–420 m 로(렌더에서 필요 없었다), 1층 관중석 재구성(범위 밖).
+
 ## 2026-11-02 · 서킷 공통 하늘: TrackLook 의 스카이박스·지평선 안개 (`feature/m6-track-sky`)
 
 - **결정 (사용자, 2026-11-02)**: FINGER 렌더를 보고 "좋은데 최외곽이 살짝 비어보인다. 하늘같은걸 구현해 놓는건 어떤가? 서킷 공통적으로 쓰일만하게" → 요청서(TrackLook 에 하늘·지평선 색·안개 거리, 레이스 시작 때 적용, 내장 Panoramic 셰이더로 커스텀 셰이더 없이) "ㄱㄱ 추천대로, finger 먼저 커밋하고 진행" — FINGER·PALM·SKYWAY 낮, STADIUM 밤.

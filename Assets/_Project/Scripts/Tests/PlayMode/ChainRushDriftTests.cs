@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Motion;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -23,12 +24,13 @@ namespace ProtoHarness.Tests.PlayMode
         {
             public bool ChainAction;
             public bool Coasting;
+            public float Steer;
 
             public void Poll() { }
 
             public TickInput Consume()
             {
-                var input = new TickInput(0f, false, false, false, false, ChainAction, coasting: Coasting);
+                var input = new TickInput(Steer, false, false, false, false, ChainAction, coasting: Coasting);
                 ChainAction = false;
                 return input;
             }
@@ -103,6 +105,100 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForSeconds(1f);
             Assert.That(game.IsRunning, Is.True);
             Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed).Within(0.5f), "Speed returns to the run speed after the carry.");
+        }
+
+        [UnityTest]
+        public IEnumerator Sling_AngledFacing_KeepsTheFacingWhilePulling()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            game.Racer.Heading = 20f;
+            float heading = player.Heading;
+            Vector3 facing = RunDrive.FacingOf(heading);
+            Vector3 before = player.transform.position;
+            source.ChainAction = true;
+            yield return WaitTicks(1);
+            Assert.That(player.IsSlingPulling, Is.True, "precondition: the slingshot is pulling.");
+            while (player.IsSlingPulling)
+            {
+                Assert.That(Mathf.Abs(Mathf.DeltaAngle(player.Heading, heading)), Is.LessThanOrEqualTo(0.01f), "The booster must keep the facing.");
+                // Step computes the hook before moving the controller, so compare its direction from that tick's start.
+                Vector3 hookDirection = (player.SlingTarget - before).normalized;
+                Assert.That(Vector3.Distance(hookDirection, facing), Is.LessThan(1e-4f), "The hook must lie along the facing.");
+                Assert.That(Vector3.Dot(player.SlingTarget - player.transform.position, facing), Is.GreaterThan(0f), "The hook must stay ahead of the runner.");
+                before = player.transform.position;
+                yield return WaitTicks(1);
+            }
+        }
+
+        // A booster turns less than running does (user 2026-11-04 "오히려 덜꺽여야"): its speed must not buy a tighter turn.
+        [UnityTest]
+        public IEnumerator Sling_Steering_TurnsLessThanRunning()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 40d);
+            float running = player.Heading;
+            source.Steer = 1f;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            source.Steer = 0f;
+            running = Mathf.DeltaAngle(running, player.Heading);
+            game.Racer.AddGauge(1f);
+            source.ChainAction = true;
+            yield return WaitForSpeed(RunSpeed + 4f);
+            float boosted = player.Heading;
+            source.Steer = 1f;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            boosted = Mathf.DeltaAngle(boosted, player.Heading);
+            Debug.Log("ChainRush booster steering: " + running.ToString("0.0") + " deg running, " + boosted.ToString("0.0") + " deg boosted, in 0.5 s.");
+            Assert.That(game.Racer.SlingTicks, Is.GreaterThan(0), "precondition: the booster is still running.");
+            Assert.That(boosted, Is.LessThan(running), "A booster must turn less than running.");
+        }
+
+        // Steering costs a booster speed as it does a run (user 2026-11-04), and letting go gives the speed back.
+        [UnityTest]
+        public IEnumerator Sling_Steering_LosesSpeedUntilLetGo()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            game.Racer.AddGauge(1f);
+            source.ChainAction = true;
+            yield return WaitForSpeed(RunSpeed + 4f);
+            float boosted = player.ForwardSpeed;
+            source.Steer = 1f;
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            float turning = player.ForwardSpeed;
+            source.Steer = 0f;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            float released = player.ForwardSpeed;
+            Debug.Log("ChainRush booster speed: " + boosted.ToString("0.00") + " boosted, " + turning.ToString("0.00") + " after 1 s of full steer, "
+                + released.ToString("0.00") + " 0.5 s after letting go.");
+            Assert.That(game.Racer.SlingTicks, Is.GreaterThan(0), "precondition: the booster is still running.");
+            // The bench's carry 26 less half of turnSpeedLoss 0.2 at full steer.
+            Assert.That(turning, Is.EqualTo(26f * (1f - 0.2f * 0.5f)).Within(0.2f), "Full steer must cost the booster half of turnSpeedLoss.");
+            Assert.That(released, Is.GreaterThan(turning + 0.5f), "Letting go must give the speed back.");
+        }
+
+        // Full steer costs a run half of the scene's turnSpeedLoss 0.2 (user 2026-11-04 "일반 상태일때도 감속 절반").
+        [UnityTest]
+        public IEnumerator Run_FullSteer_LosesHalfOfTheTurnSpeedLoss()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 30d);
+            source.Steer = 1f;
+            yield return WaitTicks(Ticks.FromSeconds(0.4f));
+            float early = player.ForwardSpeed;
+            // 2.6 s in all: the speed has reached its limit, and the turn is still on the 40 m half width road.
+            yield return WaitTicks(Ticks.FromSeconds(2.2f));
+            Debug.Log("ChainRush run speed: " + early.ToString("0.00") + " m/s after 0.4 s of full steer, "
+                + player.ForwardSpeed.ToString("0.00") + " after 2.6 s.");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(RunSpeed * (1f - 0.2f * 0.5f)).Within(0.3f), "Full steer must cost a run half of turnSpeedLoss.");
+            // A ninth of the overspeed falloff 8 (user 2026-11-04 "1/3", then "1/3 더"): under 0.4 m/s gone by now, not all 2.
+            Assert.That(early, Is.GreaterThan(RunSpeed - 0.5f), "Steering must wear the speed off slowly.");
         }
 
         // KartRider style (2026-10-19): letting go of the throttle cuts a booster at once, the slingshot and a swing's carry,
@@ -219,6 +315,22 @@ namespace ProtoHarness.Tests.PlayMode
             while (game.IsRunning && line.Project(player.transform.position).S < s && Time.time < deadline)
                 yield return new WaitForFixedUpdate();
             Assert.That(line.Project(player.transform.position).S, Is.GreaterThanOrEqualTo(s), "Timed out before s=" + s + ".");
+        }
+
+        private IEnumerator WaitForSpeed(float speed)
+        {
+            int deadline = game.Tick + Ticks.FromSeconds(2f);
+            while (player.ForwardSpeed < speed && game.Tick < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(player.ForwardSpeed, Is.GreaterThanOrEqualTo(speed), "The booster never reached this speed.");
+        }
+
+        // Wait for simulation ticks, using the same exact-tick check as ChainRushSteeringTests.
+        private IEnumerator WaitTicks(int ticks)
+        {
+            int target = game.Tick + ticks;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (game.Tick < target && Time.realtimeSinceStartup < deadline) yield return new WaitForFixedUpdate();
+            Assert.That(game.Tick, Is.EqualTo(target), $"Waited for {ticks} ticks.");
         }
 
         private void MovePlayer(Vector3 position)

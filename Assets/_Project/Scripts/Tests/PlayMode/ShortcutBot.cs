@@ -75,7 +75,9 @@ namespace ProtoHarness.Tests.PlayMode
                         follower.SwingHold = false;
                         stage = Stage.OnLoop;
                     }
-                    else if (Mathf.DeltaAngle(turnFrom, runner.Heading) >= QuarterTurn)
+                    // A guard can end the swing first (the inner key's short rope reaches one): a guard no longer turns the
+                    // runner (user 2026-11-04), so the bot takes the steering back.
+                    else if (game.Racer.SwingTicks == 0 || Mathf.DeltaAngle(turnFrom, runner.Heading) >= QuarterTurn)
                     {
                         follower.SwingHold = false;
                         if (stage == Stage.SecondSwing) Taken++;

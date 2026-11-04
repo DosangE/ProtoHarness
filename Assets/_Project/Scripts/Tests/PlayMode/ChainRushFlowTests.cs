@@ -1292,7 +1292,8 @@ namespace ProtoHarness.Tests.PlayMode
                 float deadline = Time.realtimeSinceStartup + 60f;
                 while (circuit.Laps.CompletedLaps < 1 && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
                 Time.timeScale = scale;
-                string where = $"tick {game.Tick}, {circuit.Laps.CompletedLaps} laps, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}";
+                string where = $"tick {game.Tick}, {circuit.Laps.CompletedLaps} laps, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}, "
+                    + $"progress {circuit.Laps.Progress:F1} m, heading {player.Heading:F1}, speed {player.HorizontalSpeed:F2} m/s, swinging {player.IsSwinging}";
                 Debug.Log($"ChainRush Finger Lanes inner-key swings: {swingTicks} swinging ticks, top {top:F2} m/s, steepest rise {steepest:F4} m/s a tick at tick {steepestTick} (limit {limit:F4}). {where}");
                 Assert.That(game.HasFailed, Is.False, "The runner fell. " + where);
                 Assert.That(circuit.Laps.CompletedLaps, Is.GreaterThanOrEqualTo(1), "The runner did not finish a lap. " + where);

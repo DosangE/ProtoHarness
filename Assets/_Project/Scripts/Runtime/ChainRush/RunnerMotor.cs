@@ -35,9 +35,17 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float turnAcceleration = 1200f;
         [SerializeField] private float airTurnScale = 0.5f;
         [SerializeField] private float minTurnRadius = 0f;
-        // Turning costs speed on the ground (KartRider style): the run target drops by turnSpeedLoss times how hard the
-        // runner turns (its turn rate over the turn limit). 0 turns it off.
+        // While a slingshot booster runs minTurnRadius grows by this, so its speed does not buy a tighter turn: 2 at the
+        // circuit's run 20 and booster 32 turns 0.8 times as fast as running (user 2026-11-04 "오히려 덜꺽여야").
+        [SerializeField] private float boostTurnRadiusScale = 2f;
+        // Turning costs speed on the ground (KartRider style): the run target, and a booster's, drops by turnSpeedLoss times
+        // turnSpeedLossScale times how hard the runner turns (its turn rate over the turn limit). 0 turns it off. The scale
+        // halves the 0.2 saved in the scenes (user 2026-11-04 "감속 절반"), which only the editor may change.
         [SerializeField] private float turnSpeedLoss = 0f;
+        [SerializeField] private float turnSpeedLossScale = 0.5f;
+        // Speed lost only to turning falls at this share of the overspeed falloff, so a turn eases the speed down to its
+        // limit instead of dropping to it (user 2026-11-04 "감속 속도를 1/3", then "1/3 더").
+        [SerializeField] private float turnFalloffScale = 1f / 9f;
         // How fast a grounded runner below its run target speeds up to it, in m/s a second.
         [SerializeField] private float runAcceleration = 30f;
         // How fast a grounded runner with the throttle let go slows toward a stop, in m/s a second (2026-10-19).
@@ -56,10 +64,19 @@ namespace ProtoHarness.ChainRush
         // Velocity across the facing (from rope swings, wall glances) bleeds off at these rates.
         [SerializeField] private float sideGrip = 60f;
         [SerializeField] private float airSideGrip = 18f;
-        // Share of speed lost in a head-on guard hit; glancing hits lose proportionally less. Every tick in contact with a
-        // guard also scrapes off guardScrapeDecel (m/s a second) of speed; 0 turns that off.
+        // Share of speed lost in a head-on guard hit; glancing hits lose proportionally less. A tick of contact also scrapes
+        // off guardScrapeDecel (m/s a second) of speed, 0 turns that off, except for a run pushing into the guard: that slides
+        // along it (GuardContact.Slide), and a scrape would stop a shallow rub dead (2026-11-04: 2 degrees, 20 to 0 m/s).
         [SerializeField] private float guardSpeedLoss = 0.15f;
         [SerializeField] private float guardScrapeDecel = 0f;
+        // The least turn rate (degrees a second) steering keeps against a guard, where the speed that sets the turn limit is
+        // gone: a guard never turns the runner (user 2026-11-04), so the player must be able to.
+        [SerializeField] private float guardTurnRate = 60f;
+        // TryFindGuardAhead: how far the cast looks, the share of the capsule radius its sphere is drawn in by, and the gap
+        // square to a guard (beyond the skin and that inset) that still counts as against it.
+        private const float GuardProbeReach = 12f;
+        private const float GuardProbeInset = 0.2f;
+        private const float GuardProbeGap = 0.05f;
         // Grounded run speed scales by 1 - factor * grade, clamped: uphill slows, downhill speeds up.
         [SerializeField] private float slopeSpeedFactor = 1.5f;
         [SerializeField] private float minSlopeSpeedScale = 0.7f;
@@ -68,15 +85,14 @@ namespace ProtoHarness.ChainRush
         [SerializeField] private float overspeedFalloff = 30f;
         // How far below the capsule a downhill road may drop in one tick and still be followed.
         [SerializeField] private float groundSnapDistance = 0.3f;
-        // Chain slingshot (chain action when not grappling): the chain hooks a point slingLead ahead on the
-        // centerline and pulls hard, turning the runner toward it, then extra speed carries for a moment.
+        // Chain slingshot (chain action when not grappling): the chain hooks a point slingLead ahead along the
+        // runner's facing and pushes that way without turning the runner, then extra speed carries for a moment.
         // While it runs and the runner is below its boost speed, it accelerates by slingPullAcceleration scaled by how far
         // below that speed it is (2026-10-19): strong from low speed, easing off as it closes in.
         [SerializeField] private float slingLead = 18f;
         [SerializeField] private float slingPullTime = 0.4f;
         [SerializeField] private float slingPullAcceleration = 45f;
         [SerializeField] private float slingTopSpeed = 20f;
-        [SerializeField] private float slingTurnRate = 90f;
         [SerializeField] private float slingCarryTime = 0.8f;
         [SerializeField] private float slingCarrySpeed = 16f;
         // A road pad's instant forward speed, far above the slingshot. It is the same for every runner and speed class
@@ -137,8 +153,8 @@ namespace ProtoHarness.ChainRush
         public Vector3 Facing => RunDrive.FacingOf(game.Racer.Heading);
         public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
         // The ground turn rate full steering reaches at the current speed, in degrees a second (Step's limit, before the
-        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set.
-        public float TurnLimit => RunDrive.TurnLimit(game.Racer.Velocity, DriveSettings());
+        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set, a wider radius under a booster.
+        public float TurnLimit => RunDrive.TurnLimit(game.Racer.Velocity, game.Racer.SlingTicks > 0, DriveSettings());
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RunDrive.RightOf(game.Racer.Heading));
         public bool IsGrounded => game.Racer.Grounded;
         public float Speed => game.Racer.Velocity.magnitude;
@@ -201,10 +217,12 @@ namespace ProtoHarness.ChainRush
                 Debug.LogError("RunnerMotor: movement settings must be positive.", this);
             if (maxTurnRate <= 0f || turnAcceleration <= 0f || airTurnScale < 0f || airTurnScale > 1f || minTurnRadius < 0f)
                 Debug.LogError("RunnerMotor: turn rate and acceleration must be positive, air turn scale within [0, 1], the turn radius not negative.", this);
+            if (boostTurnRadiusScale < 1f || turnSpeedLossScale < 0f || turnSpeedLossScale > 1f || turnFalloffScale <= 0f || turnFalloffScale > 1f)
+                Debug.LogError("RunnerMotor: the booster's turn radius scale must be at least 1, the turn speed loss scale within [0, 1], the turn falloff scale within (0, 1].", this);
             if (turnSpeedLoss < 0f || turnSpeedLoss >= 1f || runAcceleration <= 0f || airDeceleration < 0f)
                 Debug.LogError("RunnerMotor: the turn speed loss must be within [0, 1), the run acceleration positive, the air deceleration not negative.", this);
-            if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f || guardScrapeDecel < 0f)
-                Debug.LogError("RunnerMotor: grips and the guard scrape cannot be negative, guard speed loss within [0, 1].", this);
+            if (sideGrip < 0f || airSideGrip < 0f || guardSpeedLoss < 0f || guardSpeedLoss > 1f || guardScrapeDecel < 0f || guardTurnRate < 0f)
+                Debug.LogError("RunnerMotor: grips, the guard scrape and the guard turn rate cannot be negative, guard speed loss within [0, 1].", this);
             if (slopeSpeedFactor < 0f || minSlopeSpeedScale <= 0f || minSlopeSpeedScale > 1f || maxSlopeSpeedScale < 1f)
                 Debug.LogError("RunnerMotor: slope factor cannot be negative, and the speed scale range must be within (0, 1] .. [1, inf).", this);
             if (groundSnapDistance < 0f || overspeedFalloff <= 0f || coastDeceleration <= 0f)
@@ -212,7 +230,7 @@ namespace ProtoHarness.ChainRush
             if (brakeDeceleration <= 0f || reverseSpeed <= 0f || reverseAcceleration <= 0f)
                 Debug.LogError("RunnerMotor: the brake deceleration, reverse speed and reverse acceleration must be positive.", this);
             if (slingLead <= 0f || slingPullTime <= 0f || slingPullAcceleration <= 0f || slingTopSpeed <= runSpeed
-                || slingTurnRate < 0f || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < ReleaseSpeed)
+                || slingCarryTime < 0f || slingCarrySpeed < runSpeed || empoweredReleaseSpeed < ReleaseSpeed)
                 Debug.LogError($"RunnerMotor: slingshot settings must be positive, its speeds above run speed, and the empowered release at least the normal {ReleaseSpeed}.", this);
             if (!(boostZoneSpeed > slingTopSpeed) || float.IsInfinity(boostZoneSpeed) || !(boostZoneFalloff > 0f) || float.IsInfinity(boostZoneFalloff))
                 Debug.LogError("RunnerMotor: boost zone speed must be finite and above slingshot top speed, its falloff positive and finite.", this);
@@ -273,7 +291,7 @@ namespace ProtoHarness.ChainRush
             bool carrying = racer.SlingTicks > 0 && !pulling;
             float turnLimit = RunDrive.Turn(racer, grounded, swinging, reversing, dt, drive);
             PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling);
-            if (pulling && !swinging) slingTarget = Slingshot.SteerToward(racer, game.Track, frame, transform.position, dt, sling);
+            if (pulling && !swinging) slingTarget = Slingshot.HookPoint(racer.Heading, transform.position, sling);
             var now = new RunDrive.Conditions
             {
                 Grounded = grounded,
@@ -284,9 +302,38 @@ namespace ProtoHarness.ChainRush
                 Carrying = carrying,
                 GrappleAttached = grapple.IsAttached,
             };
-            RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);
-            MoveAndCollide(racer, frame, grounded, swinging, dt);
+            Vector3 arrived = racer.Velocity;
+            RunDrive.Push push = RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);
+            // Only the run on the ground pushes along a guard; a swing, a grapple or a jump just loses the push into it.
+            if (grounded && !swinging && !grapple.IsAttached && TryFindGuardAhead(push.Target, out Vector3 guard))
+            {
+                GuardContact.Glance(ref arrived, guard, guardSpeedLoss);
+                GuardContact.Slide(ref racer.Velocity, arrived, Facing, guard, push, dt);
+                float steer = RunDrive.SteerSign(arrived, racer.Heading, reversing) * racer.Steer;
+                GuardContact.TurnOut(ref racer.Heading, steer, turnLimit, guardTurnRate, dt);
+            }
+            MoveAndCollide(racer, frame, grounded, swinging, push.Target, dt);
             CountDownAndCheckFall(racer);
+        }
+
+        // Finds the guard the run is pushing into, before the move: a contact found only after it leaves that tick's move to
+        // the side grip, and a slow run along a guard barely goes (2026-11-04: 1.24 m/s shown, 0.10 m moved in a second). The
+        // cast goes the way the run pushes; a shallow push reaches the guard far along it, so what counts is the gap square
+        // to the guard. Nothing is kept between ticks: the answer comes from the position, as SnapToGround's does.
+        private bool TryFindGuardAhead(float push, out Vector3 normal)
+        {
+            normal = Vector3.zero;
+            if (push == 0f) return false;
+            Vector3 direction = Facing * Mathf.Sign(push);
+            float inset = controller.radius * GuardProbeInset;
+            // The sphere is drawn in so that it starts clear of a guard the capsule rests against: a cast misses what it
+            // starts inside.
+            PhysicsScene world = gameObject.scene.GetPhysicsScene();
+            if (!world.SphereCast(transform.TransformPoint(controller.center), controller.radius - inset, direction, out RaycastHit hit,
+                    GuardProbeReach, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
+            normal = hit.normal;
+            if (!IsGuard(ref normal)) return false;
+            return hit.distance * -Vector3.Dot(direction, normal) <= controller.skinWidth + inset + GuardProbeGap;
         }
 
         // Coyote time, then a queued jump if it still counts.
@@ -308,7 +355,7 @@ namespace ProtoHarness.ChainRush
 
         // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
         // the ceiling, a guard, a kicker's crest, the ground and the grapple.
-        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float dt)
+        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float push, float dt)
         {
             ref Vector3 velocity = ref racer.Velocity;
             ref float heading = ref racer.Heading;
@@ -324,8 +371,9 @@ namespace ProtoHarness.ChainRush
             {
                 // A swing that carries the runner into a guard snaps there, without the carry.
                 racer.SwingTicks = 0;
-                GuardContact.Glance(ref velocity, ref heading, guardNormal, frame.Forward, guardSpeedLoss);
-                if (guardScrapeDecel > 0f) GuardContact.Scrape(ref velocity, guardScrapeDecel, dt);
+                GuardContact.Glance(ref velocity, guardNormal, guardSpeedLoss);
+                bool runPushing = grounded && !swinging && !grapple.IsAttached && push * Vector3.Dot(Facing, guardNormal) < 0f;
+                if (guardScrapeDecel > 0f && !runPushing) GuardContact.Scrape(ref velocity, guardScrapeDecel, dt);
             }
             // A runner that ran over a kicker's lip this tick leaves the road climbing by its forward speed (user 2026-10-25,
             // Finger Lanes: the faster, the farther); the up speed also keeps the ground snap below from pulling it back.
@@ -380,7 +428,9 @@ namespace ProtoHarness.ChainRush
             TurnAcceleration = turnAcceleration,
             AirTurnScale = airTurnScale,
             MinTurnRadius = minTurnRadius,
-            TurnSpeedLoss = turnSpeedLoss,
+            BoostTurnRadiusScale = boostTurnRadiusScale,
+            TurnSpeedLoss = turnSpeedLoss * turnSpeedLossScale,
+            TurnFalloffScale = turnFalloffScale,
             CoastDeceleration = coastDeceleration,
             BrakeDeceleration = brakeDeceleration,
             ReverseSpeed = reverseSpeed,
@@ -403,7 +453,6 @@ namespace ProtoHarness.ChainRush
             PullTime = slingPullTime,
             PullAcceleration = slingPullAcceleration,
             TopSpeed = SlingTopSpeed,
-            TurnRate = slingTurnRate,
             CarryTime = slingCarryTime,
             CarrySpeed = SlingCarrySpeed,
             OverspeedFalloff = overspeedFalloff,
@@ -545,13 +594,19 @@ namespace ProtoHarness.ChainRush
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
             Vector3 normal = hit.normal;
-            if (Mathf.Abs(normal.y) > 0.3f) return;
-            normal.y = 0f;
-            normal.Normalize();
-            if (Mathf.Abs(Vector3.Dot(normal, game.Track.Frame(transform.position).Forward)) > 0.5f) return;
+            if (!IsGuard(ref normal)) return;
             if (hitGuard && Vector3.Dot(normal, Facing) >= Vector3.Dot(guardNormal, Facing)) return;
             guardNormal = normal;
             hitGuard = true;
+        }
+
+        // Levels a contact's normal and says whether it is a guard's.
+        private bool IsGuard(ref Vector3 normal)
+        {
+            if (Mathf.Abs(normal.y) > 0.3f) return false;
+            normal.y = 0f;
+            normal.Normalize();
+            return Mathf.Abs(Vector3.Dot(normal, game.Track.Frame(transform.position).Forward)) <= 0.5f;
         }
 
         public void ShiftOrigin(Vector3 offset)

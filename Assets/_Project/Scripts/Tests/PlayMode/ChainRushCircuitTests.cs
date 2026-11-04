@@ -74,6 +74,35 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(circuit.Laps.IsFinished, Is.False);
         }
 
+        // Rubbing a guard at a shallow angle the run goes on along it (review 2026-11-04). Here on the circuit: its
+        // guardScrapeDecel 25 outweighs its run acceleration 8, where the bench's 30 hides a scrape.
+        [UnityTest]
+        public IEnumerator Guard_ShallowRub_KeepsRunningAlongIt([Values(1f, 2f, 3f)] float angle)
+        {
+            game.SetInputSource(new TrackFollower(game.Track, player) { Steering = false });
+            game.StartRun();
+            yield return LandOnRoad();
+            int ready = game.Tick + Ticks.FromSeconds(4f);
+            while (game.IsRunning && player.HorizontalSpeed < 19f && game.Tick < ready) yield return new WaitForFixedUpdate();
+            Assert.That(player.HorizontalSpeed, Is.GreaterThanOrEqualTo(19f), "precondition: up to speed. " + State());
+            Vector3 position = player.transform.position;
+            TrackFrame frame = game.Track.Frame(position);
+            float offset = game.Track.Project(position).D;
+            // 0.2 m off the left guard (road half width 6 less the capsule's 0.38), leaning into it.
+            player.SetPosition(position + frame.Right * (-5.42f - offset));
+            float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg - angle;
+            game.Racer.Heading = heading;
+            int end = game.Tick + Ticks.FromSeconds(1.5f);
+            while (game.IsRunning && game.Tick < end) yield return new WaitForFixedUpdate();
+            float reached = Mathf.Abs(game.Track.Project(player.transform.position).D);
+            Debug.Log($"ChainRush shallow rub: {angle:0} deg, offset {reached:0.00} m, speed {player.HorizontalSpeed:0.00} m/s.");
+            Assert.That(game.IsRunning, Is.True, State());
+            // The slide starts a skin and a probe gap short of the guard (RunnerMotor.TryFindGuardAhead): about 5.54 m.
+            Assert.That(reached, Is.GreaterThan(5.5f), "The runner should be against the guard. " + State());
+            Assert.That(Mathf.DeltaAngle(player.Heading, heading), Is.EqualTo(0f).Within(0.01f), "A guard never turns the facing. " + State());
+            Assert.That(player.HorizontalSpeed, Is.GreaterThan(18f), "A shallow rub must not stop the run. " + State());
+        }
+
         // A fall no longer ends a circuit run: the runner comes back on the road before the gap, at rest and facing along
         // the track, stands still for the hold (1 s = 50 ticks) while the clock runs, then runs on.
         [UnityTest]

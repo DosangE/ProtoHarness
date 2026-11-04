@@ -1027,7 +1027,8 @@ namespace ProtoHarness.Tests.PlayMode
 
         // User 2026-11-02: "장식 테스트도 봇완주에 포함 ... 한바퀴만". Every track at every speed keeps its coverage,
         // using the saved lobby entry, decoration and look in the same run. The first counted lap is enough here;
-        // Race_FinishFromTheLobby keeps the finish/records/ghost contract. VeryFast may brush a guard (2026-10-25).
+        // Race_FinishFromTheLobby keeps the finish/records/ghost contract. VeryFast may brush a guard (2026-10-25), and Fast
+        // too since turning costs less speed (user 2026-11-04): corners are for the pole swing, only Normal must keep clear.
         [UnityTest, Timeout(90000), Category("Lap")]
         public IEnumerator Race_BotLap_WithLobbyEnvironmentAndLook_CompletesOneLap(
             [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed,
@@ -1094,7 +1095,7 @@ namespace ProtoHarness.Tests.PlayMode
                 double lapSeconds = track.LapLength / (20d * SpeedScale.Of(speed));
                 float seconds = Ticks.ToSeconds(laps.LapTicks(1));
                 Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), "lap 1 time. " + where);
-                if (speed != SpeedClass.VeryFast)
+                if (speed == SpeedClass.Normal)
                     Assert.That(maxOffset, Is.LessThan(track.RoadHalfWidth - 0.4f), "The bot touched a guard. " + where);
                 for (int k = 0; k < crests.Count; k++)
                 {
@@ -1292,7 +1293,8 @@ namespace ProtoHarness.Tests.PlayMode
                 float deadline = Time.realtimeSinceStartup + 60f;
                 while (circuit.Laps.CompletedLaps < 1 && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
                 Time.timeScale = scale;
-                string where = $"tick {game.Tick}, {circuit.Laps.CompletedLaps} laps, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}";
+                string where = $"tick {game.Tick}, {circuit.Laps.CompletedLaps} laps, shortcuts taken {bot.Taken}, hooks missed {bot.Missed}, "
+                    + $"progress {circuit.Laps.Progress:F1} m, heading {player.Heading:F1}, speed {player.HorizontalSpeed:F2} m/s, swinging {player.IsSwinging}";
                 Debug.Log($"ChainRush Finger Lanes inner-key swings: {swingTicks} swinging ticks, top {top:F2} m/s, steepest rise {steepest:F4} m/s a tick at tick {steepestTick} (limit {limit:F4}). {where}");
                 Assert.That(game.HasFailed, Is.False, "The runner fell. " + where);
                 Assert.That(circuit.Laps.CompletedLaps, Is.GreaterThanOrEqualTo(1), "The runner did not finish a lap. " + where);

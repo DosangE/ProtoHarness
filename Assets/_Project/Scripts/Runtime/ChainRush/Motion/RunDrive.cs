@@ -26,7 +26,11 @@ namespace ProtoHarness.ChainRush.Motion
             public float TurnAcceleration;
             public float AirTurnScale;
             public float MinTurnRadius;
+            // MinTurnRadius grows by this while a slingshot booster runs.
+            public float BoostTurnRadiusScale;
             public float TurnSpeedLoss;
+            // The share of the usual overspeed falloff that speed lost only to turning falls at.
+            public float TurnFalloffScale;
             public float CoastDeceleration;
             public float BrakeDeceleration;
             public float ReverseSpeed;
@@ -56,6 +60,20 @@ namespace ProtoHarness.ChainRush.Motion
             public bool GrappleAttached;
         }
 
+        // What the running force reached for this tick: the forward speed it headed for and how fast. A guard turns the
+        // same push along itself (GuardContact.Slide).
+        public readonly struct Push
+        {
+            public readonly float Target;
+            public readonly float Acceleration;
+
+            public Push(float target, float acceleration)
+            {
+                Target = target;
+                Acceleration = acceleration;
+            }
+        }
+
         public static Vector3 FacingOf(float heading)
         {
             float radians = heading * Mathf.Deg2Rad;
@@ -69,10 +87,19 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // The ground turn rate full steering reaches at this velocity, in degrees a second: MaxTurnRate, held to
-        // speed / MinTurnRadius when that is set.
-        public static float TurnLimit(Vector3 velocity, in Settings settings) => settings.MinTurnRadius > 0f
-            ? Mathf.Min(settings.MaxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / settings.MinTurnRadius * Mathf.Rad2Deg)
-            : settings.MaxTurnRate;
+        // speed / MinTurnRadius when that is set. A booster's speed must not buy a tighter turn (user 2026-11-04 "오히려
+        // 덜꺽여야"), so its radius is wider by BoostTurnRadiusScale.
+        public static float TurnLimit(Vector3 velocity, bool boosting, in Settings settings)
+        {
+            if (settings.MinTurnRadius <= 0f) return settings.MaxTurnRate;
+            float radius = settings.MinTurnRadius * (boosting ? settings.BoostTurnRadiusScale : 1f);
+            return Mathf.Min(settings.MaxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / radius * Mathf.Rad2Deg);
+        }
+
+        // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the down
+        // arrow is held: a runner turned round against its velocity some other way steers as it always did.
+        public static float SteerSign(Vector3 velocity, float heading, bool reversing) =>
+            reversing && Vector3.Dot(velocity, FacingOf(heading)) < 0f ? -1f : 1f;
 
         // Input turns the facing, and running and grip act along the facing. The track only supplies the grade; it no
         // longer decides which way is ahead. Returns the turn rate limit at the current speed.
@@ -84,10 +111,8 @@ namespace ProtoHarness.ChainRush.Motion
             // A swing ignores steering for the facing (steering works the rope there): the rope sets the facing
             // (PoleSwing.Step), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
-            float turnLimit = TurnLimit(racer.Velocity, settings);
-            // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the
-            // down arrow is held: a runner turned round against its velocity some other way steers as it always did.
-            float steerSign = reversing && Vector3.Dot(racer.Velocity, FacingOf(heading)) < 0f ? -1f : 1f;
+            float turnLimit = TurnLimit(racer.Velocity, racer.SlingTicks > 0, settings);
+            float steerSign = SteerSign(racer.Velocity, heading, reversing);
             turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * racer.Steer * turnLimit * turnScale, settings.TurnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             return turnLimit;
@@ -95,7 +120,7 @@ namespace ProtoHarness.ChainRush.Motion
 
         // The running force: grip takes out the side speed, the forward speed moves toward the target at the chosen
         // acceleration, and gravity pulls the vertical speed down. grade is the track's under the runner.
-        public static void Drive(RacerState racer, float grade, in Conditions now, float turnLimit, float dt, in Settings settings,
+        public static Push Drive(RacerState racer, float grade, in Conditions now, float turnLimit, float dt, in Settings settings,
             in Slingshot.Settings sling)
         {
             ref Vector3 velocity = ref racer.Velocity;
@@ -106,9 +131,14 @@ namespace ProtoHarness.ChainRush.Motion
             float baseTarget = RunTarget(racer, grade, now, turnLimit, dt, settings);
             float carried = Mathf.Max(CarryTarget(ref racer.SwingCarrySpeed, baseTarget, settings.SwingCarryFalloff, dt),
                 CarryTarget(ref racer.BoostZoneCarrySpeed, baseTarget, settings.BoostZoneFalloff, dt));
-            float runTarget = Slingshot.RaiseTarget(carried, now.Pulling, now.Carrying, sling);
+            float turnCost = TurnCost(racer, now, turnLimit, settings);
+            float runTarget = Slingshot.RaiseTarget(carried, now.Pulling, now.Carrying, turnCost, sling);
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = ForwardAcceleration(currentForward, runTarget, now, settings, sling);
+            // Speed that only the turn took the target away from wears off gently (user 2026-11-04): the limit stays, it just
+            // takes longer to get there. Speed above the straight target falls as any overspeed.
+            if (turnCost < 1f && currentForward > runTarget && currentForward <= runTarget / turnCost)
+                acceleration *= settings.TurnFalloffScale;
             // A carried speed wears off in proportion to what is left above running speed (user 2026-10-30, the inverse of
             // the slingshot's pull; a pad first, then a swing let go): hard at first, easing as it nears running speed. In
             // the air it keeps, so a jump flies on the speed it left with.
@@ -121,6 +151,7 @@ namespace ProtoHarness.ChainRush.Motion
                 acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - settings.Gravity * dt, -MaxFallSpeed);
+            return new Push(runTarget, acceleration);
         }
 
         // The forward speed the runner heads for this tick before a booster raises it (Slingshot.RaiseTarget).
@@ -128,12 +159,18 @@ namespace ProtoHarness.ChainRush.Motion
         {
             // In the air too the road below sets the target, so jumping off an uphill does not reach for the flat speed.
             float runTarget = settings.RunSpeed * Mathf.Clamp(1f - settings.SlopeSpeedFactor * grade, settings.MinSlopeSpeedScale, settings.MaxSlopeSpeedScale);
-            if (settings.TurnSpeedLoss > 0f && now.Grounded && !now.Swinging && turnLimit > 0f)
-                runTarget *= 1f - settings.TurnSpeedLoss * Mathf.Min(1f, Mathf.Abs(racer.TurnRate) / turnLimit);
+            runTarget *= TurnCost(racer, now, turnLimit, settings);
             // Without the throttle a grounded runner rolls to a stop; in the air the jump keeps what it took off with.
             if (now.Coasting && now.Grounded) runTarget = now.Reversing ? -settings.ReverseSpeed : 0f;
             return runTarget;
         }
+
+        // The share of a target left by turning on the ground: 1 going straight, 1 - TurnSpeedLoss at the turn limit. It
+        // takes from a booster's speed as from a run's (Slingshot.RaiseTarget).
+        private static float TurnCost(RacerState racer, in Conditions now, float turnLimit, in Settings settings) =>
+            settings.TurnSpeedLoss > 0f && now.Grounded && !now.Swinging && turnLimit > 0f
+                ? 1f - settings.TurnSpeedLoss * Mathf.Min(1f, Mathf.Abs(racer.TurnRate) / turnLimit)
+                : 1f;
 
         // A carried speed (RacerState.SwingCarrySpeed, BoostZoneCarrySpeed) falls off by falloff of its part above
         // runTarget a second and holds the target up while it lasts; within CarryEnd of running speed it is gone.

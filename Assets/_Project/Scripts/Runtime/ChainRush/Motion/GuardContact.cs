@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Motion
 {
-    // What a guard (a wall along the road edge) does to a runner that touches it. RunnerMotor finds the contact
-    // (OnControllerColliderHit) and passes its level normal, pointing away from the guard.
+    // What a guard (a wall along the road edge) does to a runner that touches it. RunnerMotor finds the guard, before the
+    // move (TryFindGuardAhead) or in it (OnControllerColliderHit), and passes its level normal, pointing away from the guard.
     public static class GuardContact
     {
         // Removes the push into the guard and loses speed by how head-on the hit was (speedLoss for a head-on hit). The

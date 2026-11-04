@@ -17,9 +17,10 @@ namespace ProtoHarness.Tests.PlayMode
         private sealed class ScriptedInputSource : IInputSource
         {
             public float Steer;
+            public bool Reversing;
 
             public void Poll() { }
-            public TickInput Consume() => new TickInput(Steer, false, false, false);
+            public TickInput Consume() => new TickInput(Steer, false, false, false, coasting: Reversing, reversing: Reversing);
             public void Clear() { }
         }
 
@@ -61,7 +62,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsGrounded, Is.True);
             Assert.That(minX, Is.LessThan(-InnerEdge + 0.3f), "The runner never reached the left guard.");
             Assert.That(minX, Is.GreaterThan(-InnerEdge - 0.1f), "The runner went past the left guard.");
-            Assert.That(player.transform.position.z, Is.GreaterThan(startZ + 5f), "The guard must turn the runner along the road.");
+            Assert.That(player.transform.position.z, Is.GreaterThan(startZ + 5f), "The run must go on along the guard.");
         }
 
         [UnityTest]
@@ -113,6 +114,24 @@ namespace ProtoHarness.Tests.PlayMode
                 + player.Velocity.z.ToString("0.00") + " m/s.");
             Assert.That(Mathf.Abs(Mathf.DeltaAngle(player.Heading, heading)), Is.LessThanOrEqualTo(0.01f), "The guard must keep the facing.");
             Assert.That(player.Velocity.z, Is.LessThan(-5f), "The run must carry on backward along the guard.");
+        }
+
+        // Backing along a guard the keys turn the runner as backing up anywhere does (review 2026-11-04).
+        [UnityTest]
+        public IEnumerator Guard_BackingAlongIt_SteersTheWayBackingUpDoes()
+        {
+            game.StartRun();
+            yield return WaitTicks(Ticks.FromSeconds(2f));
+            game.Racer.Heading = 70f;
+            source.Reversing = true;
+            yield return WaitTicks(Ticks.FromSeconds(3f));
+            Assert.That(player.transform.position.x, Is.LessThan(-InnerEdge + 0.3f), "The runner should have backed into the left guard.");
+            float heading = player.Heading;
+            source.Steer = 1f;
+            yield return WaitTicks(Ticks.FromSeconds(0.5f));
+            float turned = Mathf.DeltaAngle(heading, player.Heading);
+            Debug.Log("ChainRush backing along a guard: turned " + turned.ToString("0.0") + " deg in 0.5 s of full steer.");
+            Assert.That(turned, Is.LessThan(0f), "Backing up, the key turns the facing the other way.");
         }
 
         // The angle to a guard sets the speed along it (user 2026-11-04): square gives nothing, a slight turn creeps that way

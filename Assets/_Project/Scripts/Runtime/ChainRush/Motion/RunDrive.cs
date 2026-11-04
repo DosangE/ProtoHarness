@@ -96,6 +96,11 @@ namespace ProtoHarness.ChainRush.Motion
             return Mathf.Min(settings.MaxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / radius * Mathf.Rad2Deg);
         }
 
+        // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the down
+        // arrow is held: a runner turned round against its velocity some other way steers as it always did.
+        public static float SteerSign(Vector3 velocity, float heading, bool reversing) =>
+            reversing && Vector3.Dot(velocity, FacingOf(heading)) < 0f ? -1f : 1f;
+
         // Input turns the facing, and running and grip act along the facing. The track only supplies the grade; it no
         // longer decides which way is ahead. Returns the turn rate limit at the current speed.
         public static float Turn(RacerState racer, bool grounded, bool swinging, bool reversing, float dt, in Settings settings)
@@ -107,9 +112,7 @@ namespace ProtoHarness.ChainRush.Motion
             // (PoleSwing.Step), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
             float turnLimit = TurnLimit(racer.Velocity, racer.SlingTicks > 0, settings);
-            // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the
-            // down arrow is held: a runner turned round against its velocity some other way steers as it always did.
-            float steerSign = reversing && Vector3.Dot(racer.Velocity, FacingOf(heading)) < 0f ? -1f : 1f;
+            float steerSign = SteerSign(racer.Velocity, heading, reversing);
             turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * racer.Steer * turnLimit * turnScale, settings.TurnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
             return turnLimit;

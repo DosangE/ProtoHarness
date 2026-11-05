@@ -20,6 +20,9 @@
   - PlayMode `testcasecount="9" result="Passed" passed="9" failed="0" skipped="0"` (07:08:08Z~07:09:12Z). 영향 평가: `ChainRushAudio`·`TrackLook` → `RaceAssembler`·`ChainRushGame` → Presentation 4, Flow 4(`Race_WithATrackLook*`·`Race_FingerLanesLook_*`·`Race_FinishFromTheLobby_*`), 지문 1. **서킷 지문 그대로** `0xEF92FB76BFD1D767`. 주행과 맵이 바뀌지 않아 `Lap`·Device 는 돌리지 않았다. `select-tests` 는 코어 시뮬 파일이 있어 "전체" 로 판정할 수 있어 이름으로 골랐다(CLAUDE.md §9-2).
   - `Rebuild Track Sounds` 를 다시 돌려 WAV 두 개의 SHA-256 이 같은 것을 확인했다(고정 시드).
   - 사용자 플레이: 네 트랙을 들은 뒤의 위 평가. 분리한 이 브랜치의 코드로는 듣지 않았다.
+- **리뷰** (병합 전, `72a9d61` 기준): Codex `adversarial-review --base dev` 판정 approve, 지적 없음(사용량은 읽지 않았다). `unity-reviewer` 치명·중대 0, 경미 2건, 제안 5건(토큰 수치는 받지 못했다).
+  - 경미 ① `ChainRushAudio.ResetAudio`·`SetMuted` 는 `Awake` 가 끝까지 돌아야 생기는 `trackAmbience` 에 기댄다. 씬 연결이 깨졌을 때만 닿고 그때는 `LogError` 가 먼저 난다. 경미 ② `MusicClip` 이 `TrackAmbienceClip` 과 달리 `initialized` 를 보지 않는다. 호출처는 `Awake` 뒤의 테스트뿐이다. 둘 다 지금 도달하지 않아 고치지 않고 병합했다.
+  - 제안 중 남긴 것: 실제 클립으로 환경음의 재생·일시정지·정지를 보는 테스트가 없다. 빌더에 쓰지 않는 세 테마 코드가 있다(의도).
 
 ## 2026-11-05 · M6 범위: 사운드 구분·봉 스윙 이펙트·고저차 트랙 1개, 태그 M6 = v0.6 · M5 = v0.7 (`docs/m6-scope`)
 

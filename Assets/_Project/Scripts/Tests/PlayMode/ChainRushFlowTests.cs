@@ -1432,6 +1432,32 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(RenderSettings.fogColor, Is.EqualTo(look.Horizon), $"The fog is {look.name}'s horizon.");
         }
 
+        // The race plays the look's own sounds: Finger Lanes is the track that has them (user 2026-11-05).
+        [UnityTest]
+        public IEnumerator Race_FingerLanesLook_PlaysTheTracksMusicAndAmbience()
+        {
+#if UNITY_EDITOR
+            var store = TestRecords();
+            var definition = AssetDatabase.LoadAssetAtPath<TrackDefinition>(FingerLanesPath);
+            var look = AssetDatabase.LoadAssetAtPath<TrackLook>("Assets/_Project/Data/TrackLook_FingerLanes.asset");
+            Assert.That(definition, Is.Not.Null);
+            Assert.That(look, Is.Not.Null);
+            Assert.That(look.Music, Is.Not.Null, "Rebuild Track Sounds links the music.");
+            Assert.That(look.Ambience, Is.Not.Null, "Rebuild Track Sounds links the ambience.");
+            RaceLaunch.Request(new RaceSetup(definition, "FINGER LANES", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            ChainRushAudio sound = Find<ChainRushAudio>(assembler.gameObject.scene);
+            Assert.That(sound.MusicClip, Is.SameAs(look.Music));
+            Assert.That(sound.TrackAmbienceClip, Is.SameAs(look.Ambience));
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            yield break;
+#endif
+        }
+
         // A track's own look (user 2026-10-30, Palm Coast's road and walls): the race lays the road and the guard walls with
         // the look's materials instead of the race scene's, and none with the scene's road material is left; with markings
         // it paints the lane markings too (CircuitScenery.PaintMarkings).

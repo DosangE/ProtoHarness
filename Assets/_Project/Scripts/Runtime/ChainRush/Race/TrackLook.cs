@@ -45,6 +45,10 @@ namespace ProtoHarness.ChainRush.Race
         [SerializeField] private float fogStart = 150f;
         [Tooltip("Metres from the camera where the fog hides everything; the camera draws no further.")]
         [SerializeField] private float fogEnd = 500f;
+        [Tooltip("The track's music loop; empty keeps the race scene's music.")]
+        [SerializeField] private AudioClip music;
+        [Tooltip("The track's environment loop, mixed with the running wind; empty keeps the scene's ambience.")]
+        [SerializeField] private AudioClip ambience;
 
         public Material Road => road;
         public Material Rail => rail;
@@ -56,6 +60,8 @@ namespace ProtoHarness.ChainRush.Race
         public Color Horizon => horizon;
         public float FogStart => fogStart;
         public float FogEnd => fogEnd;
+        public AudioClip Music => music;
+        public AudioClip Ambience => ambience;
 
         // The lane lines across a road of halfWidth, as distances right of the middle (each stands mirrored on the left
         // too), nearest first, into offsets; returns what the middle shows. A line stays only while the lane outside it,

@@ -7,6 +7,20 @@
 
 ---
 
+## 2026-11-05 · 트랙별 소리: FINGER LANES 음원만 넣고, 나머지는 다시 만든다 (`feature/m6-finger-sound`)
+
+- **결정 (사용자, 2026-11-05)**: 네 트랙 음악·환경음과 새 효과음을 플레이한 뒤 "손가락맵 음원 말고는 다 별로다. 기록해놓고 손가락맵만 커밋 푸쉬 병합하라."
+  - **넣은 것**: `TrackLook` 의 `music`·`ambience`, `ChainRushAudio.UseTrackSounds`(`RaceAssembler` → `ChainRushGame.UseTrackSounds`), 환경음용 런타임 `AudioSource`, `Editor/ChainRush/TrackSoundBuilder.cs`(메뉴 Rebuild Track Sounds), `Assets/_Project/Audio/FingerLanes_Music.wav`·`_Ambience.wav`(새소리·시계탑 종, 뜯는 현 120 BPM). 합성 코드는 Codex 작성.
+  - **뺀 것**: STADIUM·SKYWAY·PALM COAST 음악·환경음은 사용자가 "별로다" 라고 했다. 세 트랙은 지금까지의 씬 음악 그대로다. 빌더에 세 테마 코드는 남겼지만 굽지 않는다(`themes` 는 FingerLanes 뿐).
+  - **효과음은 이 브랜치에 없다**: 동작별 효과음 배선과 소리는 `feature/m6-sound-cues` 에서 계속한다.
+- **효과음 평가 (사용자, 같은 말에서)**: "부스터 소리는 지지직 거리는 소리라 잘못되었다. 속도감이 안느껴진다. 제트 소리 같은 느낌", "스윙 소리는 체인&금속의 소리가 아니라 또르르륵 뭔가 굴러가는 소리", "부스트 존 소리도 … 지지직 … 속도감이 느껴지는 하이톤의 소리".
+  - **참고 영상 재측정**: 부스터로 본 소리 12번의 평균에서 음악을 뺀 스펙트럼의 고음 봉우리가 약 4.2 kHz → 4.6 → 4.9 → 5.1 → 5.6 kHz 로 2초 동안 올라간다(+15~20 dB). 넓은 잡음이 아니라 올라가는 좁은 대역이다. 저음은 35~60 Hz 에 머문다. 영상의 소리는 복제하지 않고 구조만 참고한다.
+- **검증** (에디터 6000.3.19f1, 커밋 전 작업 트리): 컴파일 `*** Tundra build success (1.75 seconds), 5 items updated, 1618 evaluated`, Console Error 0.
+  - EditMode `testcasecount="335" result="Passed" passed="335" failed="0" skipped="0"` (07:09:31Z~07:09:36Z).
+  - PlayMode `testcasecount="9" result="Passed" passed="9" failed="0" skipped="0"` (07:08:08Z~07:09:12Z). 영향 평가: `ChainRushAudio`·`TrackLook` → `RaceAssembler`·`ChainRushGame` → Presentation 4, Flow 4(`Race_WithATrackLook*`·`Race_FingerLanesLook_*`·`Race_FinishFromTheLobby_*`), 지문 1. **서킷 지문 그대로** `0xEF92FB76BFD1D767`. 주행과 맵이 바뀌지 않아 `Lap`·Device 는 돌리지 않았다. `select-tests` 는 코어 시뮬 파일이 있어 "전체" 로 판정할 수 있어 이름으로 골랐다(CLAUDE.md §9-2).
+  - `Rebuild Track Sounds` 를 다시 돌려 WAV 두 개의 SHA-256 이 같은 것을 확인했다(고정 시드).
+  - 사용자 플레이: 네 트랙을 들은 뒤의 위 평가. 분리한 이 브랜치의 코드로는 듣지 않았다.
+
 ## 2026-11-05 · M6 범위: 사운드 구분·봉 스윙 이펙트·고저차 트랙 1개, 태그 M6 = v0.6 · M5 = v0.7 (`docs/m6-scope`)
 
 - **결정 (사용자, 2026-11-05)**: 범위안의 세 질문(범위, 태그, 빌드 확인)에 "3가지 ㄱㄱ". M6 완료 조건이 "마일스톤에 들어갈 때 정한다" 로 비어 있어 먼저 정했다.

@@ -136,6 +136,35 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator Audio_TrackSounds_ReplaceMusicAndNullKeepsCurrentClips()
+        {
+            AudioClip original = sound.MusicClip;
+            AudioClip music = AudioClip.Create("Track music fixture", 44100, 2, 44100, false);
+            AudioClip environment = AudioClip.Create("Track environment fixture", 44100, 1, 44100, false);
+            try
+            {
+                game.UseTrackSounds(null, null);
+                Assert.That(sound.MusicClip, Is.SameAs(original));
+                game.UseTrackSounds(music, environment);
+                Assert.That(sound.MusicClip, Is.SameAs(music));
+                Assert.That(sound.TrackAmbienceClip, Is.SameAs(environment));
+                game.UseTrackSounds(null, null);
+                Assert.That(sound.MusicClip, Is.SameAs(music));
+                Assert.That(sound.TrackAmbienceClip, Is.SameAs(environment));
+                game.UseTrackSounds(original, null);
+                yield return null;
+                Assert.That(sound.MusicClip, Is.SameAs(original));
+            }
+            finally
+            {
+                // These clips belong to the caller; ChainRushAudio only destroys its synthesized clips.
+                game.UseTrackSounds(original, null);
+                UnityEngine.Object.Destroy(music);
+                UnityEngine.Object.Destroy(environment);
+            }
+        }
+
         // The circuit's grapple gap: the first gap after S 150 (the one before it, on the first straight, is a jump gap with
         // no anchor; ChainRushCircuitTests does the same). Returns its start S, or 0 without an anchor. The run is started.
         private double FindGrappleGap()

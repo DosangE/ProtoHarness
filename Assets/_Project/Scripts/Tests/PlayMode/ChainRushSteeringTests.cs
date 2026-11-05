@@ -1,6 +1,7 @@
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -151,6 +152,20 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log("ChainRush near square: heading " + heading.ToString("0") + ", moved " + moved.ToString("0.00") + " m in 1 s, velocity "
                 + player.Velocity.z.ToString("0.00") + " m/s, wanted " + along.ToString("0.00") + " m/s.");
             Assert.That(moved, Is.EqualTo(along).Within(along * 0.25f), "The runner must really move along the guard by the angle.");
+        }
+
+        // A hit sounds once. Held against the guard the speed into it stays gone, so it does not sound again (user 2026-11-05).
+        [UnityTest]
+        public IEnumerator Guard_SquareOnHit_SoundsOnce()
+        {
+            int hits = 0;
+            game.CuePlayed += cue => { if (cue == RaceCue.GuardHit) hits++; };
+            game.StartRun();
+            yield return WaitTicks(Ticks.FromSeconds(1f));
+            game.Racer.Heading = -90f;
+            yield return WaitTicks(Ticks.FromSeconds(2.5f));
+            Assert.That(player.transform.position.x, Is.LessThan(-InnerEdge + 0.3f), "The runner should be against the left guard.");
+            Assert.That(hits, Is.EqualTo(1));
         }
 
         // Stopped square against a guard the speed that sets the turn limit is gone: steering must still get the runner out.

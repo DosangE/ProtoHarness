@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
@@ -110,7 +112,10 @@ namespace ProtoHarness.Tests.PlayMode
             float deadline = Time.time + 1f;
             while (grapple.Candidate == null && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(grapple.Candidate, Is.Not.Null, $"No anchor came within the rope's reach: runner at {player.transform.position}.");
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
             Assert.That(grapple.TryAttach(), Is.True);
+            Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.Grapple));
             yield return new WaitForSeconds(0.2f);
             Assert.That(Quaternion.Angle(animation.RightArmPose, Quaternion.identity), Is.GreaterThan(110f));
             Assert.That(player.transform.position.y, Is.GreaterThan(1f));
@@ -121,7 +126,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Audio_GeneratedClips_HaveSignalAndNoClipping()
         {
-            Assert.That(sound.CueCount, Is.EqualTo(9));
+            Assert.That(sound.CueCount, Is.EqualTo(14));
             for (int i = 0; i <= sound.CueCount; i++)
             {
                 AudioClip clip = i == sound.CueCount ? sound.MusicClip : sound.GetCue(i);
@@ -134,6 +139,46 @@ namespace ProtoHarness.Tests.PlayMode
             }
             WritePreview(sound.MusicClip, Path.Combine(Path.GetTempPath(), "ChainRush-music-preview.wav"));
             yield return null;
+        }
+
+        // ChainRushGame.PlayCue once refused every cue past the first four, here too, where ChainRushAudio has them all.
+        [UnityTest]
+        public IEnumerator Audio_PlayCue_PlaysEveryCue()
+        {
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
+            foreach (RaceCue cue in Enum.GetValues(typeof(RaceCue))) game.PlayCue(cue);
+            Assert.That(heard.Count, Is.EqualTo(sound.CueCount));
+            yield return null;
+        }
+
+        // Moves must be told apart by ear (M6 completion, DECISIONS 2026-11-05 "M6 범위"). This only keeps the waveforms
+        // apart: whether they sound different enough is the user's to hear.
+        [UnityTest]
+        public IEnumerator Audio_MoveCues_HaveUnlikeWaveforms()
+        {
+            RaceCue[] moves = { RaceCue.Finish, RaceCue.GuardHit, RaceCue.Boost, RaceCue.Grapple, RaceCue.PoleHook, RaceCue.BoostZone, RaceCue.Respawn };
+            for (int a = 0; a < moves.Length; a++)
+                for (int b = a + 1; b < moves.Length; b++)
+                    Assert.That(Likeness(sound.GetCue((int)moves[a]), sound.GetCue((int)moves[b])), Is.LessThan(0.5f), $"{moves[a]} and {moves[b]}");
+            yield return null;
+        }
+
+        // How alike two clips are over their common length: 0 unrelated, 1 the same wave.
+        private static float Likeness(AudioClip first, AudioClip second)
+        {
+            var a = new float[first.samples];
+            var b = new float[second.samples];
+            Assert.That(first.GetData(a, 0), Is.True);
+            Assert.That(second.GetData(b, 0), Is.True);
+            double both = 0d, onlyA = 0d, onlyB = 0d;
+            for (int i = 0; i < Mathf.Min(a.Length, b.Length); i++)
+            {
+                both += a[i] * b[i];
+                onlyA += a[i] * a[i];
+                onlyB += b[i] * b[i];
+            }
+            return Mathf.Abs((float)(both / Math.Sqrt(onlyA * onlyB)));
         }
 
         // The circuit's grapple gap: the first gap after S 150 (the one before it, on the first straight, is a jump gap with

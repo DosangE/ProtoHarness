@@ -43,7 +43,7 @@ namespace ProtoHarness.ChainRush.Audio
                 enabled = false;
                 return;
             }
-            cues = new AudioClip[9];
+            cues = new AudioClip[Enum.GetValues(typeof(RaceCue)).Length];
             for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
             score = MakeScore();
             wind = MakeWind();
@@ -115,7 +115,7 @@ namespace ProtoHarness.ChainRush.Audio
         private static AudioClip MakeCue(RaceCue cue)
         {
             int index = (int)cue;
-            float duration = cue == RaceCue.Beeps ? 0.48f : cue == RaceCue.Footstep ? 0.09f : 0.32f;
+            float duration = CueSeconds(cue);
             var samples = new float[Mathf.RoundToInt(SampleRate * duration)];
             var random = new System.Random(702 + index);
             for (int i = 0; i < samples.Length; i++)
@@ -127,18 +127,44 @@ namespace ProtoHarness.ChainRush.Audio
                 switch (cue)
                 {
                     case RaceCue.Jump: value = Mathf.Sin(2f * Mathf.PI * (160f * t + 700f * t * t)) * 0.4f + noise * 0.12f; break;
-                    case RaceCue.Action: value = (Mathf.Sin(t * 3500f) + Mathf.Sin(t * 5179f) * 0.45f) * Mathf.Exp(-t * 12f) * 0.45f; break;
+                    case RaceCue.Finish: value = (Mathf.Sin(t * 3500f) + Mathf.Sin(t * 5179f) * 0.45f) * Mathf.Exp(-t * 12f) * 0.45f; break;
                     case RaceCue.Attack: value = noise * 0.55f * Mathf.Exp(-t * 8f) + Mathf.Sin(2f * Mathf.PI * (800f * t - 900f * t * t)) * 0.25f; break;
                     case RaceCue.Damage: value = noise * 0.38f + Mathf.Sin(t * 510f) * 0.45f; break;
                     case RaceCue.Beeps: value = Mathf.Sin(t * 2f * Mathf.PI * 880f) * (Mathf.Repeat(t, 0.16f) < 0.08f ? 0.5f : 0f); break;
-                    case RaceCue.Crash: value = noise * 0.6f * Mathf.Exp(-t * 7f) + Mathf.Sin(t * 2100f) * 0.22f + Mathf.Sin(t * 3559f) * 0.13f; break;
+                    case RaceCue.GuardHit: value = noise * 0.6f * Mathf.Exp(-t * 7f) + Mathf.Sin(t * 2100f) * 0.22f + Mathf.Sin(t * 3559f) * 0.13f; break;
                     case RaceCue.Buzz: value = (Mathf.Sin(t * 4600f) * 0.25f + noise * 0.28f) * (0.65f + 0.35f * Mathf.Sin(t * 145f)); break;
                     case RaceCue.Footstep: value = noise * 0.35f * Mathf.Exp(-t * 25f) + Mathf.Sin(t * 800f) * 0.22f; break;
-                    default: value = noise * 0.3f * Mathf.Exp(-t * 15f) + Mathf.Sin(t * 420f) * 0.35f; break;
+                    case RaceCue.Land: value = noise * 0.3f * Mathf.Exp(-t * 15f) + Mathf.Sin(t * 420f) * 0.35f; break;
+                    // Low to high, with air rushing in behind it.
+                    case RaceCue.Boost: value = Mathf.Sin(2f * Mathf.PI * (180f * t + 2000f * t * t)) * 0.4f + noise * 0.22f * (t / duration); break;
+                    // A short metal click and the catch just after it.
+                    case RaceCue.Grapple: value = (Mathf.Sin(2f * Mathf.PI * 2600f * t) + Mathf.Sin(2f * Mathf.PI * 3900f * t) * 0.6f) * Mathf.Exp(-t * 45f) * 0.4f + (t > 0.07f ? noise * 0.35f * Mathf.Exp(-(t - 0.07f) * 60f) : 0f); break;
+                    // Struck steel: partials that do not line up, ringing on after the strike's noise.
+                    case RaceCue.PoleHook: value = (Mathf.Sin(2f * Mathf.PI * 1240f * t) + Mathf.Sin(2f * Mathf.PI * 1880f * t) * 0.7f + Mathf.Sin(2f * Mathf.PI * 3170f * t) * 0.4f) * Mathf.Exp(-t * 7f) * 0.35f + noise * 0.25f * Mathf.Exp(-t * 60f); break;
+                    // Two quick notes going up.
+                    case RaceCue.BoostZone: float note = t < 0.12f ? 784f : 1175f; value = Mathf.Sin(2f * Mathf.PI * note * t) * 0.4f + Mathf.Sin(4f * Mathf.PI * note * t) * 0.15f; break;
+                    // High to low, wavering on the way down.
+                    case RaceCue.Respawn: value = Mathf.Sin(2f * Mathf.PI * (900f * t - 800f * t * t)) * 0.42f * (0.7f + 0.3f * Mathf.Sin(t * 90f)); break;
+                    default: throw new ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushAudio: no sound for this cue.");
                 }
                 samples[i] = value * envelope * 0.8f;
             }
             return Clip("CR effect " + index, samples);
+        }
+
+        private static float CueSeconds(RaceCue cue)
+        {
+            switch (cue)
+            {
+                case RaceCue.Beeps: return 0.48f;
+                case RaceCue.Footstep: return 0.09f;
+                case RaceCue.Boost: return 0.55f;
+                case RaceCue.Grapple: return 0.16f;
+                case RaceCue.PoleHook: return 0.42f;
+                case RaceCue.BoostZone: return 0.36f;
+                case RaceCue.Respawn: return 0.45f;
+                default: return 0.32f;
+            }
         }
 
         private static AudioClip MakeScore()

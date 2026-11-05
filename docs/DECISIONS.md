@@ -7,6 +7,21 @@
 
 ---
 
+## 2026-11-05 · 사운드 구분: 동작마다 다른 효과음, 벽은 충돌만 (`feature/m6-sound-cues`)
+
+- **결정 (사용자, 2026-11-05)**: 합의 요청서에 "ㅇㅋ ㄱㄱ". 벽 스침은 무음, 강화 그래플은 부스터와 같은 소리(요청서의 추천 그대로).
+  - **효과음 14개** (`RaceCue`): 새로 `Boost`·`Grapple`·`PoleHook`·`BoostZone`·`Respawn` 을 뒤에 붙였다(앞 번호의 클립이 그대로다). 안 쓰던 `Crash` 는 `GuardHit` 으로 쓴다. `Action` 은 결승만 남아 `Finish` 로 이름을 바꿨고 소리는 같다. `Beeps`·`Buzz` 는 그대로 안 쓴다. 모두 기존 합성 방식이다.
+  - **벽 충돌음**: 벽으로 파고드는 속도가 `RunnerMotor.GuardHitCueSpeed` 3 m/s 이상인 틱에만 낸다. `GuardContact.Glance` 가 그 속도를 없애므로 틱 사이 상태 없이 충돌마다 한 번이다(정면 충돌 1회, 1·2·3° 스침 0회 — 테스트).
+  - **찾은 것**: `ChainRushGame.PlayCue` 의 범위 검사가 강화 표현 분기 앞에 있어 번호 4 이상을 강화 표현에서도 던졌다. 그때까지 그 번호를 이 경로로 부르는 곳이 없어 드러나지 않았다. 검사를 enum 범위로 바꿨고, 강화 표현이 꺼지면 첫 네 개 밖의 소리는 `Finish` 자리 클립을 낸다(그 동작들이 전에 내던 소리다).
+  - **`ChainRushGame.CuePlayed`**: 어떤 소리가 났는지 테스트가 듣는 이벤트(`UiSound.Played` 와 같은 방식).
+- **버린 대안**: 벽을 긁는 소리 — 스침을 무음으로 정했다. 벽에 붙은 상태를 틱 사이에 저장해 소리 간격을 재기 — 스냅샷에 상태가 늘고, 파고드는 속도만으로 충분했다.
+- **남은 것**: 롤백 재실행 중에도 소리가 다시 난다(RF2 의 2-1, M7 전). 새 소리도 같다.
+- **검증** (에디터 6000.3.19f1, 커밋 전 작업 트리, 바뀐 부분만): 컴파일 `*** Tundra build success (32.19 seconds)`, `scriptCompilationFailed=False`.
+  - EditMode `testcasecount="335" result="Passed" passed="335" failed="0" skipped="0"` (05:31:43Z~05:31:48Z).
+  - PlayMode `testcasecount="67" result="Passed" passed="67" failed="0" skipped="0"` (05:32:23Z~05:37:52Z, 328.3초). 영향 평가: `RaceCue`·`ChainRushAudio`·`PlayCue` → 호출하는 `RunnerMotor`·`GrappleController`·`ChainRushGame` → Presentation 5·Drift 10·Steering 10·CornerSwing 13·Circuit 11·Rollback 10 클래스 전체, Flow 7(`BoostZone_PalmCoastZ1_*`·`Race_FinishFromTheLobby_*`), 지문 1. `select-tests` 는 "전체" 라 이름으로 골랐다(CLAUDE.md §9-2). `Lap`·Device 는 주행 결과·입력 장치 경로가 바뀌지 않아 돌리지 않았다.
+  - **서킷 지문 그대로** `0xEF92FB76BFD1D767`. Console Error 6건은 모두 `BoostZone_PalmCoastZ1_*` 이 일부러 되감아 내는 `RaceAssembler: tick N came after N` 이고 테스트가 `LogAssert.Expect` 로 기다린다.
+  - 소리가 귀로 구분되는지는 테스트가 볼 수 없다(파형이 다른 것까지만 `Audio_MoveCues_HaveUnlikeWaveforms`). 사용자 플레이 확인 전이다(검증 안 됨).
+
 ## 2026-11-05 · M6 범위: 사운드 구분·봉 스윙 이펙트·고저차 트랙 1개, 태그 M6 = v0.6 · M5 = v0.7 (`docs/m6-scope`)
 
 - **결정 (사용자, 2026-11-05)**: 범위안의 세 질문(범위, 태그, 빌드 확인)에 "3가지 ㄱㄱ". M6 완료 조건이 "마일스톤에 들어갈 때 정한다" 로 비어 있어 먼저 정했다.

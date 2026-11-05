@@ -307,13 +307,23 @@ namespace ProtoHarness.ChainRush
             // Only the run on the ground pushes along a guard; a swing, a grapple or a jump just loses the push into it.
             if (grounded && !swinging && !grapple.IsAttached && TryFindGuardAhead(push.Target, out Vector3 guard))
             {
-                GuardContact.Glance(ref arrived, guard, guardSpeedLoss);
+                GlanceOffGuard(ref arrived, guard);
                 GuardContact.Slide(ref racer.Velocity, arrived, Facing, guard, push, dt);
                 float steer = RunDrive.SteerSign(arrived, racer.Heading, reversing) * racer.Steer;
                 GuardContact.TurnOut(ref racer.Heading, steer, turnLimit, guardTurnRate, dt);
             }
             MoveAndCollide(racer, frame, grounded, swinging, push.Target, dt);
             CountDownAndCheckFall(racer);
+        }
+
+        // The speed into a guard that sounds as a hit. Glance takes that speed away, so a runner held against the guard or
+        // rubbing along it stays under this and each hit sounds once, with nothing kept between ticks.
+        private const float GuardHitCueSpeed = 3f;
+
+        private void GlanceOffGuard(ref Vector3 velocity, Vector3 guard)
+        {
+            if (GuardContact.SpeedInto(velocity, guard) >= GuardHitCueSpeed) game.PlayCue(RaceCue.GuardHit);
+            GuardContact.Glance(ref velocity, guard, guardSpeedLoss);
         }
 
         // Finds the guard the run is pushing into, before the move: a contact found only after it leaves that tick's move to
@@ -371,7 +381,7 @@ namespace ProtoHarness.ChainRush
             {
                 // A swing that carries the runner into a guard snaps there, without the carry.
                 racer.SwingTicks = 0;
-                GuardContact.Glance(ref velocity, guardNormal, guardSpeedLoss);
+                GlanceOffGuard(ref velocity, guardNormal);
                 bool runPushing = grounded && !swinging && !grapple.IsAttached && push * Vector3.Dot(Facing, guardNormal) < 0f;
                 if (guardScrapeDecel > 0f && !runPushing) GuardContact.Scrape(ref velocity, guardScrapeDecel, dt);
             }
@@ -393,6 +403,7 @@ namespace ProtoHarness.ChainRush
                 float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
                 velocity += facing * (boosted - forwardSpeed);
                 racer.BoostZoneCarrySpeed = boosted;
+                game.PlayCue(RaceCue.BoostZone);
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
             if (racer.Grounded && grapple.IsAttached) grapple.Release(false);
@@ -495,6 +506,7 @@ namespace ProtoHarness.ChainRush
             racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
             racer.TurnRate = 0f;
             racer.RespawnHoldTicks = Ticks.FromSeconds(respawnHoldTime);
+            game.PlayCue(RaceCue.Respawn);
         }
 
         // One gauge slot buys the chain action that fits the moment: while grappling it empowers the grapple;
@@ -509,10 +521,10 @@ namespace ProtoHarness.ChainRush
             {
                 if (racer.GrappleEmpowered || !racer.TrySpendGaugeSlot()) return;
                 racer.EmpowerGrapple();
-                game.PlayCue(RaceCue.Action);
+                game.PlayCue(RaceCue.Boost);
                 return;
             }
-            if (Slingshot.TryFire(racer, coasting, SlingSettings())) game.PlayCue(RaceCue.Action);
+            if (Slingshot.TryFire(racer, coasting, SlingSettings())) game.PlayCue(RaceCue.Boost);
         }
 
         // A swing key press hooks the corner pole in reach, if there is one, at the rope length and speed of this moment.
@@ -524,7 +536,7 @@ namespace ProtoHarness.ChainRush
             RacerState racer = game.Racer;
             if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || !TryFindPole(out Vector3 pole)) return;
             PoleSwing.Hook(racer, transform.position, pole);
-            game.PlayCue(RaceCue.Action);
+            game.PlayCue(RaceCue.PoleHook);
         }
 
         // The corner pole a swing key press would hook from here and now, if any (see poleMaxAngle, poleReach and poleHookArcShare). The

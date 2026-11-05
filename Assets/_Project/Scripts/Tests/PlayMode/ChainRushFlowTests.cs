@@ -687,9 +687,12 @@ namespace ProtoHarness.Tests.PlayMode
                 game.SetInputSource(new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit));
                 Time.timeScale = 6f;
                 game.StartRun();
+                int finishes = 0;
+                game.CuePlayed += cue => { if (cue == RaceCue.Finish) finishes++; };
                 float deadline = Time.realtimeSinceStartup + 90f;
                 while (!game.HasFinished && !game.HasFailed && Time.realtimeSinceStartup < deadline) yield return null;
                 Time.timeScale = scale;
+                Assert.That(finishes, Is.EqualTo(game.HasFinished ? 1 : 0));
                 // User 2026-11-02: keep the old CircuitTests' exact finish accounting here, in the run that must finish
                 // to save a record and ghost. The Lap matrix stops at lap one and never repeats these three laps.
                 LapCounter laps = circuit.Laps;
@@ -1576,6 +1579,8 @@ namespace ProtoHarness.Tests.PlayMode
                 var log = new InputLog();
                 var replay = new InputReplay(log);
                 bool fired = false, crossed = false;
+                int pads = 0;
+                game.CuePlayed += cue => { if (cue == RaceCue.BoostZone) pads++; };
                 for (int tick = 0; tick < 1000 && game.IsRunning; tick++)
                 {
                     TrackFrame before = game.Track.Frame(player.transform.position);
@@ -1596,6 +1601,7 @@ namespace ProtoHarness.Tests.PlayMode
                     double toS = before.S + Vector3.Dot(player.transform.position - position, before.Forward);
                     if (!(before.S < zones[0] && toS >= zones[0])) continue;
                     crossed = true;
+                    Assert.That(pads, Is.EqualTo(1), "The crossing sounds once.");
                     Assert.That(grounded, Is.True, "The bot crosses on the ground.");
                     if (booster) Assert.That(slingBefore, Is.GreaterThan(0), "The booster must still be running when Z1 is crossed.");
                     Assert.That(player.ForwardSpeed, Is.GreaterThanOrEqualTo(player.BoostZoneSpeed), "Immediate state after the crossing tick.");

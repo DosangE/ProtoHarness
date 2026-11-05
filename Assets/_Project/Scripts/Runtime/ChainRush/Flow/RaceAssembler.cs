@@ -97,7 +97,11 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             circuit.UseDefinition(setup.Track);
-            if (setup.Look != null) circuit.UseLook(setup.Look);
+            if (setup.Look != null)
+            {
+                circuit.UseLook(setup.Look);
+                game.UseTrackSounds(setup.Look.Music, setup.Look.Ambience);
+            }
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;

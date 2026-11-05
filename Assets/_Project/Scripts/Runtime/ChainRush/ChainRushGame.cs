@@ -56,6 +56,13 @@ namespace ProtoHarness.ChainRush
         public CircuitRace Circuit => circuit;
         public RunnerMotor Player => player;
         public bool HasPresentation => enhancedPresentation;
+        // Presentation only; RaceAssembler may supply the track's clips before the audio's Awake.
+        public void UseTrackSounds(AudioClip music, AudioClip ambience)
+        {
+            if (!enhancedPresentation) return;
+            if (presentationAudio == null) throw new System.InvalidOperationException("ChainRushGame: enhanced presentation requires audio.");
+            presentationAudio.UseTrackSounds(music, ambience);
+        }
         public RacerState Racer => racer;
         public Centerline Track => track;
         public double Distance => System.Math.Max(0d, PlayerS - 5d);

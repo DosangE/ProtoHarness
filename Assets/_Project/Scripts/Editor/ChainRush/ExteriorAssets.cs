@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -16,6 +17,7 @@ namespace ProtoHarness.Editor.ChainRush
     public static class ExteriorAssets
     {
         public const string MaterialFolder = "Assets/_Project/Art/Materials/";
+        public const string ModelFolder = "Assets/_Project/Art/Models/";
 
         public static void RequireIdle()
         {
@@ -467,9 +469,39 @@ namespace ProtoHarness.Editor.ChainRush
             AssetDatabase.SaveAssets();
         }
 
+        // Every mesh the build made in memory goes to ModelFolder under its own name, and the filters then point at the
+        // asset. Called only once all the checks have passed: saving during the build left new meshes under the old prefab
+        // whenever a later check failed (review 2026-11-03). Names are checked before anything is written.
+        private static void SaveBuiltMeshes(GameObject root)
+        {
+            MeshFilter[] filters = root.GetComponentsInChildren<MeshFilter>(true);
+            var assets = new Dictionary<Mesh, Mesh>();
+            var names = new HashSet<string>();
+            foreach (MeshFilter filter in filters)
+            {
+                Mesh mesh = filter.sharedMesh;
+                if (EditorUtility.IsPersistent(mesh) || assets.ContainsKey(mesh)) continue;
+                if (string.IsNullOrEmpty(mesh.name)) throw new InvalidOperationException("A built mesh has no name to save it under: " + filter.name);
+                if (!names.Add(mesh.name)) throw new InvalidOperationException("Two built meshes share the name " + mesh.name);
+                assets.Add(mesh, null);
+            }
+            foreach (Mesh mesh in new List<Mesh>(assets.Keys)) assets[mesh] = SaveMesh(mesh, ModelFolder + mesh.name + ".asset");
+            foreach (MeshFilter filter in filters)
+                if (assets.TryGetValue(filter.sharedMesh, out Mesh asset)) filter.sharedMesh = asset;
+            foreach (Mesh mesh in assets.Keys) UnityEngine.Object.DestroyImmediate(mesh);
+        }
+
+        // What a failed build leaves in memory: closing the preview scene destroys its objects, not their meshes.
+        private static void DestroyBuiltMeshes(Scene preview)
+        {
+            foreach (GameObject root in preview.GetRootGameObjects())
+                foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
+                    if (filter.sharedMesh != null && !EditorUtility.IsPersistent(filter.sharedMesh))
+                        UnityEngine.Object.DestroyImmediate(filter.sharedMesh);
+        }
+
         // Saves mesh at path, or copies it over the mesh already there so the asset keeps its GUID; returns the asset.
-        // The mesh passed in is the builder's to destroy.
-        public static Mesh SaveMesh(Mesh mesh, string path)
+        private static Mesh SaveMesh(Mesh mesh, string path)
         {
             if (mesh == null) throw new ArgumentNullException(nameof(mesh));
             Mesh saved = AssetDatabase.LoadAssetAtPath<Mesh>(path);
@@ -504,7 +536,8 @@ namespace ProtoHarness.Editor.ChainRush
 
         // Builds the exterior in a preview scene (the open scenes are not touched), checks it is decoration only and clear
         // of the road (checkClearance), and saves it at prefabPath; a rebuild keeps the prefab's GUID, so the decoration
-        // scene's instance stays.
+        // scene's instance stays. A mesh the build makes stays in memory, named for its asset: only here, after the checks,
+        // is it saved (SaveBuiltMeshes), and this destroys it.
         public static GameObject SavePrefab(string prefabPath, Func<Scene, GameObject> build, Action<GameObject> checkClearance)
         {
             if (build == null) throw new ArgumentNullException(nameof(build));
@@ -516,6 +549,7 @@ namespace ProtoHarness.Editor.ChainRush
                 GameObject root = build(preview);
                 ValidateDecoration(root);
                 checkClearance(root);
+                SaveBuiltMeshes(root);
                 GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out bool success);
                 if (!success || saved == null) throw new IOException("Could not save the exterior prefab " + prefabPath);
                 if (guid.Length != 0 && AssetDatabase.AssetPathToGUID(prefabPath) != guid)
@@ -526,6 +560,7 @@ namespace ProtoHarness.Editor.ChainRush
             }
             finally
             {
+                DestroyBuiltMeshes(preview);
                 EditorSceneManager.ClosePreviewScene(preview);
             }
         }

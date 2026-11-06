@@ -4,69 +4,50 @@ using UnityEngine.Rendering;
 
 namespace ProtoHarness.ChainRush.Visuals
 {
-    // Presentation only: how a pole swing shows beyond its chain (M6). Sparks fly off the pole's band, the chain snaps and
-    // its halves spring back when the swing ends, and a thin amber tail follows the runner, apart from the booster's mint
-    // one. Nothing here reads the runner's model, which is temporary (DECISIONS 2026-11-06). ControlFeedback notices the
-    // moments and calls these; the simulation never reads them.
+    // Presentation only: how a pole swing shows beyond its chain (M6). Sparks fly off the pole's band, and off the chain
+    // just by the runner, where the camera can see them (user 2026-11-06: the band's alone were too far off to tell); the
+    // chain snaps and its halves spring back when the swing ends. Nothing here reads the runner's model, which is
+    // temporary (DECISIONS 2026-11-06). ControlFeedback notices the moments and calls these; the simulation never reads
+    // them.
     public sealed class SwingEffects : IDisposable
     {
         private const int SnapPoints = 10;
         private const int MaxSparks = 64;
         private const float SnapWidth = 0.09f;
-        private static readonly Color Spark = new Color(1f, 0.62f, 0.18f);
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private readonly GameObject root;
-        private readonly GameObject tailObject;
-        private readonly ParticleSystem sparks;
-        private readonly ParticleSystemRenderer sparkRenderer;
+        private readonly ParticleSystem bandSparks;
+        private readonly ParticleSystem handSparks;
         private readonly LineRenderer poleHalf;
         private readonly LineRenderer runnerHalf;
-        private readonly TrailRenderer tail;
         private readonly MaterialPropertyBlock tint = new MaterialPropertyBlock();
         private readonly Vector3[] points = new Vector3[SnapPoints];
         private bool snapped;
         private float snappedAt;
         private Vector3 snapBite;
 
-        public bool SparksEmitting => sparks != null && sparks.isEmitting;
+        public bool SparksEmitting => bandSparks != null && bandSparks.isEmitting;
+        public bool HandSparksEmitting => handSparks != null && handSparks.isEmitting;
         public bool SnapShown => poleHalf != null && poleHalf.enabled;
-        public bool TailEmitting => tail != null && tail.emitting;
 
         // material is ControlFeedback's, which owns it; the tint on each renderer gives these their colours.
-        public SwingEffects(Transform parent, Transform runner, Material material)
+        public SwingEffects(Transform parent, Material material)
         {
             if (parent == null) throw new ArgumentNullException(nameof(parent));
-            if (runner == null) throw new ArgumentNullException(nameof(runner));
             if (material == null) throw new ArgumentNullException(nameof(material));
             root = new GameObject("Swing effects");
             root.transform.SetParent(parent, false);
-            sparks = MakeSparks(material, out sparkRenderer);
-            SetTint(sparkRenderer, Spark, 4f);
+            // The band's edge (CircuitScenery.PlacePoles: 1.6 times the pole's thickness across).
+            bandSparks = MakeSparks("Band sparks", material, SwingLook.PoleThickness * 0.8f, FeedbackLook.SparkRate, 4f, 10f, 0.12f, 0.3f);
+            handSparks = MakeSparks("Hand sparks", material, 0.15f, FeedbackLook.HandSparkRate, 2f, 6f, 0.05f, 0.13f);
             poleHalf = MakeHalf("Chain snap, pole half", material);
             runnerHalf = MakeHalf("Chain snap, runner half", material);
-            tailObject = new GameObject("Swing trail");
-            tailObject.transform.SetParent(runner, false);
-            tailObject.transform.localPosition = new Vector3(0f, -0.2f, 0f);
-            tail = tailObject.AddComponent<TrailRenderer>();
-            tail.sharedMaterial = material;
-            tail.shadowCastingMode = ShadowCastingMode.Off;
-            tail.receiveShadows = false;
-            tail.time = FeedbackLook.SwingTailTime;
-            tail.minVertexDistance = 0.15f;
-            tail.startWidth = FeedbackLook.SwingTailWidth;
-            tail.endWidth = 0f;
-            tail.autodestruct = false;
-            tail.emitting = false;
-            tail.enabled = false;
-            Color tailColor = Spark;
-            tailColor.a = 0.35f;
-            SetTint(tail, tailColor, 2f);
         }
 
-        private ParticleSystem MakeSparks(Material material, out ParticleSystemRenderer renderer)
+        private ParticleSystem MakeSparks(string name, Material material, float radius, float rate, float slowest, float fastest, float smallest, float largest)
         {
-            var holder = new GameObject("Swing sparks");
+            var holder = new GameObject(name);
             // Inactive while it is set up: a new system plays on awake with the defaults otherwise.
             holder.SetActive(false);
             holder.transform.SetParent(root.transform, false);
@@ -77,26 +58,26 @@ namespace ProtoHarness.ChainRush.Visuals
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.maxParticles = MaxSparks;
             main.startLifetime = new ParticleSystem.MinMaxCurve(0.25f, 0.45f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 10f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.3f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(slowest, fastest);
+            main.startSize = new ParticleSystem.MinMaxCurve(smallest, largest);
             main.gravityModifier = 1.5f;
             ParticleSystem.EmissionModule emission = system.emission;
-            emission.rateOverTime = FeedbackLook.SparkRate;
+            emission.rateOverTime = rate;
             ParticleSystem.ShapeModule shape = system.shape;
             shape.shapeType = ParticleSystemShapeType.Sphere;
-            // The band's edge (CircuitScenery.PlacePoles: 1.6 times the pole's thickness across).
-            shape.radius = SwingLook.PoleThickness * 0.8f;
+            shape.radius = radius;
             shape.radiusThickness = 0f;
             ParticleSystem.SizeOverLifetimeModule size = system.sizeOverLifetime;
             size.enabled = true;
             size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0f));
-            renderer = holder.GetComponent<ParticleSystemRenderer>();
+            var renderer = holder.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = material;
             renderer.renderMode = ParticleSystemRenderMode.Stretch;
             renderer.velocityScale = 0.04f;
             renderer.lengthScale = 1f;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
+            SetTint(renderer, FeedbackLook.SwingAmber, 4f);
             holder.SetActive(true);
             return system;
         }
@@ -116,21 +97,28 @@ namespace ProtoHarness.ChainRush.Visuals
             return line;
         }
 
+        // Where the chain leaves the runner: a little way up it from the body, toward the band.
+        private static Vector3 HandEnd(Vector3 bite, Vector3 body) => body + (bite - body).normalized * 0.8f;
+
         // The chain has bitten the band at bite.
-        public void Hook(Vector3 bite)
+        public void Hook(Vector3 bite, Vector3 body)
         {
-            sparks.transform.position = bite;
-            sparks.Emit(FeedbackLook.SparkHookBurst);
+            bandSparks.transform.position = bite;
+            bandSparks.Emit(FeedbackLook.SparkHookBurst);
+            handSparks.transform.position = HandEnd(bite, body);
+            handSparks.Emit(FeedbackLook.SparkHookBurst);
         }
 
         // The swing has ended on its own: the chain parts where it was.
-        public void Snap(Vector3 bite, float now)
+        public void Snap(Vector3 bite, Vector3 body, float now)
         {
             snapped = true;
             snappedAt = now;
             snapBite = bite;
-            sparks.transform.position = bite;
-            sparks.Emit(FeedbackLook.SparkSnapBurst);
+            bandSparks.transform.position = bite;
+            bandSparks.Emit(FeedbackLook.SparkSnapBurst);
+            handSparks.transform.position = HandEnd(bite, body);
+            handSparks.Emit(FeedbackLook.SparkSnapBurst);
         }
 
         // Each frame of a run. body is where the runner's half of a snapped chain springs back to.
@@ -138,12 +126,16 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             if (swinging)
             {
-                sparks.transform.position = bite;
-                if (!sparks.isEmitting) sparks.Play();
+                bandSparks.transform.position = bite;
+                handSparks.transform.position = HandEnd(bite, body);
+                if (!bandSparks.isEmitting) bandSparks.Play();
+                if (!handSparks.isEmitting) handSparks.Play();
             }
-            else if (sparks.isEmitting) sparks.Stop(true, ParticleSystemStopBehavior.StopEmitting);
-            tail.enabled = true;
-            tail.emitting = swinging || (snapped && now - snappedAt < FeedbackLook.SwingTailAfter);
+            else
+            {
+                if (bandSparks.isEmitting) bandSparks.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                if (handSparks.isEmitting) handSparks.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
             float fade = snapped ? FeedbackLook.Fade(now - snappedAt, FeedbackLook.ChainSnapTime) : 0f;
             poleHalf.enabled = runnerHalf.enabled = fade > 0f;
             if (fade <= 0f) return;
@@ -164,22 +156,19 @@ namespace ProtoHarness.ChainRush.Visuals
                 points[i] = Vector3.Lerp(from, tip, along) + side * (Mathf.Sin(along * Mathf.PI * 3f) * along * whip);
             }
             half.SetPositions(points);
-            Color color = Color.Lerp(Spark, Color.white, fade);
+            Color color = Color.Lerp(FeedbackLook.SwingAmber, Color.white, fade);
             color.a = fade;
             SetTint(half, color, 2f);
         }
 
-        // Out of a run, paused or on a respawn's jump: nothing shows, and the tail keeps no points to join across the jump.
+        // Out of a run, paused or on a respawn's jump: nothing shows.
         public void Hide()
         {
             snapped = false;
-            if (sparks != null) sparks.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (bandSparks != null) bandSparks.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (handSparks != null) handSparks.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (poleHalf != null) poleHalf.enabled = false;
             if (runnerHalf != null) runnerHalf.enabled = false;
-            if (tail == null) return;
-            tail.emitting = false;
-            if (tail.enabled) tail.Clear();
-            tail.enabled = false;
         }
 
         // SetPropertyBlock copies the values, so one block serves every renderer here.
@@ -193,7 +182,6 @@ namespace ProtoHarness.ChainRush.Visuals
         public void Dispose()
         {
             if (root != null) UnityEngine.Object.Destroy(root);
-            if (tailObject != null) UnityEngine.Object.Destroy(tailObject);
         }
     }
 }

@@ -487,6 +487,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForEndOfFrame();
             Assert.That(player.IsSwinging, Is.True);
             Assert.That(feedback.SwingSparksEmitting, Is.True, "Sparks fly while swinging.");
+            Assert.That(feedback.HandSparksEmitting, Is.True, "Sparks fly by the runner too.");
             Assert.That(feedback.SwingTailEmitting, Is.True, "The tail runs while swinging.");
             Assert.That(feedback.ChainSnapShown, Is.False);
             bot.SwingHold = false;
@@ -555,6 +556,51 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsSwinging, Is.True);
             Assert.That(feedback.SwingSparksEmitting, Is.True, "The sparks come back with the swing.");
             Assert.That(feedback.ChainSnapShown, Is.False, "A pause is not the swing's end.");
+        }
+
+        // A booster on a swing shows its own tail, in place of the swing's or the booster's, and the wind lines.
+        [UnityTest]
+        public IEnumerator SpeedTrails_BoosterOnASwing_ShowsItsOwnTailAndTheWindLines()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.Swing));
+            Assert.That(feedback.TrailEmitting, Is.False, "No booster yet, so no mint tail.");
+            Assert.That(feedback.WindLinesShown, Is.False, "No booster yet, so no wind lines.");
+            game.Racer.AddGauge(1f);
+            bot.ChainAction = true;
+            for (int i = 0; i < 5; i++) yield return new WaitForFixedUpdate();
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.SwingBooster));
+            Assert.That(feedback.SwingBoostTailEmitting, Is.True, "Both have a tail of their own.");
+            Assert.That(feedback.TrailEmitting, Is.False, "Not the booster's alone.");
+            Assert.That(feedback.SwingTailEmitting, Is.False, "Not the swing's alone.");
+            Assert.That(feedback.WindLinesShown, Is.True);
+        }
+
+        // A boost pad's carry shows the booster's tail, without a booster or a swing.
+        [UnityTest]
+        public IEnumerator SpeedTrails_BoostZoneCarry_ShowsTheBoosterTail()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.None));
+            Assert.That(feedback.WindLinesShown, Is.False);
+            game.Racer.BoostZoneCarrySpeed = player.BoostZoneSpeed;
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.BoostZone));
+            Assert.That(feedback.TrailEmitting, Is.True);
+            Assert.That(feedback.SwingTailEmitting, Is.False);
+            Assert.That(feedback.WindLinesShown, Is.True);
         }
 
         private static ControlFeedback Feedback()

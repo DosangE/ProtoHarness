@@ -33,17 +33,37 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float PadBurstTime = 0.35f;
         public const int PadWindStreaks = 28;
         public const float PadWindCycle = 0.22f;
-        // The pole swing's effects (M6, SwingEffects). Sparks fly off the band: per second while swinging, in a burst on
-        // the hook and on the snap. The chain whips aside by up to ChainSnapWhip metres as its halves spring back. The
-        // thin tail runs on for SwingTailAfter seconds after the swing, each point lasting SwingTailTime.
+        // The pole swing's effects (M6, SwingEffects). Sparks fly off the band and the chain by the hand: per second while
+        // swinging, in a burst on the hook and on the snap. The chain whips aside by up to ChainSnapWhip metres as its
+        // halves spring back.
         public const float SparkRate = 45f;
+        public const float HandSparkRate = 30f;
         public const int SparkHookBurst = 24;
         public const int SparkSnapBurst = 10;
         public const float ChainSnapTime = 0.25f;
         public const float ChainSnapWhip = 0.7f;
+        // The tails at speed (SpeedTrails). The swing's tail runs on for SwingTailAfter seconds after the swing; each tail
+        // point lasts its Time (a booster's 0.5 s was too long, user 2026-11-06).
         public const float SwingTailAfter = 0.4f;
         public const float SwingTailTime = 0.25f;
         public const float SwingTailWidth = 0.12f;
+        public const float BoostTailTime = 0.25f;
+        public const float BoostTailWidth = 0.25f;
+        public const float SwingBoostTailWidth = 0.325f;
+        public const float TailGlow = 1.2f;
+        // The white wind lines: a mirrored pair starts every WindLineEvery seconds and lives WindLineTime, from WindLineAhead
+        // metres ahead of the runner, WindLineRadius round a centre WindLineHeight up, reaching WindLineReach metres back.
+        public const float WindLineEvery = 0.07f;
+        public const float WindLineTime = 0.28f;
+        public const float WindLineAhead = 0.8f;
+        public const float WindLineHeight = 0.4f;
+        public const float WindLineRadius = 0.5f;
+        public const float WindLineReach = 5f;
+        public const float WindLineWidth = 0.14f;
+        public const float WindLineAlpha = 0.85f;
+        public static readonly Color SwingAmber = new Color(1f, 0.62f, 0.18f);
+        public static readonly Color SwingBoostGold = new Color(1f, 0.86f, 0.32f);
+        public static readonly Color BoostZoneGreen = new Color(0.1f, 0.85f, 0.2f);
 
         // One at the event, zero once its duration has passed or before it has ever happened.
         public static float Fade(float since, float duration)

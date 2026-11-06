@@ -7,6 +7,27 @@
 
 ---
 
+## 2026-11-06 · 봉 스윙 이펙트, 상태별 꼬리, 흰 바람 선 (`feature/m6-swing-effects`)
+
+- **결정 (사용자 플레이로 다듬었다, 2026-11-06)**: M6 "봉 스윙 이펙트" 를 표현 계층에서만 넣었다. 시뮬은 바꾸지 않았다.
+  - **불꽃·줄 끊김 (`Visuals/SwingEffects`)**: 띠와 손 쪽에서 튄다, 스윙이 끝나면 줄이 둘로 갈라져 0.25 s 에 튕겨 사라진다. 복귀로 끝난 스윙은 끊김을 내지 않는다. 띠 불꽃만으로는 멀어서 사용자 "불꽃은 봉에 달린건가? 잘 모르겠다" — 손 쪽을 더한 뒤 "불꽃도 보인다".
+  - **꼬리 (`Visuals/SpeedTrails`, 한 번에 하나)**: 스윙 앰버(0.12), 부스터 민트(0.25, 0.25 s), 스윙 + 부스터 금색(0.325), 부스트존 진한 초록(속도와 함께 약해진다). "꼬리는 부스터만"(2026-10-29)을 사용자 "스윙꼬리 따로 부스터 단일꼬리 따로 스윙+부스터 꼬리 따로, 부스터존에 의한 부스터 꼬리 따로" 로 바꿨다. 스윙 + 부스터는 두 꼬리를 겹쳤을 때 사용자 "안보인다" 여서 전용 꼬리를 뒀다. 겹쳤을 때 안 보인 원인은 확인하지 못했다. 금색 폭은 사용자 "현재와 부스터의 중간".
+  - **흰 바람 선**: 부스터가 켜진 동안(부스트존 포함) 양 끝이 뾰족한 흰 선이 러너 둘레 8방향으로 뒤로 벌어진다. 동시에 최대 8개, 0.07 s 마다 대칭 한 쌍, 고정 패턴. 사용자 참고 영상의 5:34~5:35 프레임을 읽어 만들었다.
+- **버린 대안**: 파티클 속도 줄기 — "너무 불규칙하게 뻗어나가는거같다". 소닉붐 고리 — "구체느낌", "개수가 너무 많다". 좌우 한 쌍만 — "여러 방향으로 있어야지". 몸 실루엣 잔상 — 러너 모형에 묶인다(모형은 임시용). 머티리얼 에셋으로 가산 발광 — 씬 연결이 따라와 1단계에서 뺐다. 프로젝트에 파티클 셰이더를 쓰는 머티리얼이 없어 코드로 찾으면 플레이어 빌드에서 빠질 수 있다.
+- **검증 (병합 ②, 작업 중 실행을 다시 쓴다)**: 영향 평가: `SpeedTrails`·`SwingEffects`·`FeedbackLook`·`ControlFeedback` → `ChainRushHud.Awake`(표현만, 시뮬 참조 없음) → `ChainRushCornerSwingTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`·`ControlFeedback_`·서킷 지문(도구 목록 + `ControlFeedback_`).
+  - PlayMode `testcasecount=34 result=Passed passed=34 failed=0 skipped=0`, 2026-11-06 06:28:33Z~06:30:26Z. 이 실행 뒤 코드 변경은 `SwingBoostTailWidth` 0.4 → 0.325 뿐이다.
+  - 그 변경 뒤 PlayMode `SpeedTrails_` `testcasecount=2 result=Passed passed=2 failed=0 skipped=0`, 06:34:15Z~06:34:19Z.
+  - EditMode 전체(`Enemy` 제외) `testcasecount=342 result=Passed passed=342 failed=0 skipped=0`, 06:33:42Z~06:33:47Z.
+  - 사용자 플레이 "일단 ㅇㅋ". 플레이어 빌드에서 이 런타임 머티리얼이 보이는지는 확인 못 했다 — M6 마감 빌드에서 본다.
+
+## 2026-11-06 · 봉 체인은 18 m 에 걸고, 장식은 줄 때문에 제한하지 않는다 (`feature/m6-swing-effects`)
+
+- **결정 (사용자, 2026-11-06)**: `SwingLook.BiteHeight` 3 → 18 m. 체인이 위로 뻗어 낮은 장식 위로 지나간다. 사용자 플레이 "괜찮네". 값은 표현 계층 상수 하나고 시뮬은 읽지 않는다(`SwingCenter` 만 쓴다). 20 m 는 띠가 꼭대기 구체에 묻혀(`CircuitScenery.PlacePoles`) 18 m 로 했다.
+- **이유**: 사용자 "맵 장식들을 뚫고 줄이 보이지않나". 장식과 줄은 둘 다 물리가 없어(`ExteriorAssets.ValidateDecoration`, `MetalChain`) 달리기에는 영향이 없고, 보이는 문제다. 코너를 드리프트가 아니라 봉에 줄을 걸어 각도를 고정해 지나가는 것이 이 게임의 차이라, 봉 스윙은 그대로 둔다.
+- **측정 (장식 프리팹에 임시 충돌체, 봉을 걸 수 있는 중앙선 지점마다 손 → 걸림 띠 레이캐스트)**: 3 m → 18 m 로 STADIUM 1% → 1%, FINGER LANES 18% → 0%, SKYWAY 57% → 8%, PALM COAST 44% → 33%. 남은 겹침은 그대로 둔다.
+- **버린 대안**: 줄이 쓸고 가는 부채꼴에서 높은 장식을 빼거나 옮기기 — 사용자 "이건 아닌거같다". 줄이 코너를 도는 동안 겹치는 모든 장식을 막아야 해서다. 체인을 손 쪽만 그리기, 코너 안쪽 난간에 걸기(`RailPoint`)는 하지 않았다. 남은 겹침이 거슬리면 다시 본다.
+- **검증**: PlayMode 선택 18건 `testcasecount=18 result=Passed passed=18 failed=0 skipped=0`, 2026-11-06 05:26:01Z~05:27:06Z(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`SwingLook_WhileSwinging_…`·서킷 지문·`Scene_CornerPoles_…`·`ControlFeedback_…`).
+
 ## 2026-11-05 · 트랙별 소리: FINGER LANES 음원만 넣고, 나머지는 다시 만든다 (`feature/m6-finger-sound`)
 
 - **결정 (사용자, 2026-11-05)**: 네 트랙 음악·환경음과 새 효과음을 플레이한 뒤 "손가락맵 음원 말고는 다 별로다. 기록해놓고 손가락맵만 커밋 푸쉬 병합하라."

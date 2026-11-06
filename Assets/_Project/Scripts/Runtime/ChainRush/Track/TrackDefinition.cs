@@ -261,6 +261,23 @@ namespace ProtoHarness.ChainRush.Track
         [SerializeField] private float roadHalfWidth = RoadProfile.DeckHalfWidth;
         [SerializeField] private float roadThickness = RoadProfile.DeckThickness;
 
+        // A closed ring of two right half turns round one point, made in code with no anchors, checkpoints or asset (the
+        // tutorial, user 2026-11-06). From the origin heading +z its centre, where the corner pole stands, is radius to
+        // the right. Both arcs share that pole, so it comes twice from Centerline.GetPoles.
+        public static TrackDefinition Ring(string name, float radius)
+        {
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("A ring needs a name.", nameof(name));
+            var ring = CreateInstance<TrackDefinition>();
+            ring.name = name;
+            ring.segments = new List<Segment> { Segment.Arc(radius, 180f), Segment.Arc(radius, 180f) };
+            ring.anchors = new List<Anchor>();
+            ring.checkpointFractions = new float[0];
+            ring.lapCount = 1;
+            if (ring.TryValidate(out string error)) return ring;
+            Destroy(ring);
+            throw new ArgumentException(error, nameof(radius));
+        }
+
         public IReadOnlyList<Segment> Segments => segments;
         public IReadOnlyList<Anchor> Anchors => anchors;
         public IReadOnlyList<Pole> Poles => poles;

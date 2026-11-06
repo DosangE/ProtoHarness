@@ -239,6 +239,9 @@ namespace ProtoHarness.ChainRush
                 throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race.");
         }
 
+        // Resets the runner and camera to their start pose, ready without advancing simulation or counting down.
+        public void ReturnToStart() => ResetRun();
+
         // Starts a run at once. Servers, rollbacks and tests start here; a player at the keyboard goes through StartCountdown.
         public void StartRun()
         {
@@ -307,7 +310,8 @@ namespace ProtoHarness.ChainRush
             attackVisual.gameObject.SetActive(false);
         }
 
-        private void CompleteRun()
+        // Ends the run as finished: a race when its last lap is done, the tutorial when its last stage is.
+        public void CompleteRun()
         {
             if (!IsRunning) return;
             phase = Phase.Complete;

@@ -167,6 +167,48 @@ namespace ProtoHarness.ChainRush.Race
             }
         }
 
+        // A round floor instead of the road (the tutorial): one wide section swept round the ring, reaching from
+        // innerRadius to outerRadius about its centre, with a guard on both edges: the wall round the floor and the
+        // island the pole stands on. The ring turns right, so its centre is on the right of every frame.
+        public void LayArena(float ringRadius, float innerRadius, float outerRadius)
+        {
+            float half = (outerRadius - innerRadius) * 0.5f, offset = ringRadius - (innerRadius + outerRadius) * 0.5f;
+            var profile = new RoadProfile(half, half, offset, offset, definition.RoadThickness, true, true, false);
+            double lap = track.EndS;
+            int count = Math.Max(1, (int)Math.Ceiling(lap / maxPieceLength - 1e-9));
+            for (int i = 0; i < count; i++)
+            {
+                var piece = new RoadPiece("Arena floor " + pieces.Count, parent, roadMaterial, railMaterial, lightMaterial);
+                piece.Build(track, lap * i / count, i == count - 1 ? lap : lap * (i + 1) / count, profile);
+                pieces.Add(piece);
+            }
+        }
+
+        // A level x/z grid, offset half a cell from the pole so no strip crosses its island. Both edges of each strip
+        // end inside the round floor, including the outer edge of its width. Paint adds no collider.
+        public void PaintArena(Material paint, float ringRadius, float outerRadius)
+        {
+            if (paint == null) throw new ArgumentNullException(nameof(paint));
+            const float Step = 30f, HalfWidth = 0.125f, Height = 0.02f;
+            Vector3 origin = track.FrameAt(0d).TransformPoint(new Vector3(ringRadius, 0f, 0f));
+            var vertices = new List<Vector3>(160);
+            var triangles = new List<int>(240);
+            for (float distance = Step * 0.5f; distance + HalfWidth < outerRadius; distance += Step)
+            {
+                float edge = distance + HalfWidth;
+                float end = Mathf.Sqrt(outerRadius * outerRadius - edge * edge);
+                for (int sign = -1; sign <= 1; sign += 2)
+                {
+                    float at = sign * distance;
+                    Quad(new Vector3(at - HalfWidth, Height, -end), new Vector3(at - HalfWidth, Height, end),
+                        new Vector3(at + HalfWidth, Height, end), new Vector3(at + HalfWidth, Height, -end), vertices, triangles);
+                    Quad(new Vector3(-end, Height, at - HalfWidth), new Vector3(end, Height, at - HalfWidth),
+                        new Vector3(end, Height, at + HalfWidth), new Vector3(-end, Height, at + HalfWidth), vertices, triangles);
+                }
+            }
+            Paint("Arena grid", paint, origin, vertices, triangles);
+        }
+
         private void LayMainRoad()
         {
             IReadOnlyList<TrackDefinition.Segment> segments = definition.Segments;

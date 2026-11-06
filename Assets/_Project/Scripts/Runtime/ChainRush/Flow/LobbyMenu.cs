@@ -3,13 +3,14 @@ using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Flow.Lobby;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Tutorial;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 namespace ProtoHarness.ChainRush.Flow
 {
-    // The lobby: main menu (single race / multi, locked / settings), then for a single race the speed class, the track
+    // The lobby: main menu (single race / multi, locked / tutorial / settings), then for a single race the speed class, the track
     // (with that speed's records, user 2026-10-29) and the runner, then RaceLaunch and the race scene. ↑/↓ choose, Enter confirms, ESC goes back (from the main menu,
     // to the title). Locked entries are shown but refuse with a notice. Drawn like ChainRushHud (OnGUI, 1600 x 900).
     // Each page is a LobbyPage (Flow/Lobby/: its rows, what choosing and going back do, how it is drawn); this keeps the
@@ -18,7 +19,7 @@ namespace ProtoHarness.ChainRush.Flow
     public sealed class LobbyMenu : MonoBehaviour
     {
         // In the order of the page list built in Awake.
-        public enum Page { Main, Settings, Track, Speed, Runner, Keys }
+        public enum Page { Main, Settings, Track, Speed, Runner, Keys, Tutorial }
 
         // One track the lobby offers: what the circuit is built from and the scene loaded around it for looks.
         [Serializable]
@@ -145,7 +146,7 @@ namespace ProtoHarness.ChainRush.Flow
             pages = new LobbyPage[]
             {
                 new MainPage(context), new SettingsPage(context), trackPage,
-                new SpeedPage(context), new RunnerPage(context), new KeysPage(context),
+                new SpeedPage(context), new RunnerPage(context), new KeysPage(context), new TutorialPage(context),
             };
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i].Id != (Page)i)
@@ -239,6 +240,9 @@ namespace ProtoHarness.ChainRush.Flow
                 SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look);
         }
 
+        // The tutorial from a stage on: the first runner, with the first track's materials and sky on its round floor.
+        public RaceSetup BuildTutorialSetup(int stage) => TutorialCourse.Setup(runners[0], tracks[0].Look, stage);
+
         private void Go(LobbyPage.Step step)
         {
             switch (step.What)
@@ -250,6 +254,11 @@ namespace ProtoHarness.ChainRush.Flow
                     break;
                 case LobbyPage.Step.Kind.Launch:
                     RaceLaunch.Request(BuildSetup());
+                    leaving = true;
+                    SceneManager.LoadScene(RaceLaunch.RaceScene);
+                    break;
+                case LobbyPage.Step.Kind.Tutorial:
+                    RaceLaunch.Request(BuildTutorialSetup(step.Highlight));
                     leaving = true;
                     SceneManager.LoadScene(RaceLaunch.RaceScene);
                     break;

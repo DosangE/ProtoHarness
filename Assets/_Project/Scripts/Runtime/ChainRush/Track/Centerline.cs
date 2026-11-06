@@ -288,7 +288,7 @@ namespace ProtoHarness.ChainRush.Track
         {
             Piece piece = PieceAt(world, out float along, out float right);
             if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out float branchRight))
-                return new TrackCoord(Wrap(branch.MapS(onBranch.StartS + branchAlong)), branchRight, world.y - HeightOn(onBranch, branchAlong));
+                return new TrackCoord(WrapIfLoop(branch.MapS(onBranch.StartS + branchAlong)), branchRight, world.y - HeightOn(onBranch, branchAlong));
             return new TrackCoord(WrapIfLoop(piece.StartS + along), right, world.y - HeightOn(piece, along));
         }
 
@@ -299,7 +299,7 @@ namespace ProtoHarness.ChainRush.Track
             if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out _))
             {
                 TrackFrame own = FrameOn(onBranch, branchAlong);
-                return new TrackFrame(Wrap(branch.MapS(own.S)), own.Position, own.Forward, own.Right, own.Grade, own.Curvature);
+                return new TrackFrame(WrapIfLoop(branch.MapS(own.S)), own.Position, own.Forward, own.Right, own.Grade, own.Curvature);
             }
             TrackFrame frame = FrameOn(piece, along);
             if (!isLoop) return frame;
@@ -315,7 +315,7 @@ namespace ProtoHarness.ChainRush.Track
         // the laps keep counting across. The branch's arcs have corner poles like the loop's.
         public void AddBranch(double fromS, double toS, Centerline line, float mainHalfWidth)
         {
-            if (!isLoop) throw new InvalidOperationException("Only a closed centerline takes branches.");
+            RequirePieces();
             if (line == null) throw new ArgumentNullException(nameof(line));
             if (line.isLoop || line.pieces.Count == 0) throw new ArgumentException("A branch is an open line with pieces.", nameof(line));
             if (!(fromS >= 0d) || !(toS > fromS) || !(toS < endS))
@@ -639,7 +639,7 @@ namespace ProtoHarness.ChainRush.Track
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
             RequirePieces();
-            if (isLoop || hasFocus) return NearestPiece(world, out along, out right);
+            if (isLoop || hasFocus || branches.Count != 0) return NearestPiece(world, out along, out right);
             int last = pieces.Count - 1;
             for (int i = 0; i < last; i++)
             {

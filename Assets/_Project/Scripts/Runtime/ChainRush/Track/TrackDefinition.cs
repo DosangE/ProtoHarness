@@ -160,6 +160,26 @@ namespace ProtoHarness.ChainRush.Track
             public float Length => Mathf.PI * radius + straight;
         }
 
+        // A road edge without a guard over [FromS, ToS], on either a circuit or an open course.
+        [Serializable]
+        public struct OpenEdge
+        {
+            [SerializeField] private float fromS;
+            [SerializeField] private float toS;
+            [SerializeField] private bool left;
+
+            public OpenEdge(float fromS, float toS, bool left)
+            {
+                this.fromS = fromS;
+                this.toS = toS;
+                this.left = left;
+            }
+
+            public float FromS => fromS;
+            public float ToS => toS;
+            public bool Left => left;
+        }
+
         // A dead-end widening beside the road (user 2026-11-02, the Skyway's on-ramp: "넓은 지상도로 … 정면은 가드로
         // 막혀있어야"): from FromS the road grows Width metres wider on one side over Taper metres, runs on as one wide road
         // and ends at ToS against a guard square across the widening. The main road's guard on that side opens over it
@@ -253,6 +273,7 @@ namespace ProtoHarness.ChainRush.Track
         [SerializeField] private List<Pole> poles = new List<Pole>();
         [SerializeField] private List<Shortcut> shortcuts = new List<Shortcut>();
         [SerializeField] private List<Bay> bays = new List<Bay>();
+        [SerializeField] private List<OpenEdge> openEdges = new List<OpenEdge>();
         [Tooltip("Checkpoints as fractions of a lap, ascending, strictly between 0 and 1.")]
         [SerializeField] private float[] checkpointFractions = { 0.25f, 0.5f, 0.75f };
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]
@@ -309,6 +330,7 @@ namespace ProtoHarness.ChainRush.Track
         public IReadOnlyList<Pole> Poles => poles;
         public IReadOnlyList<Shortcut> Shortcuts => shortcuts;
         public IReadOnlyList<Bay> Bays => bays;
+        public IReadOnlyList<OpenEdge> OpenEdges => openEdges;
         public int LapCount => lapCount;
         public bool IsOpenCourse => openCourse;
         public float FinishRunout => finishRunout;
@@ -484,7 +506,7 @@ namespace ProtoHarness.ChainRush.Track
             if (openCourse)
             {
                 if (lapCount != 1) return Fail("an open course needs exactly one lap.", out error);
-                if (shortcuts.Count != 0 || bays.Count != 0) return Fail("an open course cannot have shortcuts or bays.", out error);
+                if (bays.Count != 0) return Fail("an open course cannot have bays.", out error);
                 if (!(finishRunout >= 2f) || float.IsInfinity(finishRunout) || !(startRunway > 0f) || float.IsInfinity(startRunway))
                     return Fail("an open course needs finite end road lengths, with at least 2 m runout for finish clearance and positive start runway.", out error);
                 if (segments[0].IsGap || segments[segments.Count - 1].IsGap || segments[segments.Count - 1].EndGrade != 0f)
@@ -580,6 +602,31 @@ namespace ProtoHarness.ChainRush.Track
                 if (!TryValidateShortcut(i, line, lap, out error)) return false;
             for (int i = 0; i < bays.Count; i++)
                 if (!TryValidateBay(i, line, lap, gaps, out error)) return false;
+            for (int i = 0; i < openEdges.Count; i++)
+                if (!TryValidateOpenEdge(i, lap, gaps, out error)) return false;
+            error = null;
+            return true;
+        }
+
+        // Guard openings may touch but may not overlap on the same side, including existing junction openings.
+        private bool TryValidateOpenEdge(int i, double lap, List<(double Start, double End)> gaps, out string error)
+        {
+            OpenEdge edge = openEdges[i];
+            if (!(edge.FromS >= 0f) || !(edge.ToS > edge.FromS) || !(edge.ToS <= lap))
+                return Fail($"open edge {i}: [{edge.FromS}, {edge.ToS}] must be an ordered finite range within [0, {lap:F1}].", out error);
+            for (int k = 0; k < i; k++)
+                if (openEdges[k].Left == edge.Left && openEdges[k].ToS > edge.FromS && openEdges[k].FromS < edge.ToS)
+                    return Fail($"open edge {i}: it overlaps another open edge on the same side.", out error);
+            foreach ((double from, double to, bool left) in BayGuardGaps())
+                if (left == edge.Left && to > edge.FromS && from < edge.ToS)
+                    return Fail($"open edge {i}: it overlaps a bay opening.", out error);
+            if (!edge.Left)
+                foreach ((double from, double to) in ShortcutGuardGaps())
+                    if (to > edge.FromS && from < edge.ToS)
+                        return Fail($"open edge {i}: it overlaps a shortcut crossing.", out error);
+            foreach ((double from, double to) in gaps)
+                if (to > edge.FromS && from < edge.ToS)
+                    return Fail($"open edge {i}: it overlaps a road gap.", out error);
             error = null;
             return true;
         }
@@ -654,14 +701,14 @@ namespace ProtoHarness.ChainRush.Track
             return true;
         }
 
-        // A shortcut leaves and rejoins the closed line where the main road is a flat straight for the whole crossing, is
+        // A shortcut leaves and rejoins the main line where the road is a flat straight for the whole crossing, is
         // narrower than the main road and wider than a corner pole's reach allows, and its end meets the main line at ToS.
         private bool TryValidateShortcut(int i, Centerline line, double lap, out string error)
         {
             Shortcut shortcut = shortcuts[i];
             const float guard = RoadMeshBuilder.GuardThickness;
             double from = shortcut.FromS, to = shortcut.ToS;
-            if (!(from > guard) || !(to > from) || !(to < lap - guard))
+            if (!(openCourse ? from >= 0d : from > guard) || !(to > from) || !(to < (openCourse ? lap : lap - guard)))
                 return Fail($"shortcut {i}: it must leave at S {from} and come back at S {to}, later in the same lap.", out error);
             if (!(shortcut.Radius >= MinShortcutRadius) || float.IsInfinity(shortcut.Radius) || !(shortcut.Straight > 0f) || float.IsInfinity(shortcut.Straight))
                 return Fail($"shortcut {i}: the radius must be at least {MinShortcutRadius} m and the straight positive.", out error);

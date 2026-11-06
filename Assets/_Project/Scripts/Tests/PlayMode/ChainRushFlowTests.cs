@@ -239,12 +239,12 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Confirm();
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
-            menu.Highlight(4);
-            Assert.That(menu.TrackRecordText(4), Is.EqualTo("준비 중"));
+            menu.Highlight(5);
+            Assert.That(menu.TrackRecordText(5), Is.EqualTo("준비 중"));
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track), "The placeholder track is locked.");
             Assert.That(menu.Notice, Is.Not.Empty);
-            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(5), "The stadium, the skyway, Finger Lanes, Palm Coast and one placeholder.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => menu.Highlight(6), "The stadium, the skyway, Finger Lanes, Palm Coast, Summit Drop and one placeholder.");
             menu.Move(1);
             Assert.That(menu.Cursor, Is.EqualTo(0), "The cursor wraps from the last placeholder to the stadium.");
             Assert.That(menu.BuildSetup().Track, Is.SameAs(Stadium()), "A refused track is not chosen.");
@@ -1749,6 +1749,305 @@ namespace ProtoHarness.Tests.PlayMode
                 Time.timeScale = scale;
                 store.Clear(palm.name, speed);
             }
+        }
+
+        [Test]
+        public void SummitDrop_Layout_HasEightHeightStagesOneLapAndTheDesignedFeatures()
+        {
+            TrackDefinition summit = SummitDrop();
+            Assert.That(summit.TryValidate(out string error), Is.True, error);
+            Assert.That(summit.IsOpenCourse, Is.True);
+            Assert.That(summit.LapCount, Is.EqualTo(1));
+            Assert.That(summit.LapLength, Is.EqualTo(2279.956d).Within(0.02d));
+            Centerline line = summit.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.IsLoop, Is.False);
+            var indices = new[] { 0, 8, 16, 23, 28, 31, 38, 44, 48 };
+            var heights = new[] { 0f, -70f, -99.6f, -114.6f, -114.6f, -114.6f, -129.1f, -179.1f, -167.1f };
+            double s = 0d;
+            int stage = 0;
+            for (int i = 0; i <= summit.Segments.Count; i++)
+            {
+                if (i == indices[stage])
+                {
+                    Assert.That(line.FrameAt(s).Position.y, Is.EqualTo(heights[stage]).Within(0.02f), $"stage {stage} S {s:F2}");
+                    if (stage > 0) Debug.Log($"SUMMIT DROP boundary {stage}: S={s:F3}, height={line.FrameAt(s).Position.y:F3}");
+                    stage++;
+                }
+                if (i == summit.Segments.Count) break;
+                TrackDefinition.Segment segment = summit.Segments[i];
+                Assert.That(Mathf.Abs(segment.EndGrade), Is.LessThanOrEqualTo(0.2f));
+                if (segment.IsArc) Assert.That(segment.Radius, Is.GreaterThanOrEqualTo(28f));
+                else if (i > 0 && segment.EndGrade != summit.Segments[i - 1].EndGrade)
+                    Assert.That(segment.Length, Is.EqualTo(10f), "All grade changes use short easing straights.");
+                s += segment.Length;
+            }
+            Assert.That(line.FrameAt(s).Grade, Is.Zero);
+            Assert.That(line.FrameAt(s + summit.FinishRunout).Position.y, Is.EqualTo(-167.1f).Within(0.02f));
+            Assert.That(summit.OpenEdges.Count, Is.EqualTo(1));
+            TrackDefinition.OpenEdge edge = summit.OpenEdges[0];
+            Assert.That(edge.Left, Is.True);
+            Assert.That(edge.ToS - edge.FromS, Is.EqualTo(150f));
+            Assert.That(summit.HalfWidthAt(900d), Is.EqualTo(4.5f));
+            Assert.That(summit.Gaps().Count, Is.EqualTo(1));
+            Assert.That(summit.Gaps()[0].End - summit.Gaps()[0].Start, Is.EqualTo(30d));
+            Assert.That(line.BoostZoneCount, Is.EqualTo(3));
+            Assert.That(line.LaunchCount, Is.EqualTo(1));
+            Assert.That(line.BranchCount, Is.EqualTo(1));
+            Assert.That(summit.Poles.Count, Is.EqualTo(3));
+            Assert.That(summit.Poles[1].S - summit.Poles[0].S, Is.EqualTo(40f).Within(0.001f));
+            Assert.That(summit.Poles[2].S - summit.Poles[1].S, Is.EqualTo(40f).Within(0.001f));
+            Assert.That(summit.CheckpointCount, Is.InRange(3, 4));
+            for (int i = 0; i < summit.CheckpointCount; i++)
+                Assert.That(summit.CheckpointS(i), Is.Not.InRange((double)summit.Shortcuts[0].FromS, summit.Shortcuts[0].ToS));
+            var points = new System.Collections.Generic.List<Vector3>();
+            line.GetPoles(points);
+            Assert.That(points.Count, Is.EqualTo(18), "13 main turns, 2 shortcut turns and 3 slalom poles.");
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator SummitDrop_BotAtEachSpeed_FinishesAndReportsTimeOffsetAndFalls(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed)
+        {
+            TrackDefinition summit = SummitDrop();
+            var store = TestRecords();
+            RaceLaunch.Request(new RaceSetup(summit, "SUMMIT DROP", "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                float offset = 0f, lipSpeed = 0f;
+                double offsetS = 0d;
+                int falls = 0;
+                bool held = false;
+                double lip = summit.Gaps()[0].Start - 15d;
+                for (int tick = 0; tick < 16000 && game.IsRunning; tick++)
+                {
+                    double before = game.Track.Project(player.transform.position).S;
+                    game.StepTick(bot);
+                    TrackCoord here = game.Track.Project(player.transform.position);
+                    if (Mathf.Abs(here.D) > offset) { offset = Mathf.Abs(here.D); offsetS = here.S; }
+                    if (player.IsRespawning && !held) falls++;
+                    held = player.IsRespawning;
+                    if (before < lip && here.S >= lip) lipSpeed = player.ForwardSpeed;
+                    if (tick % 400 == 0) yield return null;
+                }
+                string metrics = $"SUMMIT DROP {speed}: finish={game.HasFinished}, seconds={Ticks.ToSeconds(circuit.Laps.TotalTicks):F3}, " +
+                    $"maxOffset={offset:F3} at S={offsetS:F3}, respawns={falls}, lipSpeed={lipSpeed:F3}";
+                Debug.Log(metrics);
+                Assert.That(game.HasFinished, Is.True, metrics);
+                Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1), metrics);
+                Assert.That(lipSpeed, Is.GreaterThan(Mathf.Sqrt(45f * 22f / 0.48f)), "The pad carries even Normal over the 30 m gap, 45 m from the lip.");
+            }
+            finally { Time.timeScale = scale; store.Clear(summit.name, speed); }
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator SummitDrop_OpenLeftEdge_FallsTwelveMetresThenRespawnsOnRoad()
+        {
+            TrackDefinition summit = SummitDrop();
+            RaceLaunch.Request(new RaceSetup(summit, "SUMMIT DROP", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                // Start ON the narrow straight. Drive physically through its left edge, never teleport below it.
+                TrackFrame frame = game.Track.FrameAt(900d);
+                SimSnapshot now = game.CaptureSnapshot();
+                RacerState.Snapshot racer = now.Racer;
+                racer.LastGroundedS = 900d;
+                racer.Heading = Mathf.Atan2(-frame.Right.x, -frame.Right.z) * Mathf.Rad2Deg;
+                racer.Velocity = -frame.Right * player.RunSpeed;
+                racer.Grounded = true;
+                CircuitRace.Snapshot atEdge = now.Circuit;
+                atEdge.LastS = frame.S;
+                game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, frame.Position + Vector3.up, atEdge));
+                var input = new InputLog();
+                for (int i = 0; i < 300; i++) input.Add(new TickInput(0f, false, false, false));
+                var drive = new InputReplay(input);
+                float lowest = 0f;
+                bool outside = false;
+                for (int tick = 0; tick < 300 && !player.IsRespawning; tick++)
+                {
+                    game.StepTick(drive);
+                    TrackCoord here = game.Track.Project(player.transform.position);
+                    outside |= here.D < -summit.HalfWidthAt(here.S) - 1f;
+                    lowest = Mathf.Min(lowest, here.H);
+                }
+                Assert.That(outside, Is.True, "The capsule actually crossed the open left edge.");
+                Assert.That(lowest, Is.LessThan(-10f), "A real fall before the existing -12 m recovery.");
+                Assert.That(player.IsRespawning, Is.True);
+                TrackCoord back = game.Track.Project(player.transform.position);
+                Assert.That(Mathf.Abs(back.D), Is.LessThan(0.1f));
+                Assert.That(back.H, Is.InRange(0.5f, 1.5f));
+                Assert.That(player.IsGrounded, Is.True);
+            }
+            finally { Time.timeScale = scale; }
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator SummitDrop_SwingShortcut_ReachesFinishSoonerThanMainRoad()
+        {
+            TrackDefinition summit = SummitDrop();
+            var times = new int[2];
+            for (int run = 0; run < 2; run++)
+            {
+                RaceLaunch.Request(new RaceSetup(summit, "SUMMIT DROP", "", RaceMode.Single, SpeedClass.Fast, runner));
+                RaceAssembler assembler = null;
+                yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+                assembler.Records = TestRecords();
+                assembler.Ghosts = ghosts;
+                Scene scene = assembler.gameObject.scene;
+                ChainRushGame game = Find<ChainRushGame>(scene);
+                RunnerMotor player = Find<RunnerMotor>(scene);
+                CircuitRace circuit = Find<CircuitRace>(scene);
+                var shortcut = new ShortcutBot(game, player, summit);
+                IInputSource input = run == 0 ? (IInputSource)new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit) : shortcut;
+                float scale = Time.timeScale;
+                try
+                {
+                    Time.timeScale = 0f;
+                    game.StartRun();
+                    for (int tick = 0; tick < 14000 && game.IsRunning; tick++)
+                    {
+                        game.StepTick(input);
+                        if (tick % 400 == 0) yield return null;
+                    }
+                    Assert.That(game.HasFinished, Is.True, $"run {run}, progress {circuit.Laps.Progress:F1}");
+                    times[run] = circuit.Laps.TotalTicks;
+                    if (run == 1)
+                    {
+                        Assert.That(shortcut.Taken, Is.EqualTo(1));
+                        Assert.That(shortcut.Missed, Is.Zero);
+                    }
+                    Debug.Log($"SUMMIT DROP shortcut={run == 1}: finish {Ticks.ToSeconds(times[run]):F3} s");
+                }
+                finally { Time.timeScale = scale; TestRecords().Clear(summit.name, SpeedClass.Fast); }
+            }
+            Assert.That(times[1], Is.LessThan(times[0]), "The swing must save time over the entire run.");
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator SummitDrop_JumpWithoutPad_FallsAndRespawnsBeforePad(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed)
+        {
+            TrackDefinition summit = SummitDrop();
+            RaceLaunch.Request(new RaceSetup(summit, "SUMMIT DROP", "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var gap = summit.Gaps()[0];
+                TrackFrame frame = game.Track.FrameAt(gap.Start - 20d);
+                SimSnapshot now = game.CaptureSnapshot();
+                RacerState.Snapshot racer = now.Racer;
+                racer.LastGroundedS = frame.S;
+                racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+                racer.Velocity = frame.Forward * player.SlingTopSpeed;
+                racer.BoostZoneCarrySpeed = 0f;
+                racer.Grounded = true;
+                CircuitRace.Snapshot atKicker = now.Circuit;
+                atKicker.LastS = frame.S;
+                game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, frame.Position + Vector3.up, atKicker));
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                bool landed = false;
+                for (int tick = 0; tick < 700 && !player.IsRespawning; tick++)
+                {
+                    game.StepTick(bot);
+                    TrackCoord here = game.Track.Project(player.transform.position);
+                    landed |= here.S >= gap.End && player.IsGrounded;
+                }
+                Assert.That(landed, Is.False, $"A {speed} slingshot without a pad must not clear the gap.");
+                Assert.That(player.IsRespawning, Is.True);
+                var pads = new System.Collections.Generic.List<double>();
+                game.Track.GetBoostZones(pads);
+                Assert.That(game.Track.Project(player.transform.position).S, Is.LessThan(pads[0]), "Recovery must offer the pad again.");
+            }
+            finally { Time.timeScale = scale; }
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator SummitDrop_RollbackAcrossShortcut_RepeatsEveryTickBitForBit()
+        {
+            TrackDefinition summit = SummitDrop();
+            RaceLaunch.Request(new RaceSetup(summit, "SUMMIT DROP", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var bot = new ShortcutBot(game, player, summit);
+                TrackDefinition.Shortcut shortcut = summit.Shortcuts[0];
+                while (game.IsRunning && game.Tick < 10000 && circuit.LastS < shortcut.FromS - 20d) game.StepTick(bot);
+                Assert.That(game.IsRunning, Is.True);
+                Assert.That(game.Tick, Is.LessThan(10000));
+                SimSnapshot snapshot = game.CaptureSnapshot();
+                var log = new InputLog();
+                StateTrace original = Trace(new InputRecorder(bot, log));
+                int limit = game.Tick + 3000;
+                while (game.IsRunning && game.Tick < limit && circuit.LastS < shortcut.ToS + 20d) game.StepTick(original);
+                Assert.That(circuit.LastS, Is.GreaterThanOrEqualTo(shortcut.ToS + 20d));
+                Assert.That(bot.Taken, Is.EqualTo(1));
+                game.RestoreSnapshot(snapshot);
+                LogAssert.Expect(LogType.Error, new Regex("came after \\d+; this run will keep no ghost"));
+                StateTrace replay = Trace(new InputReplay(log));
+                for (int i = 0; i < log.Count; i++) game.StepTick(replay);
+                Assert.That(StateTrace.Compare(original, replay, log.Count), Is.Null);
+                Assert.That(replay.Hash(log.Count), Is.EqualTo(original.Hash(log.Count)));
+                Debug.Log($"SUMMIT DROP shortcut rollback: {log.Count} identical ticks, hash 0x{original.Hash(log.Count):X16}");
+            }
+            finally { Time.timeScale = scale; }
+
+            StateTrace Trace(IInputSource input) => new StateTrace(game, player, input,
+                ("lapProgress", () => circuit.Laps.Progress), ("checkpoints", () => circuit.Laps.CheckpointsPassed),
+                ("lastGroundedS", () => game.Racer.LastGroundedS));
+        }
+
+        private static TrackDefinition SummitDrop()
+        {
+#if UNITY_EDITOR
+            const string path = "Assets/_Project/Data/Circuit_SummitDrop.asset";
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>(path);
+            Assert.That(summit, Is.Not.Null, path + " (menu: Create Summit Drop Track)");
+            return summit;
+#else
+            Assert.Fail("Flow tests require the Unity Editor.");
+            return null;
+#endif
         }
 
         [UnityTest, Timeout(120000)]

@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-11-06 · 열린 코스와 1랩 다운힐 SUMMIT DROP · M6 "시뮬 변경 없이" 를 뺀다 (`feature/m6-open-course`)
+
+- **결정 (사용자, 2026-11-06)**: 고저차 트랙은 "위에서 아래로 쮹 가는 맵", "1랩만". 레퍼런스는 "보고 참고하라는거다". "열린코스도 되도록 구조 바꿔". 8구간 구성, 갈림길, 가드레일 없는 구간에 "1 o 2 o 3 o". 2026-11-05 "M6 범위" 의 "시뮬 변경 없이" 는 이 트랙에서 빠진다.
+- **구조**: `TrackDefinition` 에 열린 코스(`openCourse`, 결승 뒤 감속 구간 `finishRunout`, 출발 뒤 도로 `startRunway`)와 가드 없는 구간(`OpenEdge`)을 더했다. 열린 코스는 닫힘 검사가 없고 1랩만 받으며, 지름길은 받고 베이는 받지 않는다. `LapLength` 는 결승 S 이고 감속 구간은 들어가지 않는다. 새 시뮬 저장 상태는 없다. 닫힌 코스는 기존 분기 그대로다.
+- **트랙**: 2279.96 m, 순낙차 167.10 m, 1랩. 설계 원칙은 약 10초마다 할 일이 바뀌는 것이다 — 절벽 낙하, 스위치백, 벽 없는 좁은 벼랑길, 틈 점프, 갈림길, 지그재그, 두 번째 낙하, 결승 앞 오르막. 배치는 새로 짰고, 레퍼런스에서는 구간 리듬만 참고했다(기록 영상의 속도 변화, 공략 문서의 구간 순서).
+- **이름**: `SUMMIT DROP`, 사용자 "1,2 ㅇㅇ".
+- **분담**: 구현·검증은 Codex(Unity MCP 사용자 허락), 리뷰와 로비 항목은 Claude. 로비 씬 저장도 사용자 지시로 Claude 가 `Unity_RunCommand` 로 했다("저장은 너가 진행하도록 현재 직접 못다루는 성황", 이 1건만의 승인이다). 씬 변경은 새 항목 4줄뿐이다.
+- **미룬 것**: `TrackLook`, 장식 씬, 빌드 씬 목록은 2단계다. 로비 테스트(`Lobby_TrackChoices_*`)와 `Race_BotLap_*` 행은 `LobbyLapSetup` 이 `look` 과 환경 씬을 요구해 2단계에서 더한다.
+- **버린 대안**: 닫힌 코스 유지(끝에 출발 높이까지 오르막으로 복귀) — 결승이 다시 꼭대기라 다운힐이 아니다. 입체교차 안 — 내려가기만 하는 코스에는 필요 없다.
+- **검증** (Codex 실행, 시각은 UTC, 커밋 전 작업 트리):
+  - 열린 코스 구조: EditMode 1회차 `testcasecount="197" result="Passed" passed="197" failed="0"`(09:53:36Z), PlayMode 1회차 `testcasecount="14" result="Failed(Child)" passed="13" failed="1"`(09:54:25Z~09:55:25Z, 새 복귀 테스트 `Expected: 106.0d … But was: 110.0d`, 테스트의 준비 상태와 기대값 문제), EditMode 최종 `testcasecount="199" result="Passed" passed="199" failed="0"`(09:58:12Z), PlayMode 최종 `testcasecount="14" result="Passed" passed="14" failed="0"`(09:59:01Z~09:59:59Z), 네 트랙 × 세 속도 `testcasecount="12" result="Passed" passed="12" failed="0"`(10:00:55Z~10:03:49Z, XML 원본 확인).
+  - 트랙·지름길: EditMode `testcasecount="169" result="Passed" passed="169" failed="0"`(10:21:43Z), 지문 `testcasecount="1" result="Passed"`(10:22:34Z~10:23:10Z), SummitDrop·OpenCourse `testcasecount="13" result="Passed" passed="13" failed="0"`(10:26:29Z~10:26:41Z), FINGER 3속도·스윙 지름길 `testcasecount="4" result="Passed" passed="4" failed="0"`(10:27:33Z~10:28:34Z), 최종 에셋 도로·봉 간격 `testcasecount="1" result="Passed"`(10:28:54Z, XML 원본 확인).
+  - 로비 저장 뒤 `ChainRushFlowTests.Lobby_` (Claude 실행, 자리표시 순번 4 → 5): `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"`(10:35:57Z~10:36:08Z). Console 에러 0.
+  - 서킷 지문 그대로 `0xEF92FB76BFD1D767`. 봇 결승: 보통 124.72 s, 빠름 100.68 s, 매우빠름 85.08 s, 복귀 0회, 최대 옆 거리 6.82 m. 빠름 지름길 90.00 s(10.68 s 단축).
+- **남은 것**: 사용자 플레이 확인. 2단계(장식, `TrackLook`, 빌드 씬 목록, 로비 테스트 행). 병합 전 리뷰.
+
 ## 2026-11-06 · 튜토리얼: 넓은 원형 미션 맵, 스테이지 6개 (`feature/tutorial-stages`)
 
 - **결정 (사용자, 2026-11-06)**: "고저차 트랙 작업은 미루고 튜토리얼부터". 가운데 봉이 있는 아주 넓은 원형 맵에서 목표 지점에 닿으면 다음 목표와 설명을 준다. "골인 지점이 있는 맵이 아닌 단순 튜토리얼 미션용 맵", 완료하면 팝업의 버튼으로 로비로, "esc로 중간에 나갈수도". 요청서의 스테이지형·메인 메뉴 별도 줄·스윙을 부스터보다 먼저 두는 순서에 "좋다". 마일스톤은 답이 없어 추천대로 밖에 뒀다.

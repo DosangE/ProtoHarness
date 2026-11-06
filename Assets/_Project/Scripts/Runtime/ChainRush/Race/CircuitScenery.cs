@@ -52,6 +52,7 @@ namespace ProtoHarness.ChainRush.Race
             this.maxPieceLength = maxPieceLength;
             foreach ((double from, double to) in definition.ShortcutGuardGaps()) guardGaps.Add((from, to, false));
             guardGaps.AddRange(definition.BayGuardGaps());
+            foreach (TrackDefinition.OpenEdge edge in definition.OpenEdges) guardGaps.Add((edge.FromS, edge.ToS, edge.Left));
             guardGaps.Sort((a, b) => a.From.CompareTo(b.From));
         }
 

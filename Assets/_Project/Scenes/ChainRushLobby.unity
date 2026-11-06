@@ -165,6 +165,10 @@ MonoBehaviour:
     definition: {fileID: 11400000, guid: 2c1535d5a14c1ce4482711f1d89f08cd, type: 2}
     environmentScene: ChainRushTrackPalmCoast
     look: {fileID: 11400000, guid: eef08cb38284416449ae4abea4e7cd9b, type: 2}
+  - title: SUMMIT DROP
+    definition: {fileID: 11400000, guid: a242f02309cfc9044b45f2f76e1904ef, type: 2}
+    environmentScene: 
+    look: {fileID: 0}
   runners:
   - {fileID: 11400000, guid: 70e8d84855df5114182dddd9a937357d, type: 2}
   - {fileID: 11400000, guid: 25ffae7fda0824f4ebdf655e4c2a5fd0, type: 2}

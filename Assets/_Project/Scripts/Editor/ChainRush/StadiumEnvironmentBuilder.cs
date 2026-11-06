@@ -676,7 +676,7 @@ namespace ProtoHarness.Editor.ChainRush
                 // Nominal face 0.4..1.2 m leaves 5 cm within the requested 0.35..1.25 m envelope for the eased grades
                 // on the opening straights. Its six-metre chord differs from those road heights by at most 2.25 cm.
                 // Feet end at its bottom. Four renderers per module.
-                const float Bottom = 0.4f, Height = 0.8f;
+                const float Bottom = 0.4f, Height = 0.8f, ScreenProud = 0.05f;
                 double s0 = 0d;
                 int index = 0;
                 foreach (TrackDefinition.Segment segment in definition.Segments)
@@ -698,9 +698,10 @@ namespace ProtoHarness.Editor.ChainRush
                         // TrackFrame.Forward is horizontal (TrackFrame.cs); the endpoint chord also follows the rise.
                         board.SetPositionAndRotation((a + b) * 0.5f, Quaternion.LookRotation(b - a));
                         board.localScale = new Vector3(1f, 1f, (b - a).magnitude / BoardLength);
-                        Box("Dark board frame", board, new Vector3(0f, Bottom + Height * 0.5f, 0f), new Vector3(BoardDepth, Height, BoardLength), detailSteel);
-                        // Local +x faces the road from its outside; the screen stays flush with the 1.6 m front.
-                        Box("LED screen", board, new Vector3(BoardDepth * 0.5f - 0.015f, Bottom + Height * 0.5f, 0f), new Vector3(0.03f, Height - 0.16f, BoardLength - 0.2f), Pick(index * 7 + 113, ledMint, ledAmber, ledMagenta));
+                        // Local +x faces the road from its outside; the screen's front is the 1.6 m front. The frame's stands
+                        // ScreenProud behind it: on one plane the two flickered (user 2026-11-06).
+                        Box("Dark board frame", board, new Vector3(-ScreenProud * 0.5f, Bottom + Height * 0.5f, 0f), new Vector3(BoardDepth - ScreenProud, Height, BoardLength), detailSteel);
+                        Box("LED screen", board, new Vector3(BoardDepth * 0.5f - ScreenProud, Bottom + Height * 0.5f, 0f), new Vector3(ScreenProud * 2f, Height - 0.16f, BoardLength - 0.2f), Pick(index * 7 + 113, ledMint, ledAmber, ledMagenta));
                         for (int foot = -1; foot <= 1; foot += 2)
                             Box("Board foot", board, new Vector3(0f, Bottom * 0.5f, foot * 2f), new Vector3(BoardDepth, Bottom, 0.3f), detailSteel);
                         for (double s = from; s <= to; s += Station)

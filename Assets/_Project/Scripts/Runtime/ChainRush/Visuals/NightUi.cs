@@ -50,6 +50,8 @@ namespace ProtoHarness.ChainRush.Visuals
                 font = font, fontSize = size, fontStyle = weight, padding = new RectOffset(0, 0, 0, 0)
             };
             style.normal.textColor = color;
+            // A label under the mouse draws its hover state, which the skin leaves white.
+            style.hover.textColor = color;
             return style;
         }
 
@@ -130,9 +132,9 @@ namespace ProtoHarness.ChainRush.Visuals
         public static void ShadowLabel(Rect rect, string text, GUIStyle style, float shadow = 3f)
         {
             Color color = style.normal.textColor;
-            style.normal.textColor = new Color(0, 0, 0, .8f);
+            style.normal.textColor = style.hover.textColor = new Color(0, 0, 0, .8f);
             GUI.Label(new Rect(rect.x + shadow, rect.y + shadow, rect.width, rect.height), text, style);
-            style.normal.textColor = color;
+            style.normal.textColor = style.hover.textColor = color;
             GUI.Label(rect, text, style);
         }
 

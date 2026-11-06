@@ -258,13 +258,10 @@ namespace ProtoHarness.ChainRush
         private void DrawCue(float width, float height, string text, float since)
         {
             Vector3 center = new Vector3(width / 2f, height / 2f - 20f, 0f);
-            float size = FeedbackLook.CueScale(since) * CueSize / CueDrawSize;
+            float size = FeedbackLook.CueScale(since, CueSeconds) * CueSize / CueDrawSize;
             Matrix4x4 previous = GUI.matrix;
-            Color tint = GUI.color;
             GUI.matrix = previous * Matrix4x4.TRS(center, Quaternion.identity, new Vector3(size, size, 1f)) * Matrix4x4.Translate(-center);
-            GUI.color = new Color(tint.r, tint.g, tint.b, tint.a * FeedbackLook.CueAlpha(since, CueSeconds));
             NightUi.ShadowLabel(new Rect(center.x - CueBoxWidth / 2f, center.y - CueBoxHeight / 2f, CueBoxWidth, CueBoxHeight), text, cue, CueShadow);
-            GUI.color = tint;
             GUI.matrix = previous;
         }
 

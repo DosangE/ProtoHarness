@@ -195,6 +195,78 @@ namespace ProtoHarness.Tests.EditMode
             }
         }
 
+        // The inside of a turn can fall further than a shaft reaches; the scenery then carries the pole down to the ground
+        // (user 2026-11-06 "봉이 공중에 떠있는것이 있고"). 01 is the terrain, 09 the overhangs, 10 the spires.
+        [Test]
+        public void SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround()
+        {
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_SummitDrop.asset");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/SummitDropExterior.prefab");
+            Assert.That(summit, Is.Not.Null, "Create Summit Drop Track first.");
+            Assert.That(prefab, Is.Not.Null, "Rebuild Summit Drop Exterior first.");
+            var poles = new List<Vector3>();
+            summit.BuildCenterline(Vector3.zero, 0f).GetPoles(poles);
+            var highest = new float[poles.Count];
+            for (int i = 0; i < highest.Length; i++) highest[i] = float.NegativeInfinity;
+            foreach (MeshFilter filter in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                string group = filter.transform.parent.name;
+                if (!group.StartsWith("01") && !group.StartsWith("09") && !group.StartsWith("10")) continue;
+                Matrix4x4 world = filter.transform.localToWorldMatrix;
+                Vector3[] vertices = filter.sharedMesh.vertices;
+                for (int i = 0; i < vertices.Length; i++) vertices[i] = world.MultiplyPoint3x4(vertices[i]);
+                int[] triangles = filter.sharedMesh.triangles;
+                for (int t = 0; t < triangles.Length; t += 3)
+                    for (int p = 0; p < poles.Count; p++)
+                        if (TryHeightOver(poles[p], vertices[triangles[t]], vertices[triangles[t + 1]], vertices[triangles[t + 2]], out float y))
+                            highest[p] = Mathf.Max(highest[p], y);
+            }
+            var hanging = new List<string>();
+            for (int p = 0; p < poles.Count; p++)
+            {
+                float foot = poles[p].y - SwingLook.PoleDepth;
+                if (highest[p] < foot - 0.1f) hanging.Add($"pole {p} at {poles[p]}: {foot - highest[p]:F1} m");
+            }
+            Assert.That(hanging, Is.Empty);
+        }
+
+        // The height of triangle a, b, c straight over or under point, if it lies within it seen from above.
+        private static bool TryHeightOver(Vector3 point, Vector3 a, Vector3 b, Vector3 c, out float y)
+        {
+            y = 0f;
+            if (point.x < Mathf.Min(a.x, b.x, c.x) || point.x > Mathf.Max(a.x, b.x, c.x)
+                || point.z < Mathf.Min(a.z, b.z, c.z) || point.z > Mathf.Max(a.z, b.z, c.z)) return false;
+            float area = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+            if (Mathf.Abs(area) < 1e-6f) return false;
+            float u = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / area;
+            float v = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / area;
+            float w = 1f - u - v;
+            if (u < -1e-4f || v < -1e-4f || w < -1e-4f) return false;
+            y = u * a.y + v * b.y + w * c.y;
+            return true;
+        }
+
+        // The LED boards flickered: a screen's front and its frame's shared a plane (user 2026-11-06 "주황 청록 핑크로 된 거").
+        [Test]
+        public void Stadium_Exterior_LedScreensStandProudOfTheirFrames()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/StadiumExterior.prefab");
+            Assert.That(prefab, Is.Not.Null, "Rebuild Stadium Exterior first.");
+            int modules = 0;
+            foreach (Transform module in prefab.GetComponentsInChildren<Transform>(true))
+            {
+                if (!module.name.StartsWith("LED module")) continue;
+                Transform screen = module.Find("LED screen"), frame = module.Find("Dark board frame");
+                Assert.That(screen, Is.Not.Null, module.name);
+                Assert.That(frame, Is.Not.Null, module.name);
+                float screenFront = screen.localPosition.x + screen.localScale.x * 0.5f;
+                float frameFront = frame.localPosition.x + frame.localScale.x * 0.5f;
+                Assert.That(screenFront - frameFront, Is.GreaterThanOrEqualTo(0.04f), module.name);
+                modules++;
+            }
+            Assert.That(modules, Is.GreaterThan(0));
+        }
+
         [Test]
         public void SummitDrop_Layout_RoadsAndTwentyMetrePolesStayClearOfOtherRoads()
         {
@@ -240,9 +312,6 @@ namespace ProtoHarness.Tests.EditMode
             for (int i = 0; i < points.Count; i++)
                 foreach (var sample in road)
                 {
-                    // Added slalom poles intentionally stand on their own straight, not on another section.
-                    int extra = i - (points.Count - summit.Poles.Count);
-                    if (extra >= 0 && Math.Abs(sample.S - summit.Poles[extra].S) < 20d) continue;
                     Vector3 delta = sample.P - points[i];
                     if (delta.y < -SwingLook.PoleDepth - summit.RoadThickness - 0.2f || delta.y > SwingLook.PoleHeight + 0.2f) continue;
                     float clearance = sample.W + SwingLook.PoleThickness + 0.5f;

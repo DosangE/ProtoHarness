@@ -1793,15 +1793,13 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(line.BoostZoneCount, Is.EqualTo(3));
             Assert.That(line.LaunchCount, Is.EqualTo(1));
             Assert.That(line.BranchCount, Is.EqualTo(1));
-            Assert.That(summit.Poles.Count, Is.EqualTo(3));
-            Assert.That(summit.Poles[1].S - summit.Poles[0].S, Is.EqualTo(40f).Within(0.001f));
-            Assert.That(summit.Poles[2].S - summit.Poles[1].S, Is.EqualTo(40f).Within(0.001f));
+            Assert.That(summit.Poles.Count, Is.Zero, "No pole stands in the road (user 2026-11-06).");
             Assert.That(summit.CheckpointCount, Is.InRange(3, 4));
             for (int i = 0; i < summit.CheckpointCount; i++)
                 Assert.That(summit.CheckpointS(i), Is.Not.InRange((double)summit.Shortcuts[0].FromS, summit.Shortcuts[0].ToS));
             var points = new System.Collections.Generic.List<Vector3>();
             line.GetPoles(points);
-            Assert.That(points.Count, Is.EqualTo(18), "13 main turns, 2 shortcut turns and 3 slalom poles.");
+            Assert.That(points.Count, Is.EqualTo(15), "13 main turns and 2 shortcut turns.");
         }
 
         [UnityTest, Timeout(120000)]

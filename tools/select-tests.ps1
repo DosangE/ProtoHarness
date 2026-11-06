@@ -49,7 +49,7 @@ $explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 # Fingerprint = $false 면 지문을 넣지 않는다, Note = 보고에 붙일 말.
 $rules = @(
     # Lap eligibility is separate from the ordinary test table; see VERIFICATION §4-4 (one rule source).
-    @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
+    @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast|SummitDrop)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
     @{ Pattern = '^Assets/_Project/Data/TrackLook_'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '트랙 표현 SO (주행 시뮬 참조 없음)' }
     @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/StadiumExterior_)|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/(.*EnvironmentBuilder|ExteriorAssets|ExteriorKit|RoadCorridor)\.cs$'; Classes = @(); Fingerprint = $false; Why = '장식 빌더 (침범 검사와 구조 테스트로 확인)' }
@@ -317,6 +317,7 @@ foreach ($path in $changed) {
             'Circuit_Skyway\.' { 'SKYWAY LOOP' }
             'Circuit_FingerLanes\.' { 'FINGER LANES' }
             'Circuit_PalmCoast\.' { 'PALM COAST' }
+            'Circuit_SummitDrop\.' { 'SUMMIT DROP' }
         }
         $lapTracks.Add($trackName)
     }
@@ -369,7 +370,7 @@ Write-Output '고른 테스트 (① 빠른 확인 / ② 병합은 -Range dev...H
 Write-Output '  EditMode: 전체 (Enemy 카테고리 제외: categoryNames = { "!Enemy" })'
 
 $lapTitles = @($lapTracks | Sort-Object -Unique)
-if ($lapTitles -contains '*') { $lapTitles = @('STADIUM', 'SKYWAY LOOP', 'FINGER LANES', 'PALM COAST') }
+if ($lapTitles -contains '*') { $lapTitles = @('STADIUM', 'SKYWAY LOOP', 'FINGER LANES', 'PALM COAST', 'SUMMIT DROP') }
 if ($lapTitles.Count -eq 0) {
     Write-Output '  Lap: 없음 (구조/주행 경로 변경을 찾지 못함; 새 Lap 테스트 검증을 명시한 작업은 이름으로 따로 실행)'
 } else {

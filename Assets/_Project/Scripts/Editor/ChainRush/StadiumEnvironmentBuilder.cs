@@ -25,7 +25,7 @@ namespace ProtoHarness.Editor.ChainRush
         public const string ScenePath = "Assets/_Project/Scenes/ChainRushTrackStadium.unity";
         public const string LookPath = "Assets/_Project/Data/TrackLook_Stadium.asset";
         private const string DefinitionPath = "Assets/_Project/Data/Circuit_Stadium.asset";
-        private const string ModelFolder = "Assets/_Project/Art/Models/";
+        private const string ModelFolder = ExteriorAssets.ModelFolder;
         // What lies at or below this is ground for the clearance check: the baked ground (-0.21 m), the new infield
         // grass and the water in the pits.
         private const float Ground = -0.15f;
@@ -277,15 +277,11 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     if (triangles.Count == 0) throw new InvalidOperationException("Stadium surface is empty: " + key);
                     var mesh = new Mesh { name = "StadiumExterior_" + key, indexFormat = IndexFormat.UInt32 };
-                    try
-                    {
-                        mesh.SetVertices(vertices);
-                        mesh.SetTriangles(triangles, 0);
-                        mesh.RecalculateNormals();
-                        mesh.RecalculateBounds();
-                        Baked(parent, key, ExteriorAssets.SaveMesh(mesh, ModelFolder + mesh.name + ".asset"), material);
-                    }
-                    finally { UnityEngine.Object.DestroyImmediate(mesh); }
+                    mesh.SetVertices(vertices);
+                    mesh.SetTriangles(triangles, 0);
+                    mesh.RecalculateNormals();
+                    mesh.RecalculateBounds();
+                    Baked(parent, key, mesh, material);
                 }
             }
 
@@ -851,24 +847,10 @@ namespace ProtoHarness.Editor.ChainRush
                 foreach ((string mesh, string material) in Trimmed)
                 {
                     Mesh cleared = WithoutInfield(ExteriorAssets.Require<Mesh>(ModelFolder + "StadiumSports_" + mesh + ".asset"), Array.IndexOf(OldBoards, mesh) >= 0);
-                    try
-                    {
-                        Baked(parent, mesh, ExteriorAssets.SaveMesh(cleared, ModelFolder + "StadiumExterior_" + mesh + ".asset"), Require(material));
-                    }
-                    finally
-                    {
-                        UnityEngine.Object.DestroyImmediate(cleared);
-                    }
+                    cleared.name = "StadiumExterior_" + mesh;
+                    Baked(parent, mesh, cleared, Require(material));
                 }
-                Mesh grass = InfieldMesh();
-                try
-                {
-                    Baked(parent, "Infield grass", ExteriorAssets.SaveMesh(grass, ModelFolder + "StadiumExterior_Infield.asset"), infieldGrass);
-                }
-                finally
-                {
-                    UnityEngine.Object.DestroyImmediate(grass);
-                }
+                Baked(parent, "Infield grass", InfieldMesh(), infieldGrass);
             }
 
 

@@ -51,7 +51,7 @@ $rules = @(
     # Lap eligibility is separate from the ordinary test table; see VERIFICATION §4-4 (one rule source).
     @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast|SummitDrop)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
     @{ Pattern = '^Assets/_Project/Data/TrackLook_'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '트랙 표현 SO (주행 시뮬 참조 없음)' }
-    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/StadiumExterior_)|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
+    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/(\w+Exterior_|StadiumSports_))|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/(.*EnvironmentBuilder|ExteriorAssets|ExteriorKit|RoadCorridor)\.cs$'; Classes = @(); Fingerprint = $false; Why = '장식 빌더 (침범 검사와 구조 테스트로 확인)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/ChainRushCircuitSceneBuilder\.cs$'; Classes = @('ChainRushCircuitTests'); LapTracks = @('*'); Why = '트랙 생성: 개별 Create...Track만 바뀌었으면 영향 평가로 그 트랙만 좁힌다' }
     @{ Pattern = '^' + $runtime + 'Race/TrackLook\.cs$'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '도로·벽·차선 표현 (시뮬 참조 없음)' }

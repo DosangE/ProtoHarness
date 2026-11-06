@@ -9,7 +9,7 @@
 ### 2026-11-05 — 다음 세션은 여기부터
 
 - **소리 (DECISIONS 2026-11-05 "트랙별 소리")**: FINGER LANES 음악·환경음만 `dev` 에 들어갔다. STADIUM·SKYWAY·PALM COAST 소리는 사용자가 "별로다" — 다시 만든다.
-- **효과음은 `feature/m6-sound-cues` 에서 계속**: 부스터는 제트 소리(지지직 금지), 부스트존은 속도감 있는 하이톤, 스윙은 체인·금속(또르르륵 금지). 참고 측정은 같은 DECISIONS 항목.
+- **효과음은 `feature/m6-sound-cues` 에서 계속**: 부스터는 제트 소리(지지직 금지), 부스트존은 속도감 있는 하이톤, 스윙은 체인·금속(또르르륵 금지). 참고 측정은 같은 DECISIONS 항목. Codex 지시서는 `docs/NEXT_REQUESTS.md` "M6 효과음 2차" 에 있고 **대기 중이다**(사용자가 보내라고 할 때까지 보내지 않는다).
 - **`fix/stadium-flicker` (`38f418a`) 는 플레이 확인 대기**: 병합·푸시 안 했다.
 - 첫 소리 시도의 코드와 세 트랙 WAV 는 stash `sound round 1` 에 있다(로컬).
 

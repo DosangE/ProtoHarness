@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -151,10 +152,12 @@ namespace ProtoHarness.Editor.ChainRush
                 Tunnel(Group("06 Rock tunnel", root.transform));
                 Village(Group("07 Valley village and finish", root.transform));
                 Forest(Group("08 Irregular pine forest", root.transform));
-                // Validate bounds before merging; afterwards they span the whole mountain.
+                PoleSpires(Group("10 Rock spires under corner poles", root.transform));
+                // Validate bounds before merging; afterwards they span the whole mountain. A spire's tall bounds swell
+                // toward a road beside it, so 10 is left to the vertex check in ValidateClearance, with 01, 06 and 09.
                 foreach (Transform group in root.transform)
                     if (!group.name.StartsWith("01", StringComparison.Ordinal) && !group.name.StartsWith("06", StringComparison.Ordinal)
-                        && !group.name.StartsWith("09", StringComparison.Ordinal))
+                        && !group.name.StartsWith("09", StringComparison.Ordinal) && !group.name.StartsWith("10", StringComparison.Ordinal))
                         corridor.ValidateClearance(group.gameObject, float.NegativeInfinity);
                 var transient = new HashSet<Mesh>();
                 foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
@@ -667,6 +670,71 @@ namespace ProtoHarness.Editor.ChainRush
                         for (int col = 0; col < 3; col++)
                             if (glyphs[words[i]][row * 3 + col] == '1')
                                 Box("Solid letter " + words[i], parent, new Vector3(-width * 0.5f + i * step + (col + 0.5f) * cell, y + (2 - row) * cell * 0.9f, z), new Vector3(cell * 0.85f, cell * 0.8f, 0.12f), ink);
+            }
+
+            // A pole's shaft ends SwingLook.PoleDepth below its point. Inside a turn over a cliff the mountain falls further
+            // than that, so a rock spire carries the shaft down to the ground (user 2026-11-06 "봉이 공중에 떠있는것이").
+            private void PoleSpires(Transform parent)
+            {
+                const int Sides = 8;
+                const float Overlap = 1f, TopRadius = 1.1f, BaseRadius = 5f, Taper = 0.05f, RingEvery = 10f, Rough = 0.2f, ThinnestRoom = 0.3f;
+                var points = new List<Vector3>();
+                var triangles = new List<int>();
+                int spires = 0;
+                for (int i = 0; i < poles.Count; i++)
+                {
+                    Vector3 pole = poles[i];
+                    float top = pole.y - SwingLook.PoleDepth + Overlap, bottom = GroundAt(pole) - Overlap;
+                    // The shaft reaches the ground, or the ground stands over it.
+                    if (top - bottom <= Overlap * 2f) continue;
+                    float room = RoomBesideRoads(pole, bottom, top);
+                    if (room < ThinnestRoom) throw new InvalidOperationException($"No room for a spire under the pole at {pole}: {room:F2} m.");
+                    float wide = Mathf.Min(BaseRadius, TopRadius + (top - bottom) * Taper, room), narrow = Mathf.Min(TopRadius, room);
+                    int rings = Mathf.Max(2, Mathf.CeilToInt((top - bottom) / RingEvery) + 1);
+                    int first = points.Count;
+                    for (int ring = 0; ring < rings; ring++)
+                    {
+                        float along = ring / (rings - 1f);
+                        for (int side = 0; side < Sides; side++)
+                        {
+                            float angle = side * Mathf.PI * 2f / Sides;
+                            float radius = Mathf.Lerp(wide, narrow, along) * (1f - Hash(i * 97 + ring * 13 + side) * Rough);
+                            points.Add(new Vector3(pole.x + Mathf.Cos(angle) * radius, Mathf.Lerp(bottom, top, along), pole.z + Mathf.Sin(angle) * radius));
+                        }
+                    }
+                    for (int ring = 0; ring + 1 < rings; ring++)
+                        for (int side = 0; side < Sides; side++)
+                        {
+                            int a = first + ring * Sides + side, b = first + ring * Sides + (side + 1) % Sides;
+                            QuadIndices(triangles, a, b, a + Sides, b + Sides, false);
+                        }
+                    int cap = points.Count, last = first + (rings - 1) * Sides;
+                    points.Add(new Vector3(pole.x, top, pole.z));
+                    for (int side = 0; side < Sides; side++)
+                    {
+                        triangles.Add(cap);
+                        triangles.Add(last + (side + 1) % Sides);
+                        triangles.Add(last + side);
+                    }
+                    spires++;
+                }
+                if (spires == 0) throw new InvalidOperationException("Summit Drop layout changed: no pole hangs over the ground, so 10 has nothing to hold.");
+                MeshObject("Pole rock spires", parent, points, triangles, rockC);
+                Debug.Log($"Summit Drop raised {spires} rock spires under corner poles.", parent);
+            }
+
+            // How far out from pole a spire may reach and stay clear of any road at its heights (RoadCorridor's edge margin).
+            private float RoomBesideRoads(Vector3 pole, float bottom, float top)
+            {
+                const float EdgeMargin = 2f, Reach = 2f;
+                float room = float.PositiveInfinity;
+                for (int i = 0; i < samples.Count; i++)
+                {
+                    Vector3 road = samples[i].Position;
+                    if (road.y < bottom - Reach || road.y > top + Reach) continue;
+                    room = Mathf.Min(room, new Vector2(road.x - pole.x, road.z - pole.z).magnitude - widths[i] - EdgeMargin);
+                }
+                return room;
             }
 
             private void ValidatePoles(GameObject root)

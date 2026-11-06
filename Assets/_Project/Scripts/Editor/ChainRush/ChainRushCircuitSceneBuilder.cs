@@ -190,10 +190,8 @@ namespace ProtoHarness.Editor.ChainRush
             TrackDefinition.Segment[] segments = SummitDropSegments();
             double lap = StartOf(segments, segments.Length);
             double fork = StartOf(segments, 28);
-            double slalom = StartOf(segments, 36);
-            var poles = new TrackDefinition.Pole[3];
-            for (int i = 0; i < poles.Length; i++)
-                poles[i] = new TrackDefinition.Pole((float)slalom + 20f + i * 40f, i % 2 == 0 ? -2.5f : 2.5f, 14f);
+            // No poles of its own: three stood in the road on the long straight (user 2026-11-06 "잘못 설계된 것 같다").
+            var poles = Array.Empty<TrackDefinition.Pole>();
             // R15 is deliberately tighter than the runner's R25 steering, as on Finger Lanes.
             var shortcut = new TrackDefinition.Shortcut((float)fork + 35f,
                 (float)(fork + 240f + Mathf.PI * 35f - 35f), 15f, 40f, 3.6f);
@@ -355,7 +353,7 @@ namespace ProtoHarness.Editor.ChainRush
             TrackDefinition.Segment.Straight(120f),
             TrackDefinition.Segment.Arc(35f, 180f),
             TrackDefinition.Segment.Straight(120f),
-            // 6: 300 m / -14.5 m. Four alternating 70-degree turns, then three slalom poles 40 m apart.
+            // 6: 300 m / -14.5 m. Four alternating 70-degree turns, then a long straight.
             TrackDefinition.Segment.Straight(10f, -0.05f),
             TrackDefinition.Segment.Arc(30f, -70f, -0.05f),
             TrackDefinition.Segment.Arc(30f, 70f, -0.05f),

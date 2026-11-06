@@ -7,14 +7,43 @@
 
 ---
 
+## 2026-11-06 · 플레이 피드백: LED 깜빡임, SUMMIT DROP 봉, 카운트다운 색 (`fix/playtest-visuals`)
+
+- **결정 (사용자, 2026-11-06)**: "수정해봐 1. 스타디움 맵 서킷의 벽쪽에 있는 장식 아직 깜빡거린다. 주황 청록 핑크로 된 거 2. 새로 만든 맵 장식은 괜찮으나 봉이 공중에 떠있는 것이 있고 마지막 쯤에 긴 직선구간에 트랙 안에 봉이 여러개 있는 곳도 있는데 이건 잘못 설계된 것 같다". 앞서 물은 카운트다운의 탁한 색도 이 말로 고쳤다.
+- **LED 깜빡임**: `LED screen` 과 `Dark board frame` 의 앞면이 같은 평면이어서(차이 `-9.3E-10`) z-fighting 이 났다. 뒤판 앞면을 5 cm 뒤로 물렸다(`ScreenProud`). 화면 앞면은 그대로 1.6 m 다. 다른 PC 의 `fix/stadium-flicker`(`38f418a`)는 이 PC 에 없어서 내용을 확인하지 못했다. 합칠 때 겹치는지 본다.
+- **도로 위 봉**: 슬라롬 봉 3개(S 1716~1796, 도로 중심 ±2.5 m)를 뺐다. 코너와 상관없이 도로 위에 세운 설계였다. 봉 18 → 15개.
+- **뜬 봉**: 봉은 ±20 m 고정이고 코너 중심에 서는데, 코너 안쪽이 절벽이면 땅이 더 깊다. 저장된 지형으로 잰 틈은 0번 93.2 m, 5번 37.6 m, 4번 29.4 m, 1번 21.1 m. 장식 그룹 `10` 에 땅에서 봉 아래까지 오는 바위 기둥을 세웠다(`PoleSpires`). 둘레는 그 높이의 도로에서 2 m 떨어지게 줄인다(`RoomBesideRoads`), 그래서 1번은 도로 옆이라 가늘다. 시뮬은 그대로다.
+- **카운트다운**: 반투명이면 민트와 트랙의 빨강이 섞여 회색이 된다. 투명도를 없애고 마지막 0.1초에 크기가 0 으로 줄어든다(`CueExitTime`, `CueAlpha` 삭제).
+- **버린 대안**: 봉 길이를 땅까지 늘리기 — 런타임 장식이 지형을 모르고, 93 m 민트 기둥이 된다. 코너 봉을 트랙 정의에서 빼기 — 그 코너의 스윙이 없어진다. 슬라롬 봉을 도로 밖으로 옮기기 — 직선에 스윙할 이유가 없다. 카운트다운의 그림자만 빨리 흐리기 — 민트와 빨강이 섞이는 것은 그대로다.
+- **검증** (시각은 UTC):
+  - 고치기 전 새 테스트 2건 `Failed passed=0 failed=2`(12:58:05Z): `Stadium_Exterior_LedScreensStandProudOfTheirFrames` `Expected: greater than or equal to 0.0399999991f But was: -9.31322575E-10f`, `SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround` 는 봉 0·1·4·5 번.
+  - 재빌드: `Summit Drop raised 4 rock spires`, `pole clearance PASS: 15 poles`, `validation PASS … 38 renderers; 932829 vertices`, `StadiumExterior: 1051 renderers; … road corridor clear`.
+  - PlayMode(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`·`ChainRushFlowTests.SummitDrop_*`·`Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenu*`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`) `testcasecount=45 Passed passed=45 failed=0 skipped=0`, 13:01:39Z~13:02:43Z.
+  - 랩 SUMMIT DROP 3속도 `testcasecount=3 Passed passed=3 failed=0 skipped=0`, 13:03:06Z~13:04:05Z.
+  - EditMode(`!Enemy`) `Passed passed=394 failed=0 skipped=0`, 13:04:41Z 끝.
+  - 영향 평가: 시뮬 코드는 안 바꿔 지문을 돌리지 않았다. 트랙 빌더는 SUMMIT DROP 생성만 바뀌어 Lap 은 그 3칸이다. 스타디움은 장식 빌더만이라 Lap 없음(§4-4). `select-tests.ps1` 은 "전체" 로 판정했고, Lap 후보에 SUMMIT DROP 이 없다(도구 표가 낡았다).
+  - 캡처: 스타디움 레이스 시점과 비스듬한 근접에서 LED 단색, 줄무늬 없음. 뜬 봉 4곳 바위 기둥 확인, 긴 직선에 도로 위 봉 없음, 카운트다운이 사라지기 직전까지 민트.
+  - 사용자 확인: "확인했다 커밋 병합 푸쉬 ㄱㄱ".
+- **한계**: 캡처는 Game 뷰 588×374 와 멈춘 프레임으로 봤다. 재빌드가 `TrackLook_Stadium.asset` 에 빈 `music`·`ambience` 줄을 붙였다(내용 변경 없음, 커밋에서 뺀다). `StadiumExterior.prefab` diff 가 큰 것은 로컬 fileID 가 새로 나와서다.
+- **찾았지만 안 고친 것**: 봉 6·10·11·12 번은 지형 속에 묻혀 있다(잰 땅이 봉 꼭대기보다 위). 보이지 않는데 스윙이 걸릴 수 있다. 플레이로 확인하지 않았다.
+
+## 2026-11-06 · IMGUI 글자는 마우스 아래에서도 제 색을 유지한다 (`fix/playtest-visuals`)
+
+- **증상 (캡처로 발견, 사용자 "해봐")**: 카운트다운의 민트 글자가 처음 커질 때 흰색으로 뿌옇게 나왔다.
+- **원인**: `GUI.Label` 은 마우스가 사각형 안에 있으면 hover 상태로 그린다. `NightUi.Style` 은 normal 색만 정해서 hover 는 스킨 기본값 `RGBA(0.9, 0.9, 0.9)` 로 남았다. `ShadowLabel` 도 normal 만 검게 바꿔 그림자까지 흰색이 되어 뿌옇게 보였다. 상태별 글자 색을 다르게 칠하자 흰 글자가 hover 의 빨강으로 나와 확인했다. 나이 0.10초에 마우스 y=657 이 글자 상자(끝 708.8) 안, 0.18초에 y=712.8 로 밖이었다. 글자가 커지면 상자가 마우스까지 닿는다.
+- **결정**: `NightUi.Style` 이 hover 도 같은 색으로 두고, `ShadowLabel` 이 두 상태를 함께 바꾼다. 모든 스타일이 `NightUi.Style` 에서 나오므로(`new GUIStyle` 은 `NightUi.cs` 한 곳) HUD·로비·타이틀의 같은 문제가 함께 없어진다.
+- **버린 대안**: 카운트다운 스타일 하나만 고치기 — 흰 글자의 검은 그림자, 다른 민트 글자에 같은 문제가 남는다. 일부러 흰색에서 민트로 바뀌는 연출 — 마우스 위치에 따라 나오는 현상이라 연출이 될 수 없다.
+- **검증**: 고치기 전 `NightUi_Style_KeepsItsColourUnderTheMouse` `testcasecount=1 Failed(Child) passed=0 failed=1`, `Expected: RGBA(1.000, 0.000, 0.000, 1.000) But was: RGBA(0.900, 0.900, 0.900, 1.000)`. 고친 뒤 PlayMode(`select-tests.ps1` 목록: `ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) `testcasecount=31 Passed passed=31 failed=0 skipped=0`, 12:25:44Z~12:26:33Z. EditMode(`!Enemy`) `Passed passed=392 failed=0 skipped=0`, 12:26:58Z 끝. 지문·Lap 은 도구도 고르지 않았다(시뮬이 읽는 경로가 아니다). 캡처: 같은 나이 0.10초를 커서를 움직이지 않은 채(`1602,473`, 흰색이 재현된 지점) 찍어 민트 확인, GO! 도 민트.
+- **한계**: Game 뷰 588×374 에서만 봤다. 그림자는 테스트가 없고 캡처로만 봤다.
+
 ## 2026-11-06 · 속도 표시는 km/h, 카운트다운은 큰 글자가 줄어들며 나온다 (`feature/hud-kmh-countdown`)
 
 - **결정 (사용자, 2026-11-06)**: "Km/h로 변경작업 ㄱㄱ", "3 2 1 시간 나오는 것도 폰트 바꾸고 액션 추가해줘 … 큰 글자가 축소되서 표현되는".
 - **속도**: 표시만 바꾼다. 시뮬 값은 m/s 그대로이고 HUD 가 ×3.6 해서 정수로 보인다(`FeedbackLook.Kmh`, `ChainRushHud.SpeedText`). 달리기 20 m/s 는 72, 부스트존 55 m/s 는 198 이다. 단위 글자는 HUD 의 대문자 표기대로 `KM / H`.
-- **카운트다운**: 3·2·1·GO! 를 맑은 고딕 Bold 에서 HUD 숫자와 같은 Bahnschrift BoldAndItalic 으로 바꿨다. 2.6배에서 0.3초에 줄어들고(`CueScale`), 0.08초에 나타나 마지막 0.2초에 사라진다(`CueAlpha`). 나이는 `ChainRushGame.CountdownNumberAge`(읽기 전용, 시뮬이 읽지 않는다)와 `game.Elapsed` 로 잰다. 글자는 320 으로 그려 절반으로 줄인다. 160 으로 그려 키우면 커 있는 동안 흐려지기 때문이다.
+- **카운트다운**: 3·2·1·GO! 를 맑은 고딕 Bold 에서 HUD 숫자와 같은 Bahnschrift BoldAndItalic 으로 바꿨다. 2.6배에서 0.3초에 줄어들고(`CueScale`), ~~0.08초에 나타나 마지막 0.2초에 사라진다(`CueAlpha`)~~ 반투명이 탁해 보여 위 "플레이 피드백" 에서 없앴다. 나이는 `ChainRushGame.CountdownNumberAge`(읽기 전용, 시뮬이 읽지 않는다)와 `game.Elapsed` 로 잰다. 글자는 320 으로 그려 절반으로 줄인다. 160 으로 그려 키우면 커 있는 동안 흐려지기 때문이다.
 - **버린 대안**: 글꼴 크기를 프레임마다 바꾸기 — 크기마다 글리프를 새로 구워 프레임이 끊긴다. 시뮬까지 km/h 로 바꾸기 — 지문과 튜닝 값이 전부 바뀌는데 얻는 것이 없다.
 - **검증**: 선택 PlayMode 13건 `testcasecount=13 Passed passed=13 failed=0 skipped=0`, 12:05:41Z~12:06:03Z. 고른 것: `ChainRushTests.ChainRushHud_*`·`StartCountdown_*`, `ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenu*`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`. 영향 평가: `CountdownNumberAge` → `ChainRushHud.cs` 만 읽는다 → 시뮬 밖이라 지문·Lap 없음. `select-tests.ps1` 은 `ChainRushGame.cs` 때문에 "전체" 로 판정했다. Console Error·Warning 0건.
-- **한계**: 화면으로 보지 않았다. 위치·크기·움직임은 사용자 플레이 확인 대기.
+- **한계**: ~~화면으로 보지 않았다. 위치·크기·움직임은 사용자 플레이 확인 대기.~~ 병합 뒤 Play 캡처로 위치·크기·축소를 봤고 흰색 버그를 찾았다(위 "IMGUI 글자"). 체감은 사용자 플레이 확인 대기.
 
 ## 2026-11-06 · 열린 코스와 1랩 다운힐 SUMMIT DROP · M6 "시뮬 변경 없이" 를 뺀다 (`feature/m6-open-course`)
 

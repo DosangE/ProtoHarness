@@ -472,6 +472,102 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f));
         }
 
+        // M6: sparks and the thin tail while swinging; letting go stops the sparks and snaps the chain, which is gone after
+        // its time, and the tail runs on a little longer.
+        [UnityTest]
+        public IEnumerator SwingEffects_WhileSwinging_SparksAndTail_LettingGoSnapsTheChain()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            Assert.That(feedback.SwingSparksEmitting, Is.False, "No sparks before the swing.");
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.SwingSparksEmitting, Is.True, "Sparks fly while swinging.");
+            Assert.That(feedback.SwingTailEmitting, Is.True, "The tail runs while swinging.");
+            Assert.That(feedback.ChainSnapShown, Is.False);
+            bot.SwingHold = false;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.False);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.ChainSnapShown, Is.True, "Letting go snaps the chain.");
+            Assert.That(feedback.SwingSparksEmitting, Is.False);
+            Assert.That(feedback.SwingTailEmitting, Is.True, "The tail runs on past the swing.");
+            yield return new WaitForSeconds(FeedbackLook.ChainSnapTime + 0.05f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.ChainSnapShown, Is.False, "The snap is gone after its time.");
+            yield return new WaitForSeconds(FeedbackLook.SwingTailAfter - FeedbackLook.ChainSnapTime);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingTailEmitting, Is.False, "The tail stops after its time.");
+        }
+
+        // A respawn cuts a swing short (RunnerMotor.RespawnOnTrack): the runner jumps, so no chain snaps and no tail joins
+        // the two places.
+        [UnityTest]
+        public IEnumerator SwingEffects_SwingCutByARespawn_ShowsNoSnap()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingSparksEmitting, Is.True);
+            game.Racer.SwingTicks = 0;
+            game.Racer.RespawnHoldTicks = 50;
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsRespawning, Is.True);
+            Assert.That(feedback.ChainSnapShown, Is.False, "A respawn does not snap the chain.");
+            Assert.That(feedback.SwingSparksEmitting, Is.False);
+            Assert.That(feedback.SwingTailEmitting, Is.False);
+        }
+
+        // Paused, every swing effect hides; resuming mid-swing brings the sparks back without a snap.
+        [UnityTest]
+        public IEnumerator SwingEffects_Paused_HidesThem_ResumingBringsTheSparksBack()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingSparksEmitting, Is.True);
+            game.TogglePause();
+            try
+            {
+                yield return null;
+                yield return new WaitForEndOfFrame();
+                Assert.That(feedback.SwingSparksEmitting, Is.False);
+                Assert.That(feedback.SwingTailEmitting, Is.False);
+            }
+            finally
+            {
+                if (game.IsPaused) game.TogglePause();
+            }
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.SwingSparksEmitting, Is.True, "The sparks come back with the swing.");
+            Assert.That(feedback.ChainSnapShown, Is.False, "A pause is not the swing's end.");
+        }
+
+        private static ControlFeedback Feedback()
+        {
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+            {
+                var feedback = root.GetComponentInChildren<ControlFeedback>(true);
+                if (feedback != null) return feedback;
+            }
+            Assert.Fail("The bench must have a HUD with its control feedback.");
+            return null;
+        }
+
         // A pole beside a straight (Centerline.AddPole, user 2026-10-22, the Skyway's wide straight) hooks like a corner pole:
         // on a road 30 m across, coming abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
         // fills the gauge by the distance swung; letting go ends the swing. A pole once passed is not offered (user 2026-10-30):

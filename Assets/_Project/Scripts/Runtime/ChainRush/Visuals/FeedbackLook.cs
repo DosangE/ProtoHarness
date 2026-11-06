@@ -33,6 +33,17 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float PadBurstTime = 0.35f;
         public const int PadWindStreaks = 28;
         public const float PadWindCycle = 0.22f;
+        // The pole swing's effects (M6, SwingEffects). Sparks fly off the band: per second while swinging, in a burst on
+        // the hook and on the snap. The chain whips aside by up to ChainSnapWhip metres as its halves spring back. The
+        // thin tail runs on for SwingTailAfter seconds after the swing, each point lasting SwingTailTime.
+        public const float SparkRate = 45f;
+        public const int SparkHookBurst = 24;
+        public const int SparkSnapBurst = 10;
+        public const float ChainSnapTime = 0.25f;
+        public const float ChainSnapWhip = 0.7f;
+        public const float SwingTailAfter = 0.4f;
+        public const float SwingTailTime = 0.25f;
+        public const float SwingTailWidth = 0.12f;
 
         // One at the event, zero once its duration has passed or before it has ever happened.
         public static float Fade(float since, float duration)

@@ -810,13 +810,13 @@ namespace ProtoHarness.Tests.PlayMode
 
         [UnityTest]
         public IEnumerator Lobby_TrackChoices_AreChosenWithTheirSavedSetup(
-            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST")] string title)
+            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST", "SUMMIT DROP")] string title)
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             menu.Confirm();
-            int index = title == "STADIUM" ? 0 : title == "SKYWAY LOOP" ? 1 : title == "FINGER LANES" ? 2 : 3;
+            int index = title == "STADIUM" ? 0 : title == "SKYWAY LOOP" ? 1 : title == "FINGER LANES" ? 2 : title == "PALM COAST" ? 3 : 4;
             menu.Highlight(index);
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner), title + " can be raced.");
@@ -1032,7 +1032,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest, Timeout(90000), Category("Lap")]
         public IEnumerator Race_BotLap_WithLobbyEnvironmentAndLook_CompletesOneLap(
             [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed,
-            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST")] string title)
+            [Values("STADIUM", "SKYWAY LOOP", "FINGER LANES", "PALM COAST", "SUMMIT DROP")] string title)
         {
             RaceSetup setup = default;
             yield return Load(LobbyPath, scene => setup = LobbyLapSetup(Find<LobbyMenu>(scene), title, speed, runner));
@@ -2249,7 +2249,7 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(look, Is.Not.Null, title + " needs its road and walls.");
                 Assert.That(track.TryValidate(out string error), Is.True, error);
                 string suffix = title == "STADIUM" ? "Stadium" : title == "SKYWAY LOOP" ? "Skyway" :
-                    title == "FINGER LANES" ? "FingerLanes" : title == "PALM COAST" ? "PalmCoast" : null;
+                    title == "FINGER LANES" ? "FingerLanes" : title == "PALM COAST" ? "PalmCoast" : title == "SUMMIT DROP" ? "SummitDrop" : null;
                 Assert.That(suffix, Is.Not.Null, "No expected lobby entry for " + title);
                 Assert.That(track, Is.SameAs(AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_" + suffix + ".asset")));
                 Assert.That(environment, Is.EqualTo("ChainRushTrack" + suffix));

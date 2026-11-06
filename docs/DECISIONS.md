@@ -14,14 +14,16 @@
 - **트랙**: 2279.96 m, 순낙차 167.10 m, 1랩. 설계 원칙은 약 10초마다 할 일이 바뀌는 것이다 — 절벽 낙하, 스위치백, 벽 없는 좁은 벼랑길, 틈 점프, 갈림길, 지그재그, 두 번째 낙하, 결승 앞 오르막. 배치는 새로 짰고, 레퍼런스에서는 구간 리듬만 참고했다(기록 영상의 속도 변화, 공략 문서의 구간 순서).
 - **이름**: `SUMMIT DROP`, 사용자 "1,2 ㅇㅇ".
 - **분담**: 구현·검증은 Codex(Unity MCP 사용자 허락), 리뷰와 로비 항목은 Claude. 로비 씬 저장도 사용자 지시로 Claude 가 `Unity_RunCommand` 로 했다("저장은 너가 진행하도록 현재 직접 못다루는 성황", 이 1건만의 승인이다). 씬 변경은 새 항목 4줄뿐이다.
-- **미룬 것**: `TrackLook`, 장식 씬, 빌드 씬 목록은 2단계다. 로비 테스트(`Lobby_TrackChoices_*`)와 `Race_BotLap_*` 행은 `LobbyLapSetup` 이 `look` 과 환경 씬을 요구해 2단계에서 더한다.
+- **장식 (2단계, 사용자 "일단 장식 ㄱㄱ", 테마 "숲과 바위 산악")**: `SummitDropEnvironmentBuilder`. 땅 높이가 하나인 기존 방식과 달리 도로 높이를 따라 내려가는 지형을 만든다. 정상의 암벽, 스위치백 숲, 왼쪽이 트인 벼랑길, 틈 아래 골짜기와 폭포, 갈림길 공터, 지그재그 바위 사이, 터널(S1848–1910), 바닥 마을과 결승 문. 렌더러 37, 정점 932,625. `RoadCorridor` 에 경사를 따라 검사하는 오버로드를 더했다(기존 호출은 그대로). 장식 씬 저장, 빌드 씬 목록, 로비 항목은 사용자 승인으로 Claude 가 `Unity_RunCommand` 로 했다.
+- **미룬 것**: 음악·환경음. 플레이어 빌드에서의 프레임은 재지 않았다.
 - **버린 대안**: 닫힌 코스 유지(끝에 출발 높이까지 오르막으로 복귀) — 결승이 다시 꼭대기라 다운힐이 아니다. 입체교차 안 — 내려가기만 하는 코스에는 필요 없다.
 - **검증** (Codex 실행, 시각은 UTC, 커밋 전 작업 트리):
   - 열린 코스 구조: EditMode 1회차 `testcasecount="197" result="Passed" passed="197" failed="0"`(09:53:36Z), PlayMode 1회차 `testcasecount="14" result="Failed(Child)" passed="13" failed="1"`(09:54:25Z~09:55:25Z, 새 복귀 테스트 `Expected: 106.0d … But was: 110.0d`, 테스트의 준비 상태와 기대값 문제), EditMode 최종 `testcasecount="199" result="Passed" passed="199" failed="0"`(09:58:12Z), PlayMode 최종 `testcasecount="14" result="Passed" passed="14" failed="0"`(09:59:01Z~09:59:59Z), 네 트랙 × 세 속도 `testcasecount="12" result="Passed" passed="12" failed="0"`(10:00:55Z~10:03:49Z, XML 원본 확인).
   - 트랙·지름길: EditMode `testcasecount="169" result="Passed" passed="169" failed="0"`(10:21:43Z), 지문 `testcasecount="1" result="Passed"`(10:22:34Z~10:23:10Z), SummitDrop·OpenCourse `testcasecount="13" result="Passed" passed="13" failed="0"`(10:26:29Z~10:26:41Z), FINGER 3속도·스윙 지름길 `testcasecount="4" result="Passed" passed="4" failed="0"`(10:27:33Z~10:28:34Z), 최종 에셋 도로·봉 간격 `testcasecount="1" result="Passed"`(10:28:54Z, XML 원본 확인).
   - 로비 저장 뒤 `ChainRushFlowTests.Lobby_` (Claude 실행, 자리표시 순번 4 → 5): `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"`(10:35:57Z~10:36:08Z). Console 에러 0.
+  - 장식 포함 (Claude 실행): `Race_BotLap_*` SUMMIT DROP 3칸 `testcasecount="3" result="Passed" passed="3" failed="0"`(11:28:40Z~11:29:38Z), `ChainRushFlowTests.Lobby_` `testcasecount="18" result="Passed" passed="18" failed="0"`(11:30:11Z~11:30:23Z). 첫 랩 실행은 테스트 시작 때 뜬 `Scene(s) Have Been Modified` 대화 상자에 막혀 시작되지 않았다(Cancel 로 닫았고 씬을 다시 저장했다. 저장 내용은 의도한 두 줄뿐이었다). 레이스 화면 11곳을 캡처해 확인했다.
   - 서킷 지문 그대로 `0xEF92FB76BFD1D767`. 봇 결승: 보통 124.72 s, 빠름 100.68 s, 매우빠름 85.08 s, 복귀 0회, 최대 옆 거리 6.82 m. 빠름 지름길 90.00 s(10.68 s 단축).
-- **남은 것**: 사용자 플레이 확인. 2단계(장식, `TrackLook`, 빌드 씬 목록, 로비 테스트 행). 병합 전 리뷰.
+- **남은 것**: 사용자 플레이 확인. 병합 전 리뷰. 빌드 씬 목록은 §9-2 대로 `ProjectSettings` 만 담은 브랜치로 나눈다.
 
 ## 2026-11-06 · 튜토리얼: 넓은 원형 미션 맵, 스테이지 6개 (`feature/tutorial-stages`)
 

@@ -59,6 +59,117 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void TryValidate_OpenDownhill_PassesWhileTheSameClosedCourseFails()
+        {
+            SetSegments(TrackDefinition.Segment.Straight(60f, -0.2f), TrackDefinition.Segment.Straight(60f));
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetField("lapCount", 1);
+            SetField("openCourse", true);
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.IsLoop, Is.False);
+            Assert.That(line.FrameAt(definition.LapLength).Position.y, Is.EqualTo(-12f).Within(1e-4f));
+            SetField("openCourse", false);
+            Assert.That(Error(), Does.Contain("does not close"));
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseWithTwoLapsOrBranches_IsRejected()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 2);
+            Assert.That(Error(), Does.Contain("exactly one lap"));
+            SetField("lapCount", 1);
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(20f, 80f, 20f, 20f, 3f) });
+            Assert.That(Error(), Does.Contain("shortcuts or bays"));
+            SetField("shortcuts", new List<TrackDefinition.Shortcut>());
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(20f, 80f, 6f, 20f, true) });
+            Assert.That(Error(), Does.Contain("shortcuts or bays"));
+        }
+
+        [Test]
+        public void BuildCenterline_OpenCourse_KeepsRunoutOutsideLapAndAllTrackFeatures()
+        {
+            var course = TrackDefinition.OpenCourse("Features", new[]
+            {
+                TrackDefinition.Segment.BoostStraight(30f, 10f), TrackDefinition.Segment.Kicker(30f, 0f, 0.2f),
+                TrackDefinition.Segment.Gap(6f), TrackDefinition.Segment.Straight(40f), TrackDefinition.Segment.Arc(25f, 90f)
+            }, 35f, poles: new[] { new TrackDefinition.Pole(20f, 2f, 15f) },
+                anchors: new[] { new TrackDefinition.Anchor(63f, 0f, 10f) });
+            try
+            {
+                var origin = new Vector3(15f, 40f, -12f);
+                Centerline line = course.BuildCenterline(origin, 90f);
+                Assert.That(line.EndS, Is.EqualTo(course.LapLength + 35d));
+                Assert.That(line.FrameAt(0d).Position, Is.EqualTo(origin));
+                TrackFrame finish = line.FrameAt(course.LapLength), end = line.FrameAt(line.EndS);
+                Assert.That(Vector3.Distance(end.Position, finish.Position + finish.Forward * 35f), Is.LessThan(1e-4f));
+                Assert.That(end.Grade, Is.Zero);
+                Assert.That(line.LaunchCount, Is.EqualTo(1));
+                Assert.That(line.BoostZoneCount, Is.EqualTo(1));
+                var points = new List<Vector3>();
+                line.GetPoles(points);
+                Assert.That(points.Count, Is.EqualTo(2));
+                Assert.That(line.TryBoostBetween(0d, 11d), Is.True);
+                Assert.That(line.TryBoostBetween(line.EndS - 1d, line.EndS + 11d), Is.False);
+                Assert.That(line.TryBoostZoneBehind(0d, 200d, out _), Is.False);
+                Assert.That(line.TryLaunchBetween(59d, 61d, out float lift), Is.True);
+                Assert.That(lift, Is.EqualTo(0.2f));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(course); }
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseWidths_DoNotJoinTheLastPieceToTheFirst()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(2f), TrackDefinition.Segment.Straight(100f, endHalfWidth: 20f));
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Assert.That(definition.StartHalfWidth(0), Is.EqualTo(6f));
+            Assert.That(definition.HalfWidthAt(-5d), Is.EqualTo(6f));
+            Assert.That(definition.HalfWidthAt(definition.LapLength + 30d), Is.EqualTo(20f));
+            SetField("openCourse", false);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("half width changes"));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void TryValidate_OpenCourseGapNearAnEnd_DoesNotBorrowRunwayAcrossTheSeam(bool nearStart)
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(nearStart ? 5f : 100f), TrackDefinition.Segment.Gap(6f),
+                TrackDefinition.Segment.Straight(nearStart ? 100f : 5f));
+            Assert.That(Error(), Does.Contain("flat straight before").And.Contain(nearStart ? "5.0 m) and after (100.0" : "100.0 m) and after (5.0"));
+        }
+
+        [TestCase(0f, 10f)]
+        [TestCase(0.1f, 10f)]
+        [TestCase(float.NaN, 10f)]
+        [TestCase(40f, float.PositiveInfinity)]
+        [TestCase(40f, 1f)]
+        public void TryValidate_OpenCourseUnsafeEndRoad_IsRejected(float runout, float runway)
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("finishRunout", runout);
+            SetField("startRunway", runway);
+            Assert.That(definition.TryValidate(out _), Is.False);
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseSlopingFinish_IsRejectedBeforeBuildingTheFlatRunout()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetSegments(TrackDefinition.Segment.Straight(60f), TrackDefinition.Segment.Straight(60f, -0.1f));
+            Assert.That(Error(), Does.Contain("flat end grade"));
+        }
+
+        [Test]
         public void Defaults_Stadium_LapLengthAndSettings()
         {
             Assert.That(definition.LapLength, Is.EqualTo(StadiumLap).Within(1e-3));

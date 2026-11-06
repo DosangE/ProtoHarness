@@ -1751,6 +1751,180 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        [UnityTest, Timeout(120000)]
+        public IEnumerator OpenCourse_DownhillBot_FinishesOnRunoutAndKeepsItsRecordAndGhost()
+        {
+            made = OpenDownhill();
+            var store = TestRecords();
+            store.Clear(made.name, SpeedClass.Fast);
+            RaceLaunch.Request(new RaceSetup(made, "OPEN DOWNHILL", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                Transform finish = circuit.transform.Find("Finish line"), start = circuit.transform.Find("Start line");
+                Assert.That(finish, Is.Not.Null);
+                Assert.That(start, Is.Not.Null);
+                Assert.That(game.Track.Project(finish.position).S, Is.EqualTo(made.LapLength).Within(1e-3));
+                Assert.That(game.Track.Project(start.position).S, Is.EqualTo(0d).Within(1e-3));
+                game.StartRun();
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                for (int tick = 0; tick < 3000 && game.IsRunning; tick++)
+                {
+                    game.StepTick(bot);
+                    Assert.That(player.IsRespawning, Is.False, "The bot must drive the descent and jump without a fall.");
+                }
+                Assert.That(game.HasFinished, Is.True);
+                Assert.That(circuit.Laps.CompletedLaps, Is.EqualTo(1));
+                Assert.That(game.Progress, Is.EqualTo(1f));
+                TrackCoord end = game.Track.Project(player.transform.position);
+                Assert.That(end.S, Is.GreaterThanOrEqualTo(made.LapLength).And.LessThan(game.Track.EndS));
+                Assert.That(player.IsGrounded, Is.True);
+                Assert.That(player.transform.position.y, Is.LessThan(0f));
+                Assert.That(circuit.TryGetNextGap(end.S, out _, out _, out _), Is.False, "There is no next lap's gap.");
+                yield return null;
+                Assert.That(assembler.HasLastFinish, Is.True);
+                Assert.That(store.TryGet(made.name, SpeedClass.Fast, out BestRecords.Record best), Is.True);
+                Assert.That(best.Ticks, Is.EqualTo(circuit.Laps.TotalTicks));
+                Assert.That(ghosts.TryLoad(made.name, SpeedClass.Fast, out GhostTrace ghost), Is.True);
+                Assert.That(ghost.Count, Is.EqualTo(best.Ticks));
+                Assert.That(ghost[ghost.Count - 1].Position, Is.EqualTo(player.transform.position));
+
+                // The game stops at the finish; moving the capsule farther proves the runout's physical end guard.
+                CharacterController capsule = player.GetComponent<CharacterController>();
+                for (int step = 0; step < 150; step++) capsule.Move(Vector3.forward * 0.5f + Vector3.down * 0.1f);
+                end = game.Track.Project(player.transform.position);
+                Assert.That(end.S, Is.GreaterThan(game.Track.EndS - 2d).And.LessThan(game.Track.EndS));
+                Assert.That(end.H, Is.InRange(0.5f, 1.5f));
+                Assert.That(capsule.isGrounded, Is.True);
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(made.name, SpeedClass.Fast);
+            }
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator OpenCourse_StartGuardAndFalls_StayOnRoadAndRespawnFacingForward()
+        {
+            made = OpenDownhill();
+            RaceLaunch.Request(new RaceSetup(made, "OPEN DOWNHILL", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var reverseLog = new InputLog();
+                for (int i = 0; i < 500; i++) reverseLog.Add(new TickInput(0f, false, false, false, coasting: true, reversing: true));
+                var reverse = new InputReplay(reverseLog);
+                for (int i = 0; i < reverseLog.Count; i++)
+                {
+                    game.StepTick(reverse);
+                    Assert.That(player.IsRespawning, Is.False);
+                }
+                TrackCoord behind = game.Track.Project(player.transform.position);
+                Assert.That(behind.S, Is.GreaterThan(-made.StartRunway).And.LessThan(-made.StartRunway + 2d));
+                Assert.That(player.IsGrounded, Is.True);
+                Assert.That(game.HasFinished, Is.False);
+                Assert.That(game.Progress, Is.Zero);
+
+                foreach ((double lastGrounded, double expected) in new[] { (1d, 0d), (37d, 26d), (110d, 82d) })
+                {
+                    SimSnapshot now = game.CaptureSnapshot();
+                    RacerState.Snapshot racer = now.Racer;
+                    racer.LastGroundedS = lastGrounded;
+                    racer.Grounded = false;
+                    racer.Velocity = Vector3.zero;
+                    racer.RespawnHoldTicks = 0;
+                    TrackFrame frame = game.Track.FrameAt(lastGrounded);
+                    game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, frame.Position + Vector3.down * 40f, now.Circuit));
+                    game.StepTick(new InputReplay(new InputLog()));
+                    Assert.That(player.IsRespawning, Is.True);
+                    double back = game.Track.Project(player.transform.position).S;
+                    Assert.That(back, Is.EqualTo(expected).Within(0.05d));
+                    Assert.That(player.Heading, Is.EqualTo(0f).Within(1e-4f));
+                    Assert.That(player.IsGrounded, Is.True);
+                    Assert.That(game.Track.Project(player.transform.position).H, Is.InRange(0.5f, 1.5f));
+                }
+            }
+            finally { Time.timeScale = scale; }
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator OpenCourse_RollbackAcrossDownhillAndFinish_RepeatsEveryTickBitForBit()
+        {
+            made = OpenDownhill();
+            RaceLaunch.Request(new RaceSetup(made, "OPEN DOWNHILL", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                // Include a grounded downhill pose, a pad and the finish in the restored window.
+                while (game.IsRunning && game.Tick < 3000 && circuit.LastS < 80d) game.StepTick(bot);
+                Assert.That(game.IsRunning, Is.True);
+                SimSnapshot snapshot = game.CaptureSnapshot();
+                var log = new InputLog();
+                StateTrace original = Trace(new InputRecorder(bot, log));
+                for (int i = 0; i < 2000 && game.IsRunning; i++) game.StepTick(original);
+                Assert.That(game.HasFinished, Is.True);
+                Vector3 finishPosition = player.transform.position, finishVelocity = player.Velocity;
+                int finishTick = game.Tick, totalTicks = circuit.Laps.TotalTicks;
+                double progress = circuit.Laps.Progress;
+                Assert.That(log.Count, Is.GreaterThan(30));
+                game.RestoreSnapshot(snapshot);
+                LogAssert.Expect(LogType.Error, new Regex("came after \\d+; this run will keep no ghost"));
+                StateTrace replay = Trace(new InputReplay(log));
+                for (int i = 0; i < log.Count; i++) game.StepTick(replay);
+                Assert.That(StateTrace.Compare(original, replay, log.Count), Is.Null);
+                Assert.That(replay.Hash(log.Count), Is.EqualTo(original.Hash(log.Count)));
+                Assert.That(game.HasFinished, Is.True);
+                Assert.That(game.Tick, Is.EqualTo(finishTick));
+                Assert.That(circuit.Laps.TotalTicks, Is.EqualTo(totalTicks));
+                Assert.That(circuit.Laps.Progress, Is.EqualTo(progress));
+                Assert.That(player.transform.position, Is.EqualTo(finishPosition));
+                Assert.That(player.Velocity, Is.EqualTo(finishVelocity));
+                Debug.Log($"ChainRush open rollback: {log.Count} ticks identical through finish, hash 0x{original.Hash(log.Count):X16}.");
+                game.ReturnToStart();
+            }
+            finally { Time.timeScale = scale; }
+
+            StateTrace Trace(IInputSource input) => new StateTrace(game, player, input,
+                ("lapProgress", () => circuit.Laps.Progress), ("checkpoints", () => circuit.Laps.CheckpointsPassed),
+                ("lastGroundedS", () => game.Racer.LastGroundedS));
+        }
+
+        private static TrackDefinition OpenDownhill() => TrackDefinition.OpenCourse("TestOpenDownhill", new[]
+        {
+            TrackDefinition.Segment.Straight(30f), TrackDefinition.Segment.Gap(6f), TrackDefinition.Segment.Straight(30f),
+            TrackDefinition.Segment.BoostStraight(30f, 20f, -0.15f), TrackDefinition.Segment.Straight(30f, 0f)
+        });
+
         // ---- helpers -------------------------------------------------------------------------------------
 
         // Read the saved menu's very same tracks array as LobbyMenu.BuildSetup, without navigating its pages on every

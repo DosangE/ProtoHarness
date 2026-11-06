@@ -4,13 +4,13 @@ using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Track
 {
-    // A hand-built closed circuit (COURSE.md 7-2, T4): straight, arc and vertical-curve segments in driving
+    // A hand-built circuit or one-way course (COURSE.md 7-2, T4): straight, arc and vertical-curve segments in driving
     // order from the start line, grapple anchors over the gaps, checkpoints, start slots and the lap count.
     // The defaults are the "stadium": a 140 m straight with a hill and a jump gap, a half turn of R40, a 140 m
     // straight with a grapple gap, and a second half turn, about 531 m a lap. TryValidate is the one source of
-    // truth for OnValidate, the builder and CircuitRace: it checks the segment rules and that the end meets the start.
+    // truth for OnValidate, the builder and CircuitRace: it checks the segment rules and, on a circuit, closure.
     // The road is roadHalfWidth wide unless a piece names its own end width: then the width goes linearly from the
-    // previous piece's end width to it over the piece (the first piece starts from the last one's, the lap being closed).
+    // previous piece's end width to it over the piece (the first starts from the last only on a closed lap).
     // Swing poles beside the road (Pole) join the corner poles at the arcs' centers (user 2026-10-22, the Skyway).
     [CreateAssetMenu(menuName = "ProtoHarness/ChainRush/Track Definition")]
     public sealed class TrackDefinition : ScriptableObject
@@ -258,6 +258,11 @@ namespace ProtoHarness.ChainRush.Track
         [Tooltip("Start slots: metres behind the start line. A single runner uses the first.")]
         [SerializeField] private float[] startSlots = { 0f };
         [SerializeField] private int lapCount = 3;
+        [SerializeField] private bool openCourse;
+        [Tooltip("Flat road after the finish, excluded from LapLength (open courses only).")]
+        [SerializeField] private float finishRunout = 40f;
+        [Tooltip("Flat road behind the start, ending at a transverse guard (open courses only).")]
+        [SerializeField] private float startRunway = 10f;
         [SerializeField] private float roadHalfWidth = RoadProfile.DeckHalfWidth;
         [SerializeField] private float roadThickness = RoadProfile.DeckThickness;
 
@@ -278,12 +283,36 @@ namespace ProtoHarness.ChainRush.Track
             throw new ArgumentException(error, nameof(radius));
         }
 
+        // An in-memory one-way course, like Ring: no asset is created or saved. The supplied pieces end at the
+        // finish; the flat runout is road only. Anchors and poles use the same coordinates as a circuit's.
+        public static TrackDefinition OpenCourse(string name, IReadOnlyList<Segment> pieces, float finishRunout = 40f,
+            float startRunway = 10f, IReadOnlyList<Anchor> anchors = null, IReadOnlyList<Pole> poles = null)
+        {
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("An open course needs a name.", nameof(name));
+            if (pieces == null) throw new ArgumentNullException(nameof(pieces));
+            var course = CreateInstance<TrackDefinition>();
+            course.name = name;
+            course.openCourse = true;
+            course.lapCount = 1;
+            course.segments = new List<Segment>(pieces);
+            course.anchors = anchors == null ? new List<Anchor>() : new List<Anchor>(anchors);
+            course.poles = poles == null ? new List<Pole>() : new List<Pole>(poles);
+            course.finishRunout = finishRunout;
+            course.startRunway = startRunway;
+            if (course.TryValidate(out string error)) return course;
+            Destroy(course);
+            throw new ArgumentException(error, nameof(pieces));
+        }
+
         public IReadOnlyList<Segment> Segments => segments;
         public IReadOnlyList<Anchor> Anchors => anchors;
         public IReadOnlyList<Pole> Poles => poles;
         public IReadOnlyList<Shortcut> Shortcuts => shortcuts;
         public IReadOnlyList<Bay> Bays => bays;
         public int LapCount => lapCount;
+        public bool IsOpenCourse => openCourse;
+        public float FinishRunout => finishRunout;
+        public float StartRunway => startRunway;
         public float RoadHalfWidth => roadHalfWidth;
         public float RoadThickness => roadThickness;
         public int CheckpointCount => checkpointFractions.Length;
@@ -327,14 +356,15 @@ namespace ProtoHarness.ChainRush.Track
             return gaps;
         }
 
-        // The closed centerline of one lap starting at origin heading yawDegrees (0 = +z), with the swing poles, the
-        // kickers' crests, boost zones and the shortcuts added.
+        // The centerline starting at origin heading yawDegrees (0 = +z), with poles, kickers, pads and shortcuts.
+        // An open course ends at LapLength, followed by its flat runout; only a circuit calls Close.
         public Centerline BuildCenterline(Vector3 origin, float yawDegrees)
         {
             if (!TryValidate(out string error)) throw new InvalidOperationException(error);
             var line = new Centerline(origin, yawDegrees);
             for (int i = 0; i < segments.Count; i++) segments[i].AppendTo(line);
-            line.Close();
+            if (openCourse) line.AppendStraight(finishRunout, 0f);
+            else line.Close();
             for (int i = 0; i < poles.Count; i++)
                 line.AddPole(line.FrameAt(poles[i].S).TransformPoint(new Vector3(poles[i].Offset, 0f, 0f)), poles[i].Reach);
             double s = 0d;
@@ -412,15 +442,16 @@ namespace ProtoHarness.ChainRush.Track
             return own > 0f ? own : roadHalfWidth;
         }
 
-        // A piece's start half width: the end width of the piece before it, going round the lap.
-        public float StartHalfWidth(int index) => EndHalfWidth(index == 0 ? segments.Count - 1 : index - 1);
+        // A piece's start half width: the previous piece's end, or the base width at an open course's start.
+        public float StartHalfWidth(int index) => openCourse && index == 0 ? roadHalfWidth : EndHalfWidth(index == 0 ? segments.Count - 1 : index - 1);
 
-        // The road's half width at S along the lap (S is folded into one lap).
+        // Width at S: folded on a circuit, held at each end's width outside an open course.
         public float HalfWidthAt(double s)
         {
             double lap = LapLength;
             if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
-            s -= Math.Floor(s / lap) * lap;
+            if (openCourse) s = Math.Max(0d, Math.Min(lap, s));
+            else s -= Math.Floor(s / lap) * lap;
             double start = 0d;
             for (int i = 0; i < segments.Count; i++)
             {
@@ -450,6 +481,15 @@ namespace ProtoHarness.ChainRush.Track
         public bool TryValidate(out string error)
         {
             if (segments == null || segments.Count < 2) return Fail("a circuit needs at least two segments.", out error);
+            if (openCourse)
+            {
+                if (lapCount != 1) return Fail("an open course needs exactly one lap.", out error);
+                if (shortcuts.Count != 0 || bays.Count != 0) return Fail("an open course cannot have shortcuts or bays.", out error);
+                if (!(finishRunout >= 2f) || float.IsInfinity(finishRunout) || !(startRunway > 0f) || float.IsInfinity(startRunway))
+                    return Fail("an open course needs finite end road lengths, with at least 2 m runout for finish clearance and positive start runway.", out error);
+                if (segments[0].IsGap || segments[segments.Count - 1].IsGap || segments[segments.Count - 1].EndGrade != 0f)
+                    return Fail("an open course must start and finish on road, with a flat end grade for its runout.", out error);
+            }
             var startGrades = new float[segments.Count];
             float grade = 0f;
             for (int i = 0; i < segments.Count; i++)
@@ -508,7 +548,10 @@ namespace ProtoHarness.ChainRush.Track
             }
             if (startSlots == null || startSlots.Length < 1) return Fail("at least one start slot is needed.", out error);
             for (int i = 0; i < startSlots.Length; i++)
+            {
                 if (!(startSlots[i] >= 0f) || startSlots[i] > 40f) return Fail($"start slot {i} ({startSlots[i]}) must be within [0, 40] m behind the line.", out error);
+                if (openCourse && startSlots[i] + 2f >= startRunway) return Fail($"start slot {i} needs 2 m clearance from the start guard.", out error);
+            }
             List<(double Start, double End)> gaps = Gaps();
             for (int i = 0; i < anchors.Count; i++)
             {
@@ -532,7 +575,7 @@ namespace ProtoHarness.ChainRush.Track
             }
             var line = new Centerline(Vector3.zero, 0f);
             for (int i = 0; i < segments.Count; i++) segments[i].AppendTo(line);
-            if (!line.TryClose(out string closeError)) return Fail("the circuit does not close: " + closeError, out error);
+            if (!openCourse && !line.TryClose(out string closeError)) return Fail("the circuit does not close: " + closeError, out error);
             for (int i = 0; i < shortcuts.Count; i++)
                 if (!TryValidateShortcut(i, line, lap, out error)) return false;
             for (int i = 0; i < bays.Count; i++)
@@ -661,6 +704,7 @@ namespace ProtoHarness.ChainRush.Track
             int count = segments.Count;
             for (int n = 0; n < count; n++)
             {
+                if (openCourse && (from + step * n < 0 || from + step * n >= count)) break;
                 int i = (((from + step * n) % count) + count) % count;
                 Segment segment = segments[i];
                 if (segment.IsArc || segment.IsGap || startGrades[i] != 0f || segment.EndGrade != 0f) break;

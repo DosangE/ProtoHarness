@@ -174,7 +174,7 @@ namespace ProtoHarness.ChainRush.Race
             hasAnchor = false;
             if (gaps.Count == 0) return false;
             double lap = definition.LapLength;
-            for (int pass = 0; pass < 2; pass++)
+            for (int pass = 0; pass < (definition.IsOpenCourse ? 1 : 2); pass++)
             {
                 for (int i = 0; i < gaps.Count; i++)
                 {
@@ -226,7 +226,7 @@ namespace ProtoHarness.ChainRush.Race
             track = definition.BuildCenterline(Vector3.zero, 0f);
             var checkpoints = new double[definition.CheckpointCount];
             for (int i = 0; i < checkpoints.Length; i++) checkpoints[i] = definition.CheckpointS(i);
-            counter = new LapCounter(definition.LapLength, checkpoints, definition.LapCount);
+            counter = new LapCounter(definition.LapLength, checkpoints, definition.LapCount, !definition.IsOpenCourse);
             gaps = definition.Gaps();
             scenery = new CircuitScenery(definition, track, transform, roadMaterial, railMaterial, lightMaterial, maxPieceLength);
             if (arena)

@@ -7,7 +7,7 @@ using Object = UnityEngine.Object;
 
 namespace ProtoHarness.ChainRush.Race
 {
-    // The circuit's scene (COURSE.md T4), made once from a TrackDefinition on its closed centerline: the road in
+    // The track's scene (COURSE.md T4), made once from a TrackDefinition on its centerline: the road in
     // RoadPieces (gaps stay empty, the width follows TrackDefinition.HalfWidthAt), glowing bands on the start line and
     // the checkpoints, and a pole at every arc's center and every swing pole of the definition. The road pieces carry
     // the colliders the runner moves on; the bands and poles are visual only. CircuitRace makes it and keeps the race
@@ -32,7 +32,7 @@ namespace ProtoHarness.ChainRush.Race
         private readonly List<(double From, double To, bool Left)> guardGaps = new List<(double From, double To, bool Left)>(4);
         private readonly List<double> cuts = new List<double>(8);
 
-        // track is definition's closed centerline (TrackDefinition.BuildCenterline).
+        // track is definition's centerline, including the runout of an open course (TrackDefinition.BuildCenterline).
         public CircuitScenery(TrackDefinition definition, Centerline track, Transform parent, Material road, Material rail, Material light,
             float maxPieceLength)
         {
@@ -63,7 +63,13 @@ namespace ProtoHarness.ChainRush.Race
         // never spans a bend in the width. Then each shortcut's road and each bay's.
         public void LayRoad()
         {
+            if (definition.IsOpenCourse) LayRange(-definition.StartRunway, 0d, definition.RoadHalfWidth, definition.RoadHalfWidth);
             LayMainRoad();
+            if (definition.IsOpenCourse)
+            {
+                float width = definition.EndHalfWidth(definition.Segments.Count - 1);
+                LayRange(definition.LapLength, track.EndS, width, width);
+            }
             IReadOnlyList<TrackDefinition.Shortcut> shortcuts = definition.Shortcuts;
             for (int i = 0; i < shortcuts.Count; i++) LayShortcut(shortcuts[i]);
             IReadOnlyList<TrackDefinition.Bay> bays = definition.Bays;
@@ -242,6 +248,7 @@ namespace ProtoHarness.ChainRush.Race
         {
             if (checkpoints == null) throw new ArgumentNullException(nameof(checkpoints));
             AddMarker("Start line", 0d, 1.2f);
+            if (definition.IsOpenCourse) AddMarker("Finish line", definition.LapLength, 1.2f);
             for (int i = 0; i < checkpoints.Length; i++) AddMarker("Checkpoint " + i, checkpoints[i], 0.5f);
         }
 
@@ -334,7 +341,7 @@ namespace ProtoHarness.ChainRush.Race
             var lanes = new List<float>(8);
             double lap = track.EndS;
             int chunk = 0;
-            for (double from = 0d; from < lap; from += maxPieceLength)
+            for (double from = definition.IsOpenCourse ? -definition.StartRunway : 0d; from < lap; from += maxPieceLength)
             {
                 double to = Math.Min(lap, from + maxPieceLength);
                 Vector3 origin = track.FrameAt(from).Position;
@@ -699,6 +706,9 @@ namespace ProtoHarness.ChainRush.Race
                 ? new RoadProfile(fromWidth, definition.RoadThickness, leftGuard, rightGuard)
                 : new RoadProfile(WidthBetween(fromWidth, toWidth, (start - from) / (to - from)),
                     WidthBetween(fromWidth, toWidth, (end - from) / (to - from)), definition.RoadThickness, leftGuard, rightGuard);
+            if (definition.IsOpenCourse)
+                profile = new RoadProfile(profile.HalfWidth, profile.EndHalfWidth, 0f, 0f, profile.Thickness,
+                    leftGuard, rightGuard, end == track.EndS, start == -definition.StartRunway);
             var piece = new RoadPiece("Circuit road " + pieces.Count, parent, roadMaterial, railMaterial, lightMaterial);
             piece.Build(line, start, end, profile);
             pieces.Add(piece);

@@ -8,6 +8,9 @@
 
 ### 2026-11-06 — 다음 세션은 여기부터
 
+- **튜토리얼 (`feature/tutorial-stages`, `dev` 병합, 푸시는 지시 때, DECISIONS "튜토리얼")**: 메인 메뉴의 튜토리얼 줄, 스테이지 6개, 그림이 있는 설명 팝업, 원형 미션 맵(평행 격자, 바닥 어디서나 스윙), 완료 팝업. 사용자가 고저차 트랙보다 먼저 하기로 했고 마일스톤 밖이다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
+- **다음 작업 방식 (사용자 2026-11-06)**: "다음 작업 codex, mcp로 하겟다". 구현·검증은 Codex 가 Unity MCP 로 하고 Claude 는 리뷰한다. 무슨 작업인지는 사용자가 다음 세션에서 말한다. 실행은 `tools/codex-unity.ps1 -PromptFile <파일> -Write`(`docs/RULES/SUBAGENTS.md` §7-5).
+- **Codex 의 Unity MCP**: 사용자가 그 작업에서 허락할 때만 연다(§7-5). "codex로 구현" 만으로는 허락이 아니다.
 - **`dev` 에 병합·푸시 (`feature/m6-swing-effects`)**: 봉 체인 18 m, 봉 스윙 이펙트(불꽃·줄 끊김), 상태별 꼬리, 흰 바람 선. DECISIONS 2026-11-06 두 항목. M6 "봉 스윙 이펙트" 는 끝났다. 시야와 플레이어 빌드는 M6 마감 때 다시 본다.
 - **남은 M6 필수**: 사운드 구분(1차 코드 `feature/m6-sound-cues`·`fix/stadium-flicker`·stash 는 다른 PC 에 있다, 이 PC·origin 에 없음을 2026-11-06 확인), 고저차 트랙(요청서부터).
 - **같은 날 `dev` 에 병합·푸시**: `fix/exterior-save-order`(장식 빌더가 검사를 통과한 뒤에만 메시를 저장한다 — 장식 빌더 후속 ①), `docs/runner-model-temporary`(캐릭터 모형은 임시용). 앞의 것은 STADIUM·SKYWAY 재빌드와 강제 실패로 확인했고(실패한 빌드가 메시를 다시 쓴 수 21 → 0), FINGER·PALM COAST 재빌드와 메시 에셋을 처음 만드는 경로는 돌리지 않았다.

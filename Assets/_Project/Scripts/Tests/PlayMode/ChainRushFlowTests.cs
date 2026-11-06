@@ -312,7 +312,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Back();
             menu.Back();
             menu.Back();
-            menu.Highlight(2);
+            menu.Highlight(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
             Assert.That(menu.Description, Is.Empty);
@@ -329,12 +329,12 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
-            menu.Move(2);
+            menu.Move(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
-            Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+            Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow), "Back on the settings entry.");
         }
 
         // ---- settings (M2-c, user 2026-10-20) --------------------------------------------------------------
@@ -351,7 +351,7 @@ namespace ProtoHarness.Tests.PlayMode
                 menu.Adjust(1);
                 Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
                 Assert.That(menu.Cursor, Is.EqualTo(0), "Adjusting does nothing off the settings page.");
-                menu.Move(2);
+                menu.Move(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
                 menu.Confirm();
                 Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
                 Assert.That(menu.Cursor, Is.EqualTo(0));
@@ -394,7 +394,7 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(menu.Cursor, Is.EqualTo(4), "Back on the keys row.");
                 menu.Back();
                 Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
-                Assert.That(menu.Cursor, Is.EqualTo(2), "Back on the settings entry.");
+                Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow), "Back on the settings entry.");
             }
             finally
             {
@@ -412,7 +412,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Settings = store;
             try
             {
-                menu.Move(2);
+                menu.Move(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
                 menu.Confirm();
                 Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Settings));
                 menu.Move(5);

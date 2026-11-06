@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-11-06 · 튜토리얼: 넓은 원형 미션 맵, 스테이지 6개 (`feature/tutorial-stages`)
+
+- **결정 (사용자, 2026-11-06)**: "고저차 트랙 작업은 미루고 튜토리얼부터". 가운데 봉이 있는 아주 넓은 원형 맵에서 목표 지점에 닿으면 다음 목표와 설명을 준다. "골인 지점이 있는 맵이 아닌 단순 튜토리얼 미션용 맵", 완료하면 팝업의 버튼으로 로비로, "esc로 중간에 나갈수도". 요청서의 스테이지형·메인 메뉴 별도 줄·스윙을 부스터보다 먼저 두는 순서에 "좋다". 마일스톤은 답이 없어 추천대로 밖에 뒀다.
+- **맵**: 봉을 감싸는 반지름 30 m 고리 중심선(`TrackDefinition.Ring`) 위에 반지름 3~150 m 원판(`CircuitRace.UseArena`, `CircuitScenery.LayArena`). 봉은 원호의 중심에 서고 후보 각도는 트랙 방향에서 재므로 지금 규칙이 그대로 통한다. 에디터 측정(메모리상 고리, 2026-11-06): 봉 걸기 35.9 m 까지 72/72, 36.1 m 부터 0/72, 벽 판정 내적 0.0000, 높이 오차 0.00000(반지름 3.3~149 m).
+- **에셋 없이 코드로**: 고리와 스테이지 표를 코드에 두고 `TutorialDirector` 를 런타임에 붙인다(고스트와 같은 방식). 씬·`.asset`·`ProjectSettings` 변경이 없어 사용자가 저장할 것이 없다. 재질과 하늘은 로비 첫 트랙(STADIUM)의 것을 빌린다.
+- **스테이지**: ~~시작할 때마다 출발점에서 카운트다운한다.~~ 시작할 때마다 출발점으로 돌아가므로 재시작이 곧 "이 스테이지 다시" 이고 로비에서 아무 스테이지나 고를 수 있다. ~~부스터 스테이지는 게이지가 스윙으로만 차서 1칸을 주고 시작한다.~~ 보통 속도·첫 러너 고정, 랩·기록·고스트 없음. 취소선은 아래 "플레이 피드백" 으로 바뀌었다.
+- **플레이 피드백 (사용자, 2026-11-06, 구현·검증은 사용자 지시로 Codex, Claude 는 리뷰)**:
+  - **설명 팝업**: "스테이지별로 바로 시작하는 것이 아닌, 팝업(페이지 형식으로 좌우 넘어가며 볼 수 있는)을 띄워 이미지와 함께 설명", "그 팝업창을 닫아야 플레이 시작". 그림은 코드로 그린다(`Tutorial/TutorialFigures`): PNG 는 씬 참조 저장이 따라오고 `Resources/` 는 금지다. 봉 사각형·화살표·게이지는 HUD 의 `DrawTarget`·`DrawArrow`·`DrawBoostGauge` 를 그대로 불러 실제 문양과 같다. 닫기 버튼은 어느 쪽에서나 눌리고, 팝업에서 ESC 는 로비로 나간다.
+  - **스윙이 먼저**: "부스터를 바로 주는게 아니라 스윙으로 게이지가 찬다는 것 부터". 게이지 지급을 없앴다. 5번은 스윙 → 놓기 → 부스터 → 목표. 6번은 5번과 겹치지 않게 바깥 목표 → 스윙 → 놓기 → 부스터 → 멈추기.
+  - **3·2·1 없앰**: 튜토리얼은 팝업을 닫으면 바로 달린다. 재시작도 팝업·카운트다운 없이 바로 시작한다. "GO!" 도 그리지 않는다. 레이스는 그대로다.
+  - **바닥 어디서나 스윙**: "바깥에서도 걸리게". `RunnerMotor.ReachPolesFrom`(기본 0)으로 튜토리얼만 거리를 늘리고, 그때는 원호 비율도 1로 쓴다(0.5 면 반원 경계에서 후보가 빠진다, Codex 가 테스트로 찾았다). 기본값에서는 `TryFindPole` 에 들어가는 값이 그대로다.
+  - **바닥 무늬**: "모래지옥 모양". 바닥은 코드상 평면이었고(`TrackFrame` 위쪽 = 월드 위쪽, 경사 0) 동심원·스포크가 깔때기로 보였다고 판단해 평행 격자로 바꿨다. 레이캐스트 144점 높이 차 1 mm 이내를 테스트로 재서 평면을 확인했다. 착시가 없어졌는지는 사용자 플레이 확인이 남았다.
+  - **리뷰가 고친 것**: 스윙 중 CTRL 로 게이지를 쓰면 Boost 목표가 막힘(`GoalText` 안내로), 팝업 뒤 불투명(`Dim` 으로), 줄 감기 8 m 가 봉 가까이서 달성 불가(5 m 로).
+  - **Codex 의 Unity MCP**: 사용자 "쓸 순 있지만 내가 너에게 명령할때 codex로 구현하고 mcp 활용하라고 사용 허락할때만". 설정에 승인을 두면 허락 없이도 열리므로, `tools/codex-unity.ps1` 이 허락받은 실행 동안만 `approval_mode = "approve"` 를 넣고 끝나면 지운다. 규칙은 `docs/RULES/SUBAGENTS.md` §7-5. 시험: 읽기 전용 호출 성공, 끝난 뒤 `config.toml` 해시가 백업과 같음.
+- **버린 대안**: 트랙 폭 제한을 풀어 넓은 도로로 깔기 — 고리 반지름이 커져 봉이 걸리는 거리도 함께 커진다(반지름 + 6 m). `Data/` 에셋 + 로비 씬 참조 — 사용자의 씬 저장이 따라온다.
+- **검증 (작업 중 ①, 같은 코드)**: 영향 평가: `CircuitRace.Step`·`Initialize` 분기(튜토리얼에서만 켜짐) → 서킷 지문·`ChainRushCircuitTests`·`ChainRushRollbackTests`, `RaceAssembler`·`ChainRushHud`·로비 → `ChainRushFlowTests` 의 `Lobby_`·`Race_FromTheLobby_`·`Race_PauseMenu`·`Race_OpenedDirectly_`·`Race_WithATrackLook_`·`Race_FinishFromTheLobby_`, 새 기능 → `ChainRushTutorialTests`. 일반 레이스 주행 코드는 바뀌지 않아 `Lap` 은 돌리지 않았다.
+  - PlayMode 첫 실행 `testcasecount=53 result=Failed(Child) passed=51 failed=2`, 2026-11-06 07:17:27Z~07:21:01Z. 실패 2건은 `Lobby_BackAndSettings_GoPageByPage`·`Lobby_SettingsPage_AdjustsOnlyTheHighlightedSettingAndOpensTheKeys` 의 `Back on the settings entry. Expected: 2 But was: 3` — 메뉴에 튜토리얼 줄이 들어가 설정 줄이 3이 된 결과라 테스트의 줄 번호를 `MainPage.SettingsRow` 로 바꿨다(같은 이유로 `Move(2)`·`Highlight(2)` 4곳도).
+  - 재실행 `Lobby_` `testcasecount=17 result=Passed passed=17 failed=0`, 07:21:57Z~07:22:08Z.
+  - `STAGE CLEAR` 위치를 고친 뒤 PlayMode `testcasecount=53 result=Passed passed=53 failed=0 skipped=0`, 07:24:42Z~07:28:17Z (봇이 6스테이지 완주, 서킷 지문 포함). EditMode 전체(`Enemy` 제외) `testcasecount=351 result=Passed passed=351 failed=0 skipped=0`, 07:28:48Z~07:28:49Z.
+  - 캡처로 메인 메뉴, 스테이지 페이지, 안내 패널, 스윙, 화면 밖 목표 표시, `STAGE CLEAR`(고치기 전 위치), 완료 팝업을 봤다. 팝업의 Enter·버튼 클릭과 실제 키 입력은 테스트로 돌리지 않았다. 사용자 플레이 확인 대기.
+  - 위 값은 첫 구현 때다. **플레이 피드백 반영 뒤 (Codex 실행, XML 은 Claude 가 대조)**: 영향 평가에 `RunnerMotor.TryFindPole` → `ChainRushCornerSwingTests` 를 더했다. 수정 전 재현 `testcasecount=1 result=Failed(Child) failed=1`, 08:28:58Z~08:29:03Z(`Briefing_WaitsAtTheStartWithoutTicks_…`). EditMode `testcasecount=359 result=Failed(Child) passed=358 failed=1`, 08:33:39Z~08:33:40Z(`0 degrees, radius 15`, 반원 경계 후보 누락). 고친 뒤 EditMode 전체(`Enemy` 제외) `testcasecount=359 result=Passed passed=359 failed=0`, 08:36:12Z~08:36:13Z. PlayMode `testcasecount=81 result=Passed passed=81 failed=0 skipped=0`, 08:36:48Z~08:41:24Z(튜토리얼 17, Flow 24, CornerSwing 18, Circuit 11, Rollback 10, 서킷 지문 1). 마지막 코드 수정은 08:35:38Z 로 두 실행 전이다. `Lap` 은 돌리지 않았다(기본값에서 주행 코드 경로가 같다).
+  - 팝업의 실제 키(←/→·Enter·ESC)와 마우스 클릭은 테스트로 돌리지 않았다. 캡처는 Game 뷰 588 x 339 를 3배로 키운 것이라 글자가 흐리다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
+
 ## 2026-11-06 · 캐릭터 모형은 임시용이고 최종적으로 바꾼다 (마일스톤 미정)
 
 - **결정 (사용자, 2026-11-06)**: "캐릭터 모형 최종적으론 바꿀것이다", "지금은 임시용". 2026-11-05 "M6 범위" 의 "러너 디자인 5종 유지" 를 고친다. M6 에서 교체하지 않는 것은 그대로다. 언제 바꿀지는 정하지 않았다.

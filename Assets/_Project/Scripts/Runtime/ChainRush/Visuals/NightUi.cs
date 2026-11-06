@@ -127,11 +127,11 @@ namespace ProtoHarness.ChainRush.Visuals
             return clicked;
         }
 
-        public static void ShadowLabel(Rect rect, string text, GUIStyle style)
+        public static void ShadowLabel(Rect rect, string text, GUIStyle style, float shadow = 3f)
         {
             Color color = style.normal.textColor;
             style.normal.textColor = new Color(0, 0, 0, .8f);
-            GUI.Label(new Rect(rect.x + 3, rect.y + 3, rect.width, rect.height), text, style);
+            GUI.Label(new Rect(rect.x + shadow, rect.y + shadow, rect.width, rect.height), text, style);
             style.normal.textColor = color;
             GUI.Label(rect, text, style);
         }

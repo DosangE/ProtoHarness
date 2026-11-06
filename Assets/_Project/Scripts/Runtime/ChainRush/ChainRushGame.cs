@@ -38,6 +38,8 @@ namespace ProtoHarness.ChainRush
         public bool IsCountingDown => phase == Phase.Countdown;
         // 3, 2, 1 while counting down; 0 otherwise.
         public int CountdownNumber => IsCountingDown ? Mathf.CeilToInt(countdownLeft) : 0;
+        // How long the number now showing has been up, in seconds; 0 when not counting down.
+        public float CountdownNumberAge => IsCountingDown ? CountdownNumber - countdownLeft : 0f;
         // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
         // so the keyboard cannot restart a run the server is simulating.
         public bool ManualStart { get; set; } = true;

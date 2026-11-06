@@ -61,6 +61,14 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float WindLineReach = 5f;
         public const float WindLineWidth = 0.14f;
         public const float WindLineAlpha = 0.85f;
+        // The speed the HUD shows is km/h (user 2026-11-06); the simulation stays in m/s.
+        public const float KmhPerMetrePerSecond = 3.6f;
+        // The countdown's 3, 2, 1 and "GO!" (user 2026-11-06 "큰 글자가 축소되서"): each comes in CueStartScale times its
+        // size and shrinks to it in CueShrinkTime, appearing over CueFadeInTime and going over its last CueFadeOutTime.
+        public const float CueStartScale = 2.6f;
+        public const float CueShrinkTime = 0.3f;
+        public const float CueFadeInTime = 0.08f;
+        public const float CueFadeOutTime = 0.2f;
         public static readonly Color SwingAmber = new Color(1f, 0.62f, 0.18f);
         public static readonly Color SwingBoostGold = new Color(1f, 0.86f, 0.32f);
         public static readonly Color BoostZoneGreen = new Color(0.1f, 0.85f, 0.2f);
@@ -94,6 +102,23 @@ namespace ProtoHarness.ChainRush.Visuals
         // Three sideways shakes, fading to the bracket's original position.
         public static float ShakeOffset(float since)
             => Mathf.Sin(since * (Mathf.PI * 6f / MissShakeTime)) * MissShakeSize * Fade(since, MissShakeTime);
+
+        public static float Kmh(float metresPerSecond) => metresPerSecond * KmhPerMetrePerSecond;
+
+        // A cue's size against its resting size: CueStartScale when it appears, slowing into 1.
+        public static float CueScale(float since)
+        {
+            float left = Fade(since, CueShrinkTime);
+            return 1f + (CueStartScale - 1f) * left * left * left;
+        }
+
+        // A cue's opacity, life seconds after which it is gone.
+        public static float CueAlpha(float since, float life)
+        {
+            RequireFinite(since, nameof(since));
+            RequireFinite(life, nameof(life));
+            return Mathf.Clamp01(Mathf.Min(since / CueFadeInTime, (life - since) / CueFadeOutTime));
+        }
 
         // Whether a point in HUD coordinates (y down) lies on a screen this wide and high.
         public static bool IsOnScreen(Vector2 point, float width, float height)

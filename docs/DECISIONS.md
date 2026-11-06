@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-11-06 · 속도 표시는 km/h, 카운트다운은 큰 글자가 줄어들며 나온다 (`feature/hud-kmh-countdown`)
+
+- **결정 (사용자, 2026-11-06)**: "Km/h로 변경작업 ㄱㄱ", "3 2 1 시간 나오는 것도 폰트 바꾸고 액션 추가해줘 … 큰 글자가 축소되서 표현되는".
+- **속도**: 표시만 바꾼다. 시뮬 값은 m/s 그대로이고 HUD 가 ×3.6 해서 정수로 보인다(`FeedbackLook.Kmh`, `ChainRushHud.SpeedText`). 달리기 20 m/s 는 72, 부스트존 55 m/s 는 198 이다. 단위 글자는 HUD 의 대문자 표기대로 `KM / H`.
+- **카운트다운**: 3·2·1·GO! 를 맑은 고딕 Bold 에서 HUD 숫자와 같은 Bahnschrift BoldAndItalic 으로 바꿨다. 2.6배에서 0.3초에 줄어들고(`CueScale`), 0.08초에 나타나 마지막 0.2초에 사라진다(`CueAlpha`). 나이는 `ChainRushGame.CountdownNumberAge`(읽기 전용, 시뮬이 읽지 않는다)와 `game.Elapsed` 로 잰다. 글자는 320 으로 그려 절반으로 줄인다. 160 으로 그려 키우면 커 있는 동안 흐려지기 때문이다.
+- **버린 대안**: 글꼴 크기를 프레임마다 바꾸기 — 크기마다 글리프를 새로 구워 프레임이 끊긴다. 시뮬까지 km/h 로 바꾸기 — 지문과 튜닝 값이 전부 바뀌는데 얻는 것이 없다.
+- **검증**: 선택 PlayMode 13건 `testcasecount=13 Passed passed=13 failed=0 skipped=0`, 12:05:41Z~12:06:03Z. 고른 것: `ChainRushTests.ChainRushHud_*`·`StartCountdown_*`, `ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenu*`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`. 영향 평가: `CountdownNumberAge` → `ChainRushHud.cs` 만 읽는다 → 시뮬 밖이라 지문·Lap 없음. `select-tests.ps1` 은 `ChainRushGame.cs` 때문에 "전체" 로 판정했다. Console Error·Warning 0건.
+- **한계**: 화면으로 보지 않았다. 위치·크기·움직임은 사용자 플레이 확인 대기.
+
 ## 2026-11-06 · 열린 코스와 1랩 다운힐 SUMMIT DROP · M6 "시뮬 변경 없이" 를 뺀다 (`feature/m6-open-course`)
 
 - **결정 (사용자, 2026-11-06)**: 고저차 트랙은 "위에서 아래로 쮹 가는 맵", "1랩만". 레퍼런스는 "보고 참고하라는거다". "열린코스도 되도록 구조 바꿔". 8구간 구성, 갈림길, 가드레일 없는 구간에 "1 o 2 o 3 o". 2026-11-05 "M6 범위" 의 "시뮬 변경 없이" 는 이 트랙에서 빠진다.

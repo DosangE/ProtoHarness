@@ -46,10 +46,15 @@ namespace ProtoHarness.ChainRush
         // 2026-10-29); it runs after GrappleController, and OnGUI after every LateUpdate, so the HUD draws this frame's.
         private ControlFeedback feedback;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
+        // A cue rests at CueSize but is drawn from glyphs of CueDrawSize, so it stays sharp while it is larger (FeedbackLook.CueScale).
         private const int CueSize = 160;
+        private const int CueDrawSize = 320;
+        private const float CueBoxWidth = 800f;
+        private const float CueBoxHeight = 440f;
+        private const float CueShadow = 6f;
         private const string CueGlyphs = "321GO!";
-        // How long "GO!" stays up once a run has started.
-        private const float GoSeconds = 1f;
+        // How long each number and "GO!" stay up.
+        private const float CueSeconds = 1f;
         private static readonly Color Ink = NightUi.Panel;
         private static readonly Color Mint = NightUi.Accent;
         private static readonly Color Muted = NightUi.Muted;
@@ -65,6 +70,9 @@ namespace ProtoHarness.ChainRush
 
         // The title at the top left: the lobby's track name, or what the scene is when it was opened directly.
         public string Heading => FromLobby ? assembler.Setup.Title : game.IsCircuit ? "CIRCUIT" : "CHAIN RUSH";
+
+        // The speed at the bottom right, in km/h.
+        public string SpeedText => FeedbackLook.Kmh(player.HorizontalSpeed).ToString("0");
 
         private void Awake()
         {
@@ -196,10 +204,12 @@ namespace ProtoHarness.ChainRush
             waiting.alignment = TextAnchor.MiddleCenter;
             pauseItem = Style(22, Color.white, FontStyle.Bold);
             pauseItem.alignment = TextAnchor.MiddleCenter;
-            cue = Style(CueSize, Mint, FontStyle.Bold);
+            cue = NightUi.Style(displayFont, CueDrawSize, Mint, FontStyle.BoldAndItalic);
             cue.alignment = TextAnchor.MiddleCenter;
+            cue.wordWrap = false;
+            cue.clipping = TextClipping.Overflow;
             // The first draw of new glyphs can stall a frame (DECISIONS P3 C1c-2b), and "GO!" is drawn on a run's first frame.
-            font.RequestCharactersInTexture(CueGlyphs, CueSize, FontStyle.Bold);
+            displayFont.RequestCharactersInTexture(CueGlyphs, CueDrawSize, FontStyle.BoldAndItalic);
         }
 
         private void OnGUI()
@@ -217,14 +227,14 @@ namespace ProtoHarness.ChainRush
             if (Tutorial != null && Tutorial.IsBriefing) DrawBriefing(Tutorial, width, height);
             else if (game.IsReady && FromLobby) DrawLoading(width, height);
             else if (game.IsReady) DrawReady(width, height);
-            else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString());
+            else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString(), game.CountdownNumberAge);
             else if (game.IsPaused) DrawPause(width, height);
             else if (Tutorial != null && Tutorial.IsComplete) DrawTutorialComplete(width, height);
             else if (game.HasFailed || game.HasFinished) DrawResult(width, height);
             else
             {
                 DrawPlay(width, height, scale);
-                if (Tutorial == null && game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
+                if (Tutorial == null && game.Elapsed < CueSeconds) DrawCue(width, height, "GO!", game.Elapsed);
                 // Over everything, the screen coming up from black after a fall hides the camera's cut.
                 float fade = RespawnFade;
                 if (fade > 0f) NightUi.Block(new Rect(0, 0, width, height), new Color(0f, 0f, 0f, fade));
@@ -244,10 +254,18 @@ namespace ProtoHarness.ChainRush
             GUI.Label(panel, "트랙을 불러오는 중", waiting);
         }
 
-        // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen.
-        private void DrawCue(float width, float height, string text)
+        // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen, since seconds after it appeared.
+        private void DrawCue(float width, float height, string text, float since)
         {
-            NightUi.ShadowLabel(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), text, cue);
+            Vector3 center = new Vector3(width / 2f, height / 2f - 20f, 0f);
+            float size = FeedbackLook.CueScale(since) * CueSize / CueDrawSize;
+            Matrix4x4 previous = GUI.matrix;
+            Color tint = GUI.color;
+            GUI.matrix = previous * Matrix4x4.TRS(center, Quaternion.identity, new Vector3(size, size, 1f)) * Matrix4x4.Translate(-center);
+            GUI.color = new Color(tint.r, tint.g, tint.b, tint.a * FeedbackLook.CueAlpha(since, CueSeconds));
+            NightUi.ShadowLabel(new Rect(center.x - CueBoxWidth / 2f, center.y - CueBoxHeight / 2f, CueBoxWidth, CueBoxHeight), text, cue, CueShadow);
+            GUI.color = tint;
+            GUI.matrix = previous;
         }
 
         private void DrawHeader(float width)
@@ -315,8 +333,8 @@ namespace ProtoHarness.ChainRush
             NightUi.Block(new Rect(66, 163, 300, 4), Row);
             NightUi.Block(new Rect(66, 163, 300 * (Tutorial != null ? Tutorial.StageProgress : game.Progress), 4), Mint);
             if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
-            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), player.HorizontalSpeed.ToString("00.0"), speedNumber);
-            GUI.Label(new Rect(width - 150, height - 169, 90, 26), "M / S", small);
+            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), SpeedText, speedNumber);
+            GUI.Label(new Rect(width - 150, height - 169, 90, 26), "KM / H", small);
             int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
             for (int i = 0; i < 20; i++) NightUi.Block(new Rect(width - 332 + i * 13, height - 125, 9, 5), i < speedMarks ? Mint : Row);
             DrawBoost(width, height);

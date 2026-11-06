@@ -17,6 +17,9 @@ namespace ProtoHarness.ChainRush.Track
     // (COURSE.md T4). SetFocus narrows any query to the pieces around an S the caller is tracking.
     public sealed class Centerline
     {
+        // How far above or below a pole's point its shaft goes (SwingLook.PoleHeight, PoleDepth).
+        public const float PoleVerticalReach = 20f;
+
         private struct Piece
         {
             public double StartS;
@@ -308,11 +311,11 @@ namespace ProtoHarness.ChainRush.Track
 
         public int BranchCount => branches.Count;
 
-        // A shortcut's road beside the loop (user 2026-10-25, Finger Lanes): line is its open centerline from the loop at
-        // fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the loop's road half width there. A point
-        // off the loop's road (farther to the side than mainHalfWidth) and nearer to the branch than to the loop is on the
-        // branch: Project and Frame answer with the branch's pieces, and S goes from fromS to toS in proportion along it, so
-        // the laps keep counting across. The branch's arcs have corner poles like the loop's.
+        // A shortcut's road beside the main line, closed or open (user 2026-10-25, Finger Lanes): line is its open centerline
+        // from the main line at fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the main road's half
+        // width there. A point off the main road (farther to the side than mainHalfWidth) and nearer to the branch than to the
+        // main line is on the branch: Project and Frame answer with the branch's pieces, and S goes from fromS to toS in
+        // proportion along it, so the laps keep counting across. The branch's arcs have corner poles like the main line's.
         public void AddBranch(double fromS, double toS, Centerline line, float mainHalfWidth)
         {
             RequirePieces();
@@ -487,7 +490,8 @@ namespace ProtoHarness.ChainRush.Track
 
         // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1), and AddPole
         // adds others. Of the poles within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading)
-        // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level; ties
+        // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level, of
+        // those within PoleVerticalReach of world's height (a road that folds under itself has poles on other levels); ties
         // go to the earlier piece, and arcs come before added poles. False when there is none. An arc's pole sits at the
         // arc's start height. All poles are searched, focus or not: a runner asks only when it acts.
         // A corner already passed is not offered (user 2026-10-30): an arc's pole only from before the arc up to
@@ -549,6 +553,7 @@ namespace ProtoHarness.ChainRush.Track
         // Whether a pole is within reach, nearer than the best so far and inside the angle; if so it becomes the best.
         private static bool InReach(Vector3 pole, float reach, Vector3 world, float headingDegrees, float maxAngleDegrees, ref float bestDistance)
         {
+            if (Mathf.Abs(pole.y - world.y) > PoleVerticalReach) return false;
             Vector3 toward = pole - world;
             toward.y = 0f;
             float distance = toward.magnitude;
@@ -634,7 +639,8 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         // The first piece whose span the point has not passed; before the first piece or past the
-        // last, that end piece, with along running negative or beyond its length.
+        // last, that end piece, with along running negative or beyond its length. A loop, a focused
+        // line and a line with branches take the nearest piece instead.
         private Piece PieceAt(Vector3 world, out float along, out float right)
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");

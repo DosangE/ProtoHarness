@@ -13,7 +13,7 @@
 - **다음 작업 방식 (사용자 2026-11-06)**: "다음 작업 codex, mcp로 하겟다". 구현·검증은 Codex 가 Unity MCP 로 하고 Claude 는 리뷰한다. 무슨 작업인지는 사용자가 다음 세션에서 말한다. 실행은 `tools/codex-unity.ps1 -PromptFile <파일> -Write`(`docs/RULES/SUBAGENTS.md` §7-5).
 - **Codex 의 Unity MCP**: 사용자가 그 작업에서 허락할 때만 연다(§7-5). "codex로 구현" 만으로는 허락이 아니다.
 - **`dev` 에 병합·푸시 (`feature/m6-swing-effects`)**: 봉 체인 18 m, 봉 스윙 이펙트(불꽃·줄 끊김), 상태별 꼬리, 흰 바람 선. DECISIONS 2026-11-06 두 항목. M6 "봉 스윙 이펙트" 는 끝났다. 시야와 플레이어 빌드는 M6 마감 때 다시 본다.
-- **고저차 트랙 `SUMMIT DROP` (`feature/m6-open-course`, DECISIONS 2026-11-06 "열린 코스와 1랩 다운힐")**: 열린 코스 구조, 1랩 다운힐 트랙, 숲과 바위 산악 장식. 사용자 플레이 확인 대기. 그다음 빌드 씬 목록을 `ProjectSettings` 만 담은 브랜치로 나누고 병합 전 리뷰.
+- **고저차 트랙 `SUMMIT DROP` (`feature/m6-open-course`, DECISIONS 2026-11-06 "열린 코스와 1랩 다운힐")**: 열린 코스 구조, 1랩 다운힐 트랙, 숲과 바위 산악 장식. `dev` 병합, 푸시는 지시 때. 사용자 플레이 확인 대기(코스 리듬, 틈 점프·지름길 난이도, 벽 색과 큰 바위 모양). 리뷰 후속은 그 DECISIONS 항목.
 - **속도 단위 km/h (사용자 2026-11-06 메모)**: "현재 m/s인가 그럴텐데 km/h로 단위 바꾸자고". 화면에 보이는 속도 표시를 km/h 로 바꾼다. 시기는 정하지 않았다. 시뮬 값은 m/s 그대로 두고 표시만 바꾸는지는 요청서에서 정한다.
 - **남은 M6 필수**: 사운드 구분(1차 코드 `feature/m6-sound-cues`·`fix/stadium-flicker`·stash 는 다른 PC 에 있다, 이 PC·origin 에 없음을 2026-11-06 확인). 고저차 트랙은 `SUMMIT DROP` 으로 코드·장식까지 끝났고 사용자 플레이 확인이 남았다.
 - **같은 날 `dev` 에 병합·푸시**: `fix/exterior-save-order`(장식 빌더가 검사를 통과한 뒤에만 메시를 저장한다 — 장식 빌더 후속 ①), `docs/runner-model-temporary`(캐릭터 모형은 임시용). 앞의 것은 STADIUM·SKYWAY 재빌드와 강제 실패로 확인했고(실패한 빌드가 메시를 다시 쓴 수 21 → 0), FINGER·PALM COAST 재빌드와 메시 에셋을 처음 만드는 경로는 돌리지 않았다.

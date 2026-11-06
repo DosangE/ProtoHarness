@@ -165,8 +165,8 @@ namespace ProtoHarness.ChainRush.Race
             return anchors[index];
         }
 
-        // The first gap the runner has not fully crossed on this lap, or the first one of the next lap. S is
-        // folded into the lap, so a gap after the seam comes back as S + lap length.
+        // The first gap the runner has not fully crossed on this lap, or on a circuit the first one of the next
+        // lap. S is folded into the lap, so a gap after the seam comes back as S + lap length.
         public bool TryGetNextGap(double s, out double startS, out double endS, out bool hasAnchor)
         {
             startS = 0d;

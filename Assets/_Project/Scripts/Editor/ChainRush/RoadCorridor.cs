@@ -26,7 +26,8 @@ namespace ProtoHarness.Editor.ChainRush
         private readonly float longitudinalReach;
         private readonly List<(Vector3 Position, float Radius)> occupied = new List<(Vector3, float)>();
 
-        // line is definition's closed centerline (TrackDefinition.BuildCenterline).
+        // line is definition's centerline (TrackDefinition.BuildCenterline). An open course's road runs from behind the
+        // start to the end of the runout, past the lap, so the corridor does too.
         public RoadCorridor(TrackDefinition definition, Centerline line, double step, float keepOut)
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
@@ -36,7 +37,9 @@ namespace ProtoHarness.Editor.ChainRush
             this.keepOut = keepOut;
             thickness = definition.RoadThickness;
             longitudinalReach = (float)step + 0.05f;
-            for (double s = 0d; s <= definition.LapLength; s += step)
+            double roadStart = definition.IsOpenCourse ? -definition.StartRunway : 0d;
+            double roadEnd = definition.IsOpenCourse ? line.EndS : definition.LapLength;
+            for (double s = roadStart; s <= roadEnd; s += step)
             {
                 TrackFrame frame = line.FrameAt(s);
                 samples.Add(frame.Position);

@@ -41,9 +41,10 @@ namespace ProtoHarness.Editor.ChainRush
         public static void BuildAssets()
         {
             RequireIdle();
-            BuildLook();
             var layout = new Layout(ExteriorAssets.RequireDefinition(ChainRushCircuitSceneBuilder.SummitDropPath));
             ExteriorAssets.SavePrefab(PrefabPath, layout.Build, layout.ValidateClearance);
+            // Last, so a layout that fails its checks leaves the look as it was.
+            BuildLook();
         }
 
         private static void RequireIdle()

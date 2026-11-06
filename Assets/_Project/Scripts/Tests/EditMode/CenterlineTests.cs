@@ -401,6 +401,16 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void TryFindPole_RunnerBeyondTheShaftsHeight_FindsNone()
+        {
+            Centerline line = QuarterTurn();
+            Assert.That(line.TryFindPole(new Vector3(0f, Centerline.PoleVerticalReach, 16f), 0f, 75f, 5f, out _), Is.True, "At the top of the shaft.");
+            Assert.That(line.TryFindPole(new Vector3(0f, -Centerline.PoleVerticalReach, 16f), 0f, 75f, 5f, out _), Is.True, "At its foot.");
+            Assert.That(line.TryFindPole(new Vector3(0f, Centerline.PoleVerticalReach + 1f, 16f), 0f, 75f, 5f, out _), Is.False, "Above it.");
+            Assert.That(line.TryFindPole(new Vector3(0f, -Centerline.PoleVerticalReach - 1f, 16f), 0f, 75f, 5f, out _), Is.False, "Below it.");
+        }
+
+        [Test]
         public void TryFindPole_OnTheStraightBeforeAnArc_FindsItsCenter()
         {
             Assert.That(QuarterTurn().TryFindPole(new Vector3(0f, 0f, 16f), 0f, 75f, 5f, out Vector3 pole), Is.True);

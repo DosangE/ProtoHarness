@@ -22,8 +22,12 @@
   - 트랙·지름길: EditMode `testcasecount="169" result="Passed" passed="169" failed="0"`(10:21:43Z), 지문 `testcasecount="1" result="Passed"`(10:22:34Z~10:23:10Z), SummitDrop·OpenCourse `testcasecount="13" result="Passed" passed="13" failed="0"`(10:26:29Z~10:26:41Z), FINGER 3속도·스윙 지름길 `testcasecount="4" result="Passed" passed="4" failed="0"`(10:27:33Z~10:28:34Z), 최종 에셋 도로·봉 간격 `testcasecount="1" result="Passed"`(10:28:54Z, XML 원본 확인).
   - 로비 저장 뒤 `ChainRushFlowTests.Lobby_` (Claude 실행, 자리표시 순번 4 → 5): `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"`(10:35:57Z~10:36:08Z). Console 에러 0.
   - 장식 포함 (Claude 실행): `Race_BotLap_*` SUMMIT DROP 3칸 `testcasecount="3" result="Passed" passed="3" failed="0"`(11:28:40Z~11:29:38Z), `ChainRushFlowTests.Lobby_` `testcasecount="18" result="Passed" passed="18" failed="0"`(11:30:11Z~11:30:23Z). 첫 랩 실행은 테스트 시작 때 뜬 `Scene(s) Have Been Modified` 대화 상자에 막혀 시작되지 않았다(Cancel 로 닫았고 씬을 다시 저장했다. 저장 내용은 의도한 두 줄뿐이었다). 레이스 화면 11곳을 캡처해 확인했다.
+  - 리뷰 수정 뒤 (Claude 실행): 새 봉 테스트 2건 고치기 전 `testcasecount="2" result="Failed(Child)" passed="0" failed="2"`(11:44:05Z), EditMode 전체 `testcasecount="392" result="Passed" passed="392" failed="0"`(11:45:33Z~11:45:34Z), PlayMode 코너 스윙·롤백·지문·열린 코스·SummitDrop `testcasecount="42" result="Passed" passed="42" failed="0"`(11:45:56Z~11:47:53Z).
   - 서킷 지문 그대로 `0xEF92FB76BFD1D767`. 봇 결승: 보통 124.72 s, 빠름 100.68 s, 매우빠름 85.08 s, 복귀 0회, 최대 옆 거리 6.82 m. 빠름 지름길 90.00 s(10.68 s 단축).
-- **남은 것**: 사용자 플레이 확인. 병합 전 리뷰. 빌드 씬 목록은 §9-2 대로 `ProjectSettings` 만 담은 브랜치로 나눈다.
+- **봉은 기둥 높이 안에서만 걸린다 (병합 전 Codex 리뷰)**: `Centerline.TryFindPole` 은 코스 전체의 봉을 평면 거리로 찾는다. 이 코스는 위아래 구간이 평면으로 겹쳐 S 96 에서 108.1 m 아래 봉이 잡혔다(고치기 전 실패 `Expected: less than or equal to 20.0f But was: 108.147797f`). `PoleVerticalReach` 20 m(기둥이 봉 지점 위아래로 뻗는 길이)를 넘으면 후보에서 뺀다. 닫힌 서킷은 높이 차가 작아 지문이 그대로다.
+- **병합 전 리뷰로 함께 고친 것**: 빌더는 프리팹 검사를 통과한 뒤에 룩을 저장한다. `RoadCorridor` 는 열린 코스의 출발 뒤 도로와 감속 구간도 표본으로 잡는다(재빌드 통과, 프리팹·메시 변경 없음). 테스트 이름, 틀린 주석 4곳.
+- **남은 것**: 사용자 플레이 확인. 빌드 씬 목록은 §9-2 대로 `ProjectSettings` 만 담은 브랜치로 나눠 함께 병합했다.
+- **리뷰 후속 (`unity-reviewer` 제안, 지금 자산에 영향 없음)**: ① 봇 가드 단언 `maxOffset < RoadHalfWidth - 0.4f` 는 폭이 변하는 트랙을 전제하지 않는다(`ChainRushFlowTests.cs:1099`, `HalfWidthAt(maxOffsetS)` 로) ② `OpenEdge` 가 직선 데크 위면 조용히 무시된다 ③ `MergeByMaterial` 은 Skyway 복사본이다. `Lettering` 은 네 번째 변형이다 — `ExteriorKit` 으로 ④ 장식 배치 실패를 세지 않는 `continue` 3곳, 하드코딩 S 값 ⑤ `s % 8d` 는 음수 S 에서 늘 참이라 출발 뒤 차선이 실선이 된다.
 
 ## 2026-11-06 · 튜토리얼: 넓은 원형 미션 맵, 스테이지 6개 (`feature/tutorial-stages`)
 

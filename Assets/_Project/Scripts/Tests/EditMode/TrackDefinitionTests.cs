@@ -76,7 +76,7 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void TryValidate_OpenCourseWithTwoLapsOrBranches_IsRejected()
+        public void TryValidate_OpenCourseWithTwoLapsOrBays_IsRejected()
         {
             SetField("openCourse", true);
             SetField("lapCount", 2);
@@ -176,6 +176,23 @@ namespace ProtoHarness.Tests.EditMode
             SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(35f, 205f + Mathf.PI * 35f, 15f, 40f, 3f) });
             SetField("openEdges", new List<TrackDefinition.OpenEdge> { new TrackDefinition.OpenEdge(40f, 60f, false) });
             Assert.That(Error(), Does.Contain("overlaps a shortcut crossing"));
+        }
+
+        // The road folds back under itself, so a pole can stand within level reach of a runner far above or below it
+        // (Codex review 2026-11-06: at S 100 the zigzag's pole, about 108 m down).
+        [Test]
+        public void SummitDrop_PoleSearch_NeverOffersAPoleOnAnotherLevelOfTheRoad()
+        {
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_SummitDrop.asset");
+            Assert.That(summit, Is.Not.Null, "Create Summit Drop Track first.");
+            Centerline line = summit.BuildCenterline(Vector3.zero, 0f);
+            for (double s = 0d; s <= summit.LapLength; s += 1d)
+            {
+                TrackFrame frame = line.FrameAt(s);
+                float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+                if (!line.TryFindPole(frame.Position, heading, 95f, 6f, out Vector3 pole)) continue;
+                Assert.That(Mathf.Abs(pole.y - frame.Position.y), Is.LessThanOrEqualTo(SwingLook.PoleHeight), $"S {s}: pole at {pole}.");
+            }
         }
 
         [Test]

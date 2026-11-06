@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-11-06 · 봉 체인은 18 m 에 걸고, 장식은 줄 때문에 제한하지 않는다 (`feature/m6-swing-effects`)
+
+- **결정 (사용자, 2026-11-06)**: `SwingLook.BiteHeight` 3 → 18 m. 체인이 위로 뻗어 낮은 장식 위로 지나간다. 사용자 플레이 "괜찮네". 값은 표현 계층 상수 하나고 시뮬은 읽지 않는다(`SwingCenter` 만 쓴다). 20 m 는 띠가 꼭대기 구체에 묻혀(`CircuitScenery.PlacePoles`) 18 m 로 했다.
+- **이유**: 사용자 "맵 장식들을 뚫고 줄이 보이지않나". 장식과 줄은 둘 다 물리가 없어(`ExteriorAssets.ValidateDecoration`, `MetalChain`) 달리기에는 영향이 없고, 보이는 문제다. 코너를 드리프트가 아니라 봉에 줄을 걸어 각도를 고정해 지나가는 것이 이 게임의 차이라, 봉 스윙은 그대로 둔다.
+- **측정 (장식 프리팹에 임시 충돌체, 봉을 걸 수 있는 중앙선 지점마다 손 → 걸림 띠 레이캐스트)**: 3 m → 18 m 로 STADIUM 1% → 1%, FINGER LANES 18% → 0%, SKYWAY 57% → 8%, PALM COAST 44% → 33%. 남은 겹침은 그대로 둔다.
+- **버린 대안**: 줄이 쓸고 가는 부채꼴에서 높은 장식을 빼거나 옮기기 — 사용자 "이건 아닌거같다". 줄이 코너를 도는 동안 겹치는 모든 장식을 막아야 해서다. 체인을 손 쪽만 그리기, 코너 안쪽 난간에 걸기(`RailPoint`)는 하지 않았다. 남은 겹침이 거슬리면 다시 본다.
+- **검증**: PlayMode 선택 18건 `testcasecount=18 result=Passed passed=18 failed=0 skipped=0`, 2026-11-06 05:26:01Z~05:27:06Z(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`SwingLook_WhileSwinging_…`·서킷 지문·`Scene_CornerPoles_…`·`ControlFeedback_…`).
+
 ## 2026-11-05 · 트랙별 소리: FINGER LANES 음원만 넣고, 나머지는 다시 만든다 (`feature/m6-finger-sound`)
 
 - **결정 (사용자, 2026-11-05)**: 네 트랙 음악·환경음과 새 효과음을 플레이한 뒤 "손가락맵 음원 말고는 다 별로다. 기록해놓고 손가락맵만 커밋 푸쉬 병합하라."

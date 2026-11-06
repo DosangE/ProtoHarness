@@ -461,7 +461,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(chain.enabled, Is.True);
             Vector3 bite = chain.GetPosition(1);
             Assert.That(new Vector2(bite.x, bite.z), Is.EqualTo(new Vector2(Pole.x, Pole.z)).Using(Vector2EqualityComparer(1e-3f)), "The chain must bite the pole at the arc's center.");
-            Assert.That(bite.y - game.Racer.SwingCenter.y, Is.EqualTo(SwingLook.BiteHeight).Within(1e-3f), "It bites the pole's band near hand height.");
+            Assert.That(bite.y - game.Racer.SwingCenter.y, Is.EqualTo(SwingLook.BiteHeight).Within(1e-3f), "It bites the pole's band.");
 
             bot.SwingHold = false;
             yield return new WaitForSeconds(SwingLook.BlendTime + 0.25f);

@@ -20,12 +20,13 @@ namespace ProtoHarness.ChainRush.Visuals
         // The corner pole model (R5), measured from the simulation's pole point (the arc's center at road height): it
         // rises PoleHeight above it and reaches PoleDepth below it into the open infield, so it reads as a landmark from
         // down the straight instead of a thin post floating in the dark (the first 8 m x 0.7 m dark post went unseen,
-        // 2026-10-18 play). The chain bites a band BiteHeight up, near hand height, so the rope lies almost level and
-        // shows the swing's radius.
+        // 2026-10-18 play). The chain bites a band BiteHeight up, just under the cap, so the rope rises from the hand and
+        // passes over low decoration (user 2026-11-06; at 3 m it lay almost level and ran through most of it). Decoration
+        // has no collider and is never placed around the rope: taller things still show the chain passing through them.
         public const float PoleHeight = 20f;
         public const float PoleDepth = 20f;
         public const float PoleThickness = 1.6f;
-        public const float BiteHeight = 3f;
+        public const float BiteHeight = 18f;
 
         // Where the chain meets a pole whose point is pole (Centerline.TryFindPole, RacerState.SwingCenter).
         public static Vector3 PoleBite(Vector3 pole) => pole + Vector3.up * BiteHeight;

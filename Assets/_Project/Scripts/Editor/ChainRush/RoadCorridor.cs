@@ -22,9 +22,12 @@ namespace ProtoHarness.Editor.ChainRush
         private readonly List<Vector3> samples = new List<Vector3>();
         private readonly List<Vector3> rights = new List<Vector3>();
         private readonly List<float> widths = new List<float>();
+        private readonly List<float> grades = new List<float>();
+        private readonly float longitudinalReach;
         private readonly List<(Vector3 Position, float Radius)> occupied = new List<(Vector3, float)>();
 
-        // line is definition's closed centerline (TrackDefinition.BuildCenterline).
+        // line is definition's centerline (TrackDefinition.BuildCenterline). An open course's road runs from behind the
+        // start to the end of the runout, past the lap, so the corridor does too.
         public RoadCorridor(TrackDefinition definition, Centerline line, double step, float keepOut)
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
@@ -33,12 +36,16 @@ namespace ProtoHarness.Editor.ChainRush
             if (!(keepOut >= 0f)) throw new ArgumentOutOfRangeException(nameof(keepOut), keepOut, "The keep-out must not be negative.");
             this.keepOut = keepOut;
             thickness = definition.RoadThickness;
-            for (double s = 0d; s <= definition.LapLength; s += step)
+            longitudinalReach = (float)step + 0.05f;
+            double roadStart = definition.IsOpenCourse ? -definition.StartRunway : 0d;
+            double roadEnd = definition.IsOpenCourse ? line.EndS : definition.LapLength;
+            for (double s = roadStart; s <= roadEnd; s += step)
             {
                 TrackFrame frame = line.FrameAt(s);
                 samples.Add(frame.Position);
                 rights.Add(frame.Right);
                 widths.Add(definition.HalfWidthAt(s));
+                grades.Add(frame.Grade);
             }
             foreach (TrackDefinition.Shortcut shortcut in definition.Shortcuts)
             {
@@ -49,6 +56,7 @@ namespace ProtoHarness.Editor.ChainRush
                     samples.Add(frame.Position);
                     rights.Add(frame.Right);
                     widths.Add(shortcut.HalfWidth);
+                    grades.Add(frame.Grade);
                 }
             }
             // A bay is road too: its middle beside the main road's edge, half its width either side.
@@ -64,6 +72,7 @@ namespace ProtoHarness.Editor.ChainRush
                         samples.Add(frame.Position - frame.Right * bay.Width * 0.5f);
                         rights.Add(frame.Right);
                         widths.Add(half);
+                        grades.Add(frame.Grade);
                     }
                     continue;
                 }
@@ -75,6 +84,7 @@ namespace ProtoHarness.Editor.ChainRush
                     samples.Add(frame.Position + frame.Right * side * (main + width * 0.5f));
                     rights.Add(frame.Right);
                     widths.Add(width * 0.5f);
+                    grades.Add(frame.Grade);
                 }
             }
         }
@@ -120,6 +130,11 @@ namespace ProtoHarness.Editor.ChainRush
         // As above with several groups checked vertex by vertex (SKYWAY's highway beyond its guards, and the town meshes
         // merged one per material, which spread round the road).
         public void ValidateClearance(GameObject root, float floor, Transform underRoad, IReadOnlyList<Transform> byVertex)
+            => ValidateClearance(root, floor, underRoad, byVertex, false);
+
+        // Opt-in for steep terrain: test against nearby road cross-sections at their projected grade.
+        // Existing builders retain the original circular, constant-sample-height checks above.
+        public void ValidateClearance(GameObject root, float floor, Transform underRoad, IReadOnlyList<Transform> byVertex, bool followGrade)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
             if (byVertex == null) throw new ArgumentNullException(nameof(byVertex));
@@ -132,7 +147,7 @@ namespace ProtoHarness.Editor.ChainRush
             var intrusions = new List<string>();
             int under = underRoad == null ? 0 : ValidateUnderRoad(underRoad, intrusions);
             int vertices = 0;
-            foreach (Transform group in byVertex) vertices += ValidateByVertex(group, floor, intrusions);
+            foreach (Transform group in byVertex) vertices += ValidateByVertex(group, floor, intrusions, followGrade);
             foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (underRoad != null && renderer.transform.IsChildOf(underRoad)) continue;
@@ -161,7 +176,7 @@ namespace ProtoHarness.Editor.ChainRush
         // No vertex of the group's meshes stands above the road's surface (by more than SurfaceGap) and below Overhead
         // within EdgeMargin of a road's edge; what lies at or below floor is land. A face whose corners all lie outside
         // the corridor but which spans it is not caught. Returns how many vertices it checked.
-        private int ValidateByVertex(Transform group, float floor, List<string> intrusions)
+        private int ValidateByVertex(Transform group, float floor, List<string> intrusions, bool followGrade)
         {
             const float SurfaceGap = 0.05f;
             const float Cell = 16f;
@@ -197,8 +212,16 @@ namespace ProtoHarness.Editor.ChainRush
                             if (!grid.TryGetValue((gx, gz), out List<int> cell)) continue;
                             foreach (int i in cell)
                             {
-                                if (p.y <= samples[i].y + SurfaceGap || p.y >= samples[i].y + Overhead) continue;
                                 float dx = p.x - samples[i].x, dz = p.z - samples[i].z;
+                                float roadY = samples[i].y;
+                                if (followGrade)
+                                {
+                                    Vector3 forward = Vector3.Cross(rights[i], Vector3.up);
+                                    float along = dx * forward.x + dz * forward.z;
+                                    if (Mathf.Abs(along) > longitudinalReach) continue;
+                                    roadY += grades[i] * along;
+                                }
+                                if (p.y <= roadY + SurfaceGap || p.y >= roadY + Overhead) continue;
                                 float limit = widths[i] + EdgeMargin;
                                 if (dx * dx + dz * dz >= limit * limit) continue;
                                 inside = true;

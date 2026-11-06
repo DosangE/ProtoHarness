@@ -10,6 +10,27 @@ namespace ProtoHarness.Tests.EditMode
     {
         private const float Tolerance = 1e-4f;
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Centerline_OpenCourseEnds_ExtendTheirOwnTangentsWithoutWrapping(bool focused)
+        {
+            var line = new Centerline(new Vector3(0f, 20f, 0f), 0f);
+            line.AppendStraight(60f, -0.2f);
+            line.AppendArc(30f, 90f, 0f);
+            line.AppendStraight(40f, 0f);
+            foreach (double s in new[] { -8d, line.EndS + 8d })
+            {
+                if (focused) line.SetFocus(s);
+                TrackFrame frame = line.FrameAt(s);
+                TrackCoord projected = line.Project(frame.Position + frame.Right * 2f + Vector3.up * 3f);
+                Assert.That(frame.S, Is.EqualTo(s).Within(1e-4));
+                Assert.That(projected.S, Is.EqualTo(s).Within(1e-4));
+                Assert.That(projected.D, Is.EqualTo(2f).Within(1e-4));
+                Assert.That(projected.H, Is.EqualTo(3f).Within(1e-4));
+                Assert.That(line.Frame(frame.Position).S, Is.EqualTo(s).Within(1e-4));
+            }
+        }
+
         private static Centerline StraightAlongZ(float length)
         {
             var line = new Centerline(Vector3.zero, 0f);
@@ -377,6 +398,16 @@ namespace ProtoHarness.Tests.EditMode
             line.AppendArc(30f, 90f);
             line.AppendStraight(40f);
             return line;
+        }
+
+        [Test]
+        public void TryFindPole_RunnerBeyondTheShaftsHeight_FindsNone()
+        {
+            Centerline line = QuarterTurn();
+            Assert.That(line.TryFindPole(new Vector3(0f, Centerline.PoleVerticalReach, 16f), 0f, 75f, 5f, out _), Is.True, "At the top of the shaft.");
+            Assert.That(line.TryFindPole(new Vector3(0f, -Centerline.PoleVerticalReach, 16f), 0f, 75f, 5f, out _), Is.True, "At its foot.");
+            Assert.That(line.TryFindPole(new Vector3(0f, Centerline.PoleVerticalReach + 1f, 16f), 0f, 75f, 5f, out _), Is.False, "Above it.");
+            Assert.That(line.TryFindPole(new Vector3(0f, -Centerline.PoleVerticalReach - 1f, 16f), 0f, 75f, 5f, out _), Is.False, "Below it.");
         }
 
         [Test]

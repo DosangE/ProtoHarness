@@ -489,6 +489,14 @@ namespace ProtoHarness.ChainRush
             grapple.Release(false);
             double s = racer.LastGroundedS - respawnBackoff;
             if (game.Track.TryBoostZoneBehind(s, respawnPadReach, out double pad)) s = pad - respawnBackoff;
+            if (!game.Track.IsLoop)
+            {
+                s = System.Math.Max(0d, System.Math.Min(game.Circuit.Definition.LapLength, s));
+                // A landing just beyond a gap must not put the backoff inside that gap. The open course's start
+                // is also a hard bound: respawning there faces the road ahead rather than the rear end guard.
+                if (game.Circuit.TryGetNextGap(s, out double gapStart, out double gapEnd, out _) && s >= gapStart && s <= gapEnd)
+                    s = System.Math.Max(0d, gapStart - respawnBackoff);
+            }
             TrackFrame frame = game.Track.FrameAt(s);
             controller.enabled = false;
             transform.position = frame.TransformPoint(new Vector3(0f, 1.05f, 0f));

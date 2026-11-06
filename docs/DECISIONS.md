@@ -29,6 +29,8 @@
   - 캡처로 메인 메뉴, 스테이지 페이지, 안내 패널, 스윙, 화면 밖 목표 표시, `STAGE CLEAR`(고치기 전 위치), 완료 팝업을 봤다. 팝업의 Enter·버튼 클릭과 실제 키 입력은 테스트로 돌리지 않았다. 사용자 플레이 확인 대기.
   - 위 값은 첫 구현 때다. **플레이 피드백 반영 뒤 (Codex 실행, XML 은 Claude 가 대조)**: 영향 평가에 `RunnerMotor.TryFindPole` → `ChainRushCornerSwingTests` 를 더했다. 수정 전 재현 `testcasecount=1 result=Failed(Child) failed=1`, 08:28:58Z~08:29:03Z(`Briefing_WaitsAtTheStartWithoutTicks_…`). EditMode `testcasecount=359 result=Failed(Child) passed=358 failed=1`, 08:33:39Z~08:33:40Z(`0 degrees, radius 15`, 반원 경계 후보 누락). 고친 뒤 EditMode 전체(`Enemy` 제외) `testcasecount=359 result=Passed passed=359 failed=0`, 08:36:12Z~08:36:13Z. PlayMode `testcasecount=81 result=Passed passed=81 failed=0 skipped=0`, 08:36:48Z~08:41:24Z(튜토리얼 17, Flow 24, CornerSwing 18, Circuit 11, Rollback 10, 서킷 지문 1). 마지막 코드 수정은 08:35:38Z 로 두 실행 전이다. `Lap` 은 돌리지 않았다(기본값에서 주행 코드 경로가 같다).
   - 팝업의 실제 키(←/→·Enter·ESC)와 마우스 클릭은 테스트로 돌리지 않았다. 캡처는 Game 뷰 588 x 339 를 3배로 키운 것이라 글자가 흐리다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
+  - **병합 ② (작업 중 실행을 다시 쓴다)**: 위 EditMode 359·PlayMode 81 이 병합 코드의 결과다. `Assets/` 의 가장 새 파일은 08:35:38Z 로 두 실행 전이고, 커밋 뒤 `git status` 에 `Assets/` 변경이 없다. `Device` 는 돌리지 않았다(`KeyboardMouseInputSource`·`ChainRushGame.Update` 를 바꾸지 않았다).
+  - **리뷰**: `unity-reviewer` 치명 0, 중대 0, 보통 1(테스트 이름 2단, 기존에도 34개), 제안 7(HANDOFF 후속). 일반 레이스 동작 변경·지문 영향 경로 없음. Codex 설계 리뷰 `needs-attention` 1건(high): `tools/codex-unity.ps1` 강제 종료 때 승인이 남는다 → 실제 결함. 감시 프로세스를 더해 고쳤다. 실행별 격리 설정 권고는 브로커가 공유돼 쓰지 않았다. 임시 `CODEX_HOME`·가짜 `node` 로 실행: 정상 종료 restored=True, 실행 오류 exit=7 restored=True, `Stop-Process -Force` restored=True, 늦은 감시가 다른 실행의 승인을 남김 True, `-Close` restored=True, 실제 설정은 백업과 같음. 남은 틈: 전원 차단(`-Status`, `-Close`), 강제 종료 때 이미 뜬 Codex 프로세스는 계속 돈다.
 
 ## 2026-11-06 · 캐릭터 모형은 임시용이고 최종적으로 바꾼다 (마일스톤 미정)
 

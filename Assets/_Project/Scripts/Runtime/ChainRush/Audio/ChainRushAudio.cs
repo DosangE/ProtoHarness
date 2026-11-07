@@ -14,13 +14,16 @@ namespace ProtoHarness.ChainRush.Audio
         [SerializeField] private AudioSource ambience;
         [SerializeField, Range(0f, 1f)] private float musicVolume = 0.32f;
         [SerializeField, Range(0f, 1f)] private float effectsVolume = 0.65f;
-        private const int SampleRate = 22050;
+        private const int SampleRate = 44100;
         private AudioClip[] cues;
         private AudioClip score;
         private AudioClip wind;
+        private AudioClip swingLoop;
+        private AudioSource swing;
         private AudioSource trackAmbience;
         private AudioClip trackMusicClip;
         private AudioClip trackAmbienceClip;
+        private float swingGain;
         private bool initialized;
         private bool paused;
         private bool playing;
@@ -38,6 +41,8 @@ namespace ProtoHarness.ChainRush.Audio
         public int CueCount => cues.Length;
         public AudioClip MusicClip => music.clip;
         public AudioClip TrackAmbienceClip => initialized ? trackAmbience.clip : trackAmbienceClip;
+        public AudioClip SwingClip => swingLoop;
+        public float SwingVolume => swing.volume;
 
         private void Awake()
         {
@@ -52,6 +57,9 @@ namespace ProtoHarness.ChainRush.Audio
             for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
             score = MakeScore();
             wind = MakeWind();
+            swingLoop = MakeSwingLoop();
+            swing = LoopSource(effects);
+            swing.clip = swingLoop;
             trackAmbience = LoopSource(ambience);
             trackAmbience.clip = trackAmbienceClip;
             music.clip = trackMusicClip != null ? trackMusicClip : score; music.loop = true;
@@ -108,37 +116,43 @@ namespace ProtoHarness.ChainRush.Audio
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame) SetMuted(!Muted);
-            if (game.IsPaused)
-            {
-                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); trackAmbience.Pause(); paused = true; }
-                return;
-            }
-            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); trackAmbience.UnPause(); paused = false; }
-            if (game.IsRunning && !playing)
-            {
-                music.Play(); ambience.Play(); playing = true;
-                if (trackAmbience.clip != null) trackAmbience.Play();
-            }
-            if (!game.IsRunning && playing)
-            {
-                music.Stop(); ambience.Stop(); trackAmbience.Stop(); playing = false;
-            }
-            // The wind counts as an effect.
+            // Settings also apply while paused, before the sources resume. The wind counts as an effect.
             music.volume = Muted ? 0f : musicVolume * settings.Master * settings.Music;
             effects.volume = Muted ? 0f : effectsVolume * settings.Master * settings.Effects;
             ambience.volume = Muted ? 0f : Mathf.Lerp(0.08f, 0.2f, Mathf.Clamp01(player.Speed / 20f)) * settings.Master * settings.Effects;
             trackAmbience.volume = Muted ? 0f : 0.24f * settings.Master * settings.Effects;
+            if (!game.IsPaused)
+                swingGain = Mathf.MoveTowards(swingGain, game.IsRunning && player.IsSwinging ? 1f : 0f, Time.unscaledDeltaTime * 5f);
+            swing.volume = Muted ? 0f : swingGain * 0.22f * effectsVolume * settings.Master * settings.Effects;
+            if (game.IsPaused)
+            {
+                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); swing.Pause(); trackAmbience.Pause(); paused = true; }
+                return;
+            }
+            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); swing.UnPause(); trackAmbience.UnPause(); paused = false; }
+            if (game.IsRunning && !playing)
+            {
+                music.Play(); ambience.Play(); swing.Play();
+                if (trackAmbience.clip != null) trackAmbience.Play();
+                playing = true;
+            }
+            if (!game.IsRunning && playing)
+            {
+                music.Stop(); ambience.Stop(); swing.Stop(); trackAmbience.Stop();
+                swingGain = 0f; swing.volume = 0f; playing = false;
+            }
         }
 
         public void SetMuted(bool muted)
         {
             Muted = muted;
-            music.mute = effects.mute = ambience.mute = trackAmbience.mute = muted;
+            music.mute = effects.mute = ambience.mute = swing.mute = trackAmbience.mute = muted;
         }
 
         public void ResetAudio()
         {
-            music.Stop(); effects.Stop(); ambience.Stop(); trackAmbience.Stop();
+            music.Stop(); effects.Stop(); ambience.Stop(); swing.Stop(); trackAmbience.Stop();
+            swingGain = 0f; swing.volume = 0f;
             playing = false; paused = false;
         }
 
@@ -164,6 +178,9 @@ namespace ProtoHarness.ChainRush.Audio
 
         private static AudioClip MakeCue(RaceCue cue)
         {
+            // Keep the accepted wall hit and the unused cues' synthesis unchanged.
+            if (cue != RaceCue.GuardHit && cue != RaceCue.Attack && cue != RaceCue.Damage && cue != RaceCue.Beeps && cue != RaceCue.Buzz)
+                return MakeLayeredCue(cue);
             int index = (int)cue;
             float duration = CueSeconds(cue);
             var samples = new float[Mathf.RoundToInt(SampleRate * duration)];
@@ -176,25 +193,11 @@ namespace ProtoHarness.ChainRush.Audio
                 float value;
                 switch (cue)
                 {
-                    case RaceCue.Jump: value = Mathf.Sin(2f * Mathf.PI * (160f * t + 700f * t * t)) * 0.4f + noise * 0.12f; break;
-                    case RaceCue.Finish: value = (Mathf.Sin(t * 3500f) + Mathf.Sin(t * 5179f) * 0.45f) * Mathf.Exp(-t * 12f) * 0.45f; break;
                     case RaceCue.Attack: value = noise * 0.55f * Mathf.Exp(-t * 8f) + Mathf.Sin(2f * Mathf.PI * (800f * t - 900f * t * t)) * 0.25f; break;
                     case RaceCue.Damage: value = noise * 0.38f + Mathf.Sin(t * 510f) * 0.45f; break;
                     case RaceCue.Beeps: value = Mathf.Sin(t * 2f * Mathf.PI * 880f) * (Mathf.Repeat(t, 0.16f) < 0.08f ? 0.5f : 0f); break;
                     case RaceCue.GuardHit: value = noise * 0.6f * Mathf.Exp(-t * 7f) + Mathf.Sin(t * 2100f) * 0.22f + Mathf.Sin(t * 3559f) * 0.13f; break;
                     case RaceCue.Buzz: value = (Mathf.Sin(t * 4600f) * 0.25f + noise * 0.28f) * (0.65f + 0.35f * Mathf.Sin(t * 145f)); break;
-                    case RaceCue.Footstep: value = noise * 0.35f * Mathf.Exp(-t * 25f) + Mathf.Sin(t * 800f) * 0.22f; break;
-                    case RaceCue.Land: value = noise * 0.3f * Mathf.Exp(-t * 15f) + Mathf.Sin(t * 420f) * 0.35f; break;
-                    // Low to high, with air rushing in behind it.
-                    case RaceCue.Boost: value = Mathf.Sin(2f * Mathf.PI * (180f * t + 2000f * t * t)) * 0.4f + noise * 0.22f * (t / duration); break;
-                    // A short metal click and the catch just after it.
-                    case RaceCue.Grapple: value = (Mathf.Sin(2f * Mathf.PI * 2600f * t) + Mathf.Sin(2f * Mathf.PI * 3900f * t) * 0.6f) * Mathf.Exp(-t * 45f) * 0.4f + (t > 0.07f ? noise * 0.35f * Mathf.Exp(-(t - 0.07f) * 60f) : 0f); break;
-                    // Struck steel: partials that do not line up, ringing on after the strike's noise.
-                    case RaceCue.PoleHook: value = (Mathf.Sin(2f * Mathf.PI * 1240f * t) + Mathf.Sin(2f * Mathf.PI * 1880f * t) * 0.7f + Mathf.Sin(2f * Mathf.PI * 3170f * t) * 0.4f) * Mathf.Exp(-t * 7f) * 0.35f + noise * 0.25f * Mathf.Exp(-t * 60f); break;
-                    // Two quick notes going up.
-                    case RaceCue.BoostZone: float note = t < 0.12f ? 784f : 1175f; value = Mathf.Sin(2f * Mathf.PI * note * t) * 0.4f + Mathf.Sin(4f * Mathf.PI * note * t) * 0.15f; break;
-                    // High to low, wavering on the way down.
-                    case RaceCue.Respawn: value = Mathf.Sin(2f * Mathf.PI * (900f * t - 800f * t * t)) * 0.42f * (0.7f + 0.3f * Mathf.Sin(t * 90f)); break;
                     default: throw new ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushAudio: no sound for this cue.");
                 }
                 samples[i] = value * envelope * 0.8f;
@@ -208,13 +211,134 @@ namespace ProtoHarness.ChainRush.Audio
             {
                 case RaceCue.Beeps: return 0.48f;
                 case RaceCue.Footstep: return 0.09f;
-                case RaceCue.Boost: return 0.55f;
-                case RaceCue.Grapple: return 0.16f;
-                case RaceCue.PoleHook: return 0.42f;
-                case RaceCue.BoostZone: return 0.36f;
-                case RaceCue.Respawn: return 0.45f;
+                case RaceCue.Boost: return 1.8f;
+                case RaceCue.Grapple: return 0.5f;
+                case RaceCue.PoleHook: return 0.7f;
+                case RaceCue.BoostZone: return 1.05f;
+                case RaceCue.Respawn: return 0.8f;
+                case RaceCue.Jump: return 0.38f;
+                case RaceCue.Land: return 0.36f;
+                case RaceCue.Finish: return 1.2f;
                 default: return 0.32f;
             }
+        }
+
+        private static float Tone(float hz, float t) => Mathf.Sin(2f * Mathf.PI * hz * t);
+        private static float Decay(float hz, float t, float rate) => Tone(hz, t) * Mathf.Exp(-t * rate);
+        private static float SoftClip(float value) => 0.92f * (float)Math.Tanh(value);
+
+        private static float LowPass(float value, ref float state, float hz)
+        {
+            state += (1f - Mathf.Exp(-2f * Mathf.PI * hz / SampleRate)) * (value - state);
+            return state;
+        }
+
+        private static AudioClip MakeLayeredCue(RaceCue cue)
+        {
+            float duration = CueSeconds(cue);
+            var samples = new float[Mathf.RoundToInt(SampleRate * duration)];
+            var random = new System.Random(702 + (int)cue);
+            float lowState = 0f, airLow = 0f, airHigh = 0f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float noise = (float)random.NextDouble() * 2f - 1f;
+                float rumble = LowPass(noise, ref lowState, 110f);
+                float air = LowPass(noise, ref airHigh, 8000f) - LowPass(noise, ref airLow, 3000f);
+                float hit = noise * Mathf.Exp(-t * 95f);
+                float value;
+                switch (cue)
+                {
+                    case RaceCue.Boost:
+                        // A struck launch, sustained sub pressure and a separate incoming 3..8 kHz air layer.
+                        value = 0.82f * Decay(53f, t, 0.65f) + 0.38f * Decay(79f, t, 0.9f)
+                            + 0.22f * Decay(103f, t, 1.2f) + rumble * 1.2f * Mathf.Exp(-t * 0.8f)
+                            + 0.5f * Decay(68f, t, 15f) + hit * 0.5f
+                            + air * 0.85f * (1f - Mathf.Exp(-t * 9f)) * Mathf.Exp(-t * 0.9f);
+                        break;
+                    case RaceCue.BoostZone:
+                        value = 0.85f * Decay(46f, t, 4f) + 0.4f * Decay(92f, t, 6f) + hit * 0.4f
+                            + air * 1.15f * (1f - Mathf.Exp(-t * 25f)) * Mathf.Exp(-t * 3f)
+                            * (0.7f + 0.3f * Mathf.Sin(t * t * 70f)) + rumble * 0.8f * Mathf.Exp(-t * 4f);
+                        break;
+                    case RaceCue.PoleHook:
+                        value = 0.65f * Decay(86f, t, 17f) + 0.22f * Decay(173f, t, 24f) + hit * 0.28f;
+                        break;
+                    case RaceCue.Grapple:
+                        value = 0.3f * Decay(132f, t, 24f) + hit * 0.18f;
+                        break;
+                    case RaceCue.Respawn:
+                        value = 0.65f * Decay(49f, t, 2f) + 0.3f * Decay(73f, t, 3f)
+                            + 0.24f * Tone(196f, t) * Tone(0.8f, t) * Mathf.Exp(-t * 3f)
+                            + air * 0.55f * Mathf.Sin(Mathf.PI * t / duration);
+                        break;
+                    case RaceCue.Jump:
+                        value = 0.65f * Decay(72f, t, 13f) + 0.28f * Decay(144f, t, 20f)
+                            + air * 0.55f * Mathf.Sin(Mathf.PI * t / duration) * Mathf.Exp(-t * 6f) + hit * 0.18f;
+                        break;
+                    case RaceCue.Land:
+                        value = 0.9f * Decay(57f, t, 16f) + 0.3f * Decay(113f, t, 23f)
+                            + rumble * 2f * Mathf.Exp(-t * 18f) + hit * 0.45f;
+                        break;
+                    case RaceCue.Footstep:
+                        value = 0.22f * Decay(92f, t, 55f) + rumble * 0.45f * Mathf.Exp(-t * 55f) + hit * 0.18f;
+                        break;
+                    case RaceCue.Finish:
+                        value = 0.55f * Decay(65.406f, t, 2.8f) + 0.24f * Decay(130.813f, t, 3f)
+                            + 0.24f * Decay(261.626f, t, 3f) + 0.2f * Decay(329.628f, t, 3.3f)
+                            + 0.18f * Decay(391.995f, t, 3.6f) + hit * 0.3f;
+                        break;
+                    default: throw new ArgumentOutOfRangeException(nameof(cue), cue, "No layered sound for this cue.");
+                }
+                samples[i] = value;
+            }
+            if (cue == RaceCue.PoleHook || cue == RaceCue.Grapple)
+            {
+                bool heavy = cue == RaceCue.PoleHook;
+                AddLink(samples, 0f, heavy ? 510f : 820f, heavy ? 0.7f : 0.44f, random, false);
+                float time = heavy ? 0.055f : 0.035f;
+                while (time < duration - 0.1f)
+                {
+                    float strength = (0.2f + (float)random.NextDouble() * 0.28f) * (1f - time / duration);
+                    AddLink(samples, time, (heavy ? 640f : 1050f) * (0.7f + (float)random.NextDouble() * 0.7f), strength, random, false);
+                    time += 0.025f + (float)random.NextDouble() * 0.06f;
+                }
+            }
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float edge = Mathf.Min(1f, t / 0.002f, (duration - t) / 0.06f);
+                samples[i] = SoftClip(samples[i]) * edge;
+            }
+            return Clip("CR effect " + (int)cue, samples);
+        }
+
+        // A struck link has four inharmonic steel modes and a tiny noisy contact, with a different pitch and force per link.
+        private static void AddLink(float[] samples, float start, float hz, float strength, System.Random random, bool wrap)
+        {
+            int offset = Mathf.RoundToInt(start * SampleRate);
+            for (int i = 0; i < SampleRate / 5; i++)
+            {
+                int target = offset + i;
+                if (!wrap && target >= samples.Length) break;
+                float t = (float)i / SampleRate;
+                float metal = Decay(hz, t, 28f) + 0.58f * Decay(hz * 1.481f, t, 35f)
+                    + 0.36f * Decay(hz * 2.173f, t, 43f) + 0.22f * Decay(hz * 3.127f, t, 58f);
+                float contact = ((float)random.NextDouble() * 2f - 1f) * Mathf.Exp(-t * 420f) * 0.65f;
+                float edge = Mathf.Min(1f, t * 2000f, (0.2f - t) * 200f);
+                samples[target % samples.Length] += (metal * 0.5f + contact) * strength * edge;
+            }
+        }
+
+        private static AudioClip MakeSwingLoop()
+        {
+            var samples = new float[SampleRate * 4];
+            var random = new System.Random(7193);
+            // Circular overlap carries each link's tail across the boundary, with no silent fade at the seam.
+            for (float t = 0f; t < 4f; t += 0.035f + (float)random.NextDouble() * 0.11f)
+                AddLink(samples, t, 420f + (float)random.NextDouble() * 720f, 0.16f + (float)random.NextDouble() * 0.22f, random, true);
+            for (int i = 0; i < samples.Length; i++) samples[i] = SoftClip(samples[i]);
+            return Clip("Swing chain - circular steel links", samples);
         }
 
         private static AudioClip MakeScore()
@@ -260,9 +384,12 @@ namespace ProtoHarness.ChainRush.Audio
 
         private void OnDestroy()
         {
+            if (swing != null) Destroy(swing);
+            if (trackAmbience != null) Destroy(trackAmbience);
             if (cues != null) for (int i = 0; i < cues.Length; i++) if (cues[i] != null) Destroy(cues[i]);
             if (score != null) Destroy(score);
             if (wind != null) Destroy(wind);
+            if (swingLoop != null) Destroy(swingLoop);
         }
     }
 }

@@ -6,6 +6,7 @@ using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -164,21 +165,86 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
-        // How alike two clips are over their common length: 0 unrelated, 1 the same wave.
-        private static float Likeness(AudioClip first, AudioClip second)
+        [UnityTest]
+        public IEnumerator Audio_Boost_HasSustainedSubBassAndGuardKeepsItsLength()
         {
-            var a = new float[first.samples];
-            var b = new float[second.samples];
-            Assert.That(first.GetData(a, 0), Is.True);
-            Assert.That(second.GetData(b, 0), Is.True);
-            double both = 0d, onlyA = 0d, onlyB = 0d;
-            for (int i = 0; i < Mathf.Min(a.Length, b.Length); i++)
+            AudioClip boost = sound.GetCue((int)RaceCue.Boost);
+            Assert.That(boost.frequency, Is.EqualTo(44100));
+            Assert.That(boost.length, Is.GreaterThanOrEqualTo(1.5f));
+            var samples = new float[boost.samples];
+            Assert.That(boost.GetData(samples, 0), Is.True);
+            Assert.That(EnergyBelow(samples, boost.frequency, 120d), Is.GreaterThan(0.35d), "A launch needs substantial sub bass, not just a high sweep.");
+            double tailEnergy = 0d;
+            for (int i = samples.Length / 2; i < samples.Length; i++) tailEnergy += samples[i] * samples[i];
+            Assert.That(Math.Sqrt(tailEnergy / (samples.Length - samples.Length / 2)), Is.GreaterThan(0.04d), "The second half must sustain audible pressure.");
+            Assert.That(sound.GetCue((int)RaceCue.GuardHit).length, Is.EqualTo(0.32f).Within(1f / 44100f));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Audio_SwingState_FadesChainAndObeysPauseMuteEffectsAndStop()
+        {
+            var settings = new GameSettings("ChainRush.Tests.SoundCues.");
+            GameSettings previous = sound.Settings;
+            bool wasEnabled = game.enabled;
+            try
             {
-                both += a[i] * b[i];
-                onlyA += a[i] * a[i];
-                onlyB += b[i] * b[i];
+                settings.Clear();
+                sound.Settings = settings;
+                sound.SetMuted(false);
+                game.StartRun();
+                // Freeze ticks, not presentation: stage the motor's public swing state without frame-dependent driving.
+                game.enabled = false;
+                yield return null;
+                Assert.That(sound.SwingVolume, Is.Zero);
+                game.Racer.SwingTicks = 1;
+                Assert.That(player.IsSwinging, Is.True);
+                yield return new WaitForSecondsRealtime(0.25f);
+                float held = sound.SwingVolume;
+                Assert.That(held, Is.GreaterThan(0.05f));
+                var chain = new float[sound.SwingClip.samples];
+                Assert.That(sound.SwingClip.GetData(chain, 0), Is.True);
+                float peak = 0f;
+                foreach (float sample in chain) { Assert.That(float.IsNaN(sample), Is.False); peak = Mathf.Max(peak, Mathf.Abs(sample)); }
+                Assert.That(peak, Is.GreaterThan(0.05f).And.LessThan(0.98f));
+
+                game.TogglePause();
+                yield return null;
+                Assert.That(sound.IsPaused, Is.True);
+                yield return new WaitForSecondsRealtime(0.1f);
+                Assert.That(sound.SwingVolume, Is.EqualTo(held).Within(0.001f));
+                sound.SetMuted(true);
+                yield return null;
+                Assert.That(sound.SwingVolume, Is.Zero);
+                sound.SetMuted(false);
+                settings.SetEffectsLevel(0);
+                yield return null;
+                Assert.That(sound.SwingVolume, Is.Zero);
+                settings.SetEffectsLevel(GameSettings.MaxLevel);
+                game.TogglePause();
+                yield return null;
+                Assert.That(sound.SwingVolume, Is.GreaterThan(0.05f));
+                game.Racer.SwingTicks = 0;
+                yield return new WaitForSecondsRealtime(0.08f);
+                Assert.That(sound.SwingVolume, Is.LessThan(held));
+                yield return new WaitForSecondsRealtime(0.2f);
+                Assert.That(sound.SwingVolume, Is.Zero);
+                game.Racer.SwingTicks = 1;
+                yield return new WaitForSecondsRealtime(0.25f);
+                game.FailRun();
+                yield return null;
+                Assert.That(sound.IsPlaying, Is.False);
+                Assert.That(sound.SwingVolume, Is.Zero);
+                sound.ResetAudio();
+                Assert.That(sound.SwingVolume, Is.Zero);
             }
-            return Mathf.Abs((float)(both / Math.Sqrt(onlyA * onlyB)));
+            finally
+            {
+                game.Racer.SwingTicks = 0;
+                game.enabled = wasEnabled;
+                sound.Settings = previous;
+                settings.Clear();
+            }
         }
 
         [UnityTest]
@@ -208,6 +274,44 @@ namespace ProtoHarness.Tests.PlayMode
                 UnityEngine.Object.Destroy(music);
                 UnityEngine.Object.Destroy(environment);
             }
+        }
+
+        // Exact DFT bins below cutoff via Goertzel, normalized with Parseval; excludes DC, which is not bass.
+        private static double EnergyBelow(float[] samples, int rate, double cutoff)
+        {
+            double total = 0d, low = 0d;
+            foreach (float sample in samples) total += (double)sample * sample;
+            Assert.That(total, Is.GreaterThan(0d));
+            for (int bin = 1; bin * (double)rate / samples.Length < cutoff; bin++)
+            {
+                double coefficient = 2d * Math.Cos(2d * Math.PI * bin / samples.Length);
+                double previous = 0d, before = 0d;
+                foreach (float sample in samples)
+                {
+                    double next = sample + coefficient * previous - before;
+                    before = previous;
+                    previous = next;
+                }
+                low += previous * previous + before * before - coefficient * previous * before;
+            }
+            return 2d * low / (samples.Length * total);
+        }
+
+        // How alike two clips are over their common length: 0 unrelated, 1 the same wave.
+        private static float Likeness(AudioClip first, AudioClip second)
+        {
+            var a = new float[first.samples];
+            var b = new float[second.samples];
+            Assert.That(first.GetData(a, 0), Is.True);
+            Assert.That(second.GetData(b, 0), Is.True);
+            double both = 0d, onlyA = 0d, onlyB = 0d;
+            for (int i = 0; i < Mathf.Min(a.Length, b.Length); i++)
+            {
+                both += a[i] * b[i];
+                onlyA += a[i] * a[i];
+                onlyB += b[i] * b[i];
+            }
+            return Mathf.Abs((float)(both / Math.Sqrt(onlyA * onlyB)));
         }
 
         // The circuit's grapple gap: the first gap after S 150 (the one before it, on the first straight, is a jump gap with

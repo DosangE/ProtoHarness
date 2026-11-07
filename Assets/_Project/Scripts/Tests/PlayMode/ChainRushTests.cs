@@ -45,6 +45,17 @@ namespace ProtoHarness.Tests.PlayMode
             public void Clear() { primary = false; boost = false; }
         }
 
+        // Makes a NightUi style inside OnGUI, the only place GUI.skin can be read.
+        private sealed class StyleProbe : MonoBehaviour
+        {
+            public GUIStyle Made;
+
+            private void OnGUI()
+            {
+                if (Made == null) Made = NightUi.Style(null, 20, Color.red);
+            }
+        }
+
         private ChainRushGame game;
         private RunnerMotor player;
         private GrappleController grapple;
@@ -523,6 +534,7 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(game.IsCountingDown, Is.True);
                 Assert.That(game.IsRunning, Is.False);
                 Assert.That(game.CountdownNumber, Is.EqualTo(3));
+                Assert.That(game.CountdownNumberAge, Is.Zero, "A new number has only just appeared.");
                 var seen = new System.Collections.Generic.List<int> { game.CountdownNumber };
                 float deadline = Time.realtimeSinceStartup + ChainRushGame.CountdownSeconds + 2f;
                 while (game.IsCountingDown && Time.realtimeSinceStartup < deadline)
@@ -531,6 +543,7 @@ namespace ProtoHarness.Tests.PlayMode
                     int number = game.CountdownNumber;
                     if (number > 0 && number != seen[seen.Count - 1]) seen.Add(number);
                     Assert.That(game.Tick, Is.Zero, "No tick may run during the countdown.");
+                    Assert.That(game.CountdownNumberAge, Is.InRange(0f, 1f), "Each number is up for one second.");
                 }
                 Assert.That(game.IsRunning, Is.True, "The run must start when the countdown ends.");
                 Assert.That(seen, Is.EqualTo(new[] { 3, 2, 1 }));
@@ -546,6 +559,45 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 game.CountdownFinished -= onFinished;
             }
+        }
+
+        // Each cue comes in large, shrinks to its resting size and goes by shrinking away when its time is up.
+        [UnityTest]
+        public IEnumerator ChainRushHud_Cue_ShrinksToItsSizeThenAway()
+        {
+            Assert.That(FeedbackLook.CueScale(0f, 1f), Is.EqualTo(FeedbackLook.CueStartScale));
+            float half = FeedbackLook.CueScale(FeedbackLook.CueShrinkTime * 0.5f, 1f);
+            Assert.That(half, Is.GreaterThan(1f).And.LessThan(FeedbackLook.CueStartScale));
+            Assert.That(half - 1f, Is.LessThan((FeedbackLook.CueStartScale - 1f) * 0.5f), "It slows as it nears its size.");
+            Assert.That(FeedbackLook.CueScale(FeedbackLook.CueShrinkTime, 1f), Is.EqualTo(1f));
+            Assert.That(FeedbackLook.CueScale(1f - FeedbackLook.CueExitTime, 1f), Is.EqualTo(1f).Within(1e-4f));
+            Assert.That(FeedbackLook.CueScale(1f - FeedbackLook.CueExitTime * 0.5f, 1f), Is.EqualTo(0.5f).Within(1e-3f));
+            Assert.That(FeedbackLook.CueScale(1f, 1f), Is.Zero);
+            yield break;
+        }
+
+        // A label under the mouse draws its hover state, which the skin leaves white (the countdown's mint turned white,
+        // user 2026-11-06): a style keeps its colour there.
+        [UnityTest]
+        public IEnumerator NightUi_Style_KeepsItsColourUnderTheMouse()
+        {
+            var probe = new GameObject("Style probe").AddComponent<StyleProbe>();
+            float deadline = Time.realtimeSinceStartup + 2f;
+            while (probe.Made == null && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(probe.Made, Is.Not.Null, "OnGUI never ran.");
+            Assert.That(probe.Made.normal.textColor, Is.EqualTo(Color.red));
+            Assert.That(probe.Made.hover.textColor, Is.EqualTo(Color.red));
+        }
+
+        // The HUD shows km/h, a whole number; the simulation's speeds stay in m/s.
+        [UnityTest]
+        public IEnumerator ChainRushHud_Speed_IsShownInKmh()
+        {
+            Assert.That(FeedbackLook.Kmh(20f), Is.EqualTo(72f).Within(1e-3f));
+            Assert.That(FeedbackLook.Kmh(55f), Is.EqualTo(198f).Within(1e-3f));
+            Assert.That(player.HorizontalSpeed, Is.Zero, "The runner stands still before a run.");
+            Assert.That(hud.SpeedText, Is.EqualTo("0"));
+            yield break;
         }
 
         // A run a countdown starts begins exactly as one started at once, wherever the runner was before: on the start line,

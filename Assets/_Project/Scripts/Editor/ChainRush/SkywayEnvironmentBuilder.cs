@@ -383,7 +383,7 @@ namespace ProtoHarness.Editor.ChainRush
             // The land's and the outer city's thousands of plain parts become one mesh per material, saved as
             // Art/Models/SkywayExterior_<key>_<material>.asset (user 2026-11-02, "메시로 합치고": 10661 renderers, twice
             // PALM COAST's). The parts' transforms are baked in; the group keeps its place. A rebuild writes the same
-            // assets over (ExteriorAssets.SaveMesh keeps their GUIDs).
+            // assets over, keeping their GUIDs, once the checks pass (ExteriorAssets.SavePrefab).
             private static void MergeByMaterial(Transform group, string key)
             {
                 var byMaterial = new Dictionary<Material, List<CombineInstance>>();
@@ -397,14 +397,12 @@ namespace ProtoHarness.Editor.ChainRush
                 for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
                 foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
                 {
-                    var mesh = new UnityEngine.Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                    var mesh = new UnityEngine.Mesh { name = $"SkywayExterior_{key}_{pair.Key.name}", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
                     mesh.CombineMeshes(pair.Value.ToArray(), true, true);
                     mesh.RecalculateBounds();
-                    UnityEngine.Mesh saved = ExteriorAssets.SaveMesh(mesh, $"Assets/_Project/Art/Models/SkywayExterior_{key}_{pair.Key.name}.asset");
-                    UnityEngine.Object.DestroyImmediate(mesh);
                     var merged = new GameObject(key + " " + pair.Key.name);
                     merged.transform.SetParent(group, false);
-                    merged.AddComponent<MeshFilter>().sharedMesh = saved;
+                    merged.AddComponent<MeshFilter>().sharedMesh = mesh;
                     MeshRenderer renderer = merged.AddComponent<MeshRenderer>();
                     renderer.sharedMaterial = pair.Key;
                     renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;

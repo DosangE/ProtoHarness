@@ -4,9 +4,28 @@
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
 > 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
 
-## 1. 지금 상태 (2026-11-05)
+## 1. 지금 상태 (2026-11-06)
 
-### 2026-11-05 — 다음 세션은 여기부터
+### 2026-11-06 — 다음 세션은 여기부터
+
+- **튜토리얼 (`feature/tutorial-stages`, `dev` 병합, 푸시는 지시 때, DECISIONS "튜토리얼")**: 메인 메뉴의 튜토리얼 줄, 스테이지 6개, 그림이 있는 설명 팝업, 원형 미션 맵(평행 격자, 바닥 어디서나 스윙), 완료 팝업. 사용자가 고저차 트랙보다 먼저 하기로 했고 마일스톤 밖이다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
+- **튜토리얼 후속 (병합 전 `unity-reviewer` 제안, 막히는 경로 없음, 코드 변경은 테스트를 다시 돌려야 해 남겼다)**: ① 6번에서 첫 목표 동안 스윙으로 게이지를 채우고 놓으면 Release 목표에 끝낼 스윙이 없다(다시 걸었다 놓으면 풀린다, `TutorialCourse.cs:177-179`) ② 줄 5 m 감기는 봉 8 m 안에서 건 줄로는 안 된다(`:161`) ③ `TryDress` 실패 때 고리가 해제되지 않는다(`RaceAssembler.cs:113,129`, `setup.Mode` 로 판단) ④ 주석이 코드와 다르다(`TutorialDirector.cs:8-9`, `ChainRushHud.cs:147`) ⑤ `ChainRushHud.cs:595` 숫자가 상수를 베꼈다 ⑥ `GoalColor`·`BeaconColor` 중복, `Part`·`VisualPart` 중복 ⑦ 튜토리얼 테스트 이름이 2단(§1-3). 그림 쪽 사용자 판단 대기: 2번 회전 그림의 호가 러너에서 시작하지 않음, 이동 스테이지에도 봉 표시가 떠 있음.
+- **다음 작업 방식 (사용자 2026-11-06)**: "다음 작업 codex, mcp로 하겟다". 구현·검증은 Codex 가 Unity MCP 로 하고 Claude 는 리뷰한다. 무슨 작업인지는 사용자가 다음 세션에서 말한다. 실행은 `tools/codex-unity.ps1 -PromptFile <파일> -Write`(`docs/RULES/SUBAGENTS.md` §7-5).
+- **Codex 의 Unity MCP**: 사용자가 그 작업에서 허락할 때만 연다(§7-5). "codex로 구현" 만으로는 허락이 아니다.
+- **`dev` 에 병합·푸시 (`feature/m6-swing-effects`)**: 봉 체인 18 m, 봉 스윙 이펙트(불꽃·줄 끊김), 상태별 꼬리, 흰 바람 선. DECISIONS 2026-11-06 두 항목. M6 "봉 스윙 이펙트" 는 끝났다. 시야와 플레이어 빌드는 M6 마감 때 다시 본다.
+- **고저차 트랙 `SUMMIT DROP` (`feature/m6-open-course`, DECISIONS 2026-11-06 "열린 코스와 1랩 다운힐")**: 열린 코스 구조, 1랩 다운힐 트랙, 숲과 바위 산악 장식. `dev` 병합, 푸시는 지시 때. 사용자 플레이 확인 대기(코스 리듬, 틈 점프·지름길 난이도, 벽 색과 큰 바위 모양). 리뷰 후속은 그 DECISIONS 항목.
+- **속도 km/h·카운트다운 연출 (`feature/hud-kmh-countdown`, `dev` 병합, 푸시는 지시 때, DECISIONS 2026-11-06 "속도 표시는 km/h")**: 표시만 km/h 로 바꿨고 시뮬은 m/s 다. 3·2·1·GO! 는 Bahnschrift 로 큰 글자가 줄어들며 나온다. 선택 테스트 13건 통과.
+- **플레이 피드백 (`fix/playtest-visuals`, `dev` 병합·푸시, DECISIONS 2026-11-06 "플레이 피드백", "IMGUI 글자")**: 흰 글자 버그, 카운트다운 탁한 색, 스타디움 LED 깜빡임, SUMMIT DROP 도로 위 봉 3개 삭제, 뜬 봉 4개 아래 바위 기둥. 사용자 "확인했다". 지형에 묻힌 봉 6·10·11·12 번은 게이지 때문에 그대로 둔다(DECISIONS "묻힌 코너 봉"). 후속: 다른 PC 의 `fix/stadium-flicker` 와 겹치는지 확인.
+- **남은 M6 필수**: 사운드 구분(1차 코드 `feature/m6-sound-cues`·`fix/stadium-flicker`·stash 는 다른 PC 에 있다, 이 PC·origin 에 없음을 2026-11-06 확인). 고저차 트랙은 `SUMMIT DROP` 으로 코드·장식까지 끝났고 사용자 플레이 확인이 남았다.
+- **같은 날 `dev` 에 병합·푸시**: `fix/exterior-save-order`(장식 빌더가 검사를 통과한 뒤에만 메시를 저장한다 — 장식 빌더 후속 ①), `docs/runner-model-temporary`(캐릭터 모형은 임시용). 앞의 것은 STADIUM·SKYWAY 재빌드와 강제 실패로 확인했고(실패한 빌드가 메시를 다시 쓴 수 21 → 0), FINGER·PALM COAST 재빌드와 메시 에셋을 처음 만드는 경로는 돌리지 않았다.
+- **장식 재빌드**: 2026-11-06 STADIUM·SKYWAY 재빌드에서 프리팹 로컬 fileID 가 새로 나와 큰 diff 가 생기고(ID 를 지우면 내용은 같다), `TrackLook` 에 `music`·`ambience` 빈 줄이 붙었다. 내용이 같으면 커밋하지 않는다.
+
+### 2026-11-05
+
+- **소리 (DECISIONS 2026-11-05 "트랙별 소리")**: FINGER LANES 음악·환경음만 `dev` 에 들어갔다. STADIUM·SKYWAY·PALM COAST 소리는 사용자가 "별로다" — 다시 만든다.
+- **효과음은 `feature/m6-sound-cues` 에서 계속**: 부스터는 제트 소리(지지직 금지), 부스트존은 속도감 있는 하이톤, 스윙은 체인·금속(또르르륵 금지). 참고 측정은 같은 DECISIONS 항목. Codex 지시서는 `docs/NEXT_REQUESTS.md` "M6 효과음 2차" 에 있고 **대기 중이다**(사용자가 보내라고 할 때까지 보내지 않는다).
+- **`fix/stadium-flicker` (`38f418a`) 는 플레이 확인 대기**: 병합·푸시 안 했다.
+- 첫 소리 시도의 코드와 세 트랙 WAV 는 stash `sound round 1` 에 있다(로컬).
 
 - **M6 범위 확정 (DECISIONS 2026-11-05 "M6 범위", `DESIGN.md` §5-1)**: 사운드 구분, 봉 스윙 이펙트, 고저차 트랙 1개. 완료 조건은 표의 M6 칸(플레이어 빌드 1회 포함). 태그는 M6 = v0.6, M5 = v0.7.
 - **튜토리얼**: 추후 목표, 마일스톤 미정(`DESIGN.md` §10-3).

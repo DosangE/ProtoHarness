@@ -7,6 +7,156 @@
 
 ---
 
+## 2026-11-06 · select-tests: 장식 메시는 "전체" 가 아니다 (`fix/select-tests-art-models`)
+
+- **결정 (사용자, 2026-11-06)**: "Art/Models 판정도 고쳐 ㄱㄱ". 표의 장식 줄이 `Models/StadiumExterior_` 만 알아서 뒤에 생긴 메시가 "전체 (표에 없는 경로)" 로 떨어졌다. `Models/(\w+Exterior_|StadiumSports_)` 로 넓혔다. 지문 없음, PlayMode 없음이다.
+- **근거 (§4-4, 지문을 빼는 근거)**: GUID 로 찾으니 `SkywayExterior_*`·`SummitDropExterior_*` 표본은 각자의 `*Exterior.prefab` 만 참조하고, 세 장식 프리팹의 충돌체는 0개다(`grep -c 'MeshCollider:\|BoxCollider:'`). 빌더의 `physics=0` 검사와 같다. `StadiumSports_*` 11개는 프리팹·씬·에셋 어디서도 참조하지 않는다. 스크립트에서 이 메시를 읽는 코드는 없다.
+- **`Runner*` 는 넣지 않았다**: 러너 외형이고 장식이 아니다. 그대로 "전체" 다.
+- **검증**: 실제 범위로 `tools/select-tests.ps1` 실행, exit 0. `1fd3d76^..1fd3d76`(Skyway 메시 40개) 전 "전체" → 뒤 `PlayMode 없음, 지문 없음`, 끝줄이 "범위 확정 못 함" 에서 목록으로 바뀌었다. `7f5925e^1..7f5925e` 도 목록으로 바뀌었다. `13c24c5^..13c24c5` 는 `Runner*` 와 `Art/Models.meta` 가 그대로 "전체".
+- **알아둘 것**: 참조가 없는 `StadiumSports_*` 11개는 지우지 않았다(§0).
+
+## 2026-11-06 · SUMMIT DROP 의 묻힌 코너 봉 4개는 그대로 둔다, 안 보여도 스윙은 된다
+
+- **결정 (사용자, 2026-11-06)**: 묻힌 봉을 지웠더니 "서킷 마지막 쯤에 봉이 아예 없어 게이지를 못모으니 부스터를 쓸 수 없다". 이어서 "이미 맵 초반에 장식이 뚫린채로 스윙하는 구간이 있는데 걍 초본으로 되돌리는건 어때" → "ㄱㄱ". 봉 6·10·11·12 번(S 977, 1623, 1660, 1950 의 코너)을 남긴다. 봉은 15개다.
+- **이유**: 게이지는 봉 스윙으로만 찬다(`PoleSwing.cs:92`). 네 봉을 지우면 마지막 봉이 S 1623 까지여서 결승까지 약 650 m 동안 게이지를 얻을 수 없다. 남기면 둘째 낙하 코너의 S 2020 까지 걸 수 있어 약 260 m 로 준다. 줄이 장식·지형을 뚫는 것은 2026-11-06 "봉 체인은 18 m" 에서 이미 받아들였고, 스윙 표식은 가림을 검사하지 않아 지형 뒤에서도 그려진다(`ChainRushHud.cs:460`).
+- **묻힌 깊이** (저장된 지형, 꼭대기 기준): 6번 19.7 m, 10번 89.9 m, 11번 39.0 m, 12번 7.8 m.
+- **버린 대안**:
+  - 코너별로 봉을 끄기(`Segment.Arc(..., pole: false)`) — 구현해 테스트까지 통과했다가 게이지 때문에 커밋 전에 버렸다.
+  - 12번 코너 안쪽 지형을 낮춰 봉을 보이게 하기 — 봉 둘레 방위 225~270° 에 봉보다 40~46 m 높은 능선이 있고, 그 위로 윗도로(S 720~800, 봉에서 약 61 m, 45 m 위)가 지난다. 능선을 깎으면 윗도로 밑에 구멍이 난다. 줄을 걸 수 있는 구간은 코너의 절반(`poleHookArcShare` 0.5, S 2020)까지인데 그 구간의 봉은 능선에 가린다.
+  - 패드로 게이지 채우기 — 이 트랙만 게이지 규칙의 예외가 생긴다. 코너 안쪽 갓길의 새 봉 — 줄이 짧아 벽에 부딪히기 쉽다. 마지막 구간에 코너 추가 — 뒤쪽 코스와 장식을 다시 맞춰야 한다.
+- **남긴 것**: `dev` 의 도로 위 슬라롬 봉 3개 삭제, 뜬 봉 아래 바위 기둥은 그대로다.
+- **검증**: 되돌린 뒤 `git diff --name-only dev -- Assets` 0개. `Assets/` 가 `dev`(`7f5925e`)와 같아서 테스트는 다시 돌리지 않았다. 그 코드의 값은 아래 "플레이 피드백" 검증 줄이다.
+
+## 2026-11-06 · 플레이 피드백: LED 깜빡임, SUMMIT DROP 봉, 카운트다운 색 (`fix/playtest-visuals`)
+
+- **결정 (사용자, 2026-11-06)**: "수정해봐 1. 스타디움 맵 서킷의 벽쪽에 있는 장식 아직 깜빡거린다. 주황 청록 핑크로 된 거 2. 새로 만든 맵 장식은 괜찮으나 봉이 공중에 떠있는 것이 있고 마지막 쯤에 긴 직선구간에 트랙 안에 봉이 여러개 있는 곳도 있는데 이건 잘못 설계된 것 같다". 앞서 물은 카운트다운의 탁한 색도 이 말로 고쳤다.
+- **LED 깜빡임**: `LED screen` 과 `Dark board frame` 의 앞면이 같은 평면이어서(차이 `-9.3E-10`) z-fighting 이 났다. 뒤판 앞면을 5 cm 뒤로 물렸다(`ScreenProud`). 화면 앞면은 그대로 1.6 m 다. 다른 PC 의 `fix/stadium-flicker`(`38f418a`)는 이 PC 에 없어서 내용을 확인하지 못했다. 합칠 때 겹치는지 본다.
+- **도로 위 봉**: 슬라롬 봉 3개(S 1716~1796, 도로 중심 ±2.5 m)를 뺐다. 코너와 상관없이 도로 위에 세운 설계였다. 봉 18 → 15개.
+- **뜬 봉**: 봉은 ±20 m 고정이고 코너 중심에 서는데, 코너 안쪽이 절벽이면 땅이 더 깊다. 저장된 지형으로 잰 틈은 0번 93.2 m, 5번 37.6 m, 4번 29.4 m, 1번 21.1 m. 장식 그룹 `10` 에 땅에서 봉 아래까지 오는 바위 기둥을 세웠다(`PoleSpires`). 둘레는 그 높이의 도로에서 2 m 떨어지게 줄인다(`RoomBesideRoads`), 그래서 1번은 도로 옆이라 가늘다. 시뮬은 그대로다.
+- **카운트다운**: 반투명이면 민트와 트랙의 빨강이 섞여 회색이 된다. 투명도를 없애고 마지막 0.1초에 크기가 0 으로 줄어든다(`CueExitTime`, `CueAlpha` 삭제).
+- **버린 대안**: 봉 길이를 땅까지 늘리기 — 런타임 장식이 지형을 모르고, 93 m 민트 기둥이 된다. 코너 봉을 트랙 정의에서 빼기 — 그 코너의 스윙이 없어진다. 슬라롬 봉을 도로 밖으로 옮기기 — 직선에 스윙할 이유가 없다. 카운트다운의 그림자만 빨리 흐리기 — 민트와 빨강이 섞이는 것은 그대로다.
+- **검증** (시각은 UTC):
+  - 고치기 전 새 테스트 2건 `Failed passed=0 failed=2`(12:58:05Z): `Stadium_Exterior_LedScreensStandProudOfTheirFrames` `Expected: greater than or equal to 0.0399999991f But was: -9.31322575E-10f`, `SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround` 는 봉 0·1·4·5 번.
+  - 재빌드: `Summit Drop raised 4 rock spires`, `pole clearance PASS: 15 poles`, `validation PASS … 38 renderers; 932829 vertices`, `StadiumExterior: 1051 renderers; … road corridor clear`.
+  - PlayMode(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`·`ChainRushFlowTests.SummitDrop_*`·`Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenu*`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`) `testcasecount=45 Passed passed=45 failed=0 skipped=0`, 13:01:39Z~13:02:43Z.
+  - 랩 SUMMIT DROP 3속도 `testcasecount=3 Passed passed=3 failed=0 skipped=0`, 13:03:06Z~13:04:05Z.
+  - EditMode(`!Enemy`) `Passed passed=394 failed=0 skipped=0`, 13:04:41Z 끝.
+  - 영향 평가: 시뮬 코드는 안 바꿔 지문을 돌리지 않았다. 트랙 빌더는 SUMMIT DROP 생성만 바뀌어 Lap 은 그 3칸이다. 스타디움은 장식 빌더만이라 Lap 없음(§4-4). `select-tests.ps1` 은 "전체" 로 판정했고, Lap 후보에 SUMMIT DROP 이 없다(도구 표가 낡았다).
+  - 캡처: 스타디움 레이스 시점과 비스듬한 근접에서 LED 단색, 줄무늬 없음. 뜬 봉 4곳 바위 기둥 확인, 긴 직선에 도로 위 봉 없음, 카운트다운이 사라지기 직전까지 민트.
+  - 사용자 확인: "확인했다 커밋 병합 푸쉬 ㄱㄱ".
+- **한계**: 캡처는 Game 뷰 588×374 와 멈춘 프레임으로 봤다. 재빌드가 `TrackLook_Stadium.asset` 에 빈 `music`·`ambience` 줄을 붙였다(내용 변경 없음, 커밋에서 뺀다). `StadiumExterior.prefab` diff 가 큰 것은 로컬 fileID 가 새로 나와서다.
+- **찾았지만 안 고친 것**: 봉 6·10·11·12 번은 지형 속에 묻혀 있다(잰 땅이 봉 꼭대기보다 위). 보이지 않는데 스윙이 걸릴 수 있다. 플레이로 확인하지 않았다. 그대로 두기로 했다(위 "묻힌 코너 봉").
+
+## 2026-11-06 · IMGUI 글자는 마우스 아래에서도 제 색을 유지한다 (`fix/playtest-visuals`)
+
+- **증상 (캡처로 발견, 사용자 "해봐")**: 카운트다운의 민트 글자가 처음 커질 때 흰색으로 뿌옇게 나왔다.
+- **원인**: `GUI.Label` 은 마우스가 사각형 안에 있으면 hover 상태로 그린다. `NightUi.Style` 은 normal 색만 정해서 hover 는 스킨 기본값 `RGBA(0.9, 0.9, 0.9)` 로 남았다. `ShadowLabel` 도 normal 만 검게 바꿔 그림자까지 흰색이 되어 뿌옇게 보였다. 상태별 글자 색을 다르게 칠하자 흰 글자가 hover 의 빨강으로 나와 확인했다. 나이 0.10초에 마우스 y=657 이 글자 상자(끝 708.8) 안, 0.18초에 y=712.8 로 밖이었다. 글자가 커지면 상자가 마우스까지 닿는다.
+- **결정**: `NightUi.Style` 이 hover 도 같은 색으로 두고, `ShadowLabel` 이 두 상태를 함께 바꾼다. 모든 스타일이 `NightUi.Style` 에서 나오므로(`new GUIStyle` 은 `NightUi.cs` 한 곳) HUD·로비·타이틀의 같은 문제가 함께 없어진다.
+- **버린 대안**: 카운트다운 스타일 하나만 고치기 — 흰 글자의 검은 그림자, 다른 민트 글자에 같은 문제가 남는다. 일부러 흰색에서 민트로 바뀌는 연출 — 마우스 위치에 따라 나오는 현상이라 연출이 될 수 없다.
+- **검증**: 고치기 전 `NightUi_Style_KeepsItsColourUnderTheMouse` `testcasecount=1 Failed(Child) passed=0 failed=1`, `Expected: RGBA(1.000, 0.000, 0.000, 1.000) But was: RGBA(0.900, 0.900, 0.900, 1.000)`. 고친 뒤 PlayMode(`select-tests.ps1` 목록: `ChainRushInputSourceTests`·`ChainRushPresentationTests`·`ChainRushTests`) `testcasecount=31 Passed passed=31 failed=0 skipped=0`, 12:25:44Z~12:26:33Z. EditMode(`!Enemy`) `Passed passed=392 failed=0 skipped=0`, 12:26:58Z 끝. 지문·Lap 은 도구도 고르지 않았다(시뮬이 읽는 경로가 아니다). 캡처: 같은 나이 0.10초를 커서를 움직이지 않은 채(`1602,473`, 흰색이 재현된 지점) 찍어 민트 확인, GO! 도 민트.
+- **한계**: Game 뷰 588×374 에서만 봤다. 그림자는 테스트가 없고 캡처로만 봤다.
+
+## 2026-11-06 · 속도 표시는 km/h, 카운트다운은 큰 글자가 줄어들며 나온다 (`feature/hud-kmh-countdown`)
+
+- **결정 (사용자, 2026-11-06)**: "Km/h로 변경작업 ㄱㄱ", "3 2 1 시간 나오는 것도 폰트 바꾸고 액션 추가해줘 … 큰 글자가 축소되서 표현되는".
+- **속도**: 표시만 바꾼다. 시뮬 값은 m/s 그대로이고 HUD 가 ×3.6 해서 정수로 보인다(`FeedbackLook.Kmh`, `ChainRushHud.SpeedText`). 달리기 20 m/s 는 72, 부스트존 55 m/s 는 198 이다. 단위 글자는 HUD 의 대문자 표기대로 `KM / H`.
+- **카운트다운**: 3·2·1·GO! 를 맑은 고딕 Bold 에서 HUD 숫자와 같은 Bahnschrift BoldAndItalic 으로 바꿨다. 2.6배에서 0.3초에 줄어들고(`CueScale`), ~~0.08초에 나타나 마지막 0.2초에 사라진다(`CueAlpha`)~~ 반투명이 탁해 보여 위 "플레이 피드백" 에서 없앴다. 나이는 `ChainRushGame.CountdownNumberAge`(읽기 전용, 시뮬이 읽지 않는다)와 `game.Elapsed` 로 잰다. 글자는 320 으로 그려 절반으로 줄인다. 160 으로 그려 키우면 커 있는 동안 흐려지기 때문이다.
+- **버린 대안**: 글꼴 크기를 프레임마다 바꾸기 — 크기마다 글리프를 새로 구워 프레임이 끊긴다. 시뮬까지 km/h 로 바꾸기 — 지문과 튜닝 값이 전부 바뀌는데 얻는 것이 없다.
+- **검증**: 선택 PlayMode 13건 `testcasecount=13 Passed passed=13 failed=0 skipped=0`, 12:05:41Z~12:06:03Z. 고른 것: `ChainRushTests.ChainRushHud_*`·`StartCountdown_*`, `ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn`·`Race_PauseMenu*`·`Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter`. 영향 평가: `CountdownNumberAge` → `ChainRushHud.cs` 만 읽는다 → 시뮬 밖이라 지문·Lap 없음. `select-tests.ps1` 은 `ChainRushGame.cs` 때문에 "전체" 로 판정했다. Console Error·Warning 0건.
+- **한계**: ~~화면으로 보지 않았다. 위치·크기·움직임은 사용자 플레이 확인 대기.~~ 병합 뒤 Play 캡처로 위치·크기·축소를 봤고 흰색 버그를 찾았다(위 "IMGUI 글자"). 체감은 사용자 플레이 확인 대기.
+
+## 2026-11-06 · 열린 코스와 1랩 다운힐 SUMMIT DROP · M6 "시뮬 변경 없이" 를 뺀다 (`feature/m6-open-course`)
+
+- **결정 (사용자, 2026-11-06)**: 고저차 트랙은 "위에서 아래로 쮹 가는 맵", "1랩만". 레퍼런스는 "보고 참고하라는거다". "열린코스도 되도록 구조 바꿔". 8구간 구성, 갈림길, 가드레일 없는 구간에 "1 o 2 o 3 o". 2026-11-05 "M6 범위" 의 "시뮬 변경 없이" 는 이 트랙에서 빠진다.
+- **구조**: `TrackDefinition` 에 열린 코스(`openCourse`, 결승 뒤 감속 구간 `finishRunout`, 출발 뒤 도로 `startRunway`)와 가드 없는 구간(`OpenEdge`)을 더했다. 열린 코스는 닫힘 검사가 없고 1랩만 받으며, 지름길은 받고 베이는 받지 않는다. `LapLength` 는 결승 S 이고 감속 구간은 들어가지 않는다. 새 시뮬 저장 상태는 없다. 닫힌 코스는 기존 분기 그대로다.
+- **트랙**: 2279.96 m, 순낙차 167.10 m, 1랩. 설계 원칙은 약 10초마다 할 일이 바뀌는 것이다 — 절벽 낙하, 스위치백, 벽 없는 좁은 벼랑길, 틈 점프, 갈림길, 지그재그, 두 번째 낙하, 결승 앞 오르막. 배치는 새로 짰고, 레퍼런스에서는 구간 리듬만 참고했다(기록 영상의 속도 변화, 공략 문서의 구간 순서).
+- **이름**: `SUMMIT DROP`, 사용자 "1,2 ㅇㅇ".
+- **분담**: 구현·검증은 Codex(Unity MCP 사용자 허락), 리뷰와 로비 항목은 Claude. 로비 씬 저장도 사용자 지시로 Claude 가 `Unity_RunCommand` 로 했다("저장은 너가 진행하도록 현재 직접 못다루는 성황", 이 1건만의 승인이다). 씬 변경은 새 항목 4줄뿐이다.
+- **장식 (2단계, 사용자 "일단 장식 ㄱㄱ", 테마 "숲과 바위 산악")**: `SummitDropEnvironmentBuilder`. 땅 높이가 하나인 기존 방식과 달리 도로 높이를 따라 내려가는 지형을 만든다. 정상의 암벽, 스위치백 숲, 왼쪽이 트인 벼랑길, 틈 아래 골짜기와 폭포, 갈림길 공터, 지그재그 바위 사이, 터널(S1848–1910), 바닥 마을과 결승 문. 렌더러 37, 정점 932,625. `RoadCorridor` 에 경사를 따라 검사하는 오버로드를 더했다(기존 호출은 그대로). 장식 씬 저장, 빌드 씬 목록, 로비 항목은 사용자 승인으로 Claude 가 `Unity_RunCommand` 로 했다.
+- **미룬 것**: 음악·환경음. 플레이어 빌드에서의 프레임은 재지 않았다.
+- **버린 대안**: 닫힌 코스 유지(끝에 출발 높이까지 오르막으로 복귀) — 결승이 다시 꼭대기라 다운힐이 아니다. 입체교차 안 — 내려가기만 하는 코스에는 필요 없다.
+- **검증** (Codex 실행, 시각은 UTC, 커밋 전 작업 트리):
+  - 열린 코스 구조: EditMode 1회차 `testcasecount="197" result="Passed" passed="197" failed="0"`(09:53:36Z), PlayMode 1회차 `testcasecount="14" result="Failed(Child)" passed="13" failed="1"`(09:54:25Z~09:55:25Z, 새 복귀 테스트 `Expected: 106.0d … But was: 110.0d`, 테스트의 준비 상태와 기대값 문제), EditMode 최종 `testcasecount="199" result="Passed" passed="199" failed="0"`(09:58:12Z), PlayMode 최종 `testcasecount="14" result="Passed" passed="14" failed="0"`(09:59:01Z~09:59:59Z), 네 트랙 × 세 속도 `testcasecount="12" result="Passed" passed="12" failed="0"`(10:00:55Z~10:03:49Z, XML 원본 확인).
+  - 트랙·지름길: EditMode `testcasecount="169" result="Passed" passed="169" failed="0"`(10:21:43Z), 지문 `testcasecount="1" result="Passed"`(10:22:34Z~10:23:10Z), SummitDrop·OpenCourse `testcasecount="13" result="Passed" passed="13" failed="0"`(10:26:29Z~10:26:41Z), FINGER 3속도·스윙 지름길 `testcasecount="4" result="Passed" passed="4" failed="0"`(10:27:33Z~10:28:34Z), 최종 에셋 도로·봉 간격 `testcasecount="1" result="Passed"`(10:28:54Z, XML 원본 확인).
+  - 로비 저장 뒤 `ChainRushFlowTests.Lobby_` (Claude 실행, 자리표시 순번 4 → 5): `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"`(10:35:57Z~10:36:08Z). Console 에러 0.
+  - 장식 포함 (Claude 실행): `Race_BotLap_*` SUMMIT DROP 3칸 `testcasecount="3" result="Passed" passed="3" failed="0"`(11:28:40Z~11:29:38Z), `ChainRushFlowTests.Lobby_` `testcasecount="18" result="Passed" passed="18" failed="0"`(11:30:11Z~11:30:23Z). 첫 랩 실행은 테스트 시작 때 뜬 `Scene(s) Have Been Modified` 대화 상자에 막혀 시작되지 않았다(Cancel 로 닫았고 씬을 다시 저장했다. 저장 내용은 의도한 두 줄뿐이었다). 레이스 화면 11곳을 캡처해 확인했다.
+  - 리뷰 수정 뒤 (Claude 실행): 새 봉 테스트 2건 고치기 전 `testcasecount="2" result="Failed(Child)" passed="0" failed="2"`(11:44:05Z), EditMode 전체 `testcasecount="392" result="Passed" passed="392" failed="0"`(11:45:33Z~11:45:34Z), PlayMode 코너 스윙·롤백·지문·열린 코스·SummitDrop `testcasecount="42" result="Passed" passed="42" failed="0"`(11:45:56Z~11:47:53Z).
+  - 리뷰 수정 뒤 랩 다섯 트랙 × 세 속도 `testcasecount="15" result="Passed" passed="15" failed="0" skipped="0"`(11:48:16Z~11:52:08Z). 이 실행 뒤 `Assets/` 변경은 임시 `InitTestScene`(`.gitignore`)뿐이다.
+  - 영향 평가: `Centerline.InReach` → `TryFindPole` → `RunnerMotor.cs:544,553`, `GrappleController.cs:83` → 코너 스윙·롤백·지문·랩 전 트랙. `RoadCorridor`·빌더는 에디터 전용이라 재빌드 검사로 봤다. `select-tests` 는 "전체" 로 판정했고 게이트 전체는 돌리지 않았다(§9-2). `Device` 는 입력 경로를 안 바꿔 돌리지 않았다.
+  - 리뷰: `unity-reviewer` 치명 0·중대 2·보통 5·제안 4, 225,688 토큰. Codex 설계 리뷰 `needs-attention` high 1·medium 1, 실제 결함 2. 봉 높이 결함은 Codex 만 찾았고 빌드 목록·침범 검사 범위는 `unity-reviewer` 만 찾았다. Codex 5시간 사용량은 읽지 못했다.
+  - 서킷 지문 그대로 `0xEF92FB76BFD1D767`. 봇 결승: 보통 124.72 s, 빠름 100.68 s, 매우빠름 85.08 s, 복귀 0회, 최대 옆 거리 6.82 m. 빠름 지름길 90.00 s(10.68 s 단축).
+- **봉은 기둥 높이 안에서만 걸린다 (병합 전 Codex 리뷰)**: `Centerline.TryFindPole` 은 코스 전체의 봉을 평면 거리로 찾는다. 이 코스는 위아래 구간이 평면으로 겹쳐 S 96 에서 108.1 m 아래 봉이 잡혔다(고치기 전 실패 `Expected: less than or equal to 20.0f But was: 108.147797f`). `PoleVerticalReach` 20 m(기둥이 봉 지점 위아래로 뻗는 길이)를 넘으면 후보에서 뺀다. 닫힌 서킷은 높이 차가 작아 지문이 그대로다.
+- **병합 전 리뷰로 함께 고친 것**: 빌더는 프리팹 검사를 통과한 뒤에 룩을 저장한다. `RoadCorridor` 는 열린 코스의 출발 뒤 도로와 감속 구간도 표본으로 잡는다(재빌드 통과, 프리팹·메시 변경 없음). 테스트 이름, 틀린 주석 4곳.
+- **남은 것**: 사용자 플레이 확인. 빌드 씬 목록은 §9-2 대로 `ProjectSettings` 만 담은 브랜치로 나눠 함께 병합했다.
+- **리뷰 후속 (`unity-reviewer` 제안, 지금 자산에 영향 없음)**: ① 봇 가드 단언 `maxOffset < RoadHalfWidth - 0.4f` 는 폭이 변하는 트랙을 전제하지 않는다(`ChainRushFlowTests.cs:1099`, `HalfWidthAt(maxOffsetS)` 로) ② `OpenEdge` 가 직선 데크 위면 조용히 무시된다 ③ `MergeByMaterial` 은 Skyway 복사본이다. `Lettering` 은 네 번째 변형이다 — `ExteriorKit` 으로 ④ 장식 배치 실패를 세지 않는 `continue` 3곳, 하드코딩 S 값 ⑤ `s % 8d` 는 음수 S 에서 늘 참이라 출발 뒤 차선이 실선이 된다.
+
+## 2026-11-06 · 튜토리얼: 넓은 원형 미션 맵, 스테이지 6개 (`feature/tutorial-stages`)
+
+- **결정 (사용자, 2026-11-06)**: "고저차 트랙 작업은 미루고 튜토리얼부터". 가운데 봉이 있는 아주 넓은 원형 맵에서 목표 지점에 닿으면 다음 목표와 설명을 준다. "골인 지점이 있는 맵이 아닌 단순 튜토리얼 미션용 맵", 완료하면 팝업의 버튼으로 로비로, "esc로 중간에 나갈수도". 요청서의 스테이지형·메인 메뉴 별도 줄·스윙을 부스터보다 먼저 두는 순서에 "좋다". 마일스톤은 답이 없어 추천대로 밖에 뒀다.
+- **맵**: 봉을 감싸는 반지름 30 m 고리 중심선(`TrackDefinition.Ring`) 위에 반지름 3~150 m 원판(`CircuitRace.UseArena`, `CircuitScenery.LayArena`). 봉은 원호의 중심에 서고 후보 각도는 트랙 방향에서 재므로 지금 규칙이 그대로 통한다. 에디터 측정(메모리상 고리, 2026-11-06): 봉 걸기 35.9 m 까지 72/72, 36.1 m 부터 0/72, 벽 판정 내적 0.0000, 높이 오차 0.00000(반지름 3.3~149 m).
+- **에셋 없이 코드로**: 고리와 스테이지 표를 코드에 두고 `TutorialDirector` 를 런타임에 붙인다(고스트와 같은 방식). 씬·`.asset`·`ProjectSettings` 변경이 없어 사용자가 저장할 것이 없다. 재질과 하늘은 로비 첫 트랙(STADIUM)의 것을 빌린다.
+- **스테이지**: ~~시작할 때마다 출발점에서 카운트다운한다.~~ 시작할 때마다 출발점으로 돌아가므로 재시작이 곧 "이 스테이지 다시" 이고 로비에서 아무 스테이지나 고를 수 있다. ~~부스터 스테이지는 게이지가 스윙으로만 차서 1칸을 주고 시작한다.~~ 보통 속도·첫 러너 고정, 랩·기록·고스트 없음. 취소선은 아래 "플레이 피드백" 으로 바뀌었다.
+- **플레이 피드백 (사용자, 2026-11-06, 구현·검증은 사용자 지시로 Codex, Claude 는 리뷰)**:
+  - **설명 팝업**: "스테이지별로 바로 시작하는 것이 아닌, 팝업(페이지 형식으로 좌우 넘어가며 볼 수 있는)을 띄워 이미지와 함께 설명", "그 팝업창을 닫아야 플레이 시작". 그림은 코드로 그린다(`Tutorial/TutorialFigures`): PNG 는 씬 참조 저장이 따라오고 `Resources/` 는 금지다. 봉 사각형·화살표·게이지는 HUD 의 `DrawTarget`·`DrawArrow`·`DrawBoostGauge` 를 그대로 불러 실제 문양과 같다. 닫기 버튼은 어느 쪽에서나 눌리고, 팝업에서 ESC 는 로비로 나간다.
+  - **스윙이 먼저**: "부스터를 바로 주는게 아니라 스윙으로 게이지가 찬다는 것 부터". 게이지 지급을 없앴다. 5번은 스윙 → 놓기 → 부스터 → 목표. 6번은 5번과 겹치지 않게 바깥 목표 → 스윙 → 놓기 → 부스터 → 멈추기.
+  - **3·2·1 없앰**: 튜토리얼은 팝업을 닫으면 바로 달린다. 재시작도 팝업·카운트다운 없이 바로 시작한다. "GO!" 도 그리지 않는다. 레이스는 그대로다.
+  - **바닥 어디서나 스윙**: "바깥에서도 걸리게". `RunnerMotor.ReachPolesFrom`(기본 0)으로 튜토리얼만 거리를 늘리고, 그때는 원호 비율도 1로 쓴다(0.5 면 반원 경계에서 후보가 빠진다, Codex 가 테스트로 찾았다). 기본값에서는 `TryFindPole` 에 들어가는 값이 그대로다.
+  - **바닥 무늬**: "모래지옥 모양". 바닥은 코드상 평면이었고(`TrackFrame` 위쪽 = 월드 위쪽, 경사 0) 동심원·스포크가 깔때기로 보였다고 판단해 평행 격자로 바꿨다. 레이캐스트 144점 높이 차 1 mm 이내를 테스트로 재서 평면을 확인했다. 착시가 없어졌는지는 사용자 플레이 확인이 남았다.
+  - **리뷰가 고친 것**: 스윙 중 CTRL 로 게이지를 쓰면 Boost 목표가 막힘(`GoalText` 안내로), 팝업 뒤 불투명(`Dim` 으로), 줄 감기 8 m 가 봉 가까이서 달성 불가(5 m 로).
+  - **Codex 의 Unity MCP**: 사용자 "쓸 순 있지만 내가 너에게 명령할때 codex로 구현하고 mcp 활용하라고 사용 허락할때만". 설정에 승인을 두면 허락 없이도 열리므로, `tools/codex-unity.ps1` 이 허락받은 실행 동안만 `approval_mode = "approve"` 를 넣고 끝나면 지운다. 규칙은 `docs/RULES/SUBAGENTS.md` §7-5. 시험: 읽기 전용 호출 성공, 끝난 뒤 `config.toml` 해시가 백업과 같음.
+- **버린 대안**: 트랙 폭 제한을 풀어 넓은 도로로 깔기 — 고리 반지름이 커져 봉이 걸리는 거리도 함께 커진다(반지름 + 6 m). `Data/` 에셋 + 로비 씬 참조 — 사용자의 씬 저장이 따라온다.
+- **검증 (작업 중 ①, 같은 코드)**: 영향 평가: `CircuitRace.Step`·`Initialize` 분기(튜토리얼에서만 켜짐) → 서킷 지문·`ChainRushCircuitTests`·`ChainRushRollbackTests`, `RaceAssembler`·`ChainRushHud`·로비 → `ChainRushFlowTests` 의 `Lobby_`·`Race_FromTheLobby_`·`Race_PauseMenu`·`Race_OpenedDirectly_`·`Race_WithATrackLook_`·`Race_FinishFromTheLobby_`, 새 기능 → `ChainRushTutorialTests`. 일반 레이스 주행 코드는 바뀌지 않아 `Lap` 은 돌리지 않았다.
+  - PlayMode 첫 실행 `testcasecount=53 result=Failed(Child) passed=51 failed=2`, 2026-11-06 07:17:27Z~07:21:01Z. 실패 2건은 `Lobby_BackAndSettings_GoPageByPage`·`Lobby_SettingsPage_AdjustsOnlyTheHighlightedSettingAndOpensTheKeys` 의 `Back on the settings entry. Expected: 2 But was: 3` — 메뉴에 튜토리얼 줄이 들어가 설정 줄이 3이 된 결과라 테스트의 줄 번호를 `MainPage.SettingsRow` 로 바꿨다(같은 이유로 `Move(2)`·`Highlight(2)` 4곳도).
+  - 재실행 `Lobby_` `testcasecount=17 result=Passed passed=17 failed=0`, 07:21:57Z~07:22:08Z.
+  - `STAGE CLEAR` 위치를 고친 뒤 PlayMode `testcasecount=53 result=Passed passed=53 failed=0 skipped=0`, 07:24:42Z~07:28:17Z (봇이 6스테이지 완주, 서킷 지문 포함). EditMode 전체(`Enemy` 제외) `testcasecount=351 result=Passed passed=351 failed=0 skipped=0`, 07:28:48Z~07:28:49Z.
+  - 캡처로 메인 메뉴, 스테이지 페이지, 안내 패널, 스윙, 화면 밖 목표 표시, `STAGE CLEAR`(고치기 전 위치), 완료 팝업을 봤다. 팝업의 Enter·버튼 클릭과 실제 키 입력은 테스트로 돌리지 않았다. 사용자 플레이 확인 대기.
+  - 위 값은 첫 구현 때다. **플레이 피드백 반영 뒤 (Codex 실행, XML 은 Claude 가 대조)**: 영향 평가에 `RunnerMotor.TryFindPole` → `ChainRushCornerSwingTests` 를 더했다. 수정 전 재현 `testcasecount=1 result=Failed(Child) failed=1`, 08:28:58Z~08:29:03Z(`Briefing_WaitsAtTheStartWithoutTicks_…`). EditMode `testcasecount=359 result=Failed(Child) passed=358 failed=1`, 08:33:39Z~08:33:40Z(`0 degrees, radius 15`, 반원 경계 후보 누락). 고친 뒤 EditMode 전체(`Enemy` 제외) `testcasecount=359 result=Passed passed=359 failed=0`, 08:36:12Z~08:36:13Z. PlayMode `testcasecount=81 result=Passed passed=81 failed=0 skipped=0`, 08:36:48Z~08:41:24Z(튜토리얼 17, Flow 24, CornerSwing 18, Circuit 11, Rollback 10, 서킷 지문 1). 마지막 코드 수정은 08:35:38Z 로 두 실행 전이다. `Lap` 은 돌리지 않았다(기본값에서 주행 코드 경로가 같다).
+  - 팝업의 실제 키(←/→·Enter·ESC)와 마우스 클릭은 테스트로 돌리지 않았다. 캡처는 Game 뷰 588 x 339 를 3배로 키운 것이라 글자가 흐리다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
+  - **병합 ② (작업 중 실행을 다시 쓴다)**: 위 EditMode 359·PlayMode 81 이 병합 코드의 결과다. `Assets/` 의 가장 새 파일은 08:35:38Z 로 두 실행 전이고, 커밋 뒤 `git status` 에 `Assets/` 변경이 없다. `Device` 는 돌리지 않았다(`KeyboardMouseInputSource`·`ChainRushGame.Update` 를 바꾸지 않았다).
+  - **리뷰**: `unity-reviewer` 치명 0, 중대 0, 보통 1(테스트 이름 2단, 기존에도 34개), 제안 7(HANDOFF 후속). 일반 레이스 동작 변경·지문 영향 경로 없음. Codex 설계 리뷰 `needs-attention` 1건(high): `tools/codex-unity.ps1` 강제 종료 때 승인이 남는다 → 실제 결함. 감시 프로세스를 더해 고쳤다. 실행별 격리 설정 권고는 브로커가 공유돼 쓰지 않았다. 임시 `CODEX_HOME`·가짜 `node` 로 실행: 정상 종료 restored=True, 실행 오류 exit=7 restored=True, `Stop-Process -Force` restored=True, 늦은 감시가 다른 실행의 승인을 남김 True, `-Close` restored=True, 실제 설정은 백업과 같음. 남은 틈: 전원 차단(`-Status`, `-Close`), 강제 종료 때 이미 뜬 Codex 프로세스는 계속 돈다.
+
+## 2026-11-06 · 캐릭터 모형은 임시용이고 최종적으로 바꾼다 (마일스톤 미정)
+
+- **결정 (사용자, 2026-11-06)**: "캐릭터 모형 최종적으론 바꿀것이다", "지금은 임시용". 2026-11-05 "M6 범위" 의 "러너 디자인 5종 유지" 를 고친다. M6 에서 교체하지 않는 것은 그대로다. 언제 바꿀지는 정하지 않았다.
+- **영향**: 지금 러너 모형에 묶이는 표현은 피한다 — 사용자 "러너 수정의 큰 영향 없는 것만 하자". 봉 스윙 잔상의 몸 실루엣 안은 모형을 복제하므로 여기에 걸린다.
+## 2026-11-06 · 봉 스윙 이펙트, 상태별 꼬리, 흰 바람 선 (`feature/m6-swing-effects`)
+
+- **결정 (사용자 플레이로 다듬었다, 2026-11-06)**: M6 "봉 스윙 이펙트" 를 표현 계층에서만 넣었다. 시뮬은 바꾸지 않았다.
+  - **불꽃·줄 끊김 (`Visuals/SwingEffects`)**: 띠와 손 쪽에서 튄다, 스윙이 끝나면 줄이 둘로 갈라져 0.25 s 에 튕겨 사라진다. 복귀로 끝난 스윙은 끊김을 내지 않는다. 띠 불꽃만으로는 멀어서 사용자 "불꽃은 봉에 달린건가? 잘 모르겠다" — 손 쪽을 더한 뒤 "불꽃도 보인다".
+  - **꼬리 (`Visuals/SpeedTrails`, 한 번에 하나)**: 스윙 앰버(0.12), 부스터 민트(0.25, 0.25 s), 스윙 + 부스터 금색(0.325), 부스트존 진한 초록(속도와 함께 약해진다). "꼬리는 부스터만"(2026-10-29)을 사용자 "스윙꼬리 따로 부스터 단일꼬리 따로 스윙+부스터 꼬리 따로, 부스터존에 의한 부스터 꼬리 따로" 로 바꿨다. 스윙 + 부스터는 두 꼬리를 겹쳤을 때 사용자 "안보인다" 여서 전용 꼬리를 뒀다. 겹쳤을 때 안 보인 원인은 확인하지 못했다. 금색 폭은 사용자 "현재와 부스터의 중간".
+  - **흰 바람 선**: 부스터가 켜진 동안(부스트존 포함) 양 끝이 뾰족한 흰 선이 러너 둘레 8방향으로 뒤로 벌어진다. 동시에 최대 8개, 0.07 s 마다 대칭 한 쌍, 고정 패턴. 사용자 참고 영상의 5:34~5:35 프레임을 읽어 만들었다.
+- **버린 대안**: 파티클 속도 줄기 — "너무 불규칙하게 뻗어나가는거같다". 소닉붐 고리 — "구체느낌", "개수가 너무 많다". 좌우 한 쌍만 — "여러 방향으로 있어야지". 몸 실루엣 잔상 — 러너 모형에 묶인다(모형은 임시용). 머티리얼 에셋으로 가산 발광 — 씬 연결이 따라와 1단계에서 뺐다. 프로젝트에 파티클 셰이더를 쓰는 머티리얼이 없어 코드로 찾으면 플레이어 빌드에서 빠질 수 있다.
+- **검증 (병합 ②, 작업 중 실행을 다시 쓴다)**: 영향 평가: `SpeedTrails`·`SwingEffects`·`FeedbackLook`·`ControlFeedback` → `ChainRushHud.Awake`(표현만, 시뮬 참조 없음) → `ChainRushCornerSwingTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`·`ControlFeedback_`·서킷 지문(도구 목록 + `ControlFeedback_`).
+  - PlayMode `testcasecount=34 result=Passed passed=34 failed=0 skipped=0`, 2026-11-06 06:28:33Z~06:30:26Z. 이 실행 뒤 코드 변경은 `SwingBoostTailWidth` 0.4 → 0.325 뿐이다.
+  - 그 변경 뒤 PlayMode `SpeedTrails_` `testcasecount=2 result=Passed passed=2 failed=0 skipped=0`, 06:34:15Z~06:34:19Z.
+  - EditMode 전체(`Enemy` 제외) `testcasecount=342 result=Passed passed=342 failed=0 skipped=0`, 06:33:42Z~06:33:47Z.
+  - 사용자 플레이 "일단 ㅇㅋ". 플레이어 빌드에서 이 런타임 머티리얼이 보이는지는 확인 못 했다 — M6 마감 빌드에서 본다.
+
+## 2026-11-06 · 봉 체인은 18 m 에 걸고, 장식은 줄 때문에 제한하지 않는다 (`feature/m6-swing-effects`)
+
+- **결정 (사용자, 2026-11-06)**: `SwingLook.BiteHeight` 3 → 18 m. 체인이 위로 뻗어 낮은 장식 위로 지나간다. 사용자 플레이 "괜찮네". 값은 표현 계층 상수 하나고 시뮬은 읽지 않는다(`SwingCenter` 만 쓴다). 20 m 는 띠가 꼭대기 구체에 묻혀(`CircuitScenery.PlacePoles`) 18 m 로 했다.
+- **이유**: 사용자 "맵 장식들을 뚫고 줄이 보이지않나". 장식과 줄은 둘 다 물리가 없어(`ExteriorAssets.ValidateDecoration`, `MetalChain`) 달리기에는 영향이 없고, 보이는 문제다. 코너를 드리프트가 아니라 봉에 줄을 걸어 각도를 고정해 지나가는 것이 이 게임의 차이라, 봉 스윙은 그대로 둔다.
+- **측정 (장식 프리팹에 임시 충돌체, 봉을 걸 수 있는 중앙선 지점마다 손 → 걸림 띠 레이캐스트)**: 3 m → 18 m 로 STADIUM 1% → 1%, FINGER LANES 18% → 0%, SKYWAY 57% → 8%, PALM COAST 44% → 33%. 남은 겹침은 그대로 둔다.
+- **버린 대안**: 줄이 쓸고 가는 부채꼴에서 높은 장식을 빼거나 옮기기 — 사용자 "이건 아닌거같다". 줄이 코너를 도는 동안 겹치는 모든 장식을 막아야 해서다. 체인을 손 쪽만 그리기, 코너 안쪽 난간에 걸기(`RailPoint`)는 하지 않았다. 남은 겹침이 거슬리면 다시 본다.
+- **검증**: PlayMode 선택 18건 `testcasecount=18 result=Passed passed=18 failed=0 skipped=0`, 2026-11-06 05:26:01Z~05:27:06Z(`ChainRushInputSourceTests`·`ChainRushPresentationTests`·`SwingLook_WhileSwinging_…`·서킷 지문·`Scene_CornerPoles_…`·`ControlFeedback_…`).
+
+## 2026-11-05 · 트랙별 소리: FINGER LANES 음원만 넣고, 나머지는 다시 만든다 (`feature/m6-finger-sound`)
+
+- **결정 (사용자, 2026-11-05)**: 네 트랙 음악·환경음과 새 효과음을 플레이한 뒤 "손가락맵 음원 말고는 다 별로다. 기록해놓고 손가락맵만 커밋 푸쉬 병합하라."
+  - **넣은 것**: `TrackLook` 의 `music`·`ambience`, `ChainRushAudio.UseTrackSounds`(`RaceAssembler` → `ChainRushGame.UseTrackSounds`), 환경음용 런타임 `AudioSource`, `Editor/ChainRush/TrackSoundBuilder.cs`(메뉴 Rebuild Track Sounds), `Assets/_Project/Audio/FingerLanes_Music.wav`·`_Ambience.wav`(새소리·시계탑 종, 뜯는 현 120 BPM). 합성 코드는 Codex 작성.
+  - **뺀 것**: STADIUM·SKYWAY·PALM COAST 음악·환경음은 사용자가 "별로다" 라고 했다. 세 트랙은 지금까지의 씬 음악 그대로다. 빌더에 세 테마 코드는 남겼지만 굽지 않는다(`themes` 는 FingerLanes 뿐).
+  - **효과음은 이 브랜치에 없다**: 동작별 효과음 배선과 소리는 `feature/m6-sound-cues` 에서 계속한다.
+- **효과음 평가 (사용자, 같은 말에서)**: "부스터 소리는 지지직 거리는 소리라 잘못되었다. 속도감이 안느껴진다. 제트 소리 같은 느낌", "스윙 소리는 체인&금속의 소리가 아니라 또르르륵 뭔가 굴러가는 소리", "부스트 존 소리도 … 지지직 … 속도감이 느껴지는 하이톤의 소리".
+  - **참고 영상 재측정**: 부스터로 본 소리 12번의 평균에서 음악을 뺀 스펙트럼의 고음 봉우리가 약 4.2 kHz → 4.6 → 4.9 → 5.1 → 5.6 kHz 로 2초 동안 올라간다(+15~20 dB). 넓은 잡음이 아니라 올라가는 좁은 대역이다. 저음은 35~60 Hz 에 머문다. 영상의 소리는 복제하지 않고 구조만 참고한다.
+- **검증** (에디터 6000.3.19f1, 커밋 전 작업 트리): 컴파일 `*** Tundra build success (1.75 seconds), 5 items updated, 1618 evaluated`, Console Error 0.
+  - EditMode `testcasecount="335" result="Passed" passed="335" failed="0" skipped="0"` (07:09:31Z~07:09:36Z).
+  - PlayMode `testcasecount="9" result="Passed" passed="9" failed="0" skipped="0"` (07:08:08Z~07:09:12Z). 영향 평가: `ChainRushAudio`·`TrackLook` → `RaceAssembler`·`ChainRushGame` → Presentation 4, Flow 4(`Race_WithATrackLook*`·`Race_FingerLanesLook_*`·`Race_FinishFromTheLobby_*`), 지문 1. **서킷 지문 그대로** `0xEF92FB76BFD1D767`. 주행과 맵이 바뀌지 않아 `Lap`·Device 는 돌리지 않았다. `select-tests` 는 코어 시뮬 파일이 있어 "전체" 로 판정할 수 있어 이름으로 골랐다(CLAUDE.md §9-2).
+  - `Rebuild Track Sounds` 를 다시 돌려 WAV 두 개의 SHA-256 이 같은 것을 확인했다(고정 시드).
+  - 사용자 플레이: 네 트랙을 들은 뒤의 위 평가. 분리한 이 브랜치의 코드로는 듣지 않았다.
+- **리뷰** (병합 전, `72a9d61` 기준): Codex `adversarial-review --base dev` 판정 approve, 지적 없음(사용량은 읽지 않았다). `unity-reviewer` 치명·중대 0, 경미 2건, 제안 5건(`subagent_tokens` 105033, 도구 14회, 304초).
+  - 경미 ① `ChainRushAudio.ResetAudio`·`SetMuted` 는 `Awake` 가 끝까지 돌아야 생기는 `trackAmbience` 에 기댄다. 씬 연결이 깨졌을 때만 닿고 그때는 `LogError` 가 먼저 난다. 경미 ② `MusicClip` 이 `TrackAmbienceClip` 과 달리 `initialized` 를 보지 않는다. 호출처는 `Awake` 뒤의 테스트뿐이다. 둘 다 지금 도달하지 않아 고치지 않고 병합했다.
+  - 제안 중 남긴 것: 실제 클립으로 환경음의 재생·일시정지·정지를 보는 테스트가 없다. 빌더에 쓰지 않는 세 테마 코드가 있다(의도).
+
 ## 2026-11-05 · 사운드 구분: 동작마다 다른 효과음, 벽은 충돌만 (`feature/m6-sound-cues`)
 
 - **결정 (사용자, 2026-11-05)**: 합의 요청서에 "ㅇㅋ ㄱㄱ". 벽 스침은 무음, 강화 그래플은 부스터와 같은 소리(요청서의 추천 그대로).
@@ -22,11 +172,12 @@
   - **서킷 지문 그대로** `0xEF92FB76BFD1D767`. Console Error 6건은 모두 `BoostZone_PalmCoastZ1_*` 이 일부러 되감아 내는 `RaceAssembler: tick N came after N` 이고 테스트가 `LogAssert.Expect` 로 기다린다.
   - 소리가 귀로 구분되는지는 테스트가 볼 수 없다(파형이 다른 것까지만 `Audio_MoveCues_HaveUnlikeWaveforms`). 사용자 플레이 확인 전이다(검증 안 됨).
 
+
 ## 2026-11-05 · M6 범위: 사운드 구분·봉 스윙 이펙트·고저차 트랙 1개, 태그 M6 = v0.6 · M5 = v0.7 (`docs/m6-scope`)
 
 - **결정 (사용자, 2026-11-05)**: 범위안의 세 질문(범위, 태그, 빌드 확인)에 "3가지 ㄱㄱ". M6 완료 조건이 "마일스톤에 들어갈 때 정한다" 로 비어 있어 먼저 정했다.
   - **넣는 것**: ① 사운드 구분 — 그래플·부스터·봉·결승이 같은 소리(`RaceCue.Action`, `RaceCue.cs:10`)이고 복귀 효과음이 없어서, 부스터·봉 걸림·그래플·부스트존·벽 충돌·복귀마다 소리를 나눈다. 기존 합성 방식이라 외부 음원이 필요 없다. ② 봉 스윙 이펙트(불꽃·줄 끊김·잔상) — 표현 계층이라 서킷 지문이 그대로다. ③ 고저차 트랙 1개 — 지금 `TrackDefinition` 조각으로, 시뮬 변경 없이, 장식 포함.
-  - **뺀 것**: 헤어핀·그래플 트랙(T5)과 종합 맵은 시뮬 변경이 따라와 M5 뒤로(마일스톤 미정). 캐릭터 모형 교체는 하지 않는다(러너 디자인 5종 유지). 상대 달리기 모션은 원래 M5 항목이다. 그래플 타이밍 보상은 아이디어로 둔다. 환경 아트는 네 트랙 장식·하늘로 끝난 것으로 닫는다.
+  - **뺀 것**: 헤어핀·그래플 트랙(T5)과 종합 맵은 시뮬 변경이 따라와 M5 뒤로(마일스톤 미정). 캐릭터 모형 교체는 하지 않는다(~~러너 디자인 5종 유지~~ → 2026-11-06 지금 5종은 임시용이고 최종적으로 바꾼다). 상대 달리기 모션은 원래 M5 항목이다. 그래플 타이밍 보상은 아이디어로 둔다. 환경 아트는 네 트랙 장식·하늘로 끝난 것으로 닫는다.
   - **선택 (필수 아님)**: 장식 빌더 후속, PALM COAST 구간별 바닥. 새 트랙 장식 전에 장식 빌더 후속 ①(`SaveMesh` 순서)을 고치는 쪽을 권했다.
   - **완료 조건 (사용자 플레이)**: 한 판을 돌 때 주요 동작을 소리만으로 구분할 수 있다. 봉 스윙 이펙트가 보기 좋고 시야를 가리지 않는다. 새 트랙을 완주한다. 플레이어 빌드 1회에서 고스트 투명·프레임·화면 설정을 확인한다.
   - **태그**: M6 = v0.6, M5 = v0.7. 진행 순서가 M4 → M6 → M5 → M7 이라(2026-10-30 "멀티 개발 순서") 번호와 태그 순서를 맞췄다. 마일스톤 번호는 그대로 둔다.

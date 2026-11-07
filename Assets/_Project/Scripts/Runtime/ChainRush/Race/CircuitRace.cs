@@ -26,6 +26,11 @@ namespace ProtoHarness.ChainRush.Race
         [SerializeField] private float maxPieceLength = 50f;
         // The track look whose lane markings are painted (UseLook); none without one, or when it has no markings.
         private TrackLook markingsLook;
+        // A round floor instead of a road (UseArena): no laps, no start line, nothing to finish.
+        private bool arena;
+        private float arenaRing;
+        private float arenaInner;
+        private float arenaOuter;
 
         private readonly Stopwatch stepWatch = new Stopwatch();
         private Centerline track;
@@ -44,6 +49,8 @@ namespace ProtoHarness.ChainRush.Race
 
         public LapCounter Laps => counter;
         public TrackDefinition Definition => definition;
+        public Material LightMaterial => lightMaterial;
+        public bool IsArena => arena;
         public Centerline Track => track;
         public int LapCount => definition.LapCount;
         public bool IsFinished => counter.IsFinished;
@@ -99,6 +106,20 @@ namespace ProtoHarness.ChainRush.Race
             markingsLook = look.Markings != null ? look : null;
         }
 
+        // Lays a round floor from innerRadius to outerRadius about the centre of the definition's ring (TrackDefinition.Ring)
+        // instead of its road (the tutorial, user 2026-11-06). The run then has no laps and never finishes by itself. Like the
+        // definition, before the circuit is built.
+        public void UseArena(float ringRadius, float innerRadius, float outerRadius)
+        {
+            if (!(innerRadius > 0f) || !(ringRadius > innerRadius) || !(outerRadius > ringRadius) || float.IsInfinity(outerRadius))
+                throw new ArgumentOutOfRangeException(nameof(ringRadius), ringRadius, $"CircuitRace: an arena needs 0 < inner ({innerRadius}) < ring ({ringRadius}) < outer ({outerRadius}).");
+            if (initialized) throw new InvalidOperationException("CircuitRace: the circuit is already built; set the arena before the scene's Awake.");
+            arena = true;
+            arenaRing = ringRadius;
+            arenaInner = innerRadius;
+            arenaOuter = outerRadius;
+        }
+
         // The game asks for the centerline in its Awake, which can run before this Awake, so the circuit is
         // made on the first call of either.
         public Centerline BuildTrack()
@@ -115,7 +136,7 @@ namespace ProtoHarness.ChainRush.Race
         {
             stepWatch.Restart();
             lastS = track.Project(player.transform.position).S;
-            counter.Update(lastS, tick);
+            if (!arena) counter.Update(lastS, tick);
             stepWatch.Stop();
             MaxStepMilliseconds = Math.Max(MaxStepMilliseconds, stepWatch.Elapsed.TotalMilliseconds);
         }
@@ -144,8 +165,8 @@ namespace ProtoHarness.ChainRush.Race
             return anchors[index];
         }
 
-        // The first gap the runner has not fully crossed on this lap, or the first one of the next lap. S is
-        // folded into the lap, so a gap after the seam comes back as S + lap length.
+        // The first gap the runner has not fully crossed on this lap, or on a circuit the first one of the next
+        // lap. S is folded into the lap, so a gap after the seam comes back as S + lap length.
         public bool TryGetNextGap(double s, out double startS, out double endS, out bool hasAnchor)
         {
             startS = 0d;
@@ -153,7 +174,7 @@ namespace ProtoHarness.ChainRush.Race
             hasAnchor = false;
             if (gaps.Count == 0) return false;
             double lap = definition.LapLength;
-            for (int pass = 0; pass < 2; pass++)
+            for (int pass = 0; pass < (definition.IsOpenCourse ? 1 : 2); pass++)
             {
                 for (int i = 0; i < gaps.Count; i++)
                 {
@@ -205,13 +226,21 @@ namespace ProtoHarness.ChainRush.Race
             track = definition.BuildCenterline(Vector3.zero, 0f);
             var checkpoints = new double[definition.CheckpointCount];
             for (int i = 0; i < checkpoints.Length; i++) checkpoints[i] = definition.CheckpointS(i);
-            counter = new LapCounter(definition.LapLength, checkpoints, definition.LapCount);
+            counter = new LapCounter(definition.LapLength, checkpoints, definition.LapCount, !definition.IsOpenCourse);
             gaps = definition.Gaps();
             scenery = new CircuitScenery(definition, track, transform, roadMaterial, railMaterial, lightMaterial, maxPieceLength);
-            scenery.LayRoad();
-            if (markingsLook != null) scenery.PaintMarkings(markingsLook);
+            if (arena)
+            {
+                scenery.LayArena(arenaRing, arenaInner, arenaOuter);
+                scenery.PaintArena(markingsLook != null ? markingsLook.Markings : lightMaterial, arenaRing, arenaOuter);
+            }
+            else
+            {
+                scenery.LayRoad();
+                if (markingsLook != null) scenery.PaintMarkings(markingsLook);
+            }
             PlaceAnchors();
-            scenery.PlaceMarkers(checkpoints);
+            if (!arena) scenery.PlaceMarkers(checkpoints);
             scenery.PlacePoles();
             scenery.PlaceBoostZones();
             Physics.SyncTransforms();

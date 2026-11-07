@@ -12,7 +12,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         // What choosing a row or going back asks of the menu.
         public readonly struct Step
         {
-            public enum Kind { Stay, Open, Launch, Title }
+            public enum Kind { Stay, Open, Launch, Tutorial, Title }
 
             private Step(Kind what, LobbyMenu.Page page, int highlight)
             {
@@ -22,7 +22,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             }
 
             public Kind What { get; }
-            // For Open: the page and the row it opens on.
+            // For Open: the page and the row it opens on. For Tutorial: Highlight is the stage it starts from.
             public LobbyMenu.Page Page { get; }
             public int Highlight { get; }
 
@@ -32,6 +32,8 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             // Back to the title scene.
             public static Step Title => new Step(Kind.Title, default, 0);
             public static Step Open(LobbyMenu.Page page, int highlight) => new Step(Kind.Open, page, highlight);
+            // The tutorial from a stage on, then the race scene.
+            public static Step Tutorial(int stage) => new Step(Kind.Tutorial, default, stage);
         }
 
         // The help line under most lists; the settings and runner pages name their own keys too.

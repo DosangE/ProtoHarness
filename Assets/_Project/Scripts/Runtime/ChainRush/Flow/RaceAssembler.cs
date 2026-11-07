@@ -1,4 +1,5 @@
 using ProtoHarness.ChainRush.Race;
+using ProtoHarness.ChainRush.Tutorial;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -10,7 +11,8 @@ namespace ProtoHarness.ChainRush.Flow
     // the circuit is built, gives the runner the chosen profile at the chosen speed class (SpeedScale) and its look, loads the track's environment scene additively, then counts the race in. A finish
     // goes to the best records (BestRecords) and, when it is the best for its track and speed, becomes the ghost there
     // (GhostFiles), which every race there shows running alongside, whichever runner (GhostRunner). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
-    // the scene runs as saved, Enter to start.
+    // the scene runs as saved, Enter to start. A tutorial (RaceMode.Tutorial) lays the round floor instead of a road, has a
+    // TutorialDirector run its stages, and keeps no record or ghost.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
     [DefaultExecutionOrder(-100)]
     public sealed class RaceAssembler : MonoBehaviour
@@ -34,6 +36,7 @@ namespace ProtoHarness.ChainRush.Flow
         private GhostRunner ghost;
         // A finish in this race saved a new ghost; the next count-in shows it.
         private bool ghostReplaced;
+        private TutorialDirector tutorial;
 
         // Where a finish from the lobby is kept (the player's records; a test gives its own).
         public BestRecords Records
@@ -54,6 +57,8 @@ namespace ProtoHarness.ChainRush.Flow
         }
         // The best run here racing alongside (M4-3), or null when there is none (or its file could not be read).
         public GhostRunner Ghost => ghost;
+        // The tutorial's stages in a tutorial; null in a race.
+        public TutorialDirector Tutorial => tutorial;
         public bool HasGhost => ghost != null;
         // Whether the last finish beat the best record for its track and speed class, and so became the ghost there.
         public bool LastFinishWasBest { get; private set; }
@@ -81,7 +86,7 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             // Only what the simulation can race today: multi is locked in the lobby.
-            if (setup.Mode != RaceMode.Single)
+            if (setup.Mode == RaceMode.Multi)
             {
                 Debug.LogError($"RaceAssembler: {setup.Mode} at {setup.Speed} cannot be raced yet (multi: M7).", this);
                 game.enabled = false;
@@ -97,16 +102,31 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             circuit.UseDefinition(setup.Track);
-            if (setup.Look != null) circuit.UseLook(setup.Look);
+            bool isTutorial = setup.Mode == RaceMode.Tutorial;
+            if (isTutorial) circuit.UseArena(TutorialCourse.RingRadius, TutorialCourse.IslandRadius, TutorialCourse.FloorRadius);
+            if (setup.Look != null)
+            {
+                circuit.UseLook(setup.Look);
+                game.UseTrackSounds(setup.Look.Music, setup.Look.Ambience);
+            }
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
+            if (isTutorial)
+            {
+                player.ReachPolesFrom(TutorialCourse.FloorRadius);
+                tutorial = gameObject.AddComponent<TutorialDirector>();
+                tutorial.Initialize(game, player, circuit.LightMaterial, setup.FirstStage);
+                return;
+            }
             game.TickCompleted += RecordTick;
         }
 
         private void OnDestroy()
         {
             if (launched && game != null) game.TickCompleted -= RecordTick;
+            // The ring was made for this tutorial (TutorialCourse.Setup), so it goes with it.
+            if (tutorial != null) Destroy(setup.Track);
         }
 
         // Tick 1 is a new run (a restart starts over). Ticks arrive in order in a single race; if one does not, this run
@@ -159,7 +179,7 @@ namespace ProtoHarness.ChainRush.Flow
             if (!launched) return;
             started = true;
             if (setup.Look != null && setup.Look.Sky != null) UseSky(setup.Look);
-            ShowGhost();
+            if (tutorial == null) ShowGhost();
             if (setup.EnvironmentScene.Length == 0)
             {
                 CountIn();
@@ -229,7 +249,8 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (leaving) return;
             countedIn = true;
-            game.StartCountdown();
+            if (tutorial != null) game.ReturnToStart();
+            else game.StartCountdown();
         }
 
         private void Update()
@@ -240,7 +261,7 @@ namespace ProtoHarness.ChainRush.Flow
             bool finished = game.HasFinished;
             bool newFinish = finished && !wasFinished;
             wasFinished = finished;
-            if (newFinish) KeepFinish();
+            if (newFinish && tutorial == null) KeepFinish();
             // RUN AGAIN or a restart after a new best: race the new ghost from this count-in.
             if (ghostReplaced && game.IsCountingDown) ShowGhost();
             if (!(finished || game.HasFailed)) return;

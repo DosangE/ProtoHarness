@@ -138,6 +138,8 @@ namespace ProtoHarness.ChainRush
         private float accelerationScale = 1f;
         private float gaugeChargeScale = 1f;
         private float speedClassScale = 1f;
+        // Extra pole reach for a course that permits distant hooks (the tutorial); races keep zero.
+        private float extraPoleReach;
         private Vector3 spawnPosition;
         // Scratch for one Move call: the most head-on side contact OnControllerColliderHit reported.
         private Vector3 guardNormal;
@@ -198,6 +200,15 @@ namespace ProtoHarness.ChainRush
             accelerationScale = runner.AccelerationScale;
             gaugeChargeScale = runner.GaugeChargeScale;
             speedClassScale = speedScale;
+        }
+
+        public void ReachPolesFrom(float metres)
+        {
+            if (!(metres >= 0f) || float.IsInfinity(metres))
+                throw new System.ArgumentOutOfRangeException(nameof(metres), metres, "RunnerMotor: extra pole reach must be finite and not negative.");
+            if (game.IsRunning || game.IsPaused)
+                throw new System.InvalidOperationException("RunnerMotor: set pole reach before the run, not during it.");
+            extraPoleReach = metres;
         }
 
         private void Awake()
@@ -489,6 +500,14 @@ namespace ProtoHarness.ChainRush
             grapple.Release(false);
             double s = racer.LastGroundedS - respawnBackoff;
             if (game.Track.TryBoostZoneBehind(s, respawnPadReach, out double pad)) s = pad - respawnBackoff;
+            if (!game.Track.IsLoop)
+            {
+                s = System.Math.Max(0d, System.Math.Min(game.Circuit.Definition.LapLength, s));
+                // A landing just beyond a gap must not put the backoff inside that gap. The open course's start
+                // is also a hard bound: respawning there faces the road ahead rather than the rear end guard.
+                if (game.Circuit.TryGetNextGap(s, out double gapStart, out double gapEnd, out _) && s >= gapStart && s <= gapEnd)
+                    s = System.Math.Max(0d, gapStart - respawnBackoff);
+            }
             TrackFrame frame = game.Track.FrameAt(s);
             controller.enabled = false;
             transform.position = frame.TransformPoint(new Vector3(0f, 1.05f, 0f));
@@ -546,7 +565,10 @@ namespace ProtoHarness.ChainRush
         public bool TryFindPole(out Vector3 pole)
         {
             Vector3 forward = game.Track.Frame(transform.position).Forward;
-            return game.Track.TryFindPole(transform.position, Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, poleMaxAngle, poleReach, out pole, poleHookArcShare);
+            // Distant hooks on an open floor must cover the whole ring, including the shared half-turn boundaries.
+            // With no additional reach, races keep their original corner cutoff and every query value.
+            float arcShare = extraPoleReach > 0f ? 1f : poleHookArcShare;
+            return game.Track.TryFindPole(transform.position, Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, poleMaxAngle, poleReach + extraPoleReach, out pole, arcShare);
         }
 
         // Downhill the road can drop away faster than one tick of grounded fall. When ground is still within

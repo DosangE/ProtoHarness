@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace ProtoHarness.ChainRush.Track
 {
-    // Counts laps on a loop from the runner's S (COURSE.md T4). S arrives folded into one lap, so the counter
+    // Counts laps on a loop from the runner's S (COURSE.md T4), or one open course without folding S. On a loop S arrives folded, so the counter
     // adds up every tick's movement (each step folded into [-lap/2, lap/2], far above what one tick can
     // cover) into a running progress, and a lap is done when that progress reaches the next multiple of the
     // lap length after the lap's checkpoints were reached in order. Going backwards only lowers the progress:
@@ -38,11 +38,12 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         // checkpoints are S values strictly inside (0, lapLength), ascending.
-        public LapCounter(double lapLength, IReadOnlyList<double> checkpoints, int lapCount)
+        public LapCounter(double lapLength, IReadOnlyList<double> checkpoints, int lapCount, bool isLoop = true)
         {
             if (!(lapLength > 0d) || double.IsInfinity(lapLength))
                 throw new ArgumentOutOfRangeException(nameof(lapLength), lapLength, "Lap length must be positive and finite.");
             if (lapCount < 1) throw new ArgumentOutOfRangeException(nameof(lapCount), lapCount, "A race needs at least one lap.");
+            if (!isLoop && lapCount != 1) throw new ArgumentException("An open course has one lap.", nameof(lapCount));
             if (checkpoints == null) throw new ArgumentNullException(nameof(checkpoints));
             double previous = 0d;
             for (int i = 0; i < checkpoints.Count; i++)
@@ -53,6 +54,7 @@ namespace ProtoHarness.ChainRush.Track
             }
             this.lapLength = lapLength;
             this.lapCount = lapCount;
+            IsLoop = isLoop;
             this.checkpoints = new double[checkpoints.Count];
             for (int i = 0; i < this.checkpoints.Length; i++) this.checkpoints[i] = checkpoints[i];
             lapEndTicks = new int[lapCount];
@@ -60,6 +62,8 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         public double LapLength => lapLength;
+        // Immutable course configuration, not simulation state; snapshots keep only the changing counter values.
+        public bool IsLoop { get; }
         public int LapCount => lapCount;
         public int CheckpointCount => checkpoints.Length;
         public bool HasStarted => started;
@@ -188,7 +192,7 @@ namespace ProtoHarness.ChainRush.Track
             if (lap > completed) throw new InvalidOperationException($"Lap {lap} is not finished yet.");
         }
 
-        // A difference folded into [-lap/2, lap/2].
-        private double Fold(double difference) => difference - Math.Round(difference / lapLength) * lapLength;
+        // A loop's difference folded into [-lap/2, lap/2]; an open course keeps the absolute movement.
+        private double Fold(double difference) => IsLoop ? difference - Math.Round(difference / lapLength) * lapLength : difference;
     }
 }

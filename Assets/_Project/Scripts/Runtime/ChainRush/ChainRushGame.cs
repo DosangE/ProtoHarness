@@ -38,6 +38,8 @@ namespace ProtoHarness.ChainRush
         public bool IsCountingDown => phase == Phase.Countdown;
         // 3, 2, 1 while counting down; 0 otherwise.
         public int CountdownNumber => IsCountingDown ? Mathf.CeilToInt(countdownLeft) : 0;
+        // How long the number now showing has been up, in seconds; 0 when not counting down.
+        public float CountdownNumberAge => IsCountingDown ? CountdownNumber - countdownLeft : 0f;
         // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
         // so the keyboard cannot restart a run the server is simulating.
         public bool ManualStart { get; set; } = true;
@@ -56,6 +58,13 @@ namespace ProtoHarness.ChainRush
         public CircuitRace Circuit => circuit;
         public RunnerMotor Player => player;
         public bool HasPresentation => enhancedPresentation;
+        // Presentation only; RaceAssembler may supply the track's clips before the audio's Awake.
+        public void UseTrackSounds(AudioClip music, AudioClip ambience)
+        {
+            if (!enhancedPresentation) return;
+            if (presentationAudio == null) throw new System.InvalidOperationException("ChainRushGame: enhanced presentation requires audio.");
+            presentationAudio.UseTrackSounds(music, ambience);
+        }
         public RacerState Racer => racer;
         public Centerline Track => track;
         public double Distance => System.Math.Max(0d, PlayerS - 5d);
@@ -232,6 +241,9 @@ namespace ProtoHarness.ChainRush
                 throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race.");
         }
 
+        // Resets the runner and camera to their start pose, ready without advancing simulation or counting down.
+        public void ReturnToStart() => ResetRun();
+
         // Starts a run at once. Servers, rollbacks and tests start here; a player at the keyboard goes through StartCountdown.
         public void StartRun()
         {
@@ -300,7 +312,8 @@ namespace ProtoHarness.ChainRush
             attackVisual.gameObject.SetActive(false);
         }
 
-        private void CompleteRun()
+        // Ends the run as finished: a race when its last lap is done, the tutorial when its last stage is.
+        public void CompleteRun()
         {
             if (!IsRunning) return;
             phase = Phase.Complete;

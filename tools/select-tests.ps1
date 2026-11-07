@@ -49,9 +49,9 @@ $explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 # Fingerprint = $false 면 지문을 넣지 않는다, Note = 보고에 붙일 말.
 $rules = @(
     # Lap eligibility is separate from the ordinary test table; see VERIFICATION §4-4 (one rule source).
-    @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
+    @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast|SummitDrop)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
     @{ Pattern = '^Assets/_Project/Data/TrackLook_'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '트랙 표현 SO (주행 시뮬 참조 없음)' }
-    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/StadiumExterior_)|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
+    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/(\w+Exterior_|StadiumSports_))|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/(.*EnvironmentBuilder|ExteriorAssets|ExteriorKit|RoadCorridor)\.cs$'; Classes = @(); Fingerprint = $false; Why = '장식 빌더 (침범 검사와 구조 테스트로 확인)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/ChainRushCircuitSceneBuilder\.cs$'; Classes = @('ChainRushCircuitTests'); LapTracks = @('*'); Why = '트랙 생성: 개별 Create...Track만 바뀌었으면 영향 평가로 그 트랙만 좁힌다' }
     @{ Pattern = '^' + $runtime + 'Race/TrackLook\.cs$'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '도로·벽·차선 표현 (시뮬 참조 없음)' }
@@ -74,6 +74,7 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'Race/CircuitRace\.cs$'; Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; LapTracks = @('*'); Why = '서킷 구성·랩·앵커' }
     @{ Pattern = '^' + $runtime + 'Control/(IInputSource|TickInput)\.cs$'; All = $true; LapTracks = @('*'); Why = '시뮬이 소비하는 컨트롤러 입력' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
+    @{ Pattern = '^' + $runtime + 'Tutorial(/|$)'; Classes = @('ChainRushTutorialTests'); Fingerprint = $false; Why = '튜토리얼 스테이지·진행 판정 (레이스 시뮬은 읽지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Flow/(GameSettings|ScreenOptions)\.cs$'; Classes = @('ChainRushPresentationTests'); Tests = @('ChainRushFlowTests.Lobby_'); Fingerprint = $false; Why = '설정 값 (로비 설정 페이지가 바꾸고 레이스에서는 ChainRushAudio·FollowCamera 가 읽는다. 시뮬은 읽지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Flow/(RaceAssembler|RaceSetup|SpeedScale)\.cs$'; Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); LapTracks = @('*'); Why = '트랙 정의·속도·프로필을 러너에 전달 (표현만 바뀌면 영향 평가로 Lap 제외)' }
     @{ Pattern = '^' + $runtime + 'Flow/(Lobby(/|$)|LobbyMenu\.cs$|RunnerPreview\.cs$|TitleScreen\.cs$)'; Tests = @('ChainRushFlowTests.Lobby_', 'ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn'); Fingerprint = $false; Why = '타이틀·로비 화면 (Lobby_TrackChoices가 실제 메뉴와 저장 원본을 비교, 시뮬은 읽지 않는다)' }
@@ -316,6 +317,7 @@ foreach ($path in $changed) {
             'Circuit_Skyway\.' { 'SKYWAY LOOP' }
             'Circuit_FingerLanes\.' { 'FINGER LANES' }
             'Circuit_PalmCoast\.' { 'PALM COAST' }
+            'Circuit_SummitDrop\.' { 'SUMMIT DROP' }
         }
         $lapTracks.Add($trackName)
     }
@@ -368,7 +370,7 @@ Write-Output '고른 테스트 (① 빠른 확인 / ② 병합은 -Range dev...H
 Write-Output '  EditMode: 전체 (Enemy 카테고리 제외: categoryNames = { "!Enemy" })'
 
 $lapTitles = @($lapTracks | Sort-Object -Unique)
-if ($lapTitles -contains '*') { $lapTitles = @('STADIUM', 'SKYWAY LOOP', 'FINGER LANES', 'PALM COAST') }
+if ($lapTitles -contains '*') { $lapTitles = @('STADIUM', 'SKYWAY LOOP', 'FINGER LANES', 'PALM COAST', 'SUMMIT DROP') }
 if ($lapTitles.Count -eq 0) {
     Write-Output '  Lap: 없음 (구조/주행 경로 변경을 찾지 못함; 새 Lap 테스트 검증을 명시한 작업은 이름으로 따로 실행)'
 } else {

@@ -18,6 +18,10 @@ namespace ProtoHarness.ChainRush.Audio
         private AudioClip[] cues;
         private AudioClip score;
         private AudioClip wind;
+        private AudioSource trackAmbience;
+        private AudioClip trackMusicClip;
+        private AudioClip trackAmbienceClip;
+        private bool initialized;
         private bool paused;
         private bool playing;
         // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
@@ -32,7 +36,8 @@ namespace ProtoHarness.ChainRush.Audio
         public bool IsPlaying => playing;
         public bool IsPaused => paused;
         public int CueCount => cues.Length;
-        public AudioClip MusicClip => score;
+        public AudioClip MusicClip => music.clip;
+        public AudioClip TrackAmbienceClip => initialized ? trackAmbience.clip : trackAmbienceClip;
 
         private void Awake()
         {
@@ -47,8 +52,51 @@ namespace ProtoHarness.ChainRush.Audio
             for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
             score = MakeScore();
             wind = MakeWind();
-            music.clip = score; music.loop = true;
+            trackAmbience = LoopSource(ambience);
+            trackAmbience.clip = trackAmbienceClip;
+            music.clip = trackMusicClip != null ? trackMusicClip : score; music.loop = true;
             ambience.clip = wind; ambience.loop = true;
+            initialized = true;
+        }
+
+        // A second looping source beside the scene's three, set up like model (the scene cannot be changed for it).
+        private AudioSource LoopSource(AudioSource model)
+        {
+            AudioSource source = gameObject.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.loop = true;
+            source.volume = 0f;
+            source.spatialBlend = model.spatialBlend;
+            source.outputAudioMixerGroup = model.outputAudioMixerGroup;
+            source.priority = model.priority;
+            source.panStereo = model.panStereo;
+            source.ignoreListenerPause = model.ignoreListenerPause;
+            source.ignoreListenerVolume = model.ignoreListenerVolume;
+            source.mute = Muted;
+            return source;
+        }
+
+        // RaceAssembler can supply these before Awake; null deliberately keeps the scene's current sound.
+        public void UseTrackSounds(AudioClip trackMusic, AudioClip environment)
+        {
+            if (trackMusic != null)
+            {
+                trackMusicClip = trackMusic;
+                if (initialized)
+                {
+                    music.clip = trackMusic;
+                    if (playing) { music.Play(); if (paused) music.Pause(); }
+                }
+            }
+            if (environment != null)
+            {
+                trackAmbienceClip = environment;
+                if (initialized)
+                {
+                    trackAmbience.clip = environment;
+                    if (playing) { trackAmbience.Play(); if (paused) trackAmbience.Pause(); }
+                }
+            }
         }
 
         private void OnValidate()
@@ -62,33 +110,35 @@ namespace ProtoHarness.ChainRush.Audio
             if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame) SetMuted(!Muted);
             if (game.IsPaused)
             {
-                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); paused = true; }
+                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); trackAmbience.Pause(); paused = true; }
                 return;
             }
-            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); paused = false; }
+            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); trackAmbience.UnPause(); paused = false; }
             if (game.IsRunning && !playing)
             {
                 music.Play(); ambience.Play(); playing = true;
+                if (trackAmbience.clip != null) trackAmbience.Play();
             }
             if (!game.IsRunning && playing)
             {
-                music.Stop(); ambience.Stop(); playing = false;
+                music.Stop(); ambience.Stop(); trackAmbience.Stop(); playing = false;
             }
             // The wind counts as an effect.
             music.volume = Muted ? 0f : musicVolume * settings.Master * settings.Music;
             effects.volume = Muted ? 0f : effectsVolume * settings.Master * settings.Effects;
             ambience.volume = Muted ? 0f : Mathf.Lerp(0.08f, 0.2f, Mathf.Clamp01(player.Speed / 20f)) * settings.Master * settings.Effects;
+            trackAmbience.volume = Muted ? 0f : 0.24f * settings.Master * settings.Effects;
         }
 
         public void SetMuted(bool muted)
         {
             Muted = muted;
-            music.mute = effects.mute = ambience.mute = muted;
+            music.mute = effects.mute = ambience.mute = trackAmbience.mute = muted;
         }
 
         public void ResetAudio()
         {
-            music.Stop(); effects.Stop(); ambience.Stop();
+            music.Stop(); effects.Stop(); ambience.Stop(); trackAmbience.Stop();
             playing = false; paused = false;
         }
 

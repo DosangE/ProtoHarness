@@ -93,6 +93,7 @@ namespace ProtoHarness.Editor.ChainRush
         private static readonly float[] FingerCheckpoints = { 0.15f, 0.5f, 0.75f };
 
         public const string PalmCoastPath = "Assets/_Project/Data/Circuit_PalmCoast.asset";
+        public const string SummitDropPath = "Assets/_Project/Data/Circuit_SummitDrop.asset";
         private const float PalmRoadHalfWidth = FingerRoadHalfWidth;
         private const float PalmFinishGrade = 0.03f;
         private const float PalmFinishRise = 2f;
@@ -183,13 +184,32 @@ namespace ProtoHarness.Editor.ChainRush
             SaveTrack(PalmCoastPath, "PALM COAST", PalmCoastSegments(), Array.Empty<TrackDefinition.Pole>(), PalmCheckpoints, 2, PalmRoadHalfWidth);
         }
 
+        [MenuItem("ProtoHarness/Chain Rush/Create Summit Drop Track")]
+        public static void CreateSummitDropTrack()
+        {
+            TrackDefinition.Segment[] segments = SummitDropSegments();
+            double lap = StartOf(segments, segments.Length);
+            double fork = StartOf(segments, 28);
+            // No poles of its own: three stood in the road on the long straight (user 2026-11-06 "잘못 설계된 것 같다").
+            var poles = Array.Empty<TrackDefinition.Pole>();
+            // R15 is deliberately tighter than the runner's R25 steering, as on Finger Lanes.
+            var shortcut = new TrackDefinition.Shortcut((float)fork + 35f,
+                (float)(fork + 240f + Mathf.PI * 35f - 35f), 15f, 40f, 3.6f);
+            var checkpoints = new[] { (float)(420d / lap), (float)(1060d / lap),
+                (float)(StartOf(segments, 31) / lap), (float)(StartOf(segments, 44) / lap) };
+            SaveTrack(SummitDropPath, "SUMMIT DROP", segments, poles, checkpoints, 1, 7.2f,
+                new[] { shortcut }, openCourse: true, finishRunout: 60f, startRunway: 15f,
+                openEdges: new[] { new TrackDefinition.OpenEdge(830f, 980f, true) });
+        }
+
         // Builds the definition on a new instance, checks it (TryValidate) and only then writes it to path: a new asset, or
         // over the existing one in place so its GUID (the lobby's reference) and best records stay. Null checkpoints and a
         // road half width of 0 keep the definition's defaults; no shortcuts leaves none.
         private static void SaveTrack(string path, string label, TrackDefinition.Segment[] segments, TrackDefinition.Pole[] poles,
-            float[] checkpoints, int lapCount, float roadHalfWidth = 0f, TrackDefinition.Shortcut[] shortcuts = null, TrackDefinition.Bay[] bays = null)
+            float[] checkpoints, int lapCount, float roadHalfWidth = 0f, TrackDefinition.Shortcut[] shortcuts = null, TrackDefinition.Bay[] bays = null,
+            bool openCourse = false, float finishRunout = 40f, float startRunway = 10f, TrackDefinition.OpenEdge[] openEdges = null)
         {
-            if (EditorApplication.isPlaying) throw new InvalidOperationException("Exit Play mode before creating the track.");
+            if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play mode before creating the track.");
 
             var existing = AssetDatabase.LoadAssetAtPath<TrackDefinition>(path);
             if (existing == null && File.Exists(path)) throw new InvalidOperationException("The file at " + path + " is not a TrackDefinition.");
@@ -251,6 +271,18 @@ namespace ProtoHarness.Editor.ChainRush
                 checkpointList.arraySize = checkpoints.Length;
                 for (int i = 0; i < checkpoints.Length; i++) checkpointList.GetArrayElementAtIndex(i).floatValue = checkpoints[i];
             }
+            SerializedProperty edgeList = data.FindProperty("openEdges");
+            edgeList.arraySize = openEdges == null ? 0 : openEdges.Length;
+            for (int i = 0; i < edgeList.arraySize; i++)
+            {
+                SerializedProperty element = edgeList.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("fromS").floatValue = openEdges[i].FromS;
+                element.FindPropertyRelative("toS").floatValue = openEdges[i].ToS;
+                element.FindPropertyRelative("left").boolValue = openEdges[i].Left;
+            }
+            data.FindProperty("openCourse").boolValue = openCourse;
+            data.FindProperty("finishRunout").floatValue = finishRunout;
+            data.FindProperty("startRunway").floatValue = startRunway;
             data.FindProperty("lapCount").intValue = lapCount;
             if (roadHalfWidth > 0f) data.FindProperty("roadHalfWidth").floatValue = roadHalfWidth;
             data.ApplyModifiedPropertiesWithoutUndo();
@@ -268,7 +300,8 @@ namespace ProtoHarness.Editor.ChainRush
                 definition = existing;
                 EditorUtility.SetDirty(definition);
             }
-            AssetDatabase.SaveAssets();
+            if (openCourse) AssetDatabase.SaveAssetIfDirty(definition);
+            else AssetDatabase.SaveAssets();
             if (path == PalmCoastPath)
             {
                 var zones = new List<double>(4);
@@ -279,6 +312,68 @@ namespace ProtoHarness.Editor.ChainRush
             }
             else Debug.Log("ChainRush: " + label + " track saved; " + definition.Segments.Count + " segments, " + definition.LapLength.ToString("0.0") + " m a lap, " + definition.LapCount + " laps.", definition);
         }
+
+        // Original one-way layout, user 2026-11-06: eight changes of pace, with ten-metre grade eases.
+        private static TrackDefinition.Segment[] SummitDropSegments() => new[]
+        {
+            // 1: 420 m / -70 m. A broad falling left, then a shorter right; the first road widens to 18 m.
+            TrackDefinition.Segment.Straight(30f, endHalfWidth: 9f),
+            TrackDefinition.Segment.Straight(10f, -0.2f, 9f),
+            TrackDefinition.Segment.Arc(120f, -90f, -0.2f, 9f),
+            TrackDefinition.Segment.Straight(30f, -0.2f, 9f),
+            TrackDefinition.Segment.Arc(90f, 60f, -0.2f, 9f),
+            TrackDefinition.Segment.Straight(310f - Mathf.PI * 90f, -0.2f, 9f),
+            TrackDefinition.Segment.Straight(10f, 0f, 9f),
+            TrackDefinition.Segment.Straight(30f),
+            // 2: 380 m / -29.6 m. Three alternating R28 half turns, 40 m between them.
+            TrackDefinition.Segment.Straight(10f, -0.08f),
+            TrackDefinition.Segment.Arc(28f, 180f, -0.08f),
+            TrackDefinition.Segment.Straight(40f, -0.08f),
+            TrackDefinition.Segment.Arc(28f, -180f, -0.08f),
+            TrackDefinition.Segment.Straight(40f, -0.08f),
+            TrackDefinition.Segment.Arc(28f, 180f, -0.08f),
+            TrackDefinition.Segment.Straight(280f - Mathf.PI * 84f, -0.08f),
+            TrackDefinition.Segment.Straight(10f),
+            // 3: 260 m / -15 m. A taper, a narrow S and a 150 m unguarded left edge.
+            TrackDefinition.Segment.Straight(10f, -0.06f),
+            TrackDefinition.Segment.Straight(20f, -0.06f, 4.5f),
+            TrackDefinition.Segment.Arc(60f, -45f, -0.06f, 4.5f),
+            TrackDefinition.Segment.Straight(100f, -0.06f, 4.5f),
+            TrackDefinition.Segment.Arc(60f, 45f, -0.06f),
+            TrackDefinition.Segment.Straight(120f - Mathf.PI * 30f, -0.06f),
+            TrackDefinition.Segment.Straight(10f),
+            // 4: 130 m, level. The unscaled 55 m/s pad still clears 45 m from lip to landing at Normal;
+            // ordinary running and slingshots cannot: flight = 2 * 0.24 * v^2 / 22 needs 45.42 m/s.
+            TrackDefinition.Segment.BoostStraight(22f, 20f),
+            TrackDefinition.Segment.Kicker(8f, 0f, 0.24f),
+            TrackDefinition.Segment.Straight(15f),
+            TrackDefinition.Segment.Gap(30f),
+            TrackDefinition.Segment.Straight(55f),
+            // 5: 350 m, level. Long finger, right half turn, return; the R15 nail skips its tip.
+            TrackDefinition.Segment.Straight(120f),
+            TrackDefinition.Segment.Arc(35f, 180f),
+            TrackDefinition.Segment.Straight(120f),
+            // 6: 300 m / -14.5 m. Four alternating 70-degree turns, then a long straight.
+            TrackDefinition.Segment.Straight(10f, -0.05f),
+            TrackDefinition.Segment.Arc(30f, -70f, -0.05f),
+            TrackDefinition.Segment.Arc(30f, 70f, -0.05f),
+            TrackDefinition.Segment.Arc(30f, -70f, -0.05f),
+            TrackDefinition.Segment.Arc(30f, 70f, -0.05f),
+            TrackDefinition.Segment.Straight(280f - Mathf.PI * 140f / 3f, -0.05f),
+            TrackDefinition.Segment.Straight(10f),
+            // 7: 300 m / -50 m. A broad second drop, two pads on separate straights.
+            TrackDefinition.Segment.Straight(40f, endHalfWidth: 9f),
+            TrackDefinition.Segment.Straight(10f, -0.2f, 9f),
+            TrackDefinition.Segment.BoostStraight(60f, 20f, -0.2f, 9f),
+            TrackDefinition.Segment.Arc(100f, 80f, -0.2f, 9f),
+            TrackDefinition.Segment.BoostStraight(180f - Mathf.PI * 400f / 9f, 15f, -0.2f, 9f),
+            TrackDefinition.Segment.Straight(10f, 0f, 9f),
+            // 8: 140 m / +12 m. Ease up, 90 m at +12%, ease to flat and thirty flat metres to finish.
+            TrackDefinition.Segment.Straight(10f, 0.12f),
+            TrackDefinition.Segment.Straight(90f, 0.12f),
+            TrackDefinition.Segment.Straight(10f),
+            TrackDefinition.Segment.Straight(30f),
+        };
 
         private static TrackDefinition.Segment[] SkywaySegments() => new[]
         {

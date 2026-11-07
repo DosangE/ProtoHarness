@@ -4,6 +4,8 @@ using System.Reflection;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
+using UnityEditor;
+using ProtoHarness.ChainRush.Visuals;
 
 namespace ProtoHarness.Tests.EditMode
 {
@@ -56,6 +58,348 @@ namespace ProtoHarness.Tests.EditMode
         {
             Assert.That(definition.TryValidate(out string error), Is.True, error);
             Assert.That(error, Is.Null);
+        }
+
+        [Test]
+        public void TryValidate_OpenDownhill_PassesWhileTheSameClosedCourseFails()
+        {
+            SetSegments(TrackDefinition.Segment.Straight(60f, -0.2f), TrackDefinition.Segment.Straight(60f));
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetField("lapCount", 1);
+            SetField("openCourse", true);
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Assert.That(line.IsLoop, Is.False);
+            Assert.That(line.FrameAt(definition.LapLength).Position.y, Is.EqualTo(-12f).Within(1e-4f));
+            SetField("openCourse", false);
+            Assert.That(Error(), Does.Contain("does not close"));
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseWithTwoLapsOrBays_IsRejected()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 2);
+            Assert.That(Error(), Does.Contain("exactly one lap"));
+            SetField("lapCount", 1);
+            SetSegments(TrackDefinition.Segment.Straight(120f), TrackDefinition.Segment.Arc(35f, 180f), TrackDefinition.Segment.Straight(120f));
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(35f, 205f + Mathf.PI * 35f, 15f, 40f, 3f) });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            SetField("bays", new List<TrackDefinition.Bay> { new TrackDefinition.Bay(20f, 80f, 6f, 20f, true) });
+            Assert.That(Error(), Does.Contain("cannot have bays"));
+        }
+
+        [Test]
+        public void OpenCourse_Shortcut_ProjectsAndFramesWithoutWrappingPastEitherEnd()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(120f), TrackDefinition.Segment.Arc(35f, 180f), TrackDefinition.Segment.Straight(120f));
+            var shortcut = new TrackDefinition.Shortcut(35f, 205f + Mathf.PI * 35f, 15f, 40f, 3f);
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { shortcut });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Centerline line = definition.BuildCenterline(Vector3.zero, 0f);
+            Centerline own = TrackDefinition.ShortcutLine(line, shortcut);
+            Assert.That(line.BranchCount, Is.EqualTo(1));
+            foreach (bool focused in new[] { false, true })
+            {
+                if (focused) line.SetFocus((shortcut.FromS + shortcut.ToS) * 0.5d);
+                for (double s = 16d; s < own.EndS - 16d; s += 2d)
+                {
+                    TrackFrame frame = own.FrameAt(s);
+                    double expected = shortcut.FromS + s / own.EndS * (shortcut.ToS - shortcut.FromS);
+                    Assert.That(line.Project(frame.Position).S, Is.EqualTo(expected).Within(0.002d));
+                    Assert.That(line.Frame(frame.Position).S, Is.EqualTo(expected).Within(0.002d));
+                }
+            }
+            line.ClearFocus();
+            Assert.That(line.Project(line.FrameAt(-2d).Position).S, Is.EqualTo(-2d).Within(0.001d));
+            Assert.That(line.Project(line.FrameAt(line.EndS + 2d).Position).S, Is.EqualTo(line.EndS + 2d).Within(0.001d));
+        }
+
+        [TestCase(-1f, 200f)]
+        [TestCase(20f, 400f)]
+        [TestCase(40f, 20f)]
+        [TestCase(float.NaN, 200f)]
+        public void TryValidate_OpenCourseShortcutOutsideLap_IsRejected(float from, float to)
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(120f), TrackDefinition.Segment.Arc(35f, 180f), TrackDefinition.Segment.Straight(120f));
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(from, to, 15f, 40f, 3f) });
+            Assert.That(Error(), Does.Contain("shortcut 0").And.Contain("same lap"));
+        }
+
+        [TestCase(-1f, 20f)]
+        [TestCase(20f, 20f)]
+        [TestCase(40f, 20f)]
+        [TestCase(20f, 1000f)]
+        [TestCase(float.NaN, 20f)]
+        [TestCase(20f, float.PositiveInfinity)]
+        public void TryValidate_OpenEdgeOutsideRoad_IsRejected(float from, float to)
+        {
+            SetField("openEdges", new List<TrackDefinition.OpenEdge> { new TrackDefinition.OpenEdge(from, to, true) });
+            Assert.That(Error(), Does.Contain("open edge 0").And.Contain("range"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TryValidate_OpenEdgesOnSameSide_RejectsOverlapButAllowsTouchingAndOppositeSide(bool open)
+        {
+            SetField("openCourse", open);
+            SetField("lapCount", 1);
+            SetField("openEdges", new List<TrackDefinition.OpenEdge>
+            {
+                new TrackDefinition.OpenEdge(0f, 14f, true), new TrackDefinition.OpenEdge(13f, 20f, true)
+            });
+            Assert.That(Error(), Does.Contain("overlaps another open edge"));
+            SetField("openEdges", new List<TrackDefinition.OpenEdge>
+            {
+                new TrackDefinition.OpenEdge(0f, 14f, true), new TrackDefinition.OpenEdge(14f, 20f, true),
+                new TrackDefinition.OpenEdge(0f, 20f, false)
+            });
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+        }
+
+        [Test]
+        public void TryValidate_OpenEdgeOverJunctionOrGap_IsRejected()
+        {
+            SetField("openEdges", new List<TrackDefinition.OpenEdge> { new TrackDefinition.OpenEdge(120f, 130f, true) });
+            Assert.That(Error(), Does.Contain("overlaps a road gap"));
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(120f), TrackDefinition.Segment.Arc(35f, 180f), TrackDefinition.Segment.Straight(120f));
+            SetField("shortcuts", new List<TrackDefinition.Shortcut> { new TrackDefinition.Shortcut(35f, 205f + Mathf.PI * 35f, 15f, 40f, 3f) });
+            SetField("openEdges", new List<TrackDefinition.OpenEdge> { new TrackDefinition.OpenEdge(40f, 60f, false) });
+            Assert.That(Error(), Does.Contain("overlaps a shortcut crossing"));
+        }
+
+        // The road folds back under itself, so a pole can stand within level reach of a runner far above or below it
+        // (Codex review 2026-11-06: at S 100 the zigzag's pole, about 108 m down).
+        [Test]
+        public void SummitDrop_PoleSearch_NeverOffersAPoleOnAnotherLevelOfTheRoad()
+        {
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_SummitDrop.asset");
+            Assert.That(summit, Is.Not.Null, "Create Summit Drop Track first.");
+            Centerline line = summit.BuildCenterline(Vector3.zero, 0f);
+            for (double s = 0d; s <= summit.LapLength; s += 1d)
+            {
+                TrackFrame frame = line.FrameAt(s);
+                float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+                if (!line.TryFindPole(frame.Position, heading, 95f, 6f, out Vector3 pole)) continue;
+                Assert.That(Mathf.Abs(pole.y - frame.Position.y), Is.LessThanOrEqualTo(SwingLook.PoleHeight), $"S {s}: pole at {pole}.");
+            }
+        }
+
+        // The inside of a turn can fall further than a shaft reaches; the scenery then carries the pole down to the ground
+        // (user 2026-11-06 "봉이 공중에 떠있는것이 있고"). 01 is the terrain, 09 the overhangs, 10 the spires.
+        [Test]
+        public void SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround()
+        {
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_SummitDrop.asset");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/SummitDropExterior.prefab");
+            Assert.That(summit, Is.Not.Null, "Create Summit Drop Track first.");
+            Assert.That(prefab, Is.Not.Null, "Rebuild Summit Drop Exterior first.");
+            var poles = new List<Vector3>();
+            summit.BuildCenterline(Vector3.zero, 0f).GetPoles(poles);
+            var highest = new float[poles.Count];
+            for (int i = 0; i < highest.Length; i++) highest[i] = float.NegativeInfinity;
+            foreach (MeshFilter filter in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                string group = filter.transform.parent.name;
+                if (!group.StartsWith("01") && !group.StartsWith("09") && !group.StartsWith("10")) continue;
+                Matrix4x4 world = filter.transform.localToWorldMatrix;
+                Vector3[] vertices = filter.sharedMesh.vertices;
+                for (int i = 0; i < vertices.Length; i++) vertices[i] = world.MultiplyPoint3x4(vertices[i]);
+                int[] triangles = filter.sharedMesh.triangles;
+                for (int t = 0; t < triangles.Length; t += 3)
+                    for (int p = 0; p < poles.Count; p++)
+                        if (TryHeightOver(poles[p], vertices[triangles[t]], vertices[triangles[t + 1]], vertices[triangles[t + 2]], out float y))
+                            highest[p] = Mathf.Max(highest[p], y);
+            }
+            var hanging = new List<string>();
+            for (int p = 0; p < poles.Count; p++)
+            {
+                float foot = poles[p].y - SwingLook.PoleDepth;
+                if (highest[p] < foot - 0.1f) hanging.Add($"pole {p} at {poles[p]}: {foot - highest[p]:F1} m");
+            }
+            Assert.That(hanging, Is.Empty);
+        }
+
+        // The height of triangle a, b, c straight over or under point, if it lies within it seen from above.
+        private static bool TryHeightOver(Vector3 point, Vector3 a, Vector3 b, Vector3 c, out float y)
+        {
+            y = 0f;
+            if (point.x < Mathf.Min(a.x, b.x, c.x) || point.x > Mathf.Max(a.x, b.x, c.x)
+                || point.z < Mathf.Min(a.z, b.z, c.z) || point.z > Mathf.Max(a.z, b.z, c.z)) return false;
+            float area = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+            if (Mathf.Abs(area) < 1e-6f) return false;
+            float u = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / area;
+            float v = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / area;
+            float w = 1f - u - v;
+            if (u < -1e-4f || v < -1e-4f || w < -1e-4f) return false;
+            y = u * a.y + v * b.y + w * c.y;
+            return true;
+        }
+
+        // The LED boards flickered: a screen's front and its frame's shared a plane (user 2026-11-06 "주황 청록 핑크로 된 거").
+        [Test]
+        public void Stadium_Exterior_LedScreensStandProudOfTheirFrames()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/StadiumExterior.prefab");
+            Assert.That(prefab, Is.Not.Null, "Rebuild Stadium Exterior first.");
+            int modules = 0;
+            foreach (Transform module in prefab.GetComponentsInChildren<Transform>(true))
+            {
+                if (!module.name.StartsWith("LED module")) continue;
+                Transform screen = module.Find("LED screen"), frame = module.Find("Dark board frame");
+                Assert.That(screen, Is.Not.Null, module.name);
+                Assert.That(frame, Is.Not.Null, module.name);
+                float screenFront = screen.localPosition.x + screen.localScale.x * 0.5f;
+                float frameFront = frame.localPosition.x + frame.localScale.x * 0.5f;
+                Assert.That(screenFront - frameFront, Is.GreaterThanOrEqualTo(0.04f), module.name);
+                modules++;
+            }
+            Assert.That(modules, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void SummitDrop_Layout_RoadsAndTwentyMetrePolesStayClearOfOtherRoads()
+        {
+            var summit = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_SummitDrop.asset");
+            Assert.That(summit, Is.Not.Null, "Create Summit Drop Track first.");
+            Assert.That(summit.TryValidate(out string error), Is.True, error);
+            Centerline line = summit.BuildCenterline(Vector3.zero, 0f);
+            // One-metre sampling with an extra metre of planar clearance and 0.2 m vertical clearance
+            // bounds the unsampled road between frames. Nearby samples belong to the same connected road.
+            var road = new List<(Vector3 P, float W, double S)>();
+            for (double s = -summit.StartRunway; s <= line.EndS; s += 1d)
+                if (!summit.Gaps().Exists(gap => s > gap.Start && s < gap.End))
+                    road.Add((line.FrameAt(s).Position, summit.HalfWidthAt(s), s));
+            for (int i = 0; i < road.Count; i++)
+                for (int j = i + 1; j < road.Count; j++)
+                {
+                    if (road[j].S - road[i].S <= 45d || Mathf.Abs(road[i].P.y - road[j].P.y) >= 9.2f) continue;
+                    Vector3 delta = road[i].P - road[j].P;
+                    float clearance = road[i].W + road[j].W + 7f;
+                    if (delta.x * delta.x + delta.z * delta.z < clearance * clearance)
+                        Assert.Fail($"Roads at S {road[i].S:F1} and {road[j].S:F1} overlap their 6 m clearance.");
+                }
+            foreach (TrackDefinition.Shortcut shortcut in summit.Shortcuts)
+            {
+                Centerline own = TrackDefinition.ShortcutLine(line, shortcut);
+                for (double s = 0d; s <= own.EndS; s += 1d)
+                    foreach (var main in road)
+                    {
+                        // Only the two designed merge areas may share road with the branch.
+                        if ((s < 40d && Math.Abs(main.S - shortcut.FromS) < 60d)
+                            || (s > own.EndS - 40d && Math.Abs(main.S - shortcut.ToS) < 60d)) continue;
+                        Vector3 delta = main.P - own.FrameAt(s).Position;
+                        if (Mathf.Abs(delta.y) >= 9.2f) continue;
+                        float clearance = main.W + shortcut.HalfWidth + 7f;
+                        if (delta.x * delta.x + delta.z * delta.z < clearance * clearance)
+                            Assert.Fail($"Shortcut S {s:F1} passes too close to main S {main.S:F1}.");
+                    }
+                for (double s = 0d; s <= own.EndS; s += 1d)
+                    road.Add((own.FrameAt(s).Position, shortcut.HalfWidth, double.NaN));
+            }
+            var points = new List<Vector3>();
+            line.GetPoles(points);
+            for (int i = 0; i < points.Count; i++)
+                foreach (var sample in road)
+                {
+                    Vector3 delta = sample.P - points[i];
+                    if (delta.y < -SwingLook.PoleDepth - summit.RoadThickness - 0.2f || delta.y > SwingLook.PoleHeight + 0.2f) continue;
+                    float clearance = sample.W + SwingLook.PoleThickness + 0.5f;
+                    if (delta.x * delta.x + delta.z * delta.z < clearance * clearance)
+                        Assert.Fail($"Pole {i} pierces road at S {sample.S:F1}.");
+                }
+        }
+
+        [Test]
+        public void BuildCenterline_OpenCourse_KeepsRunoutOutsideLapAndAllTrackFeatures()
+        {
+            var course = TrackDefinition.OpenCourse("Features", new[]
+            {
+                TrackDefinition.Segment.BoostStraight(30f, 10f), TrackDefinition.Segment.Kicker(30f, 0f, 0.2f),
+                TrackDefinition.Segment.Gap(6f), TrackDefinition.Segment.Straight(40f), TrackDefinition.Segment.Arc(25f, 90f)
+            }, 35f, poles: new[] { new TrackDefinition.Pole(20f, 2f, 15f) },
+                anchors: new[] { new TrackDefinition.Anchor(63f, 0f, 10f) });
+            try
+            {
+                var origin = new Vector3(15f, 40f, -12f);
+                Centerline line = course.BuildCenterline(origin, 90f);
+                Assert.That(line.EndS, Is.EqualTo(course.LapLength + 35d));
+                Assert.That(line.FrameAt(0d).Position, Is.EqualTo(origin));
+                TrackFrame finish = line.FrameAt(course.LapLength), end = line.FrameAt(line.EndS);
+                Assert.That(Vector3.Distance(end.Position, finish.Position + finish.Forward * 35f), Is.LessThan(1e-4f));
+                Assert.That(end.Grade, Is.Zero);
+                Assert.That(line.LaunchCount, Is.EqualTo(1));
+                Assert.That(line.BoostZoneCount, Is.EqualTo(1));
+                var points = new List<Vector3>();
+                line.GetPoles(points);
+                Assert.That(points.Count, Is.EqualTo(2));
+                Assert.That(line.TryBoostBetween(0d, 11d), Is.True);
+                Assert.That(line.TryBoostBetween(line.EndS - 1d, line.EndS + 11d), Is.False);
+                Assert.That(line.TryBoostZoneBehind(0d, 200d, out _), Is.False);
+                Assert.That(line.TryLaunchBetween(59d, 61d, out float lift), Is.True);
+                Assert.That(lift, Is.EqualTo(0.2f));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(course); }
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseWidths_DoNotJoinTheLastPieceToTheFirst()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(2f), TrackDefinition.Segment.Straight(100f, endHalfWidth: 20f));
+            Assert.That(definition.TryValidate(out string error), Is.True, error);
+            Assert.That(definition.StartHalfWidth(0), Is.EqualTo(6f));
+            Assert.That(definition.HalfWidthAt(-5d), Is.EqualTo(6f));
+            Assert.That(definition.HalfWidthAt(definition.LapLength + 30d), Is.EqualTo(20f));
+            SetField("openCourse", false);
+            Assert.That(Error(), Does.Contain("segment 0").And.Contain("half width changes"));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void TryValidate_OpenCourseGapNearAnEnd_DoesNotBorrowRunwayAcrossTheSeam(bool nearStart)
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("anchors", new List<TrackDefinition.Anchor>());
+            SetSegments(TrackDefinition.Segment.Straight(nearStart ? 5f : 100f), TrackDefinition.Segment.Gap(6f),
+                TrackDefinition.Segment.Straight(nearStart ? 100f : 5f));
+            Assert.That(Error(), Does.Contain("flat straight before").And.Contain(nearStart ? "5.0 m) and after (100.0" : "100.0 m) and after (5.0"));
+        }
+
+        [TestCase(0f, 10f)]
+        [TestCase(0.1f, 10f)]
+        [TestCase(float.NaN, 10f)]
+        [TestCase(40f, float.PositiveInfinity)]
+        [TestCase(40f, 1f)]
+        public void TryValidate_OpenCourseUnsafeEndRoad_IsRejected(float runout, float runway)
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetField("finishRunout", runout);
+            SetField("startRunway", runway);
+            Assert.That(definition.TryValidate(out _), Is.False);
+        }
+
+        [Test]
+        public void TryValidate_OpenCourseSlopingFinish_IsRejectedBeforeBuildingTheFlatRunout()
+        {
+            SetField("openCourse", true);
+            SetField("lapCount", 1);
+            SetSegments(TrackDefinition.Segment.Straight(60f), TrackDefinition.Segment.Straight(60f, -0.1f));
+            Assert.That(Error(), Does.Contain("flat end grade"));
         }
 
         [Test]

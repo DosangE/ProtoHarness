@@ -94,12 +94,13 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Road_NoSteeringIntoR30_ProceduralGuardTurnsRunner()
+        public IEnumerator Road_NoSteeringIntoR30_ProceduralGuardHoldsTheRunnerWithoutTurningIt()
         {
             Centerline line = CourseRoad();
             Lay(line, RoadProfile.Guarded);
             var still = new TrackFollower(line, player) { Steering = false };
             yield return StartOn(line, still);
+            float heading = player.Heading;
             float minOffset = 0f;
             float deadline = Time.time + 20f;
             while (game.IsRunning && S(line) < R30Exit + 15d && Time.time < deadline)
@@ -108,9 +109,11 @@ namespace ProtoHarness.Tests.PlayMode
                 minOffset = Mathf.Min(minOffset, line.Project(player.transform.position).D);
             }
             Assert.That(game.IsRunning, Is.True, "An unsteered runner must not fall on a guarded procedural curve: " + State(line) + ".");
-            Assert.That(S(line), Is.GreaterThanOrEqualTo(R30Exit + 15d), "The guard should carry the runner through the curve.");
             Assert.That(minOffset, Is.LessThan(-InnerEdge + 0.3f), "Going straight into a right curve must reach the outer (left) guard.");
             Assert.That(minOffset, Is.GreaterThan(-InnerEdge - 0.1f), "The runner went through the outer guard.");
+            // DECISIONS 2026-11-04: the guard holds the runner but never turns it (as Curve_NoSteering_OuterGuardHoldsTheRunnerWithoutTurningIt).
+            Assert.That(player.Heading, Is.EqualTo(heading).Within(0.01f), "A guard never turns the facing (user 2026-11-04).");
+            Assert.That(S(line), Is.LessThan(R30Exit), "Without steering the guard must not carry the runner through the curve.");
         }
 
         [UnityTest]

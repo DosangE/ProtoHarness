@@ -47,11 +47,12 @@ namespace ProtoHarness.ChainRush.Audio
         public bool Muted { get; private set; }
         public bool IsPlaying => playing;
         public bool IsPaused => paused;
-        public int CueCount => cues.Length;
+        // Off since Awake nothing was built: no cues, a silent swing, and GetCue refuses.
+        public int CueCount => initialized ? cues.Length : 0;
         public AudioClip MusicClip => music.clip;
         public AudioClip TrackAmbienceClip => initialized ? trackAmbience.clip : trackAmbienceClip;
         public AudioClip SwingClip => swingLoop;
-        public float SwingVolume => swing.volume;
+        public float SwingVolume => initialized ? swing.volume : 0f;
 
         private void Awake()
         {
@@ -66,10 +67,12 @@ namespace ProtoHarness.ChainRush.Audio
             string hookFault = ReadRecording(poleHookRecording, nameof(poleHookRecording), 0f, out double[] hook);
             string grappleFault = ReadRecording(grappleRecording, nameof(grappleRecording), 0f, out double[] grapple);
             string swingFault = ReadRecording(swingRecording, nameof(swingRecording), SwingFromSeconds + SwingSeconds + SwingBlendSeconds, out double[] swingSource);
-            string fault = hookFault ?? grappleFault ?? swingFault;
-            if (fault != null)
+            if (swingFault == null) swingFault = SwingSectionFault(swingSource, swingRecording.frequency);
+            if (hookFault != null || grappleFault != null || swingFault != null)
             {
-                Debug.LogError("ChainRushAudio: " + fault, this);
+                // Every bad recording at once, so fixing one does not just reveal the next.
+                string[] faults = { hookFault, grappleFault, swingFault };
+                Debug.LogError("ChainRushAudio: " + string.Join(" ", Array.FindAll(faults, f => f != null)), this);
                 enabled = false;
                 return;
             }
@@ -209,6 +212,7 @@ namespace ProtoHarness.ChainRush.Audio
 
         public AudioClip GetCue(int index)
         {
+            if (!initialized) throw new InvalidOperationException("ChainRushAudio: off since Awake; no cues were built.");
             if (index < 0 || index >= cues.Length) throw new ArgumentOutOfRangeException(nameof(index));
             return cues[index];
         }
@@ -360,7 +364,7 @@ namespace ProtoHarness.ChainRush.Audio
             if (recording == null) return field + " is empty. Connect it in the inspector.";
             if (recording.loadType != AudioClipLoadType.DecompressOnLoad)
                 return $"{field} ({recording.name}) must be imported as Decompress On Load to be read (it is {recording.loadType}).";
-            // One sample over the seconds covers the rounding where the swing loop cuts it into samples.
+            // Asks one sample more than the loop cuts (4 s + a rounded quarter second), so the cut never runs off the end.
             if (recording.samples < Mathf.CeilToInt(minimumSeconds * recording.frequency) + 1)
                 return $"{field} ({recording.name}) is {recording.length:F2} s; it needs {minimumSeconds:F2} s.";
             if (!recording.LoadAudioData()) return $"{field} ({recording.name}) could not be loaded.";
@@ -373,6 +377,15 @@ namespace ProtoHarness.ChainRush.Audio
             if (peak <= 0d) return $"{field} ({recording.name}) is silent.";
             mono = samples;
             return null;
+        }
+
+        // The swing loop plays only its section of the recording; sound elsewhere in the file does not make that section heard.
+        private static string SwingSectionFault(double[] source, int rate)
+        {
+            int from = Mathf.RoundToInt(SwingFromSeconds * rate), end = from + SwingSeconds * rate + Mathf.RoundToInt(SwingBlendSeconds * rate);
+            double peak = 0d;
+            for (int i = from; i < end; i++) peak = Math.Max(peak, Math.Abs(source[i]));
+            return peak > 0d ? null : $"swingRecording is silent from {SwingFromSeconds:F2} s to {SwingFromSeconds + SwingSeconds + SwingBlendSeconds:F2} s, the part the loop plays.";
         }
 
         // The recordings open with up to 170 ms of room, which would play as input lag on a hook. ReadRecording made sure

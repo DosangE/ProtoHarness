@@ -213,21 +213,37 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Audio_UnusableSwingRecording_TurnsOffWithItsName_AndLaterCallsDoNotThrow()
         {
-            var silent = AudioClip.Create("Silent swing", 48000 * 9, 1, 48000, false);
             AudioClip shortClip = (AudioClip)new SerializedObject(sound).FindProperty("poleHookRecording").objectReferenceValue;
-            foreach (AudioClip swing in new[] { shortClip, silent })
+            Assert.That(shortClip.length, Is.LessThan(8.25f), "The short case borrows the pole hook recording, which must stay under the 8.25 s the loop needs.");
+            var silent = AudioClip.Create("Silent swing", 48000 * 9, 1, 48000, false);
+            // Sound only in its first second: the file is not silent, the 4..8.25 s the loop plays is.
+            var quietLoop = AudioClip.Create("Swing quiet where it loops", 48000 * 9, 1, 48000, false);
+            var opening = new float[48000];
+            for (int i = 0; i < opening.Length; i++) opening[i] = 0.5f * Mathf.Sin(i * 0.05f);
+            Assert.That(quietLoop.SetData(opening, 0), Is.True);
+            var cases = new[]
             {
-                ChainRushAudio made = MakeAudio(swing);
-                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ChainRushAudio: swingRecording"));
+                (clip: shortClip, says: @"swingRecording \(Chain_PoleHook\) is [0-9.]+ s; it needs 8\.25 s"),
+                (clip: silent, says: @"swingRecording \(Silent swing\) is silent\."),
+                (clip: quietLoop, says: @"swingRecording is silent from 4\.00 s to 8\.25 s"),
+            };
+            foreach (var test in cases)
+            {
+                ChainRushAudio made = MakeAudio(test.clip);
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(test.says));
                 made.gameObject.SetActive(true);
                 yield return null;
-                Assert.That(made.enabled, Is.False, swing.name);
+                Assert.That(made.enabled, Is.False, test.clip.name);
                 LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ChainRushAudio: off since Awake"));
-                Assert.DoesNotThrow(() => { made.PlayCue(RaceCue.Boost); made.PlayCue(RaceCue.PoleHook); made.ResetAudio(); made.SetMuted(true); }, swing.name);
+                Assert.DoesNotThrow(() => { made.PlayCue(RaceCue.Boost); made.PlayCue(RaceCue.PoleHook); made.ResetAudio(); made.SetMuted(true); }, test.clip.name);
+                Assert.That(made.CueCount, Is.Zero, test.clip.name);
+                Assert.That(made.SwingVolume, Is.Zero, test.clip.name);
+                Assert.Throws<InvalidOperationException>(() => made.GetCue(0), test.clip.name);
                 UnityEngine.Object.Destroy(made.gameObject);
                 yield return null;
             }
             UnityEngine.Object.Destroy(silent);
+            UnityEngine.Object.Destroy(quietLoop);
         }
 
         // An inactive copy of the scene's audio wiring with its own swing recording, so Awake runs when the test activates it.

@@ -20,7 +20,11 @@
 
   "바뀐 파일" 은 Assets/ 만 본다(.meta 포함). 파일마다 기록 때의 내용(그때 커밋하지 않은 파일은 그때의 해시, 나머지는
   기록 HEAD 의 blob)과 지금 작업 트리의 내용을 git 해시로 비교한다. 그래서 실행 뒤 같은 내용을 커밋한 것은 바뀐 것으로 치지 않는다.
+  -Last 는 고른 실행 뒤에 실패한 실행이 있으면 함께 보이고 재사용을 거부한다. Assets/ 에 내용을 받지 않은 LFS pointer 가 있으면
+  -Record·-Last 모두 거부한다.
   한계: Packages/·ProjectSettings/ 는 보지 않는다(이 PC 의 버전 드리프트가 늘 바뀐 것으로 보이기 때문. 바꾼 브랜치는 영향 평가로 본다).
+  메뉴·TestRunnerApi 실행의 XML 은 이 PC 의 모든 실행이 같은 경로에 쓴다(ChainRushSceneBuilder.cs:282). 시각 검사는 "이번 실행보다
+  오래된 XML" 만 막고, 같은 때 다른 ProtoHarness 에디터가 덮어쓴 XML 은 가려내지 못한다. 그래서 같은 PC 에서 두 에디터로 동시에 돌리지 않는다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다. Windows PowerShell 5.1 은 BOM 이 없으면 .ps1 을 ANSI(cp949)로 읽어 한글이 깨진다.
 #>
@@ -53,11 +57,41 @@ if (-not $StoreDir) {
 }
 $repoKey = $root.Replace('\', '/').TrimEnd('/').ToLowerInvariant()
 
+# git 은 경로를 UTF-8 로 내보낸다. PowerShell 5.1 은 native 출력을 [Console]::OutputEncoding(여기서는 cp949)으로 읽어
+# 한글 경로를 깨뜨리므로 git 을 부르는 동안만 UTF-8 로 둔다 (Codex 리뷰 2026-11-09).
 function Invoke-Git([string[]]$gitArgs) {
-    $out = & git -C $root -c core.quotepath=false @gitArgs
-    if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') 실패 (exit $LASTEXITCODE)" }
+    $prev = [Console]::OutputEncoding
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    try {
+        $out = & git -C $root -c core.quotepath=false @gitArgs
+        $code = $LASTEXITCODE
+    } finally {
+        [Console]::OutputEncoding = $prev
+    }
+    if ($code -ne 0) { throw "git $($gitArgs -join ' ') 실패 (exit $code)" }
     return $out
 }
+
+# 내려받지 않은 LFS pointer 가 Assets/ 에 있으면 거부한다. clean 필터를 거친 해시는 pointer 와 실제 내용이 같아서
+# pointer 상태로 기록하고 나중에 내용을 받아도(또는 그 반대) 바뀐 것으로 잡히지 않는다 (Codex 리뷰 2026-11-09).
+function Assert-NoLfsPointers {
+    $lfs = @(Invoke-Git @('lfs', 'ls-files', '--name-only') | Where-Object { $_ -like 'Assets/*' })
+    $pointers = @(foreach ($p in $lfs) {
+        $full = Join-Path $root $p
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+        $fs = [IO.File]::OpenRead($full)
+        try {
+            $buf = New-Object byte[] 40
+            $n = $fs.Read($buf, 0, 40)
+        } finally { $fs.Dispose() }
+        if ([Text.Encoding]::ASCII.GetString($buf, 0, $n).StartsWith('version https://git-lfs.github.com/spec/')) { $p }
+    })
+    if ($pointers.Count -gt 0) {
+        throw "Assets/ 의 LFS 파일 $($pointers.Count)개가 내용을 받지 않은 pointer 다(예: $($pointers[0])). Unity 가 읽는 내용과 기록이 어긋나므로 계산하지 않는다. LFS 내용을 받은 뒤 다시 한다."
+    }
+}
+
+function Test-DeletedStatus([string]$status) { return $status.Contains('D') }
 
 # -z 출력은 NUL 로 나뉜다. PowerShell 은 줄바꿈으로만 나누므로 다시 붙여 NUL 로 자른다.
 function Invoke-GitZ([string[]]$gitArgs) {
@@ -74,6 +108,9 @@ function Get-DirtyAssets {
         $dirty[$e.Substring(3)] = @{ Status = $e.Substring(0, 2); Hash = $null }
     }
     $present = @($dirty.Keys | Where-Object { Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf } | Sort-Object)
+    # 지워지지 않았다는 파일을 찾지 못하면 경로가 잘못 읽힌 것이다. null 해시로 남기면 나중 비교가 "같다" 가 될 수 있다.
+    $missing = @($dirty.Keys | Where-Object { -not (Test-DeletedStatus $dirty[$_].Status) -and $present -notcontains $_ })
+    if ($missing.Count -gt 0) { throw "git status 가 알린 파일을 찾지 못했다(경로 인코딩?): $($missing -join ', ')" }
     $hashes = Get-WorktreeHashes $present
     foreach ($p in $present) { $dirty[$p].Hash = $hashes[$p] }
     return $dirty
@@ -158,6 +195,7 @@ if ($Record) {
     $existing = @(Read-Records | Where-Object { $_.startTime -eq $startKey -and $_.platform -eq $runPlatform })
     if ($existing.Count -gt 0) { throw "같은 실행($startKey, $runPlatform)이 이미 기록돼 있다: $($existing[0].xmlCopy)" }
 
+    Assert-NoLfsPointers
     $head = @(Invoke-Git @('rev-parse', 'HEAD'))[0].Trim()
     $branch = @(Invoke-Git @('branch', '--show-current'))[0]
     $dirty = Get-DirtyAssets
@@ -201,7 +239,8 @@ if ($Record) {
     exit 0
 }
 
-$records = @(Read-Records)
+$allRecords = @(Read-Records)
+$records = $allRecords
 if ($Platform) { $records = @($records | Where-Object { $_.platform -eq $Platform }) }
 
 if ($List) {
@@ -214,7 +253,8 @@ if ($List) {
 }
 
 # -Last
-if ($Passed) { $records = @($records | Where-Object { $_.result -eq 'Passed' -and [int]$_.failed -eq 0 }) }
+function Test-RunPassed($rec) { return $rec.result -eq 'Passed' -and [int]$rec.failed -eq 0 }
+if ($Passed) { $records = @($records | Where-Object { Test-RunPassed $_ }) }
 if ($records.Count -eq 0) {
     $what = if ($Passed) { '통과한 실행' } else { '실행' }
     Write-Output "기록된 $what 없음 ($StoreDir). 마지막 실행을 기록에서 찾지 못했다 — 범위는 영향 평가로 정한다."
@@ -227,6 +267,14 @@ Write-Output "  필터: $($r.filter)"
 Write-Output "  기준: $($r.head.Substring(0, 7)) ($($r.branch)), 그때 커밋하지 않은 Assets/ 파일 $(@($r.dirtyAssets).Count)개, 에디터 $($r.editorVersion)"
 Write-Output "  XML 사본: $($r.xmlCopy)"
 
+# 이 실행 뒤에 실패한 실행(플랫폼과 무관하게)은 숨기지 않는다. CLAUDE.md §9-2: 원인을 설명하지 못한 실패가 있으면 병합하지 않는다.
+$laterFailed = @($allRecords | Where-Object { $_.startTime -gt $r.startTime -and -not (Test-RunPassed $_) })
+if ($laterFailed.Count -gt 0) {
+    Write-Output "그 뒤 실패한 실행: $($laterFailed.Count)건"
+    $laterFailed | ForEach-Object { Write-Output "    $(Format-Run $_) | $($_.filter)" }
+}
+
+Assert-NoLfsPointers
 $null = & git -C $root rev-parse --verify --quiet "$($r.head)^{commit}"
 if ($LASTEXITCODE -ne 0) { throw "기록의 HEAD $($r.head) 를 이 저장소에서 찾지 못했다(리베이스·다른 clone?). 바뀐 파일을 계산할 수 없다." }
 
@@ -242,6 +290,12 @@ foreach ($p in $nowDirty.Keys) { $candidates[$p] = $true }
 foreach ($p in $thenDirty.Keys) { $candidates[$p] = $true }
 
 $present = @($candidates.Keys | Where-Object { Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf } | Sort-Object)
+# 없는 파일은 지금 커밋에 없거나 작업 트리에서 지운 것이어야 한다. 그 밖이면 경로가 잘못 읽힌 것이라 계산하지 않는다.
+$headTree = Get-TreeHashes 'HEAD'
+$unexplained = @($candidates.Keys | Where-Object {
+    $present -notcontains $_ -and $headTree.ContainsKey($_) -and -not ($nowDirty.ContainsKey($_) -and (Test-DeletedStatus $nowDirty[$_].Status))
+})
+if ($unexplained.Count -gt 0) { throw "HEAD 에 있고 지우지도 않은 파일을 찾지 못했다(경로 인코딩?): $($unexplained -join ', ')" }
 $nowHashes = Get-WorktreeHashes $present
 $changed = @(foreach ($p in ($candidates.Keys | Sort-Object)) {
     $a = $then[$p]; $b = $nowHashes[$p]
@@ -259,7 +313,11 @@ else {
 }
 Write-Output "지금 커밋하지 않은 Assets/ 변경: $($nowDirty.Count)개"
 
-if ($changed.Count -gt 0) {
+if (-not (Test-RunPassed $r)) {
+    Write-Output '판정: 이 실행은 실패했다. 재사용할 통과가 아니다 — 실패한 테스트와 원문을 보고한다 (CLAUDE.md §9-2).'
+} elseif ($laterFailed.Count -gt 0) {
+    Write-Output "판정: 재사용 불가. 이 통과 뒤에 실패한 실행이 $($laterFailed.Count)건 있다 — 원인을 설명하기 전에는 이 통과를 쓰지 않는다 (CLAUDE.md §9-2)."
+} elseif ($changed.Count -gt 0) {
     Write-Output '판정: 실행한 코드와 지금 코드가 다르다. 위 파일을 읽는 테스트만 다시 돌린다 (VERIFICATION §4-4).'
 } elseif ($nowDirty.Count -gt 0) {
     Write-Output '판정: 실행한 코드 = 지금 작업 트리. 아직 커밋하지 않았다 — 커밋한 뒤 다시 보면 커밋한 코드와 같은지 나온다.'

@@ -7,6 +7,37 @@
 
 ---
 
+## 2026-11-07 · 효과음: 부스터·부스트존은 들어 보고 고른 합성음, 쇠사슬 소리는 CC0 녹음 (`feature/m6-sound-cues`)
+
+- **결정 (사용자)**: 2차 합성을 듣고 2026-11-07 "부스터, 부스트존, 봉걸림, 그래플, 스윙 다 별로다. 부스터 소리는 새소리마냥 너무 높다. 달리는게 아닌 카트가 달리듯이 조금 묵직하면서 높은 소리였으면 좋겟다. 사이버펑크와 쇠사슬의 느낌을 잘 살려봐". 3차 후보 15개를 시청 페이지로 듣고 "부스터는 A 카트터보, 부스트존은 c 패스바이", 쇠사슬 셋은 "모든 소리에 또르르륵 하는 소리가 들리잖나 쇠소리가 없고". 같은 문제의 세 번째 실패라 §4-5 로 멈추고 후보 2개(실제 녹음 / 구조를 바꾼 합성)를 올렸고 "1번 ㄱㄱ 음원 찾아줘". 녹음 27개 중 "봉 걸림 1, 그래플 1, 스윙 루프 7 @4.0s", 합의안 "ㄱㄱ", 2026-11-09 "확인했다 커밋 푸쉬 진행".
+- **듣고 고르는 단계를 먼저 둔다**: 1·2차는 들어 보지 못한 채 합성해 게임에 넣었다가 거부됐다. 3차부터 프로젝트 밖에서 후보를 만들어 시청 페이지(비공개 아티팩트)로 고르게 하고, 고른 것만 옮겼다.
+- **부스터 "카트 터보"** (`ChainRushAudio.MakeKartBoost`): 톱니파 엔진이 72 → 150 Hz 로 오르고 저역 필터가 열리는 것이 "높은 느낌" 이다. 2차의 4~5.6 kHz 터빈이 새소리로 들린 원인을 뺐다. 길이 2.05 → 2초.
+- **부스트존 "패스바이"** (`MakePassBy`): 0.32초 동안 음높이와 밝기가 오르고 지나간 뒤 내려간다.
+- **합성 공통**: 밴드 제한(polyBLEP) 오실레이터, TPT 상태변수 필터, 후보와 같은 음량(가장 큰 300 ms 의 RMS 0.21, 피크 0.92 이하). 후보의 파이썬 합성식을 그대로 옮겼다. 인접 샘플 거칠기가 후보 0.01424 / 0.03371, 게임 0.014222 / 0.033911 이다.
+- **쇠사슬이 합성으로 안 된 이유** (코드로 확인, 귀로 확인하지 않음): 1~3차 후보가 모두 짧은 타격을 22~62 ms 간격으로 2~5번 잇는 같은 구조였다(또르르륵). 타격 하나가 모드 5개, 잔향 28~120 ms 여서 쇠의 긴 울림과 많은 배음이 없었다. 2차는 1.8 kHz, 3차는 470~820 Hz 로 음높이만 바꿨다.
+- **녹음** (`Assets/_Project/Audio/`, 모두 Freesound 페이지에서 CC0 1.0 확인, Git LFS):
+
+  | 소리 | 파일 | 출처 | 올린 사람 |
+  |---|---|---|---|
+  | 봉 걸림 | `Chain_PoleHook.mp3` | https://freesound.org/s/871034/ "metal_chain_drop2" | funkysandwich |
+  | 그래플 | `Chain_Grapple.mp3` | https://freesound.org/s/541975/ "grappling hook" | 16bitstudios |
+  | 스윙 루프 | `Chain_Swing.mp3` | https://freesound.org/s/448917/ "Chain Rattling" | Kp69606 |
+
+  - 사용자가 들은 128 kbps 미리듣기 MP3 를 그대로 넣었다. 원본 WAV 는 Freesound 로그인이 있어야 받는다. 음질이 문제되면 원본으로 바꾼다(확장자가 바뀌면 GUID 가 바뀌어 씬 참조를 다시 연결한다).
+  - CC0 라 표시 의무는 없지만 출처를 여기에 남긴다.
+- **코드** (`ChainRushAudio.cs`): 녹음 `AudioClip` 직렬화 필드 3개(`poleHookRecording`·`grappleRecording`·`swingRecording`), 비면 LogError 후 비활성화(§5). `Awake` 에서 `LoadAudioData` → `GetData` 로 읽어 모노로 합친다. 가져오기 기본값이 Decompress On Load 이고 사전 로드가 꺼져 있어서다. 합성 체인 코드(`MakeChainCue`·`AddChainCluster`·`AddLink`·`LimitChainPeak`, 합성 `MakeSwingLoop`)는 지웠다.
+  - **앞 무음 자르기**: 첫 소리가 봉 걸림 70 ms, 그래플 168 ms 뒤에 나와 입력 지연처럼 들린다. 피크의 5% 를 넘는 첫 샘플 5 ms 앞부터 쓴다. 합의안에 없던 처리라 보고했다.
+  - **스윙 루프**: 녹음의 4.0초부터 4초. 뒤따르는 0.25초를 등전력으로 머리에 겹쳐 끝이 처음으로 바로 이어진다. 녹음이 48 kHz 라 클립도 48 kHz 다. 스윙 음량 계수 0.22 는 그대로다.
+- **씬** (`ChainRushCircuit.unity`, `Unity_RunCommand` + `SerializedObject` + `SaveScene`, 코드 전문을 보이고 승인): 참조 3줄. 저장하며 Unity 가 `Runner` 의 `boostTurnRadiusScale: 2`·`turnSpeedLossScale: 0.5`·`turnFalloffScale: 0.11111111`·`guardTurnRate: 60` 을 쓰고(모두 `RunnerMotor.cs` 기본값, 값 변화 없음) 코드에서 지운 `slingTurnRate: 90` 을 뺐다(2026-11-04 "벽·부스터 방향" 의 예고대로). 합의안의 "다른 변경이 있으면 멈추고 보고" 에 따라 보고했고, 사용자가 그대로 커밋하게 했다.
+- **테스트 기준을 바꾼 것** (방향이 바뀌어서다): 부스터 저음 "120 Hz 아래 35% 초과" → "300 Hz 아래 50% 초과"(고른 A 는 120 Hz 아래 24%). 2차의 고역 상승·중심 주파수 단언 대신 3 kHz 위 에너지 상한(부스터 5%, 부스트존 10%; 측정 0.9% / 8.1%)과 "패스바이는 옆일 때 가장 밝다"(0.3622 > 0.0490). 합성 체인의 고역 비율·충돌 간격 단언과 `ImpactIntervalVariation` 을 지우고 `Audio_ChainCues_ComeFromRecordings_AndStartOnTheHit`(길이, 첫 20 ms 안에 소리, 스윙 48 kHz·4초)를 더했다.
+- **버린 대안**: 쇠사슬 4차 합성(모드 20~40개, 울림 0.3~1.5초) — 듣지 못하는 채 같은 문제의 네 번째 시도다. 상용 사슬 팩 — 라이선스. 녹음을 `TrackLook` SO 로 넘기기 — 트랙마다 같은 값을 넣게 된다. 녹음을 오디오 편집기로 잘라 넣기 — 이 PC 에 디코더가 없고, 코드로 자르면 구간을 바꾸기 쉽다.
+- **검증**:
+  - 부스터·부스트존만 바꾼 코드: `ChainRushPresentationTests.Audio_*` `testcasecount=8 result=Passed passed=8 failed=0 skipped=0`, 2026-11-07 09:23:31Z~09:23:55Z.
+  - 커밋한 코드(`9639fac`, 실행 뒤 `Assets/` 변경 없음): Presentation 11 + Flow 62 + 서킷 지문 1, `categoryNames = { "!Device", "!Enemy", "!NetEndReplay", "!^Lap$" }` → `testcasecount=74 result=Passed passed=74 failed=0 skipped=0`, 2026-11-07 09:58:47Z~10:01:31Z. 스윙 이음매 샘플 차 0.160, 주변 차 RMS 0.213. 씬을 건드려 Flow 와 지문을 넣었고, 시뮬 코드는 바꾸지 않아 Lap 은 뺐다.
+  - 컴파일 `*** Tundra build success (4.69 seconds), 14 items updated, 1618 evaluated`. Console 에러 10건은 모두 `RaceAssembler` 로그이고 호출 스택이 `ChainRushFlowTests` 의 테스트(롤백·깨진 고스트·멀티 미지원)다. `ChainRushAudio` 에러는 없다.
+  - 사용자 확인: 2026-11-09 "확인했다 커밋 푸쉬 진행".
+- **알아둘 것**: 튜토리얼 목표 달성음은 1차 커밋(`60e2de8`)에서 `RaceCue.Action` → `RaceCue.Finish`(1.2초 화음)로 바뀌었다. 거슬리는지는 아직 묻지 않았다.
+
 ## 2026-11-06 · select-tests: 장식 메시는 "전체" 가 아니다 (`fix/select-tests-art-models`)
 
 - **결정 (사용자, 2026-11-06)**: "Art/Models 판정도 고쳐 ㄱㄱ". 표의 장식 줄이 `Models/StadiumExterior_` 만 알아서 뒤에 생긴 메시가 "전체 (표에 없는 경로)" 로 떨어졌다. `Models/(\w+Exterior_|StadiumSports_)` 로 넓혔다. 지문 없음, PlayMode 없음이다.

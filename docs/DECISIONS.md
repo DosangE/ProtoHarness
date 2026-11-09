@@ -18,6 +18,13 @@
 - **남은 것**: 첫 모델(요청서·FBX 축/스케일 설정·Unity 임포트·`select-tests` 판정표의 `Art/Models` 정규식) — 따로 합의. Codex 로 Blender 를 부르는 방식. `tools/codex-unity.ps1:38` 이 쓰는 서버 이름 `unity-mcp` 와 설정의 `unity_mcp`(`config.toml:163`)가 다르다 — 확인 못 함, `fix/` 후보. 실측 파일 `art-src/_probe/` 는 커밋하지 않았다.
 - **병합 (문서 검증, `CLAUDE.md` §9-2 적용 범위; 사용자 "커밋과 병합 진행하라 네 추천대로 진행")**: 바뀐 파일은 `.claude/agents/blender-artist.md`(새)·`.codex/agents/blender-artist.toml`(새, 생성물)·`CLAUDE.md`·`README.md`·`docs/ARCHITECTURE.md`·`docs/DECISIONS.md`·`docs/RULES/CONVENTIONS.md`·`docs/RULES/SUBAGENTS.md` 뿐이다(`Assets/`·`Packages/`·`ProjectSettings/` 0개). ① 새 정의와 문서의 `§` 참조(§0·§1-3·§3·§3-4·§7·"병렬 절대 금지"·§7-1 "6종")가 모두 `CLAUDE.md` 또는 `docs/RULES/` 의 제목으로 해석된다. ② `tools/sync-agents.ps1` exit 0, `-Check` "동기화 상태: 일치", `.codex` 변경은 새 `blender-artist.toml` 하나. ③ 옮긴 내용은 없다. 작업 트리의 에디터 버전 차이 4개 파일은 넣지 않았다. 새 에이전트를 실제로 파견해 보지는 않았다.
 
+## 2026-11-09 · 테스트 범위: 마지막 통과 이후 바뀐 것만 다시 돌린다 (`docs/test-scope-since-last-pass`)
+
+- **결정 (사용자, 2026-11-09)**: 효과음 병합 직전에 브랜치가 건드린 7개 클래스 전체와 지문을 다시 걸자 "테스트 클래스 전체 돌린다는데 결국 사운드밖에 바뀐게 없는데 돌려서 뭐하나", 이어서 "테스트 돌려보는 것에 대해 반복해서 범위를 과하게 설정하는 것 방지해보자 제발". 합의안에 "ㄱㄱ". `docs/RULES/VERIFICATION.md` §4-4 에 "다시 돌리는 범위는 마지막 통과 이후 바뀐 것" 한 줄을 넣었다.
+- **이유**: 같은 종류의 지적이 네 번째다(2026-10-30 "테스트 범위", 2026-11-02 "랩 런 하나로", 2026-11-02 "작업 중 실행을 다시 쓴다", 이번). 이번에는 74건 실행 뒤 `Assets/` 에 바뀐 파일이 없었는데, 범위를 `dev...HEAD`(브랜치 전체)로 잡아 이미 통과한 부분을 다시 골랐다. 규칙은 결과를 다시 쓰라고 했지만 "무엇을 기준으로 범위를 잡나" 가 적혀 있지 않았다.
+- **버린 대안**: `tools/select-tests.ps1` 가 마지막 통과 이후를 스스로 계산하기 — 결과 XML 이 실행마다 덮어쓰이고 일부만 돈 실행도 같은 파일에 쓰여 기준점이 흔들린다. 규칙 한 줄로 부족하면 다시 올린다.
+- **문서 검증**: 새 줄의 참조(CLAUDE.md §9-2 "작업 중 실행을 다시 쓴다", 이 항목)가 실제 제목·항목으로 이어진다. 같은 규칙이 다른 곳에 없다(CLAUDE.md §9-2 는 병합 때 결과를 다시 쓰는 조건이고, 새 줄은 다시 돌릴 범위를 고르는 기준이다).
+
 ## 2026-11-07 · 효과음: 부스터·부스트존은 들어 보고 고른 합성음, 쇠사슬 소리는 CC0 녹음 (`feature/m6-sound-cues`)
 
 - **결정 (사용자)**: 2차 합성을 듣고 2026-11-07 "부스터, 부스트존, 봉걸림, 그래플, 스윙 다 별로다. 부스터 소리는 새소리마냥 너무 높다. 달리는게 아닌 카트가 달리듯이 조금 묵직하면서 높은 소리였으면 좋겟다. 사이버펑크와 쇠사슬의 느낌을 잘 살려봐". 3차 후보 15개를 시청 페이지로 듣고 "부스터는 A 카트터보, 부스트존은 c 패스바이", 쇠사슬 셋은 "모든 소리에 또르르륵 하는 소리가 들리잖나 쇠소리가 없고". 같은 문제의 세 번째 실패라 §4-5 로 멈추고 후보 2개(실제 녹음 / 구조를 바꾼 합성)를 올렸고 "1번 ㄱㄱ 음원 찾아줘". 녹음 27개 중 "봉 걸림 1, 그래플 1, 스윙 루프 7 @4.0s", 합의안 "ㄱㄱ", 2026-11-09 "확인했다 커밋 푸쉬 진행".
@@ -50,7 +57,7 @@
 - **병합 검증 (② `feature → dev`)**: `tools/select-tests.ps1 -Range dev...HEAD` 는 "전체"(mp3·씬·코어 시뮬 파일). 영향 평가: 1차 커밋의 시뮬 변경은 `PlayCue` 호출과 순수 함수 `GuardContact.SpeedInto` 뿐이라 이동 결과가 그대로여서 Lap 은 뺐다. EditMode 테스트에는 바뀐 타입(`GuardContact`·`RaceCue`)을 읽는 것이 없다(grep 0건). 실행마다 값:
   - 2차 합성 코드(1차 커밋의 시뮬 변경 포함): Presentation 10, Tutorial 17, Circuit 8, CornerSwing 18, Drift 10, Steering 13, Flow 7, 서킷 지문 1 → `testcasecount=84 result=Passed passed=84 failed=0 skipped=0`, 2026-11-07 07:56:59Z~08:03:53Z.
   - 그 뒤 바뀐 것(`ChainRushAudio.cs`, 그 테스트, 씬 참조, mp3)은 위 8건·74건 실행이 덮는다. 74건 실행이 커밋한 코드와 같다.
-  - 병합 직전에 7개 클래스 전체 + 지문을 한 번 더 걸었는데, 사용자 "결국 사운드밖에 바뀐게 없는데 돌려서 뭐하나" 대로 중복이다. 실행 guid 를 받아 두지 않아 취소하지 못했고(`TestRunnerApi.CancelTestRun(guid)`), 병합은 위 결과로 했다. 그 실행의 값은 끝나면 보고한다.
+  - 병합 직전에 7개 클래스 전체 + 지문을 한 번 더 걸었는데, 사용자 "결국 사운드밖에 바뀐게 없는데 돌려서 뭐하나" 대로 중복이다. 실행 guid 를 받아 두지 않아 취소하지 못했고(`TestRunnerApi.CancelTestRun(guid)`), 병합은 위 결과로 했다. 사용자가 에디터에서 중단했고 결과 XML 은 쓰이지 않았다(결과 없음).
 - **리뷰**: `unity-reviewer` 치명 0·중대 0·보통 2·제안 6, 77,551 토큰. ① 녹음 가져오기 설정이 Decompress On Load 가 아니거나 스윙 녹음이 8.25초보다 짧으면 `Awake` 의 `throw` 가 `enabled = false` 를 거치지 않는다(`ChainRushAudio.cs:322,324,472`). ② `ChainRushAudio` 가 스스로 꺼진 뒤에도 `ChainRushGame.PlayCue` 가 넘겨 시뮬 안에서 NRE 가 난다(`ChainRushGame.cs:94,334`, 기존 패턴의 폭이 넓어진 것). 둘 다 지금 음원·설정에서는 일어나지 않아 후속으로 둔다. 제안: 무음 녹음의 NaN, `UnloadAudioData` 없음(스윙 원본 약 5 MB), `RaceCue.Respawn` 상한 고정, 오류 메시지가 빈 필드를 말하지 않음, WebGL 의 `GetData`(미확인), `index/` 재생성. Codex 설계 리뷰 `approve`, 지적 0건(비용: `/status` 를 읽지 않아 모름). 롤백 때 효과음이 다시 나는 것은 `dev` 에도 있던 동작이고 결정성에는 영향이 없다고 봤다.
 - **알아둘 것**: 튜토리얼 목표 달성음은 1차 커밋(`60e2de8`)에서 `RaceCue.Action` → `RaceCue.Finish`(1.2초 화음)로 바뀌었다. 사용자가 2026-11-09 튜토리얼을 확인했다.
 

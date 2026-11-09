@@ -35,8 +35,13 @@
   - 부스터·부스트존만 바꾼 코드: `ChainRushPresentationTests.Audio_*` `testcasecount=8 result=Passed passed=8 failed=0 skipped=0`, 2026-11-07 09:23:31Z~09:23:55Z.
   - 커밋한 코드(`9639fac`, 실행 뒤 `Assets/` 변경 없음): Presentation 11 + Flow 62 + 서킷 지문 1, `categoryNames = { "!Device", "!Enemy", "!NetEndReplay", "!^Lap$" }` → `testcasecount=74 result=Passed passed=74 failed=0 skipped=0`, 2026-11-07 09:58:47Z~10:01:31Z. 스윙 이음매 샘플 차 0.160, 주변 차 RMS 0.213. 씬을 건드려 Flow 와 지문을 넣었고, 시뮬 코드는 바꾸지 않아 Lap 은 뺐다.
   - 컴파일 `*** Tundra build success (4.69 seconds), 14 items updated, 1618 evaluated`. Console 에러 10건은 모두 `RaceAssembler` 로그이고 호출 스택이 `ChainRushFlowTests` 의 테스트(롤백·깨진 고스트·멀티 미지원)다. `ChainRushAudio` 에러는 없다.
-  - 사용자 확인: 2026-11-09 "확인했다 커밋 푸쉬 진행".
-- **알아둘 것**: 튜토리얼 목표 달성음은 1차 커밋(`60e2de8`)에서 `RaceCue.Action` → `RaceCue.Finish`(1.2초 화음)로 바뀌었다. 거슬리는지는 아직 묻지 않았다.
+  - 사용자 확인: 2026-11-09 "확인했다 커밋 푸쉬 진행", "튜토리얼도 확인했다병합도 해".
+- **병합 검증 (② `feature → dev`)**: `tools/select-tests.ps1 -Range dev...HEAD` 는 "전체"(mp3·씬·코어 시뮬 파일). 영향 평가: 1차 커밋의 시뮬 변경은 `PlayCue` 호출과 순수 함수 `GuardContact.SpeedInto` 뿐이라 이동 결과가 그대로여서 Lap 은 뺐다. EditMode 테스트에는 바뀐 타입(`GuardContact`·`RaceCue`)을 읽는 것이 없다(grep 0건). 실행마다 값:
+  - 2차 합성 코드(1차 커밋의 시뮬 변경 포함): Presentation 10, Tutorial 17, Circuit 8, CornerSwing 18, Drift 10, Steering 13, Flow 7, 서킷 지문 1 → `testcasecount=84 result=Passed passed=84 failed=0 skipped=0`, 2026-11-07 07:56:59Z~08:03:53Z.
+  - 그 뒤 바뀐 것(`ChainRushAudio.cs`, 그 테스트, 씬 참조, mp3)은 위 8건·74건 실행이 덮는다. 74건 실행이 커밋한 코드와 같다.
+  - 병합 직전에 7개 클래스 전체 + 지문을 한 번 더 걸었는데, 사용자 "결국 사운드밖에 바뀐게 없는데 돌려서 뭐하나" 대로 중복이다. 실행 guid 를 받아 두지 않아 취소하지 못했고(`TestRunnerApi.CancelTestRun(guid)`), 병합은 위 결과로 했다. 그 실행의 값은 끝나면 보고한다.
+- **리뷰**: `unity-reviewer` 치명 0·중대 0·보통 2·제안 6, 77,551 토큰. ① 녹음 가져오기 설정이 Decompress On Load 가 아니거나 스윙 녹음이 8.25초보다 짧으면 `Awake` 의 `throw` 가 `enabled = false` 를 거치지 않는다(`ChainRushAudio.cs:322,324,472`). ② `ChainRushAudio` 가 스스로 꺼진 뒤에도 `ChainRushGame.PlayCue` 가 넘겨 시뮬 안에서 NRE 가 난다(`ChainRushGame.cs:94,334`, 기존 패턴의 폭이 넓어진 것). 둘 다 지금 음원·설정에서는 일어나지 않아 후속으로 둔다. 제안: 무음 녹음의 NaN, `UnloadAudioData` 없음(스윙 원본 약 5 MB), `RaceCue.Respawn` 상한 고정, 오류 메시지가 빈 필드를 말하지 않음, WebGL 의 `GetData`(미확인), `index/` 재생성. Codex 설계 리뷰 `approve`, 지적 0건(비용: `/status` 를 읽지 않아 모름). 롤백 때 효과음이 다시 나는 것은 `dev` 에도 있던 동작이고 결정성에는 영향이 없다고 봤다.
+- **알아둘 것**: 튜토리얼 목표 달성음은 1차 커밋(`60e2de8`)에서 `RaceCue.Action` → `RaceCue.Finish`(1.2초 화음)로 바뀌었다. 사용자가 2026-11-09 튜토리얼을 확인했다.
 
 ## 2026-11-06 · select-tests: 장식 메시는 "전체" 가 아니다 (`fix/select-tests-art-models`)
 

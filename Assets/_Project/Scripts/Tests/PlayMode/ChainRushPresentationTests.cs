@@ -166,19 +166,148 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Audio_Boost_HasSustainedSubBassAndGuardKeepsItsLength()
+        public IEnumerator Audio_Boost_HasSustainedLowBodyAndGuardKeepsItsLength()
         {
             AudioClip boost = sound.GetCue((int)RaceCue.Boost);
             Assert.That(boost.frequency, Is.EqualTo(44100));
             Assert.That(boost.length, Is.GreaterThanOrEqualTo(1.5f));
             var samples = new float[boost.samples];
             Assert.That(boost.GetData(samples, 0), Is.True);
-            Assert.That(EnergyBelow(samples, boost.frequency, 120d), Is.GreaterThan(0.35d), "A launch needs substantial sub bass, not just a high sweep.");
+            Assert.That(EnergyBelow(samples, boost.frequency, 300d), Is.GreaterThan(0.5d), "A launch needs a heavy low body, not just a high sweep.");
             double tailEnergy = 0d;
             for (int i = samples.Length / 2; i < samples.Length; i++) tailEnergy += samples[i] * samples[i];
             Assert.That(Math.Sqrt(tailEnergy / (samples.Length - samples.Length / 2)), Is.GreaterThan(0.04d), "The second half must sustain audible pressure.");
             Assert.That(sound.GetCue((int)RaceCue.GuardHit).length, Is.EqualTo(0.32f).Within(1f / 44100f));
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Audio_BoostsStayLowAndDoNotCrackle_AndZonePassesBy()
+        {
+            AudioClip boost = sound.GetCue((int)RaceCue.Boost);
+            AudioClip zone = sound.GetCue((int)RaceCue.BoostZone);
+            float[] a = ReadSamples(boost), b = ReadSamples(zone);
+            Spectrum(a, boost.frequency, 0d, boost.length, 3000d, 20000d, out double boostTop);
+            Spectrum(b, zone.frequency, 0d, zone.length, 3000d, 20000d, out double zoneTop);
+            Spectrum(b, zone.frequency, 0.25d, 0.5d, 800d, 8000d, out double zoneNear);
+            Spectrum(b, zone.frequency, 0.8d, 1.03d, 800d, 8000d, out double zoneGone);
+            double boostRoughness = DifferenceRms(a), zoneRoughness = DifferenceRms(b);
+            Debug.Log($"Sound metrics: above 3 kHz={boostTop:F4}/{zoneTop:F4}; zone bright near/gone={zoneNear:F4}/{zoneGone:F4}; difference RMS={boostRoughness:F6}/{zoneRoughness:F6}");
+            Assert.That(boost.length, Is.EqualTo(2f).Within(1f / boost.frequency));
+            Assert.That(zone.length, Is.EqualTo(1.05f).Within(1f / zone.frequency));
+            // A 4 kHz boost was heard as a bird (DECISIONS 2026-11-07); the picked takes measure 0.9% and 8.1% up there.
+            Assert.That(boostTop, Is.LessThan(0.05d), "Boost must not whistle.");
+            Assert.That(zoneTop, Is.LessThan(0.1d), "Boost zone must not whistle.");
+            Assert.That(zoneNear, Is.GreaterThan(zoneGone), "The pass-by must be brightest while it is next to the player.");
+            // Measured on the original 60e2de8 synthesis at 44100 Hz: 0.091363 / 0.075705 full-scale RMS.
+            // Caps of 0.050 / 0.045 require at least 45% / 40% less adjacent-sample roughness, including attacks.
+            Assert.That(boostRoughness, Is.LessThan(0.05d), "Boost must not crackle.");
+            Assert.That(zoneRoughness, Is.LessThan(0.045d), "Boost zone must not crackle.");
+            yield return null;
+        }
+
+        // The chain sounds are the recordings the user picked, cut so they start on the hit (DECISIONS 2026-11-07).
+        [UnityTest]
+        public IEnumerator Audio_ChainCues_ComeFromRecordings_AndStartOnTheHit()
+        {
+            RaceCue[] recorded = { RaceCue.PoleHook, RaceCue.Grapple };
+            foreach (RaceCue cue in recorded)
+            {
+                AudioClip clip = sound.GetCue((int)cue);
+                Assert.That(clip.length, Is.InRange(0.4f, 0.66f), cue.ToString());
+                float[] samples = ReadSamples(clip);
+                float peak = 0f, opening = 0f;
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    peak = Mathf.Max(peak, Mathf.Abs(samples[i]));
+                    if (i < clip.frequency / 50) opening = Mathf.Max(opening, Mathf.Abs(samples[i]));
+                }
+                Assert.That(opening, Is.GreaterThan(peak * 0.05f), cue + " must be heard within 20 ms of the input.");
+            }
+            Assert.That(sound.SwingClip.frequency, Is.EqualTo(48000));
+            Assert.That(sound.SwingClip.length, Is.EqualTo(4f).Within(1f / 48000f));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Audio_RebuiltCues_AreDeterministic_AndSwingSeamIsContinuous()
+        {
+            RaceCue[] rebuilt = { RaceCue.Boost, RaceCue.BoostZone, RaceCue.PoleHook, RaceCue.Grapple };
+            var before = new float[rebuilt.Length][];
+            for (int i = 0; i < rebuilt.Length; i++) before[i] = ReadSamples(sound.GetCue((int)rebuilt[i]));
+            float[] loop = ReadSamples(sound.SwingClip);
+            int edge = sound.SwingClip.frequency / 50;
+            double edgeDifference = 0d, edgeEnergy = 0d;
+            for (int i = 1; i < edge; i++)
+            {
+                double head = (double)loop[i] - loop[i - 1];
+                double tail = (double)loop[loop.Length - i] - loop[loop.Length - i - 1];
+                edgeDifference += head * head + tail * tail;
+                edgeEnergy += loop[i] * loop[i] + loop[loop.Length - i] * loop[loop.Length - i];
+            }
+            double edgeRms = Math.Sqrt(edgeDifference / (2 * (edge - 1)));
+            double seamStep = Math.Abs((double)loop[0] - loop[loop.Length - 1]);
+            // A wrapped tail must remain audible at the join; its one-sample step must fit the nearby oscillations.
+            Assert.That(edgeEnergy / (2 * (edge - 1)), Is.GreaterThan(1e-7d));
+            Assert.That(seamStep, Is.LessThan(4d * edgeRms));
+            Debug.Log($"Swing seam: step={seamStep:F6}; nearby difference RMS={edgeRms:F6}");
+
+            // Reuse the scene fixture to destroy and rebuild the clips, testing seed determinism through the real Awake.
+            yield return SetUp();
+            for (int i = 0; i < rebuilt.Length; i++)
+                Assert.That(ReadSamples(sound.GetCue((int)rebuilt[i])), Is.EqualTo(before[i]), rebuilt[i].ToString());
+            Assert.That(ReadSamples(sound.SwingClip), Is.EqualTo(loop), "Swing synthesis must repeat sample for sample.");
+        }
+
+        private static float[] ReadSamples(AudioClip clip)
+        {
+            var samples = new float[clip.samples];
+            Assert.That(clip.GetData(samples, 0), Is.True);
+            return samples;
+        }
+
+        // Absolute RMS of adjacent-sample differences, in full-scale sample units.
+        private static double DifferenceRms(float[] samples)
+        {
+            double sum = 0d;
+            for (int i = 1; i < samples.Length; i++)
+            {
+                double difference = (double)samples[i] - samples[i - 1];
+                sum += difference * difference;
+            }
+            return Math.Sqrt(sum / (samples.Length - 1));
+        }
+
+        // Hann-windowed 2048-point DFTs via Goertzel, spaced by 1024 samples. Fraction uses all non-DC bins.
+        private static double Spectrum(float[] samples, int rate, double from, double to, double low, double high, out double fraction)
+        {
+            const int size = 2048;
+            var window = new double[size];
+            double band = 0d, weighted = 0d, total = 0d;
+            int end = Math.Min(samples.Length, (int)(to * rate));
+            for (int offset = (int)(from * rate); offset + size <= end; offset += size / 2)
+            {
+                for (int i = 0; i < size; i++) window[i] = samples[offset + i] * (0.5d - 0.5d * Math.Cos(2d * Math.PI * i / (size - 1)));
+                for (int bin = 1; bin < size / 2; bin++)
+                {
+                    double coefficient = 2d * Math.Cos(2d * Math.PI * bin / size);
+                    double previous = 0d, before = 0d;
+                    for (int i = 0; i < size; i++)
+                    {
+                        double next = window[i] + coefficient * previous - before;
+                        before = previous;
+                        previous = next;
+                    }
+                    double energy = Math.Max(0d, previous * previous + before * before - coefficient * previous * before);
+                    double hz = bin * (double)rate / size;
+                    total += energy;
+                    if (hz >= low && hz <= high) { band += energy; weighted += energy * hz; }
+                }
+            }
+            Assert.That(total, Is.GreaterThan(0d));
+            Assert.That(band, Is.GreaterThan(0d));
+            fraction = band / total;
+            return weighted / band;
         }
 
         [UnityTest]

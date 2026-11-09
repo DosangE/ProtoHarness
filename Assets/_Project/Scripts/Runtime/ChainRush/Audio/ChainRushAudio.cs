@@ -12,9 +12,15 @@ namespace ProtoHarness.ChainRush.Audio
         [SerializeField] private AudioSource music;
         [SerializeField] private AudioSource effects;
         [SerializeField] private AudioSource ambience;
+        // Steel is recorded, not synthesized: three synthesis rounds never sounded like metal (DECISIONS 2026-11-07).
+        [SerializeField] private AudioClip poleHookRecording;
+        [SerializeField] private AudioClip grappleRecording;
+        [SerializeField] private AudioClip swingRecording;
         [SerializeField, Range(0f, 1f)] private float musicVolume = 0.32f;
         [SerializeField, Range(0f, 1f)] private float effectsVolume = 0.65f;
         private const int SampleRate = 44100;
+        private const float SwingFromSeconds = 4f;
+        private const int SwingSeconds = 4;
         private AudioClip[] cues;
         private AudioClip score;
         private AudioClip wind;
@@ -47,9 +53,10 @@ namespace ProtoHarness.ChainRush.Audio
         private void Awake()
         {
             if (settings == null) settings = GameSettings.Player;
-            if (game == null || player == null || music == null || effects == null || ambience == null)
+            if (game == null || player == null || music == null || effects == null || ambience == null
+                || poleHookRecording == null || grappleRecording == null || swingRecording == null)
             {
-                Debug.LogError("ChainRushAudio: game, runner and three audio sources are required.", this);
+                Debug.LogError("ChainRushAudio: game, runner, three audio sources and three chain recordings are required.", this);
                 enabled = false;
                 return;
             }
@@ -57,7 +64,7 @@ namespace ProtoHarness.ChainRush.Audio
             for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
             score = MakeScore();
             wind = MakeWind();
-            swingLoop = MakeSwingLoop();
+            swingLoop = MakeSwingLoop(swingRecording);
             swing = LoopSource(effects);
             swing.clip = swingLoop;
             trackAmbience = LoopSource(ambience);
@@ -169,15 +176,19 @@ namespace ProtoHarness.ChainRush.Audio
             return cues[index];
         }
 
-        private static AudioClip Clip(string name, float[] samples)
+        private static AudioClip Clip(string name, float[] samples, int rate = SampleRate)
         {
-            var clip = AudioClip.Create(name, samples.Length, 1, SampleRate, false);
+            var clip = AudioClip.Create(name, samples.Length, 1, rate, false);
             if (!clip.SetData(samples, 0)) throw new InvalidOperationException("Could not fill audio clip " + name);
             return clip;
         }
 
-        private static AudioClip MakeCue(RaceCue cue)
+        private AudioClip MakeCue(RaceCue cue)
         {
+            if (cue == RaceCue.Boost) return MakeKartBoost();
+            if (cue == RaceCue.BoostZone) return MakePassBy();
+            if (cue == RaceCue.PoleHook) return MakeRecordedCue("CR pole hook", poleHookRecording);
+            if (cue == RaceCue.Grapple) return MakeRecordedCue("CR grapple", grappleRecording);
             // Keep the accepted wall hit and the unused cues' synthesis unchanged.
             if (cue != RaceCue.GuardHit && cue != RaceCue.Attack && cue != RaceCue.Damage && cue != RaceCue.Beeps && cue != RaceCue.Buzz)
                 return MakeLayeredCue(cue);
@@ -211,9 +222,7 @@ namespace ProtoHarness.ChainRush.Audio
             {
                 case RaceCue.Beeps: return 0.48f;
                 case RaceCue.Footstep: return 0.09f;
-                case RaceCue.Boost: return 1.8f;
-                case RaceCue.Grapple: return 0.5f;
-                case RaceCue.PoleHook: return 0.7f;
+                case RaceCue.Boost: return 2f;
                 case RaceCue.BoostZone: return 1.05f;
                 case RaceCue.Respawn: return 0.8f;
                 case RaceCue.Jump: return 0.38f;
@@ -233,6 +242,177 @@ namespace ProtoHarness.ChainRush.Audio
             return state;
         }
 
+        // A kart's turbo: the engine climbs from 72 to 150 Hz and the filter opening is what reads as "higher", so the weight
+        // stays low (a 4 kHz version was heard as a bird, DECISIONS 2026-11-07).
+        private static AudioClip MakeKartBoost()
+        {
+            var samples = new double[Mathf.RoundToInt(SampleRate * CueSeconds(RaceCue.Boost))];
+            var random = new System.Random(4702 + (int)RaceCue.Boost);
+            Oscillator first = new Oscillator(0.1343642441d), second = new Oscillator(0.8474337369d);
+            Oscillator under = new Oscillator(0.7637746190d), over = new Oscillator(0.2550690257d);
+            StateVariableFilter engine = new StateVariableFilter(), wind = new StateVariableFilter();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                double t = (double)i / SampleRate;
+                double rise = 1d - Math.Exp(-t / 0.32d);
+                double hz = 72d + 78d * rise + 1.6d * Math.Sin(2d * Math.PI * 9d * t);
+                double raw = first.Saw(hz) + second.Saw(hz * 1.007d) + 0.6d * under.Saw(hz * 0.5d) + 0.45d * over.Square(hz * 2.003d);
+                double body = Math.Tanh(2.2d * engine.LowPass(raw * 0.4d, 320d + 2300d * rise * Math.Exp(-t * 0.45d), 1.5d));
+                double air = wind.BandPass(random.NextDouble() * 2d - 1d, 850d + 1300d * rise, 1.1d);
+                samples[i] = Math.Min(1d, t / 0.012d) * Math.Exp(-t * 0.6d) * (body + air * 0.45d);
+            }
+            var punch = new Oscillator(0d);
+            for (int i = 0; i < SampleRate / 2; i++)
+            {
+                double t = (double)i / SampleRate;
+                samples[i] += punch.Sine(48d + 92d * Math.Exp(-t / 0.03d)) * Math.Exp(-t / 0.1d) * 0.9d;
+            }
+            return Clip("CR kart boost", Leveled(samples, SampleRate));
+        }
+
+        // A kart going by: pitch and brightness swell for the first third, then fall away behind the player.
+        private static AudioClip MakePassBy()
+        {
+            var samples = new double[Mathf.RoundToInt(SampleRate * CueSeconds(RaceCue.BoostZone))];
+            var random = new System.Random(4702 + (int)RaceCue.BoostZone);
+            Oscillator first = new Oscillator(0.7933400838d), second = new Oscillator(0.8219540423d);
+            StateVariableFilter engine = new StateVariableFilter(), wind = new StateVariableFilter();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                double t = (double)i / SampleRate;
+                double climb = Math.Min(1d, t / 0.32d);
+                double near = Math.Sin(Math.PI * Math.Min(1d, t / 0.75d));
+                double hz = 110d + 220d * climb - 165d * Math.Max(0d, (t - 0.32d) / 0.73d);
+                double body = Math.Tanh(1.5d * engine.LowPass((first.Saw(hz) + second.Saw(hz * 1.009d)) * 0.5d, 600d + 2800d * near, 1.6d));
+                double air = wind.BandPass(random.NextDouble() * 2d - 1d, 800d + 2400d * near, 1.5d);
+                samples[i] = Math.Min(1d, t / 0.02d) * Math.Exp(-t * 1.6d) * (body + air * 0.8d);
+            }
+            return Clip("CR boost zone pass-by", Leveled(samples, SampleRate));
+        }
+
+        // Edges, then the level the takes were compared at, so the game plays what was picked.
+        private static float[] Leveled(double[] samples, int rate)
+        {
+            for (int i = 0; i < samples.Length; i++)
+                samples[i] *= Math.Min(1d, Math.Min(i / (rate * 0.0015d), (samples.Length - 1 - i) / (rate * 0.04d)));
+            return AtLevel(samples, rate);
+        }
+
+        // The loudest 300 ms lands on one RMS, unless the peak would pass 0.92 first.
+        private static float[] AtLevel(double[] samples, int rate)
+        {
+            int window = rate * 3 / 10;
+            double energy = 0d, loudest = 0d, peak = 0d;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                energy += samples[i] * samples[i];
+                if (i >= window) energy -= samples[i - window] * samples[i - window];
+                loudest = Math.Max(loudest, energy);
+                peak = Math.Max(peak, Math.Abs(samples[i]));
+            }
+            double gain = Math.Min(0.21d / Math.Sqrt(loudest / window), 0.92d / peak);
+            var leveled = new float[samples.Length];
+            for (int i = 0; i < samples.Length; i++) leveled[i] = (float)(samples[i] * gain);
+            return leveled;
+        }
+
+        // The importer leaves preload off and Decompress On Load on; only that load type can give its samples back.
+        private static double[] ReadMono(AudioClip recording)
+        {
+            if (!recording.LoadAudioData()) throw new InvalidOperationException("Could not load recording " + recording.name);
+            var interleaved = new float[recording.samples * recording.channels];
+            if (!recording.GetData(interleaved, 0)) throw new InvalidOperationException("Could not read recording " + recording.name);
+            var mono = new double[recording.samples];
+            for (int i = 0; i < interleaved.Length; i++) mono[i / recording.channels] += interleaved[i] / (double)recording.channels;
+            return mono;
+        }
+
+        // The recordings open with up to 170 ms of room, which would play as input lag on a hook.
+        private static AudioClip MakeRecordedCue(string name, AudioClip recording)
+        {
+            double[] mono = ReadMono(recording);
+            double peak = 0d;
+            foreach (double sample in mono) peak = Math.Max(peak, Math.Abs(sample));
+            int onset = 0;
+            while (Math.Abs(mono[onset]) < peak * 0.05d) onset++;
+            int start = Math.Max(0, onset - recording.frequency / 200);
+            var trimmed = new double[mono.Length - start];
+            Array.Copy(mono, start, trimmed, 0, trimmed.Length);
+            return Clip(name, Leveled(trimmed, recording.frequency), recording.frequency);
+        }
+
+        // Band-limited (polyBLEP) oscillator: a plain saw at these pitches folds back into a metallic fizz.
+        private sealed class Oscillator
+        {
+            private double phase;
+
+            public Oscillator(double phase) { this.phase = phase; }
+
+            public double Saw(double hz)
+            {
+                double step = Advance(hz);
+                return 2d * phase - 1d - Blep(phase, step);
+            }
+
+            public double Square(double hz)
+            {
+                double step = Advance(hz);
+                return (phase < 0.5d ? 1d : -1d) + Blep(phase, step) - Blep((phase + 0.5d) % 1d, step);
+            }
+
+            public double Sine(double hz)
+            {
+                Advance(hz);
+                return Math.Sin(2d * Math.PI * phase);
+            }
+
+            private double Advance(double hz)
+            {
+                double step = hz / SampleRate;
+                phase = (phase + step) % 1d;
+                return step;
+            }
+
+            private static double Blep(double t, double step)
+            {
+                if (t < step) { double x = t / step; return x + x - x * x - 1d; }
+                if (t > 1d - step) { double x = (t - 1d) / step; return x * x + x + x + 1d; }
+                return 0d;
+            }
+        }
+
+        // Topology-preserving state-variable filter: stays stable while its cutoff sweeps every sample.
+        private sealed class StateVariableFilter
+        {
+            private double first;
+            private double second;
+
+            public double LowPass(double value, double hz, double q)
+            {
+                Run(value, hz, q, out double low, out _);
+                return low;
+            }
+
+            public double BandPass(double value, double hz, double q)
+            {
+                Run(value, hz, q, out _, out double band);
+                return band;
+            }
+
+            private void Run(double value, double hz, double q, out double low, out double band)
+            {
+                double g = Math.Tan(Math.PI * Math.Min(hz, SampleRate * 0.45d) / SampleRate);
+                double a1 = 1d / (1d + g * (g + 1d / q));
+                double a2 = g * a1;
+                double a3 = g * a2;
+                double v3 = value - second;
+                band = a1 * first + a2 * v3;
+                low = second + a2 * first + a3 * v3;
+                first = 2d * band - first;
+                second = 2d * low - second;
+            }
+        }
+
         private static AudioClip MakeLayeredCue(RaceCue cue)
         {
             float duration = CueSeconds(cue);
@@ -249,24 +429,6 @@ namespace ProtoHarness.ChainRush.Audio
                 float value;
                 switch (cue)
                 {
-                    case RaceCue.Boost:
-                        // A struck launch, sustained sub pressure and a separate incoming 3..8 kHz air layer.
-                        value = 0.82f * Decay(53f, t, 0.65f) + 0.38f * Decay(79f, t, 0.9f)
-                            + 0.22f * Decay(103f, t, 1.2f) + rumble * 1.2f * Mathf.Exp(-t * 0.8f)
-                            + 0.5f * Decay(68f, t, 15f) + hit * 0.5f
-                            + air * 0.85f * (1f - Mathf.Exp(-t * 9f)) * Mathf.Exp(-t * 0.9f);
-                        break;
-                    case RaceCue.BoostZone:
-                        value = 0.85f * Decay(46f, t, 4f) + 0.4f * Decay(92f, t, 6f) + hit * 0.4f
-                            + air * 1.15f * (1f - Mathf.Exp(-t * 25f)) * Mathf.Exp(-t * 3f)
-                            * (0.7f + 0.3f * Mathf.Sin(t * t * 70f)) + rumble * 0.8f * Mathf.Exp(-t * 4f);
-                        break;
-                    case RaceCue.PoleHook:
-                        value = 0.65f * Decay(86f, t, 17f) + 0.22f * Decay(173f, t, 24f) + hit * 0.28f;
-                        break;
-                    case RaceCue.Grapple:
-                        value = 0.3f * Decay(132f, t, 24f) + hit * 0.18f;
-                        break;
                     case RaceCue.Respawn:
                         value = 0.65f * Decay(49f, t, 2f) + 0.3f * Decay(73f, t, 3f)
                             + 0.24f * Tone(196f, t) * Tone(0.8f, t) * Mathf.Exp(-t * 3f)
@@ -292,18 +454,6 @@ namespace ProtoHarness.ChainRush.Audio
                 }
                 samples[i] = value;
             }
-            if (cue == RaceCue.PoleHook || cue == RaceCue.Grapple)
-            {
-                bool heavy = cue == RaceCue.PoleHook;
-                AddLink(samples, 0f, heavy ? 510f : 820f, heavy ? 0.7f : 0.44f, random, false);
-                float time = heavy ? 0.055f : 0.035f;
-                while (time < duration - 0.1f)
-                {
-                    float strength = (0.2f + (float)random.NextDouble() * 0.28f) * (1f - time / duration);
-                    AddLink(samples, time, (heavy ? 640f : 1050f) * (0.7f + (float)random.NextDouble() * 0.7f), strength, random, false);
-                    time += 0.025f + (float)random.NextDouble() * 0.06f;
-                }
-            }
             for (int i = 0; i < samples.Length; i++)
             {
                 float t = (float)i / SampleRate;
@@ -313,32 +463,21 @@ namespace ProtoHarness.ChainRush.Audio
             return Clip("CR effect " + (int)cue, samples);
         }
 
-        // A struck link has four inharmonic steel modes and a tiny noisy contact, with a different pitch and force per link.
-        private static void AddLink(float[] samples, float start, float hz, float strength, System.Random random, bool wrap)
+        // Four seconds of the recording. What follows them fades in over their start, so the end runs straight into the start.
+        private static AudioClip MakeSwingLoop(AudioClip recording)
         {
-            int offset = Mathf.RoundToInt(start * SampleRate);
-            for (int i = 0; i < SampleRate / 5; i++)
+            double[] source = ReadMono(recording);
+            int rate = recording.frequency;
+            int from = Mathf.RoundToInt(SwingFromSeconds * rate), length = SwingSeconds * rate, blend = rate / 4;
+            if (from + length + blend > source.Length) throw new InvalidOperationException("Swing recording is too short: " + recording.name);
+            var samples = new double[length];
+            Array.Copy(source, from, samples, 0, length);
+            for (int i = 0; i < blend; i++)
             {
-                int target = offset + i;
-                if (!wrap && target >= samples.Length) break;
-                float t = (float)i / SampleRate;
-                float metal = Decay(hz, t, 28f) + 0.58f * Decay(hz * 1.481f, t, 35f)
-                    + 0.36f * Decay(hz * 2.173f, t, 43f) + 0.22f * Decay(hz * 3.127f, t, 58f);
-                float contact = ((float)random.NextDouble() * 2f - 1f) * Mathf.Exp(-t * 420f) * 0.65f;
-                float edge = Mathf.Min(1f, t * 2000f, (0.2f - t) * 200f);
-                samples[target % samples.Length] += (metal * 0.5f + contact) * strength * edge;
+                double mix = (i + 0.5d) / blend * Math.PI / 2d;
+                samples[i] = source[from + i] * Math.Sin(mix) + source[from + length + i] * Math.Cos(mix);
             }
-        }
-
-        private static AudioClip MakeSwingLoop()
-        {
-            var samples = new float[SampleRate * 4];
-            var random = new System.Random(7193);
-            // Circular overlap carries each link's tail across the boundary, with no silent fade at the seam.
-            for (float t = 0f; t < 4f; t += 0.035f + (float)random.NextDouble() * 0.11f)
-                AddLink(samples, t, 420f + (float)random.NextDouble() * 720f, 0.16f + (float)random.NextDouble() * 0.22f, random, true);
-            for (int i = 0; i < samples.Length; i++) samples[i] = SoftClip(samples[i]);
-            return Clip("Swing chain - circular steel links", samples);
+            return Clip("Swing chain - recorded loop", AtLevel(samples, rate), rate);
         }
 
         private static AudioClip MakeScore()

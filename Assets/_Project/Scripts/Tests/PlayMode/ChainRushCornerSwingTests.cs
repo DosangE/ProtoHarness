@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -637,8 +638,11 @@ namespace ProtoHarness.Tests.PlayMode
 
             float headingFrom = player.Heading;
             Vector3 hookedAt = player.transform.position;
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
             yield return Hook(bot, 0f);
             Assert.That(player.IsSwinging, Is.True, "A swing key press with the side pole in reach must hook it.");
+            Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.PoleHook));
             Assert.That(Level(game.Racer.SwingCenter - sidePole), Is.LessThan(1e-3f), "It hooks the side pole.");
             Assert.That(game.Racer.SwingRadius, Is.EqualTo(Level(hookedAt - sidePole)).Within(0.5f), "The rope is the distance when it hooked.");
 

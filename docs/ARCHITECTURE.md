@@ -73,7 +73,7 @@ Unity 6 URP 기반 프로젝트. DosangE/Chain-Rush의 점프·그래플링·공
 | 서킷 장면 (RF4, 2026-10-25): 일반 클래스. `CircuitRace` 가 정의·닫힌 중심선·부모 Transform·머티리얼 3개로 만들고 `LayRoad`(노면 `RoadPiece`, 최대 길이 `maxPieceLength`, 틈 건너뜀, 폭이 바뀌는 조각은 따로) → (앵커는 `CircuitRace`) → `PlaceMarkers`(출발선·체크포인트 띠) → `PlacePoles`(코너·스윙 봉) 순서로 부른다. 띠와 봉은 충돌체 없음. M3 트랙 장식(T3e)이 붙을 자리 | `Runtime/ChainRush/Race/CircuitScenery.cs` | `TrackDefinition`, `Centerline`, `RoadPiece`, `SwingLook` |
 | 러너 프로필 (M2-b, 2026-10-19): 이름 + 씬의 `RunnerMotor` 값에 곱하는 배율(최고 속도·부스터, 가속, 게이지 충전, 무게 — 무게는 M7 까지 효과 없음). ALPHA 가 모두 1 이라 씬 값 그대로. `RunnerMotor.Configure` 가 런 밖에서만 받는다 | `Runtime/ChainRush/RunnerProfile.cs` (SO, `Data/RunnerProfile_Alpha~Omega.asset`) | 없음 (`RaceAssembler` 가 로비의 선택을 `RunnerMotor` 에 넘김) |
 | 체력·피격 무적·공격 쿨다운·공격 시각 지속 데이터 | `Runtime/ChainRush/RunRules.cs` (SO, 기본값 `Data/RunRules_Default.asset`) | 없음 (`ChainRushGame` 이 직렬화 참조로 사용, 비어 있으면 LogError 후 비활성화) |
-| 신스 음악·9종 효과음·바람·음소거 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개 |
+| 신스 음악·14종 효과음·바람·음소거. 봉 걸림·그래플·스윙 루프는 CC0 녹음(`Audio/Chain_*.mp3`)을 읽어 다듬고 나머지는 합성한다 | `Runtime/ChainRush/Audio/ChainRushAudio.cs` | Game, Motor, AudioSource 3개, 녹음 AudioClip 3개 |
 | 달리기·점프·착지·그래플·공격 관절 자세 | `Runtime/ChainRush/Visuals/RunnerAnimation.cs` | Game, Motor, Grapple, Audio, 직렬화 관절 Transform |
 
 **고정 틱 (2026-10-02)**: 시뮬레이션의 진입점은 `ChainRushGame.StepTick` 하나이고(`FixedUpdate` 가 부른다, 롤백 안전성 2026-10-08) 한 호출이 한 틱(`Ticks.Seconds` = 0.02s)이다. 틱 안의 순서는 `IInputSource.Consume()` 로 받은 `TickInput` → 공격 → `RunnerMotor.Step(input)`(점프·그래플·해제 포함) → 장애물 접촉 → 완주 판정(서킷이면 `CircuitRace.Step`). (무한 모드의 `EnemyDirector.Step` → `CourseStream.Step` 은 2026-10-25 삭제.) `Update`/`LateUpdate`는 입력 `Poll`(실행 중일 때만), 메뉴 키(R·Enter·Esc, 음소거 M)와 표현(카메라·애니메이션·HUD·체인 시각물·오디오)만 한다. 시뮬은 장치를 직접 읽지 않고 `ChainRushGame.SetInputSource` 로 입력 출처를 바꿀 수 있다(기본값 `KeyboardMouseInputSource`, `Awake` 에서 코드로 생성). 시간은 정수 틱(`ChainRushGame.Tick`)으로 세고 `Elapsed` 는 파생값이다. 초 단위 수치는 `Ticks.FromSeconds` 로 올림 환산한다(`RunRules`, `EncounterTuning` 의 `*Ticks` 프로퍼티). `Time.fixedDeltaTime` 이 `Ticks.Seconds` 와 다르면 `ChainRushGame` 이 LogError 후 비활성화된다.
@@ -106,7 +106,7 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 첫 공격 표적은 (0, 1.1, 18)에 있으며 이후 표적·위험물은 좌우로 배치된다.
 PlayMode 테스트는 장면 로드, 전진, 점프/연결/제약/해제, 사거리 실패, 피격 무적, 낙하 후 재시작과 표적 복구, 일시정지, 자동 조작으로 전체 코스 완주를 검증한다. 가상 Keyboard 의 Input System 이벤트로 Enter·←/→·Alt·Alt 뗌·R·Space·Shift·Ctrl 도 검증하고 장치를 복구한다.
 시각 검증 캡처는 Unity 프로세스의 임시 폴더에 `ChainRush-ready.png`, `ChainRush-running.png`, `ChainRush-grapple.png`로 저장한다.
-HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 내 합성 AudioClip을 사용한다. 정식 아트·음원과 빌드/배포는 포함하지 않는다.
+HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 내 합성 AudioClip을 사용한다(2026-11-07부터 봉 걸림·그래플·스윙 루프는 CC0 녹음, `docs/DECISIONS.md` 2026-11-07). 정식 아트·음원과 빌드/배포는 포함하지 않는다.
 
 ### 무한 전투 모드 — 2026-10-25 삭제
 
@@ -125,7 +125,7 @@ HUD는 IMGUI와 OS 동적 폰트(Malgun Gothic/Arial), 효과음은 메모리 �
 ### 아트·사운드·애니메이션
 
 - 아트: 무한 씬 전용 장갑/금속/청록/자홍/옥상 머티리얼 5개. 기존 캐릭터를 비활성 보관하고 관절형 장갑 러너를 연결한다. 체인 원점은 오른손 관절 아래로 옮긴다. 발판 환기구, 발광 창문, 구간별 도시 간판, 드론 장갑을 추가하고 보라색 안개로 원경을 정리한다. 장식물에는 충돌을 켜지 않는다.
-- 사운드: 120 BPM, 16초/8마디의 원본 신스 루프와 바람 루프, 점프·연결·발사·피격·경고·명중·회수·발소리·착지 9종 효과음을 시작 시 메모리에서 합성한다. 외부 음원/패키지 없이 구현하며 파형 버퍼는 Update에서 생성하지 않는다. M으로 음소거한다. 음악·효과음·바람은 일시정지에 동기화되고 재시작 시 초기화되며 음소거 선택은 유지된다.
+- 사운드: 120 BPM, 16초/8마디의 원본 신스 루프와 바람 루프, 점프·연결·발사·피격·경고·명중·회수·발소리·착지 9종 효과음을 시작 시 메모리에서 합성한다. 외부 음원/패키지 없이 구현하며 파형 버퍼는 Update에서 생성하지 않는다(당시 기록. 2026-11-07부터 쇠사슬 소리 3개는 CC0 녹음이다). M으로 음소거한다. 음악·효과음·바람은 일시정지에 동기화되고 재시작 시 초기화되며 음소거 선택은 유지된다.
 - 애니메이션: Transform 관절을 사용하는 절차적 애니메이션. 전진 속도에 따른 팔·다리 교차와 발소리, 공중 자세, 착지 압축, 그래플 시 오른팔 들어 올리기, 체인 발사/회수 반동, 실패 시 상체 숙임. 물리 루트 대신 시각 관절만 바꾼다. Animator/외부 리깅 파일은 사용하지 않는다.
 - `ChainRushGame.enhancedPresentation`은 Audio와 RunnerAnimation 참조를 필수로 요구한다. 기존 테스트 씬은 이 기능을 켜지 않아 기존 표현을 유지한다.
 - 신규 3개 테스트: 음악/관절의 정지·재시작·음소거 유지, 그래플 팔 자세, 모든 효과음/음악의 유효 파형·피크 검사. 음악 미리듣기는 Unity 임시 경로의 `ChainRush-music-preview.wav`, 시각 캡처는 `ChainRush-art-running.png`, `ChainRush-art-grapple.png`다.

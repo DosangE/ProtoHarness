@@ -319,15 +319,20 @@ namespace ProtoHarness.ChainRush
             phase = Phase.Complete;
             grapple.Release(false);
             attackVisual.gameObject.SetActive(false);
-            PlayCue(RaceCue.Action);
+            PlayCue(RaceCue.Finish);
         }
 
-        // Only the first four cues (Jump..Damage) have a plain fallback clip; any later one is refused here too.
+        // Every cue as it plays, whichever clips play it (a test listens here).
+        public event System.Action<RaceCue> CuePlayed;
+
+        // Only the first four cues (Jump..Damage) have a plain fallback clip; without the presentation any later one
+        // sounds like Finish, as every move did before they had their own sounds (2026-11-05).
         public void PlayCue(RaceCue cue)
         {
-            if (cue < RaceCue.Jump || (int)cue >= cues.Length) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            if (cue < RaceCue.Jump || cue > RaceCue.Respawn) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            CuePlayed?.Invoke(cue);
             if (enhancedPresentation) { presentationAudio.PlayCue(cue); return; }
-            audioSource.PlayOneShot(cues[(int)cue]);
+            audioSource.PlayOneShot(cues[(int)cue < cues.Length ? (int)cue : (int)RaceCue.Finish]);
         }
 
         private void OnDestroy()

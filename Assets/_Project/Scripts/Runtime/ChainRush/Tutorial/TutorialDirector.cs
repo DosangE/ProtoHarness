@@ -140,7 +140,7 @@ namespace ProtoHarness.ChainRush.Tutorial
         {
             TutorialCourse.Reading now = Read();
             if (cleared || !TutorialCourse.IsMet(CurrentGoal, now)) return;
-            game.PlayCue(RaceCue.Action);
+            game.PlayCue(RaceCue.Finish);
             if (goal + 1 < CurrentStage.Goals.Count)
             {
                 goal++;

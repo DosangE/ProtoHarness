@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Motion;
 using ProtoHarness.ChainRush.Track;
@@ -80,6 +81,20 @@ namespace ProtoHarness.Tests.PlayMode
             built.Clear();
             yield return null;
             LogAssert.NoUnexpectedReceived();
+        }
+
+        [UnityTest]
+        public IEnumerator Sling_Firing_PlaysTheBoostCueOnce()
+        {
+            Centerline line = OpenRoad();
+            yield return StartOn(line);
+            yield return RunTo(line, 15d);
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
+            game.Racer.AddGauge(1f);
+            source.ChainAction = true;
+            for (int i = 0; i < 5; i++) yield return new WaitForFixedUpdate();
+            Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.Boost));
         }
 
         [UnityTest]
@@ -273,11 +288,14 @@ namespace ProtoHarness.Tests.PlayMode
             while (grapple.Candidate == null && Time.time < deadline) yield return new WaitForFixedUpdate();
             Assert.That(grapple.Candidate, Is.Not.Null, $"No anchor came within the rope's reach: runner at {player.transform.position}.");
             Assert.That(grapple.TryAttach(), Is.True);
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
             game.Racer.AddGauge(1f);
             source.ChainAction = true;
             yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
             Assert.That(game.Racer.GrappleEmpowered, Is.True, "A chain action while attached empowers the grapple.");
+            Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.Boost), "Spending a slot on the grapple sounds as a boost.");
             Assert.That(game.Racer.Gauge, Is.EqualTo(0f).Within(1e-4f));
             float before = grapple.RopeLength;
             for (int i = 0; i < 10; i++) yield return new WaitForFixedUpdate();

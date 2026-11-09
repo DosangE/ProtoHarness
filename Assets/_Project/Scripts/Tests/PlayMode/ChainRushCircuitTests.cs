@@ -1,6 +1,7 @@
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -88,6 +89,8 @@ namespace ProtoHarness.Tests.PlayMode
             Vector3 position = player.transform.position;
             TrackFrame frame = game.Track.Frame(position);
             float offset = game.Track.Project(position).D;
+            int hits = 0;
+            game.CuePlayed += cue => { if (cue == RaceCue.GuardHit) hits++; };
             // 0.2 m off the left guard (road half width 6 less the capsule's 0.38), leaning into it.
             player.SetPosition(position + frame.Right * (-5.42f - offset));
             float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg - angle;
@@ -101,6 +104,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(reached, Is.GreaterThan(5.5f), "The runner should be against the guard. " + State());
             Assert.That(Mathf.DeltaAngle(player.Heading, heading), Is.EqualTo(0f).Within(0.01f), "A guard never turns the facing. " + State());
             Assert.That(player.HorizontalSpeed, Is.GreaterThan(18f), "A shallow rub must not stop the run. " + State());
+            Assert.That(hits, Is.EqualTo(0), "A rub is not a hit: it stays quiet (user 2026-11-05).");
         }
 
         // A fall no longer ends a circuit run: the runner comes back on the road before the gap, at rest and facing along
@@ -192,9 +196,12 @@ namespace ProtoHarness.Tests.PlayMode
             Teleport(startS - 12d);
             yield return LandOnRoad();
 
+            int comebacks = 0;
+            game.CuePlayed += cue => { if (cue == RaceCue.Respawn) comebacks++; };
             float deadline = Time.time + 10f;
             while (!player.IsRespawning && game.IsRunning && Time.time < deadline) yield return new WaitForEndOfFrame();
             Assert.That(player.IsRespawning, Is.True, "Running into the gap must put the runner back on the track. " + State());
+            Assert.That(comebacks, Is.EqualTo(1));
             float cameFrom = Time.time;
             Vector3 runner = player.transform.position;
             Vector3 forward = game.Track.Frame(runner).Forward;

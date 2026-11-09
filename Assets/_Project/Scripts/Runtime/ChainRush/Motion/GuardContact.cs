@@ -6,6 +6,10 @@ namespace ProtoHarness.ChainRush.Motion
     // move (TryFindGuardAhead) or in it (OnControllerColliderHit), and passes its level normal, pointing away from the guard.
     public static class GuardContact
     {
+        // The level speed going into the guard, 0 when going along it or away.
+        public static float SpeedInto(Vector3 velocity, Vector3 guardNormal) =>
+            Mathf.Max(0f, -Vector3.Dot(new Vector3(velocity.x, 0f, velocity.z), guardNormal));
+
         // Removes the push into the guard and loses speed by how head-on the hit was (speedLoss for a head-on hit). The
         // facing stays the player's: a guard never turns it (user 2026-11-04).
         public static void Glance(ref Vector3 velocity, Vector3 guardNormal, float speedLoss)

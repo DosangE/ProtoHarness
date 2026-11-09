@@ -78,6 +78,17 @@
 - **리뷰**: `unity-reviewer` 치명 0·중대 0·보통 2·제안 6, 77,551 토큰. ① 녹음 가져오기 설정이 Decompress On Load 가 아니거나 스윙 녹음이 8.25초보다 짧으면 `Awake` 의 `throw` 가 `enabled = false` 를 거치지 않는다(`ChainRushAudio.cs:322,324,472`). ② `ChainRushAudio` 가 스스로 꺼진 뒤에도 `ChainRushGame.PlayCue` 가 넘겨 시뮬 안에서 NRE 가 난다(`ChainRushGame.cs:94,334`, 기존 패턴의 폭이 넓어진 것). 둘 다 지금 음원·설정에서는 일어나지 않아 후속으로 둔다. 제안: 무음 녹음의 NaN, `UnloadAudioData` 없음(스윙 원본 약 5 MB), `RaceCue.Respawn` 상한 고정, 오류 메시지가 빈 필드를 말하지 않음, WebGL 의 `GetData`(미확인), `index/` 재생성. Codex 설계 리뷰 `approve`, 지적 0건(비용: `/status` 를 읽지 않아 모름). 롤백 때 효과음이 다시 나는 것은 `dev` 에도 있던 동작이고 결정성에는 영향이 없다고 봤다.
 - **알아둘 것**: 튜토리얼 목표 달성음은 1차 커밋(`60e2de8`)에서 `RaceCue.Action` → `RaceCue.Finish`(1.2초 화음)로 바뀌었다. 사용자가 2026-11-09 튜토리얼을 확인했다.
 
+## 2026-11-07 · codex-unity 는 relay 로 서버를 찾고, 있는 도구 표는 그 자리에서 바꾼다 (`fix/codex-unity-server-name`)
+
+- **문제**: 이 PC 에서 `tools/codex-unity.ps1` 로 보낸 Codex 작업이 시작 약 5초 만에 실패했다. `failed to load configuration: C:\Users\User\.codex\config.toml:174:14: invalid transport`. 스크립트가 `mcp_servers.unity-mcp` 에 승인을 넣었는데 이 PC 의 서버 이름은 `unity_mcp` 여서, 전송 설정이 없는 서버가 새로 생겼다. 이름만 바꾸면 이번에는 `config.toml:167-171` 의 기존 도구 표(`approval_mode = "prompt"`, 2026-10-26 "Codex 역할")와 표가 겹친다.
+- **결정 (사용자, 2026-11-07)**: 두 안 중 "1번 ㄱㄱ". 서버는 `command` 에 `relay` 가 있는 것으로 찾는다. 없거나 둘 이상이면 던진다. 도구 표가 있으면 그 줄을 `approve` 로 바꾸고 줄 끝 주석에 원래 값을 적었다가 되돌린다. 표가 없으면 전처럼 블록을 덧붙인다.
+- **버린 대안**: Codex 쓰기만 열고 MCP 없이 보내기 — 빠르지만 Codex 가 스스로 테스트하며 고치지 못한다. 설정 파일 전체를 백업했다가 복원하기 — 실행 중 Codex 나 사용자가 바꾼 내용이 사라진다. 사용자 `config.toml` 의 서버 이름 바꾸기 — 다른 프로젝트도 쓰는 파일이다.
+- **검증**: `docs/`, `tools/`, `AGENTS.md` 만 바꿨다(문서 검증).
+  - 임시 `CODEX_HOME` 과 가짜 `node`: 이 PC 형태(표 있음)와 다른 PC 형태(표 없음)는 열린 동안 값이 `approve` 이고 끝나면 원본과 바이트까지 같다. relay 없음·둘은 `expected one Unity relay server` 로 실패하고 파일은 그대로다. 줄 끝 주석이 남은 설정에서 `-Status` `open`, `-Watch` 뒤 `closed`, 원본과 같다.
+  - 실제 실행(읽기 전용, `-Effort low`): 종료 코드 0. Codex 가 `Unity_GetConsoleLogs` 와 `Unity_RunCommand` 를 불렀고 `[Log] codex smoke: playing=[False] compiling=[False]`. 끝난 뒤 `config.toml` 해시가 실행 전과 같고 `-Status` 는 `closed`.
+- **한계**: 다른 PC 의 설정은 보지 못했다. `unity-mcp` 라는 이름은 스크립트가 거기서 동작했다는 기록으로 미룬 것이고, `command` 에 `relay` 가 없으면 스크립트가 시끄럽게 실패한다.
+- **알아둘 것**: 스크립트 출력을 파이프로 묶으면 안 된다. Codex 브로커가 파이프를 물려받아 `tail` 이 끝나지 않고, 실패 메시지가 나오지 않는다. 파일로 받는다.
+
 ## 2026-11-06 · select-tests: 장식 메시는 "전체" 가 아니다 (`fix/select-tests-art-models`)
 
 - **결정 (사용자, 2026-11-06)**: "Art/Models 판정도 고쳐 ㄱㄱ". 표의 장식 줄이 `Models/StadiumExterior_` 만 알아서 뒤에 생긴 메시가 "전체 (표에 없는 경로)" 로 떨어졌다. `Models/(\w+Exterior_|StadiumSports_)` 로 넓혔다. 지문 없음, PlayMode 없음이다.

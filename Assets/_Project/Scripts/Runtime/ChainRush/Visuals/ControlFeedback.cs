@@ -26,7 +26,8 @@ namespace ProtoHarness.ChainRush.Visuals
         private MaterialPropertyBlock tint;
         private LineRenderer[] rings;
         private float[] burstAt;
-        private TrailRenderer trail;
+        private SpeedTrails speedTrails;
+        private SwingEffects swingEffects;
         // A booster is either action a gauge slot buys, watched apart: the slingshot can still be pulling when the grapple
         // it leads into is empowered with a second slot, and that second spend must show too (review 2026-10-29).
         private StateEdge slingPull;
@@ -34,6 +35,11 @@ namespace ProtoHarness.ChainRush.Visuals
         private StateEdge hook;
         private StateEdge swing;
         private StateEdge poleReady;
+        // The swing's end has no edge of its own: it snaps the chain unless a respawn cut it.
+        private bool wasSwinging;
+        private Vector3 swingBite;
+        private bool swingEnded;
+        private float swingEndedAt;
         private bool boosted;
         private float boostedAt;
         private int spentBoostSlot = -1;
@@ -42,10 +48,22 @@ namespace ProtoHarness.ChainRush.Visuals
         private int lastMissUntil;
         private bool missed;
         private float missedAt;
+        // A boost pad is noticed by its carry jumping up, not turning on: the climb's pads come 30 m apart, before the
+        // last one's carry is gone (Palm Coast).
+        private float lastPadCarry;
+        private bool padHit;
+        private float padAt;
         private bool initialized;
 
         public bool PoleReadyShown => rings != null && rings[ReadyRing].enabled;
-        public bool TrailEmitting => trail != null && trail.emitting;
+        public bool TrailEmitting => speedTrails != null && speedTrails.BoostTailEmitting;
+        public bool SwingSparksEmitting => swingEffects != null && swingEffects.SparksEmitting;
+        public bool HandSparksEmitting => swingEffects != null && swingEffects.HandSparksEmitting;
+        public bool ChainSnapShown => swingEffects != null && swingEffects.SnapShown;
+        public bool SwingTailEmitting => speedTrails != null && speedTrails.SwingTailEmitting;
+        public bool SwingBoostTailEmitting => speedTrails != null && speedTrails.SwingBoostTailEmitting;
+        public bool WindLinesShown => speedTrails != null && speedTrails.WindLinesShown;
+        public SpeedTrails.Style TrailStyle => speedTrails != null ? speedTrails.Current : SpeedTrails.Style.None;
 
         // Seconds since each moment on Time.time, negative when it has not happened in this run.
         public float SinceBoost(float now) => boosted ? now - boostedAt : -1f;
@@ -53,6 +71,7 @@ namespace ProtoHarness.ChainRush.Visuals
         public float SinceSwing(float now) => swing.Since(now);
         public float SinceMiss(float now) => missed ? now - missedAt : -1f;
         public float SincePoleReady(float now) => poleReady.Since(now);
+        public float SincePad(float now) => padHit ? now - padAt : -1f;
         // The gauge slot the last booster emptied (the whole slots left after spending it), -1 before any.
         public int SpentBoostSlot => spentBoostSlot;
 
@@ -111,23 +130,8 @@ namespace ProtoHarness.ChainRush.Visuals
                 rings[i] = MakeLine("Feedback ring " + i, CirclePoints, true);
                 rings[i].SetPositions(circle);
             }
-            var tail = new GameObject("Boost trail");
-            tail.transform.SetParent(runner, false);
-            tail.transform.localPosition = new Vector3(0f, -0.2f, 0f);
-            trail = tail.AddComponent<TrailRenderer>();
-            trail.sharedMaterial = material;
-            trail.shadowCastingMode = ShadowCastingMode.Off;
-            trail.receiveShadows = false;
-            trail.time = 0.25f;
-            trail.minVertexDistance = 0.15f;
-            trail.startWidth = 0.25f;
-            trail.endWidth = 0f;
-            trail.autodestruct = false;
-            trail.emitting = false;
-            trail.enabled = false;
-            Color trailColor = NightUi.Accent;
-            trailColor.a = 0.35f;
-            SetTint(trail, trailColor);
+            speedTrails = new SpeedTrails(runner, material);
+            swingEffects = new SwingEffects(effectsRoot.transform, material);
             initialized = true;
         }
 
@@ -188,10 +192,45 @@ namespace ProtoHarness.ChainRush.Visuals
                 missedAt = now;
             }
             lastMissUntil = missUntil;
+            float padCarry = game.Racer.BoostZoneCarrySpeed;
+            if (padCarry > lastPadCarry + 0.5f)
+            {
+                padHit = true;
+                padAt = now;
+            }
+            lastPadCarry = padCarry;
             if (hook.Update(grapple.IsAttached, now))
                 StartRing(AnchorRing, grapple.AnchorPosition, Quaternion.FromToRotation(Vector3.up, -player.Facing), now);
-            if (swing.Update(player.IsSwinging, now))
-                StartRing(SwingRing, SwingLook.PoleBite(game.Racer.SwingCenter), Quaternion.identity, now);
+            bool swinging = player.IsSwinging;
+            if (swinging) swingBite = SwingLook.PoleBite(game.Racer.SwingCenter);
+            Vector3 body = runner.TransformPoint(capsule.center);
+            if (swing.Update(swinging, now))
+            {
+                StartRing(SwingRing, swingBite, Quaternion.identity, now);
+                swingEffects.Hook(swingBite, body);
+            }
+            bool respawning = player.IsRespawning;
+            if (wasSwinging && !swinging && !respawning)
+            {
+                swingEffects.Snap(swingBite, body, now);
+                swingEnded = true;
+                swingEndedAt = now;
+            }
+            wasSwinging = swinging;
+            if (respawning)
+            {
+                swingEnded = false;
+                swingEffects.Hide();
+                speedTrails.Hide();
+            }
+            else
+            {
+                swingEffects.Present(swinging, swingBite, body, now);
+                bool swingTail = swinging || (swingEnded && now - swingEndedAt < FeedbackLook.SwingTailAfter);
+                bool booster = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
+                float padShare = FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed);
+                speedTrails.Present(SpeedTrails.StyleOf(swingTail, booster, padShare > 0f), padShare, player.Facing, now);
+            }
             bool ready = grapple.HasPoleCandidate && !grapple.IsAttached && !player.IsSwinging;
             poleReady.Update(ready, now);
             rings[ReadyRing].enabled = ready;
@@ -209,10 +248,6 @@ namespace ProtoHarness.ChainRush.Visuals
             UpdateRing(BoostRing, now, FeedbackLook.BoostRingTime, 0.5f, 3.5f, false);
             UpdateRing(AnchorRing, now, FeedbackLook.HookRingTime, 0.5f, 2f, true);
             UpdateRing(SwingRing, now, FeedbackLook.HookRingTime, SwingLook.PoleThickness * 0.5f, 2.6f, true);
-            trail.enabled = true;
-            // Only while a booster is on: the slingshot pulling or carrying, or the empowered grapple. Speed left over
-            // after it (user 2026-10-29: the trail only for the booster) leaves no trail.
-            trail.emitting = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
         }
 
         // Between runs: a new run starts with no moments behind it. The miss mark is taken as it stands, so a mark left
@@ -220,9 +255,10 @@ namespace ProtoHarness.ChainRush.Visuals
         private void ForgetRun()
         {
             slingPull = empower = hook = swing = poleReady = default;
-            boosted = missed = false;
+            boosted = missed = padHit = wasSwinging = swingEnded = false;
             spentBoostSlot = -1;
             lastMissUntil = game.Racer.MissUntilTick;
+            lastPadCarry = game.Racer.BoostZoneCarrySpeed;
         }
 
         private void StartRing(int index, Vector3 center, Quaternion rotation, float now)
@@ -257,18 +293,17 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             if (rings != null)
                 for (int i = 0; i < rings.Length; i++) rings[i].enabled = false;
-            if (trail == null) return;
-            trail.emitting = false;
-            if (trail.enabled) trail.Clear();
-            trail.enabled = false;
+            if (swingEffects != null) swingEffects.Hide();
+            if (speedTrails != null) speedTrails.Hide();
         }
 
         private void OnDisable() => HideAll();
 
         private void OnDestroy()
         {
+            if (swingEffects != null) swingEffects.Dispose();
+            if (speedTrails != null) speedTrails.Dispose();
             if (effectsRoot != null) Destroy(effectsRoot);
-            if (trail != null) Destroy(trail.gameObject);
             if (material != null) Destroy(material);
         }
     }

@@ -15,7 +15,7 @@ using UnityEditor.SceneManagement;
 namespace ProtoHarness.Tests.PlayMode
 {
     // Curves with free steering (COURSE.md T2b) on a visible test road beside the prototype course: a bot
-    // steers around R30, an unsteered runner is turned by the outer guard, and side grip is measured.
+    // steers around R30, an unsteered runner is held by the outer guard, not turned, and side grip is measured.
     public sealed class ChainRushCurveTests
     {
         private const float RoadX = 300f;
@@ -84,22 +84,24 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Curve_NoSteering_OuterGuardTurnsRunnerWithoutFall()
+        public IEnumerator Curve_NoSteering_OuterGuardHoldsTheRunnerWithoutTurningIt()
         {
             Centerline line = CurveRoad(90f);
             var still = new TrackFollower(line, player) { Steering = false };
             yield return StartOn(line, still);
             double exitS = 30d + QuarterR30;
+            float heading = player.Heading;
             float minOffset = 0f;
-            float deadline = Time.time + 20f;
+            float deadline = Time.time + 8f;
             while (game.IsRunning && S(line) < exitS + 15d && Time.time < deadline)
             {
                 yield return new WaitForFixedUpdate();
                 minOffset = Mathf.Min(minOffset, line.Project(player.transform.position).D);
             }
             Assert.That(game.IsRunning, Is.True, "An unsteered runner must not fall in a guarded curve.");
-            Assert.That(S(line), Is.GreaterThanOrEqualTo(exitS + 15d), "The guard should carry the runner through the curve.");
             Assert.That(minOffset, Is.LessThan(-InnerEdge + 0.3f), "Going straight into a right curve must reach the outer (left) guard.");
+            Assert.That(player.Heading, Is.EqualTo(heading).Within(0.01f), "A guard never turns the facing (user 2026-11-04).");
+            Assert.That(S(line), Is.LessThan(exitS), "Without steering the guard must not carry the runner through the curve.");
         }
 
         // Measurement for the KartRider-style grip decision (DECISIONS 2026-10-05 T2b): full steer for

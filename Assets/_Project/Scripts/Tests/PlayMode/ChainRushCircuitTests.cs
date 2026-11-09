@@ -1,6 +1,7 @@
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
@@ -14,8 +15,8 @@ using UnityEditor.SceneManagement;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // The circuit race scene (COURSE.md T4): a bot runs three laps of the stadium and the lap counter is
-    // exact; going backwards over the line is not a lap, a fall into a gap puts the runner back before it, a restart
+    // The circuit race scene (COURSE.md T4): first-lap driving is in FlowTests' Lap matrix, exact finish accounting
+    // in its record/ghost test (user 2026-11-02). Here: backwards over the line is not a lap, a fall respawns, a restart
     // starts over.
     public sealed class ChainRushCircuitTests
     {
@@ -57,54 +58,6 @@ namespace ProtoHarness.Tests.PlayMode
             LogAssert.NoUnexpectedReceived();
         }
 
-        // ---- the bot runs three laps --------------------------------------------------------------------
-
-        [UnityTest, Timeout(180000)]
-        public IEnumerator Race_BotRunsThreeLaps_CountsThemAndTimesThemExactly()
-        {
-            game.SetInputSource(new CircuitBot(game, player, grapple, circuit));
-            Time.timeScale = 3f;
-            game.StartRun();
-            LapCounter laps = circuit.Laps;
-            float started = Time.realtimeSinceStartup;
-            float deadline = started + 150f;
-            float maxOffset = 0f;
-            double lastProgress = laps.Progress;
-            while (game.IsRunning && !laps.IsFinished && Time.realtimeSinceStartup < deadline)
-            {
-                maxOffset = Mathf.Max(maxOffset, Mathf.Abs(game.Track.Project(player.transform.position).D));
-                Assert.That(laps.Progress, Is.GreaterThanOrEqualTo(lastProgress - 1d), "The bot's progress must not run backwards. " + State());
-                lastProgress = laps.Progress;
-                yield return null;
-            }
-            Time.timeScale = timeScale;
-            Assert.That(game.HasFailed, Is.False, "The bot fell or died. " + State());
-            Assert.That(laps.IsFinished, Is.True, "Timed out after " + (Time.realtimeSinceStartup - started).ToString("F0") + " s. " + State());
-            Assert.That(game.HasFinished, Is.True, State());
-            Assert.That(laps.CompletedLaps, Is.EqualTo(3));
-            // ChainRushCircuit.unity's runner runs at 20 m/s (M1-T, 2026-10-18).
-            double lapSeconds = circuit.Definition.LapLength / 20d;
-            int sum = 0;
-            for (int lap = 1; lap <= 3; lap++)
-            {
-                float seconds = Ticks.ToSeconds(laps.LapTicks(lap));
-                Debug.Log($"ChainRush circuit lap {lap}: {seconds:F2} s");
-                Assert.That(seconds, Is.EqualTo(lapSeconds).Within(lapSeconds * 0.2d), $"lap {lap} time");
-                sum += laps.LapTicks(lap);
-            }
-            Assert.That(laps.TotalTicks, Is.EqualTo(sum));
-            Assert.That(game.Tick, Is.EqualTo(laps.LapEndTick(3)), "The game ends the race on the tick the third lap is completed.");
-            Assert.That(game.Elapsed, Is.EqualTo(Ticks.ToSeconds(laps.TotalTicks)).Within(1e-3f));
-            Assert.That(game.Health, Is.EqualTo(3));
-            Assert.That(maxOffset, Is.LessThan(RoadProfile.DeckHalfWidth - 0.4f), "The bot touched a guard.");
-            for (int cp = 0; cp < 3; cp++)
-            {
-                for (int lap = 1; lap <= 3; lap++) Assert.That(laps.CheckpointTick(lap, cp), Is.GreaterThan(0), $"lap {lap} checkpoint {cp}");
-            }
-            Debug.Log($"ChainRush circuit race: total {Ticks.ToSeconds(laps.TotalTicks):F2} s, {game.Grapples} grapples, slowest step {circuit.MaxStepMilliseconds:F2} ms, " +
-                      $"{circuit.PieceCount} road pieces, real time {Time.realtimeSinceStartup - started:F0} s, max offset {maxOffset:F2} m.");
-        }
-
         // ---- direction and gaps -------------------------------------------------------------------------
 
         [UnityTest]
@@ -120,6 +73,38 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(circuit.Laps.Progress, Is.LessThan(-5d), "The runner went backwards over the line. " + State());
             Assert.That(circuit.Laps.CompletedLaps, Is.Zero);
             Assert.That(circuit.Laps.IsFinished, Is.False);
+        }
+
+        // Rubbing a guard at a shallow angle the run goes on along it (review 2026-11-04). Here on the circuit: its
+        // guardScrapeDecel 25 outweighs its run acceleration 8, where the bench's 30 hides a scrape.
+        [UnityTest]
+        public IEnumerator Guard_ShallowRub_KeepsRunningAlongIt([Values(1f, 2f, 3f)] float angle)
+        {
+            game.SetInputSource(new TrackFollower(game.Track, player) { Steering = false });
+            game.StartRun();
+            yield return LandOnRoad();
+            int ready = game.Tick + Ticks.FromSeconds(4f);
+            while (game.IsRunning && player.HorizontalSpeed < 19f && game.Tick < ready) yield return new WaitForFixedUpdate();
+            Assert.That(player.HorizontalSpeed, Is.GreaterThanOrEqualTo(19f), "precondition: up to speed. " + State());
+            Vector3 position = player.transform.position;
+            TrackFrame frame = game.Track.Frame(position);
+            float offset = game.Track.Project(position).D;
+            int hits = 0;
+            game.CuePlayed += cue => { if (cue == RaceCue.GuardHit) hits++; };
+            // 0.2 m off the left guard (road half width 6 less the capsule's 0.38), leaning into it.
+            player.SetPosition(position + frame.Right * (-5.42f - offset));
+            float heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg - angle;
+            game.Racer.Heading = heading;
+            int end = game.Tick + Ticks.FromSeconds(1.5f);
+            while (game.IsRunning && game.Tick < end) yield return new WaitForFixedUpdate();
+            float reached = Mathf.Abs(game.Track.Project(player.transform.position).D);
+            Debug.Log($"ChainRush shallow rub: {angle:0} deg, offset {reached:0.00} m, speed {player.HorizontalSpeed:0.00} m/s.");
+            Assert.That(game.IsRunning, Is.True, State());
+            // The slide starts a skin and a probe gap short of the guard (RunnerMotor.TryFindGuardAhead): about 5.54 m.
+            Assert.That(reached, Is.GreaterThan(5.5f), "The runner should be against the guard. " + State());
+            Assert.That(Mathf.DeltaAngle(player.Heading, heading), Is.EqualTo(0f).Within(0.01f), "A guard never turns the facing. " + State());
+            Assert.That(player.HorizontalSpeed, Is.GreaterThan(18f), "A shallow rub must not stop the run. " + State());
+            Assert.That(hits, Is.EqualTo(0), "A rub is not a hit: it stays quiet (user 2026-11-05).");
         }
 
         // A fall no longer ends a circuit run: the runner comes back on the road before the gap, at rest and facing along
@@ -211,9 +196,12 @@ namespace ProtoHarness.Tests.PlayMode
             Teleport(startS - 12d);
             yield return LandOnRoad();
 
+            int comebacks = 0;
+            game.CuePlayed += cue => { if (cue == RaceCue.Respawn) comebacks++; };
             float deadline = Time.time + 10f;
             while (!player.IsRespawning && game.IsRunning && Time.time < deadline) yield return new WaitForEndOfFrame();
             Assert.That(player.IsRespawning, Is.True, "Running into the gap must put the runner back on the track. " + State());
+            Assert.That(comebacks, Is.EqualTo(1));
             float cameFrom = Time.time;
             Vector3 runner = player.transform.position;
             Vector3 forward = game.Track.Frame(runner).Forward;
@@ -389,11 +377,11 @@ namespace ProtoHarness.Tests.PlayMode
             game.StartRun();
             yield return LandOnRoad();
             yield return null;
-            // The start line is the last arc's end: its pole is 90 degrees aside and 40 m away, in reach since R4b (95 degrees,
-            // 40 + 6 m; until R4b, 75 degrees, it was not). It stays in reach for about 3.5 m past the arc (R4b, 2026-10-18:
-            // kept, to be judged in play at M1-T).
-            Assert.That(grapple.HasPoleCandidate, Is.True, "On the start line the last arc's pole is still in reach. " + State());
-            Assert.That(Vector3.Distance(grapple.PoleCandidate, feet[feet.Count - 1]), Is.LessThan(1e-3f), "The candidate is the pole of the arc just left.");
+            // The start line is the last arc's end. Specification changed (user 2026-10-30, "이미 지나간 코너 같은 곳에 연결하지
+            // 않도록"; DECISIONS "봉 걸기"): on the ground an arc's pole is offered only up to halfway round it and never past its
+            // exit, so the pole of the arc just left is no longer in reach here (R4b's 95 degrees had kept it for about 3.5 m).
+            // The 2026-10-30 change did not run this test; found at the 2026-11-02 merge.
+            Assert.That(grapple.HasPoleCandidate, Is.False, "On the start line the arc just left offers no pole. " + State());
 
             // Mid-straight both poles are out of reach: the last arc's 72 m behind-aside, the first arc's 80 m ahead.
             Teleport(60d);
@@ -413,9 +401,10 @@ namespace ProtoHarness.Tests.PlayMode
         // Halfway round a corner the pole must still hook (play report 2026-10-19; measured 2026-10-25, DECISIONS "측정: 코너
         // 중간에 …"): the runner's facing falls 5 to 17 degrees behind the track in an R22 corner (the turn limit of speed / 25 m),
         // which put the pole past 95 degrees of the facing from about 7% of the arc on. The angle is the track's direction's,
-        // so through the whole arc, on the ground, the corner's pole is offered.
+        // so on the ground the corner's pole is offered up to halfway round; past that the corner counts as passed and it is
+        // not (user 2026-10-30, RunnerMotor.poleHookArcShare 0.5). 5% either side of halfway is left unchecked.
         [UnityTest, Timeout(60000)]
-        public IEnumerator Swing_RoundTheFirstCorner_ItsPoleIsOfferedThroughTheWholeArc()
+        public IEnumerator Swing_RoundTheFirstCorner_ItsPoleIsOfferedUpToHalfwayRound()
         {
             double arcStart = -1d;
             for (double s = 100d; s < 250d && arcStart < 0d; s += 0.5d)
@@ -426,7 +415,7 @@ namespace ProtoHarness.Tests.PlayMode
             var feet = new System.Collections.Generic.List<Vector3>();
             game.Track.GetPoles(feet);
             Vector3 pole = feet[0];
-            int inArc = 0, offered = 0;
+            int inArc = 0, early = 0, offered = 0, late = 0, offeredLate = 0;
             string firstMiss = null;
             System.Action<int> sample = tick =>
             {
@@ -434,7 +423,17 @@ namespace ProtoHarness.Tests.PlayMode
                 TrackCoord here = game.Track.Project(now);
                 if (here.S < arcStart || here.S > arcEnd || !player.IsGrounded) return;
                 inArc++;
-                if (player.TryFindPole(out Vector3 got) && Vector3.Distance(got, pole) < 1e-3f) offered++;
+                double share = (here.S - arcStart) / (arcEnd - arcStart);
+                bool found = player.TryFindPole(out Vector3 got) && Vector3.Distance(got, pole) < 1e-3f;
+                if (share >= 0.55d)
+                {
+                    late++;
+                    if (found) offeredLate++;
+                    return;
+                }
+                if (share > 0.45d) return;
+                early++;
+                if (found) offered++;
                 else if (firstMiss == null)
                 {
                     Vector3 toward = pole - now;
@@ -451,9 +450,13 @@ namespace ProtoHarness.Tests.PlayMode
             while (game.IsRunning && circuit.Laps.Progress < arcEnd + 2d && Time.realtimeSinceStartup < deadline) yield return null;
             Time.timeScale = timeScale;
             game.TickCompleted -= sample;
-            Debug.Log($"ChainRush first corner (S {arcStart:F1}..{arcEnd:F1}): its pole offered on {offered} of {inArc} grounded ticks in the arc.");
+            Debug.Log($"ChainRush first corner (S {arcStart:F1}..{arcEnd:F1}): its pole offered on {offered} of {early} grounded ticks " +
+                      $"in the first 45% of the arc, on {offeredLate} of {late} from 55% on ({inArc} in the arc).");
             Assert.That(inArc, Is.GreaterThan(30), "The bot must run through the corner on the ground. " + State());
-            Assert.That(offered, Is.EqualTo(inArc), "First tick without the corner's pole: " + firstMiss);
+            Assert.That(early, Is.GreaterThan(10), "The bot must run the first part of the corner on the ground. " + State());
+            Assert.That(late, Is.GreaterThan(10), "and the last part.");
+            Assert.That(offered, Is.EqualTo(early), "First tick without the corner's pole: " + firstMiss);
+            Assert.That(offeredLate, Is.Zero, "Past halfway round the corner counts as passed.");
         }
 
         // ---- helpers ------------------------------------------------------------------------------------

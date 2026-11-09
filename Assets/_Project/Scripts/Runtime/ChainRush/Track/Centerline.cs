@@ -17,6 +17,9 @@ namespace ProtoHarness.ChainRush.Track
     // (COURSE.md T4). SetFocus narrows any query to the pieces around an S the caller is tracking.
     public sealed class Centerline
     {
+        // How far above or below a pole's point its shaft goes (SwingLook.PoleHeight, PoleDepth).
+        public const float PoleVerticalReach = 20f;
+
         private struct Piece
         {
             public double StartS;
@@ -64,6 +67,7 @@ namespace ProtoHarness.ChainRush.Track
         private readonly List<Piece> pieces = new List<Piece>(16);
         private readonly List<ExtraPole> extraPoles = new List<ExtraPole>(8);
         private readonly List<Launch> launches = new List<Launch>(4);
+        private readonly List<double> boostZones = new List<double>(4);
         private readonly List<Branch> branches = new List<Branch>(2);
         private readonly Vector3 origin;
         private readonly float originYaw;
@@ -104,13 +108,14 @@ namespace ProtoHarness.ChainRush.Track
             }
         }
 
-        // Back to the construction origin with no pieces, no added poles, no launches and no branches; S restarts at zero
+        // Back to the construction origin with no pieces, added poles, launches, boost zones or branches; S restarts at zero
         // and the grade at flat.
         public void Clear()
         {
             pieces.Clear();
             extraPoles.Clear();
             launches.Clear();
+            boostZones.Clear();
             branches.Clear();
             end = origin;
             endYaw = originYaw;
@@ -286,7 +291,7 @@ namespace ProtoHarness.ChainRush.Track
         {
             Piece piece = PieceAt(world, out float along, out float right);
             if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out float branchRight))
-                return new TrackCoord(Wrap(branch.MapS(onBranch.StartS + branchAlong)), branchRight, world.y - HeightOn(onBranch, branchAlong));
+                return new TrackCoord(WrapIfLoop(branch.MapS(onBranch.StartS + branchAlong)), branchRight, world.y - HeightOn(onBranch, branchAlong));
             return new TrackCoord(WrapIfLoop(piece.StartS + along), right, world.y - HeightOn(piece, along));
         }
 
@@ -297,7 +302,7 @@ namespace ProtoHarness.ChainRush.Track
             if (TryBranchAt(world, piece, along, right, out Branch branch, out Piece onBranch, out float branchAlong, out _))
             {
                 TrackFrame own = FrameOn(onBranch, branchAlong);
-                return new TrackFrame(Wrap(branch.MapS(own.S)), own.Position, own.Forward, own.Right, own.Grade, own.Curvature);
+                return new TrackFrame(WrapIfLoop(branch.MapS(own.S)), own.Position, own.Forward, own.Right, own.Grade, own.Curvature);
             }
             TrackFrame frame = FrameOn(piece, along);
             if (!isLoop) return frame;
@@ -306,14 +311,14 @@ namespace ProtoHarness.ChainRush.Track
 
         public int BranchCount => branches.Count;
 
-        // A shortcut's road beside the loop (user 2026-10-25, Finger Lanes): line is its open centerline from the loop at
-        // fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the loop's road half width there. A point
-        // off the loop's road (farther to the side than mainHalfWidth) and nearer to the branch than to the loop is on the
-        // branch: Project and Frame answer with the branch's pieces, and S goes from fromS to toS in proportion along it, so
-        // the laps keep counting across. The branch's arcs have corner poles like the loop's.
+        // A shortcut's road beside the main line, closed or open (user 2026-10-25, Finger Lanes): line is its open centerline
+        // from the main line at fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the main road's half
+        // width there. A point off the main road (farther to the side than mainHalfWidth) and nearer to the branch than to the
+        // main line is on the branch: Project and Frame answer with the branch's pieces, and S goes from fromS to toS in
+        // proportion along it, so the laps keep counting across. The branch's arcs have corner poles like the main line's.
         public void AddBranch(double fromS, double toS, Centerline line, float mainHalfWidth)
         {
-            if (!isLoop) throw new InvalidOperationException("Only a closed centerline takes branches.");
+            RequirePieces();
             if (line == null) throw new ArgumentNullException(nameof(line));
             if (line.isLoop || line.pieces.Count == 0) throw new ArgumentException("A branch is an open line with pieces.", nameof(line));
             if (!(fromS >= 0d) || !(toS > fromS) || !(toS < endS))
@@ -407,6 +412,59 @@ namespace ProtoHarness.ChainRush.Track
 
         public int LaunchCount => launches.Count;
 
+        // A boost pad at s (TrackDefinition.Segment.BoostStraight): a runner on the road crossing it forward cuts its
+        // booster and takes the zone's speed (RunnerMotor). Like a launch it stays by S through ShiftOrigin and is cleared.
+        public void AddBoostZone(double s)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            boostZones.Add(s);
+        }
+
+        public int BoostZoneCount => boostZones.Count;
+
+        // Appends the pads' S in AddBoostZone order, for presentation to lay a pad on each.
+        public void GetBoostZones(List<double> zones)
+        {
+            if (zones == null) throw new ArgumentNullException(nameof(zones));
+            for (int i = 0; i < boostZones.Count; i++) zones.Add(boostZones[i]);
+        }
+
+        // A pad crossed moving forward: past fromS and no farther than toS, including a move across a loop's seam,
+        // as TryLaunchBetween. A move backward or nowhere crosses none.
+        public bool TryBoostBetween(double fromS, double toS)
+        {
+            if (boostZones.Count == 0) return false;
+            double moved = toS - fromS;
+            if (isLoop && moved < -endS * 0.5d) moved += endS;
+            if (!(moved > 0d)) return false;
+            for (int i = 0; i < boostZones.Count; i++)
+            {
+                double ahead = boostZones[i] - fromS;
+                if (isLoop) ahead -= Math.Floor(ahead / endS) * endS;
+                if (ahead > 0d && ahead <= moved) return true;
+            }
+            return false;
+        }
+
+        // The nearest pad at or behind s, no more than within metres back (across a loop's seam too): where a runner that
+        // fell after a pad comes back so it can take the pad again (RunnerMotor's respawn).
+        public bool TryBoostZoneBehind(double s, double within, out double zoneS)
+        {
+            if (double.IsNaN(s) || double.IsInfinity(s)) throw new ArgumentOutOfRangeException(nameof(s), s, "S must be finite.");
+            if (!(within >= 0d)) throw new ArgumentOutOfRangeException(nameof(within), within, "The reach cannot be negative.");
+            zoneS = 0d;
+            double best = double.PositiveInfinity;
+            for (int i = 0; i < boostZones.Count; i++)
+            {
+                double behind = s - boostZones[i];
+                if (isLoop) behind -= Math.Floor(behind / endS) * endS;
+                if (behind < 0d || behind > within || behind >= best) continue;
+                best = behind;
+                zoneS = s - behind;
+            }
+            return !double.IsPositiveInfinity(best);
+        }
+
         // The first launch (AddLaunch order) a runner crosses moving forward from fromS to toS, S as Frame and Project
         // give it: past fromS and no farther than toS. On a loop the move may wrap the seam and so may the launch's S. A move
         // backward or nowhere crosses none.
@@ -432,10 +490,15 @@ namespace ProtoHarness.ChainRush.Track
 
         // Every arc piece has one pole at its center (the corner pole swing, PROPOSAL_CORNER_POLE.md 2-1), and AddPole
         // adds others. Of the poles within maxAngleDegrees either side of headingDegrees (world yaw, as RacerState.Heading)
-        // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level; ties
+        // and no farther than their arc's radius (an added pole's reach) plus extraReach, the nearest, measured level, of
+        // those within PoleVerticalReach of world's height (a road that folds under itself has poles on other levels); ties
         // go to the earlier piece, and arcs come before added poles. False when there is none. An arc's pole sits at the
         // arc's start height. All poles are searched, focus or not: a runner asks only when it acts.
-        public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole)
+        // A corner already passed is not offered (user 2026-10-30): an arc's pole only from before the arc up to
+        // maxArcShare of the way round it, by the angle about its center (ArcSwept), so a wide arc holds back as much of
+        // itself as a tight one; past its end, none. An added pole, never once it is behind (more than 90 degrees).
+        public bool TryFindPole(Vector3 world, float headingDegrees, float maxAngleDegrees, float extraReach, out Vector3 pole,
+            float maxArcShare = 1f)
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
             if (!IsFinite(headingDegrees)) throw new ArgumentOutOfRangeException(nameof(headingDegrees), headingDegrees, "Heading must be finite.");
@@ -443,13 +506,15 @@ namespace ProtoHarness.ChainRush.Track
                 throw new ArgumentOutOfRangeException(nameof(maxAngleDegrees), maxAngleDegrees, "The angle must be within [0, 180] degrees.");
             if (!(extraReach >= 0f) || float.IsInfinity(extraReach))
                 throw new ArgumentOutOfRangeException(nameof(extraReach), extraReach, "The extra reach must be finite and not negative.");
+            if (!(maxArcShare > 0f && maxArcShare <= 1f))
+                throw new ArgumentOutOfRangeException(nameof(maxArcShare), maxArcShare, "The arc share must be within (0, 1].");
             pole = default;
             bool found = false;
             float bestDistance = float.MaxValue;
             for (int i = 0; i < pieces.Count; i++)
             {
                 Piece piece = pieces[i];
-                if (piece.Curvature == 0f) continue;
+                if (piece.Curvature == 0f || !BeforeShare(piece, world, maxArcShare)) continue;
                 if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
                 pole = piece.Center;
                 found = true;
@@ -458,23 +523,37 @@ namespace ProtoHarness.ChainRush.Track
                 for (int i = 0; i < branches[b].Pieces.Count; i++)
                 {
                     Piece piece = branches[b].Pieces[i];
-                    if (piece.Curvature == 0f) continue;
+                    if (piece.Curvature == 0f || !BeforeShare(piece, world, maxArcShare)) continue;
                     if (!InReach(piece.Center, 1f / Mathf.Abs(piece.Curvature) + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
                     pole = piece.Center;
                     found = true;
                 }
             for (int i = 0; i < extraPoles.Count; i++)
             {
-                if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, maxAngleDegrees, ref bestDistance)) continue;
+                if (!InReach(extraPoles[i].Position, extraPoles[i].Reach + extraReach, world, headingDegrees, Mathf.Min(maxAngleDegrees, 90f), ref bestDistance)) continue;
                 pole = extraPoles[i].Position;
                 found = true;
             }
             return found;
         }
 
+        // Whether world is no more than share of the way round an arc: the angle swept about its center from the arc's
+        // start, in its turning direction, at most share of its turn, and more than -90 degrees (before the arc). Arcs
+        // turn at most 180 degrees (TrackDefinition), so a point past a half turn's end reads below -90 and is out.
+        private static bool BeforeShare(in Piece piece, Vector3 world, float share)
+        {
+            Vector3 from = piece.Start - piece.Center;
+            Vector3 to = world - piece.Center;
+            from.y = 0f;
+            to.y = 0f;
+            float swept = Vector3.SignedAngle(from, to, Vector3.up) * Mathf.Sign(piece.Curvature);
+            return swept > -90f && swept <= share * piece.Length * Mathf.Abs(piece.Curvature) * Mathf.Rad2Deg;
+        }
+
         // Whether a pole is within reach, nearer than the best so far and inside the angle; if so it becomes the best.
         private static bool InReach(Vector3 pole, float reach, Vector3 world, float headingDegrees, float maxAngleDegrees, ref float bestDistance)
         {
+            if (Mathf.Abs(pole.y - world.y) > PoleVerticalReach) return false;
             Vector3 toward = pole - world;
             toward.y = 0f;
             float distance = toward.magnitude;
@@ -560,12 +639,13 @@ namespace ProtoHarness.ChainRush.Track
         }
 
         // The first piece whose span the point has not passed; before the first piece or past the
-        // last, that end piece, with along running negative or beyond its length.
+        // last, that end piece, with along running negative or beyond its length. A loop, a focused
+        // line and a line with branches take the nearest piece instead.
         private Piece PieceAt(Vector3 world, out float along, out float right)
         {
             if (!IsFinite(world)) throw new ArgumentOutOfRangeException(nameof(world), world, "Position must be finite.");
             RequirePieces();
-            if (isLoop || hasFocus) return NearestPiece(world, out along, out right);
+            if (isLoop || hasFocus || branches.Count != 0) return NearestPiece(world, out along, out right);
             int last = pieces.Count - 1;
             for (int i = 0; i < last; i++)
             {

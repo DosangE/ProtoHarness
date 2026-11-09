@@ -12,6 +12,39 @@ namespace ProtoHarness.Tests.EditMode
 
         private static LapCounter Counter(int laps = 3) => new LapCounter(Lap, Checkpoints, laps);
 
+        [Test]
+        public void LapCounter_OpenCourse_CountsAbsoluteProgressAndFinishesOnlyAtTheFinish()
+        {
+            var counter = new LapCounter(120d, new[] { 30d, 90d }, 1, false);
+            counter.Begin(-10d, 0);
+            Assert.That(counter.Progress, Is.EqualTo(-10d));
+            counter.Update(0d, 1);
+            Assert.That(counter.IsFinished, Is.False);
+            counter.Update(100d, 2);
+            Assert.That(counter.Progress, Is.EqualTo(100d), "A large forward move must not fold backwards.");
+            counter.Update(119.9d, 3);
+            Assert.That(counter.IsFinished, Is.False);
+            counter.Update(120.1d, 4);
+            Assert.That(counter.IsFinished, Is.True);
+            Assert.That(counter.RaceFraction, Is.EqualTo(1d));
+            Assert.That(counter.TotalTicks, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void LapCounter_OpenCourseReverseAndRestore_RepeatsAbsoluteProgress()
+        {
+            var counter = new LapCounter(120d, Array.Empty<double>(), 1, false);
+            counter.Begin(0d, 0);
+            counter.Update(100d, 1);
+            LapCounter.Snapshot snapshot = counter.Capture();
+            counter.Update(-5d, 2);
+            Assert.That(counter.Progress, Is.EqualTo(-5d));
+            counter.Restore(snapshot);
+            counter.Update(121d, 3);
+            Assert.That(counter.IsFinished, Is.True);
+            Assert.Throws<ArgumentException>(() => new LapCounter(120d, Array.Empty<double>(), 2, false));
+        }
+
         // Moves the runner `metres` forward in 0.2 m steps from the current S, folding S into one lap.
         private static double Drive(LapCounter counter, double s, double metres, ref int tick)
         {

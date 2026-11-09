@@ -1,10 +1,9 @@
 using UnityEngine;
-using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush.Motion
 {
-    // The chain slingshot booster (chain action when not grappling): the chain hooks a point Lead ahead on the centerline
-    // and pulls hard, turning the runner toward it, then extra speed carries for a moment. Its countdown is
+    // The chain slingshot booster (chain action when not grappling): the chain hooks a point Lead ahead along the facing
+    // and pushes that way without turning the runner, then extra speed carries for a moment. Its countdown is
     // RacerState.SlingTicks: above the carry ticks it pulls, at or below them it carries.
     public static class Slingshot
     {
@@ -16,7 +15,6 @@ namespace ProtoHarness.ChainRush.Motion
             public float PullTime;
             public float PullAcceleration;
             public float TopSpeed;
-            public float TurnRate;
             public float CarryTime;
             public float CarrySpeed;
             public float OverspeedFalloff;
@@ -34,36 +32,29 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // Letting go of the throttle cuts a booster at once, as in KartRider: the slingshot's pull and carry and the
-        // speed a swing let go with. The speed already gained then falls off like any coasting.
+        // speed a swing or a boost pad left. The speed already gained then falls off like any coasting.
         public static void Cut(RacerState racer)
         {
             racer.SlingTicks = 0;
             racer.SwingCarrySpeed = 0f;
+            racer.BoostZoneCarrySpeed = 0f;
         }
 
-        // While the slingshot pulls, the facing turns toward the hook point, which rides the centerline ahead so the pull
-        // follows curves. Returns the hook point for presentation.
-        public static Vector3 SteerToward(RacerState racer, Centerline track, TrackFrame frame, Vector3 position, float dt, in Settings settings)
-        {
-            ref float heading = ref racer.Heading;
-            Vector3 target = track.FrameAt(frame.S + settings.Lead).Position + Vector3.up * (position.y - frame.Position.y);
-            Vector3 toward = target - position;
-            toward.y = 0f;
-            if (toward.sqrMagnitude > 0.01f)
-                heading = Mathf.Repeat(Mathf.MoveTowardsAngle(heading, Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, settings.TurnRate * dt) + 180f, 360f) - 180f;
-            return target;
-        }
+        // The hook point for presentation, Lead ahead along the runner's facing. The booster does not change the facing.
+        public static Vector3 HookPoint(float heading, Vector3 position, in Settings settings) =>
+            position + RunDrive.FacingOf(heading) * settings.Lead;
 
         // A booster's push toward its speed: PullAcceleration at rest, shrinking to nothing at the boost speed. Above it
         // the speed falls back like any overspeed. The boost speed is never zero (TopSpeed, CarrySpeed > the run speed).
         public static float BoostAcceleration(float speed, float boostSpeed, in Settings settings) =>
             speed < boostSpeed ? settings.PullAcceleration * (1f - speed / boostSpeed) : settings.OverspeedFalloff;
 
-        // A running booster lifts the run target to its speed: CarrySpeed while carrying, TopSpeed while pulling.
-        public static float RaiseTarget(float runTarget, bool pulling, bool carrying, in Settings settings)
+        // A running booster lifts the run target to its speed: CarrySpeed while carrying, TopSpeed while pulling. turnCost is
+        // the share turning leaves (RunDrive.TurnCost): steering costs a booster speed too (user 2026-11-04).
+        public static float RaiseTarget(float runTarget, bool pulling, bool carrying, float turnCost, in Settings settings)
         {
-            if (carrying) runTarget = Mathf.Max(runTarget, settings.CarrySpeed);
-            if (pulling) runTarget = Mathf.Max(runTarget, settings.TopSpeed);
+            if (carrying) runTarget = Mathf.Max(runTarget, settings.CarrySpeed * turnCost);
+            if (pulling) runTarget = Mathf.Max(runTarget, settings.TopSpeed * turnCost);
             return runTarget;
         }
     }

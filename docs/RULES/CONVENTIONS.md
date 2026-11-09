@@ -28,6 +28,7 @@ Assets/
 
 - 새 기능 묶음은 `Scripts/Runtime/<기능>/` 로 폴더를 만든다. 파일 15개 넘어가면 하위 분리.
 - Editor 전용 코드가 Runtime 폴더에 들어가면 빌드가 깨진다. 반드시 `Editor/` 아래.
+- **`art-src/<이름>/`** (리포 루트, `Assets/` 바깥): Blender 원본 `.blend` 와 FBX 후보. Unity 가 읽지 않는다. 쓰는 것은 `blender-artist` 다. FBX 를 `Assets/_Project/Art/Models/` 로 복사하고 Unity 가 임포트하게 하는 것은 승인받은 `unity-implementer` 작업이다. `.blend` 는 `Assets/` 에 두지 않는다 — Unity 6.3 매뉴얼: 독점 형식은 "files fail to import unless you have the corresponding 3D modeling software installed" (`docs/DECISIONS.md` 2026-11-09 "Blender 아트 에이전트").
 
 ### 1-3. 형태 규칙
 
@@ -40,6 +41,7 @@ Assets/
 | ScriptableObject | `[CreateAssetMenu(menuName = "ProtoHarness/<범주>/<이름>")]` 필수 |
 | 프리팹 / 씬 | PascalCase (`PlayerRig.prefab`, `Sandbox.unity`) |
 | 머티리얼 / 텍스처 | `M_이름`, `T_이름_BaseColor` |
+| Blender 원본 / FBX | PascalCase, 같은 이름 쌍 (`art-src/SkywaySign/SkywaySign.blend` → `SkywaySign.fbx`). 머티리얼 슬롯은 `M_이름` |
 | 테스트 | `<대상>Tests.cs`, 메서드는 `대상_조건_기대결과` |
 | asmdef | 파일명 = 어셈블리명 = `ProtoHarness.<영역>` |
 

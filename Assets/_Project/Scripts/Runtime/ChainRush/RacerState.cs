@@ -21,6 +21,7 @@ namespace ProtoHarness.ChainRush
         private float swingHookSpeed;
         private float swingHookRadius;
         private float swingCarrySpeed;
+        private float boostZoneCarrySpeed;
         private bool grappleEmpowered;
         private bool airGrappleUsed;
         private int health;
@@ -54,6 +55,7 @@ namespace ProtoHarness.ChainRush
             public float SwingHookSpeed;
             public float SwingHookRadius;
             public float SwingCarrySpeed;
+            public float BoostZoneCarrySpeed;
             public bool GrappleEmpowered;
             public bool AirGrappleUsed;
             public int Health;
@@ -128,6 +130,8 @@ namespace ProtoHarness.ChainRush
         public ref float SwingHookRadius => ref swingHookRadius;
         // After a swing lets go, the speed it carried above running speed, falling off over time; zero when none.
         public ref float SwingCarrySpeed => ref swingCarrySpeed;
+        // After a boost pad, the pad's speed as it wears off toward running speed; zero when none.
+        public ref float BoostZoneCarrySpeed => ref boostZoneCarrySpeed;
         // The current grapple was empowered by a chain action: faster reel, stronger release.
         public bool GrappleEmpowered => grappleEmpowered;
         // A grapple was hooked since the runner last stood on something: one grapple per time in the air.
@@ -174,6 +178,7 @@ namespace ProtoHarness.ChainRush
             swingHookSpeed = 0f;
             swingHookRadius = 0f;
             swingCarrySpeed = 0f;
+            boostZoneCarrySpeed = 0f;
             grappleEmpowered = false;
             airGrappleUsed = false;
             jumpQueued = false;
@@ -195,6 +200,7 @@ namespace ProtoHarness.ChainRush
             SwingHookSpeed = swingHookSpeed,
             SwingHookRadius = swingHookRadius,
             SwingCarrySpeed = swingCarrySpeed,
+            BoostZoneCarrySpeed = boostZoneCarrySpeed,
             GrappleEmpowered = grappleEmpowered,
             AirGrappleUsed = airGrappleUsed,
             Health = health,
@@ -227,6 +233,7 @@ namespace ProtoHarness.ChainRush
             swingHookSpeed = snapshot.SwingHookSpeed;
             swingHookRadius = snapshot.SwingHookRadius;
             swingCarrySpeed = snapshot.SwingCarrySpeed;
+            boostZoneCarrySpeed = snapshot.BoostZoneCarrySpeed;
             grappleEmpowered = snapshot.GrappleEmpowered;
             airGrappleUsed = snapshot.AirGrappleUsed;
             health = snapshot.Health;

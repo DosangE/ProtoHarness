@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 
 namespace ProtoHarness.ChainRush.Flow
@@ -17,8 +18,13 @@ namespace ProtoHarness.ChainRush.Flow
         public RaceMode Mode { get; }
         public SpeedClass Speed { get; }
         public RunnerProfile Runner { get; }
+        // The track's own road and wall materials; null keeps the race scene's.
+        public TrackLook Look { get; }
+        // Where a tutorial starts (a row of TutorialCourse.Stages); 0 for a race.
+        public int FirstStage { get; }
 
-        public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner)
+        public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner,
+            TrackLook look = null, int firstStage = 0)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A race needs the track's title for the HUD.", nameof(title));
@@ -26,12 +32,15 @@ namespace ProtoHarness.ChainRush.Flow
             if (!Enum.IsDefined(typeof(RaceMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown race mode.");
             if (!Enum.IsDefined(typeof(SpeedClass), speed)) throw new ArgumentOutOfRangeException(nameof(speed), speed, "Unknown speed class.");
             if (runner == null) throw new ArgumentNullException(nameof(runner));
+            if (firstStage < 0) throw new ArgumentOutOfRangeException(nameof(firstStage), firstStage, "A first stage cannot be negative.");
             Track = track;
             Title = title;
             EnvironmentScene = environmentScene;
             Mode = mode;
             Speed = speed;
             Runner = runner;
+            Look = look;
+            FirstStage = firstStage;
         }
     }
 }

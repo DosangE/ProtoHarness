@@ -5,7 +5,7 @@
 > 파견할지 말지(§7-3 파견 기준)와 **병렬 절대 금지**는 CLAUDE.md §7 에 있다. 파견 여부는 그쪽에서 먼저 판단한다.
 > 이 내용을 고칠 때는 이 파일만 고친다. CLAUDE.md 에 사본을 두지 않는다.
 
-### 7-1. 5종
+### 7-1. 7종
 
 | 에이전트 | 작업 | 쓰기 | 모델 | 노력 |
 |---|---|---|---|---|
@@ -14,6 +14,12 @@
 | `unity-reviewer` | 리뷰 (§0/§1/§5 체크리스트) | ❌ | `claude-opus-5-5` | high |
 | `unity-implementer` | 생성 | `Assets/` | `claude-opus-5-5` | high |
 | `unity-verifier` | 검증 (Unity MCP) | ❌ | `claude-opus-5-5` | high |
+| `blender-artist` | 모델링 (Blender MCP) | `art-src/` 만 | `claude-opus-5-5` | high |
+| `gameplay-designer` | 기획 (피드백 → 가설·변경안·플레이테스트 설계·요청서 초안) | ❌ | `claude-opus-5-5` | high |
+
+- `blender-artist` 는 사용자의 열린 Blender 하나에 붙는다. 같은 Blender 를 두 에이전트(Claude·Codex 포함)가 동시에 쓰지 않는다. 결과를 `Assets/` 로 옮기는 것은 승인받은 `unity-implementer` 작업이다 (`docs/DECISIONS.md` 2026-11-09 "Blender 아트 에이전트").
+
+- `gameplay-designer` 를 쓰는 때: 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때. 파견 여부는 §7-3(사용자가 지시할 때)을 따른다. 파견문에는 `git rev-parse HEAD` 값을 적는다 — 이 에이전트는 Bash 가 없어 인덱스 신선도를 스스로 확인하지 못한다. 역할 경계와 응답 형식은 정의(`.claude/agents/gameplay-designer.md`)가 원본이다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
 
 - 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
 
@@ -59,4 +65,6 @@
 - **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만 — 위 표의 병합 전 리뷰 1회만 예외)과 §3-4(`승인:`·`브랜치:` 줄을 요청 첫머리에)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
 - **쓰기 작업은 맡기지 않는다.** Codex 에 쓰기를 맡기는 것은 그 자체가 §3 합의 대상이다. Codex 기본 지침은 "되돌릴 수 있는 작업과 수정은 허락을 묻지 말고 진행" 쪽이라(2026-10-26 세션 기록 `base_instructions`) §3 과 방향이 반대다.
 - **Unity 에디터는 한 번에 한쪽만 쓴다.** Claude 와 Codex 는 같은 relay 로 같은 에디터에 붙는다. 한쪽이 Unity MCP 를 쓰는 동안 다른 쪽은 쓰지 않는다 (CLAUDE.md §7 병렬 절대 금지 2번).
+- **Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다** (사용자 2026-11-06 "쓸 순 있지만 내가 너에게 명령할때 codex로 구현하고 mcp 활용하라고 사용 허락할때만"). "codex로 구현" 만으로는 허락이 아니다. 허락이 있으면 `tools/codex-unity.ps1 -PromptFile <파일> [-Write]` 로 부르고, 지시서에 `Unity MCP: 이 실행에서 허용` 줄과 쓸 수 있는 도구를 적는다. 허락이 없으면 companion 을 그대로 부르고 지시서에 `Unity MCP: 허용 안 됨` 을 적는다. 스크립트는 그 실행 동안만 `~/.codex/config.toml` 의 도구 승인을 `approve` 로 두고 끝나면 되돌린다. 서버 이름은 머신마다 달라(`unity_mcp`, `unity-mcp`) relay 를 쓰는 서버를 찾아 쓴다. 스크립트가 강제 종료돼도 따로 띄운 감시 프로세스가 지운다. 전원이 끊긴 뒤에는 `-Status` 로 보고 `-Close` 로 닫는다. 승인을 설정에 남겨 두지 않는다.
+- **Codex 의 Blender MCP 는 평소 꺼 둔다.** `~/.codex/config.toml` 에 `[mcp_servers.blender]` 를 `enabled = false` 로 등록했다(2026-11-09, `codex mcp list` 에 `disabled`). 켜는 방식은 Codex 로 Blender 를 부르는 첫 작업에서 합의하고, 그때 차단 → 허용 → 재차단을 실행해 확인한다. `tools/codex-unity.ps1` 은 Unity 도구 두 개만 연다(`codex-unity.ps1:38-39`).
 - **stop 리뷰 게이트(`/codex:setup --enable-review-gate`)는 켜지 않는다.** 파일을 고친 턴마다 끝에서 Codex 리뷰가 돌고 최대 900초를 기다린다(플러그인 `hooks/hooks.json`). 켜려면 합의한다.

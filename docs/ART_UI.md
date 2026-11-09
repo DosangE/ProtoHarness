@@ -63,7 +63,7 @@ H = Screen.height / s
 |---|---:|---|---|
 | 타이틀 CHAIN / RUSH. | 140 | Bold | White, 왼쪽 |
 | 레이스 대기 CHAIN / THE SKY. | 96 | Bold | White, 왼쪽 |
-| 카운트다운 | 160 | Bold | Mint, 가운데 |
+| 카운트다운 | 160 (320 으로 그려 축소) | Bahnschrift BoldAndItalic | Mint, 가운데. 2.6배에서 0.3초에 줄어들고 마지막 0.1초에 크기 0 으로 사라진다. 반투명은 쓰지 않는다 (`FeedbackLook.CueScale`) |
 | HUD 속도·결과 제목 | 38 | Bold | Mint |
 | 패널 제목 | 32 | Bold | White |
 | 로비 활성 항목 | 26 | Bold | White 또는 선택 시 Ink, 세로 가운데 |
@@ -74,7 +74,7 @@ H = Screen.height / s
 | 로비 기록·설정 값 | 18 | Normal | Muted 또는 선택 시 Ink, 오른쪽 |
 | 보조 안내·단위 | 15 | Normal | Muted |
 
-영문 제목은 대문자, 한국어는 기능을 바로 읽을 수 있는 짧은 표현을 쓴다. 랩 시간은 기존 FormatTime의 mm:ss.s 표기를 유지한다. 속도의 단위는 기존 M·S 표기를 따른다.
+영문 제목은 대문자, 한국어는 기능을 바로 읽을 수 있는 짧은 표현을 쓴다. 랩 시간은 기존 FormatTime의 mm:ss.s 표기를 유지한다. 속도는 정수 km/h 로 보이고 단위는 `KM / H` 로 적는다. 시뮬 값은 m/s 다.
 
 ## 5. 타이틀
 

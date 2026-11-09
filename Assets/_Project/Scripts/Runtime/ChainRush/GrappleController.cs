@@ -136,7 +136,7 @@ namespace ProtoHarness.ChainRush
             game.Racer.Attach(index, Mathf.Max(MinRopeLength, Vector3.Distance(transform.position, anchors[index].position)));
             rope.enabled = true;
             game.RegisterGrapple();
-            game.PlayCue(RaceCue.Action);
+            game.PlayCue(RaceCue.Grapple);
             return true;
         }
 

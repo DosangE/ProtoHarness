@@ -123,6 +123,14 @@ namespace ProtoHarness.Tests.PlayMode
             public TickInput Consume() => new TickInput(driver.Consume().Steer, false, false, false);
         }
 
+        // Holds a light left steer, so the runner reaches the guard and keeps sliding along it, turning further into it.
+        private sealed class GuardRubBot : IInputSource
+        {
+            public void Poll() { }
+            public void Clear() { }
+            public TickInput Consume() => new TickInput(-0.3f, false, false, false);
+        }
+
         [UnitySetUp]
         public IEnumerator SetUp()
         {
@@ -279,6 +287,40 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(difference, Is.Null, $"snapshot '{mark.Name}' at tick {mark.Tick}: {difference}");
             }
             Debug.Log("ChainRush rollback: sling, corner swing, rope and carry snapshots " + string.Join(", ", marks.ConvertAll(m => m.Name + "@" + m.Tick)) + " replay identically.");
+        }
+
+        // A guard's slide and turn-out are worked out from the position each tick, with nothing kept between ticks
+        // (RunnerMotor.TryFindGuardAhead). Snapshots taken while sliding along a guard replay every tick bit for bit.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Rollback_SlidingAlongAGuard_ReplaysEveryTickBitForBit()
+        {
+            yield return Load(CircuitScene);
+            var log = new InputLog();
+            var marks = new List<Mark>();
+            StateTrace original = CircuitTrace(new InputRecorder(new GuardRubBot(), log));
+            Time.timeScale = 0f;
+            game.StartRun();
+            float lastOffset = 0f;
+            while (game.IsRunning && game.Tick < 1500 && marks.Count < 2)
+            {
+                float offset = Mathf.Abs(game.Track.Project(player.transform.position).D);
+                // Held at one offset while still moving: the guard is taking the push.
+                bool sliding = offset > 3f && Mathf.Abs(offset - lastOffset) < 0.001f && game.Racer.Velocity.magnitude > 5f;
+                if (sliding && (marks.Count == 0 || game.Tick >= marks[0].Tick + 20)) marks.Add(Take("guard"));
+                lastOffset = offset;
+                game.StepTick(original);
+            }
+            // Run a little on so every snapshot has ticks after it to replay.
+            for (int i = 0; i < 120 && game.IsRunning; i++) game.StepTick(original);
+            Assert.That(marks.Count, Is.EqualTo(2), $"The runner never slid along a guard (tick {game.Tick}, running {game.IsRunning}).");
+            foreach (Mark mark in marks)
+            {
+                int count = Math.Min(80, original.Samples - mark.Tick);
+                Assert.That(count, Is.GreaterThan(30), $"The snapshot at tick {mark.Tick} leaves too few ticks to replay.");
+                string difference = Replay(original, log, mark, count);
+                Assert.That(difference, Is.Null, $"snapshot at tick {mark.Tick}: {difference}");
+            }
+            Debug.Log("ChainRush rollback: guard slide snapshots " + string.Join(", ", marks.ConvertAll(m => m.Name + "@" + m.Tick)) + " replay identically.");
         }
 
         // A fall in a circuit race puts the runner back on the track and holds it (RunnerMotor.RespawnOnTrack). Snapshots

@@ -1,6 +1,7 @@
 using System;
 using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Tutorial;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -38,20 +39,28 @@ namespace ProtoHarness.ChainRush
         private GUIStyle compare;
         private GUIStyle compareDelta;
         private GUIStyle compareNew;
+        private GUIStyle clearWord;
         private int pauseCursor;
         private StateEdge respawn;
         // Notices the control moments for both the world effects and this HUD, so the two never disagree (review
         // 2026-10-29); it runs after GrappleController, and OnGUI after every LateUpdate, so the HUD draws this frame's.
         private ControlFeedback feedback;
         private static readonly string[] PauseLabels = { "계속", "재시작", "로비로" };
+        // A cue rests at CueSize but is drawn from glyphs of CueDrawSize, so it stays sharp while it is larger (FeedbackLook.CueScale).
         private const int CueSize = 160;
+        private const int CueDrawSize = 320;
+        private const float CueBoxWidth = 800f;
+        private const float CueBoxHeight = 440f;
+        private const float CueShadow = 6f;
         private const string CueGlyphs = "321GO!";
-        // How long "GO!" stays up once a run has started.
-        private const float GoSeconds = 1f;
+        // How long each number and "GO!" stay up.
+        private const float CueSeconds = 1f;
         private static readonly Color Ink = NightUi.Panel;
         private static readonly Color Mint = NightUi.Accent;
         private static readonly Color Muted = NightUi.Muted;
         private static readonly Color Coral = new Color(1f, 0.36f, 0.3f);
+        // The tutorial's goal, the same colour as its beacon in the world (TutorialDirector).
+        private static readonly Color GoalColor = new Color(1f, 0.78f, 0.22f);
         // Over the game while paused: dims it without hiding it.
         private static readonly Color Dim = new Color(0f, 0f, 0f, 0.72f);
         private static readonly Color Row = NightUi.Border;
@@ -61,6 +70,9 @@ namespace ProtoHarness.ChainRush
 
         // The title at the top left: the lobby's track name, or what the scene is when it was opened directly.
         public string Heading => FromLobby ? assembler.Setup.Title : game.IsCircuit ? "CIRCUIT" : "CHAIN RUSH";
+
+        // The speed at the bottom right, in km/h.
+        public string SpeedText => FeedbackLook.Kmh(player.HorizontalSpeed).ToString("0");
 
         private void Awake()
         {
@@ -82,12 +94,36 @@ namespace ProtoHarness.ChainRush
         public float HookFlash => game.IsRunning ? Mathf.Max(
             FeedbackLook.Fade(feedback.SinceHook(Time.time), FeedbackLook.HookRingTime),
             FeedbackLook.Fade(feedback.SinceSwing(Time.time), FeedbackLook.HookRingTime)) : 0f;
+        // 1 at a boost pad, then as strong as the pad's speed still is above running speed, 0 once it is gone.
+        public float PadWind => game.IsRunning ? Mathf.Max(FeedbackLook.Fade(feedback.SincePad(Time.time), FeedbackLook.PadBurstTime),
+            FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed)) : 0f;
         // 1 the moment a grapple misses, 0 once the shake is over.
         public float MissShake => game.IsRunning ? FeedbackLook.Fade(feedback.SinceMiss(Time.time), FeedbackLook.MissShakeTime) : 0f;
 
         private void Update()
         {
             respawn.Update(player.IsRespawning, Time.time);
+            if (Tutorial != null && Tutorial.IsBriefing)
+            {
+                var keys = Keyboard.current;
+                if (keys == null) return;
+                if (keys.escapeKey.wasPressedThisFrame) LeaveTutorial();
+                else if (keys.leftArrowKey.wasPressedThisFrame) Tutorial.PreviousPage();
+                else if (keys.rightArrowKey.wasPressedThisFrame) Tutorial.NextPage();
+                else if (keys.enterKey.wasPressedThisFrame)
+                {
+                    if (Tutorial.PageIndex + 1 < Tutorial.PageCount) Tutorial.NextPage();
+                    else Tutorial.CloseBriefing();
+                }
+                return;
+            }
+            if (Tutorial != null && Tutorial.IsComplete)
+            {
+                // ESC is RaceAssembler's, as after a race.
+                var keys = Keyboard.current;
+                if (keys != null && keys.enterKey.wasPressedThisFrame) LeaveTutorial();
+                return;
+            }
             if (!game.IsPaused)
             {
                 pauseCursor = (int)PauseChoice.Continue;
@@ -125,7 +161,10 @@ namespace ProtoHarness.ChainRush
             switch (choice)
             {
                 case PauseChoice.Continue: game.TogglePause(); break;
-                case PauseChoice.Restart: game.StartCountdown(); break;
+                case PauseChoice.Restart:
+                    if (Tutorial != null) Tutorial.RestartStage();
+                    else game.StartCountdown();
+                    break;
                 case PauseChoice.Lobby: assembler.ReturnToLobby(); break;
             }
         }
@@ -157,16 +196,20 @@ namespace ProtoHarness.ChainRush
             compareDelta.alignment = TextAnchor.UpperRight;
             compareNew = Style(18, Mint, FontStyle.Bold);
             compareNew.alignment = TextAnchor.UpperRight;
+            clearWord = NightUi.Style(displayFont, 72, Mint, FontStyle.BoldAndItalic);
+            clearWord.alignment = TextAnchor.MiddleCenter;
             button = Style(22, Ink, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
             waiting.alignment = TextAnchor.MiddleCenter;
             pauseItem = Style(22, Color.white, FontStyle.Bold);
             pauseItem.alignment = TextAnchor.MiddleCenter;
-            cue = Style(CueSize, Mint, FontStyle.Bold);
+            cue = NightUi.Style(displayFont, CueDrawSize, Mint, FontStyle.BoldAndItalic);
             cue.alignment = TextAnchor.MiddleCenter;
+            cue.wordWrap = false;
+            cue.clipping = TextClipping.Overflow;
             // The first draw of new glyphs can stall a frame (DECISIONS P3 C1c-2b), and "GO!" is drawn on a run's first frame.
-            font.RequestCharactersInTexture(CueGlyphs, CueSize, FontStyle.Bold);
+            displayFont.RequestCharactersInTexture(CueGlyphs, CueDrawSize, FontStyle.BoldAndItalic);
         }
 
         private void OnGUI()
@@ -181,15 +224,17 @@ namespace ProtoHarness.ChainRush
             DrawHeader(width);
             DrawControls(width, height);
             // A race from the lobby skips the start panel: it counts in once its environment has loaded.
-            if (game.IsReady && FromLobby) DrawLoading(width, height);
+            if (Tutorial != null && Tutorial.IsBriefing) DrawBriefing(Tutorial, width, height);
+            else if (game.IsReady && FromLobby) DrawLoading(width, height);
             else if (game.IsReady) DrawReady(width, height);
-            else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString());
+            else if (game.IsCountingDown) DrawCue(width, height, game.CountdownNumber.ToString(), game.CountdownNumberAge);
             else if (game.IsPaused) DrawPause(width, height);
+            else if (Tutorial != null && Tutorial.IsComplete) DrawTutorialComplete(width, height);
             else if (game.HasFailed || game.HasFinished) DrawResult(width, height);
             else
             {
                 DrawPlay(width, height, scale);
-                if (game.Elapsed < GoSeconds) DrawCue(width, height, "GO!");
+                if (Tutorial == null && game.Elapsed < CueSeconds) DrawCue(width, height, "GO!", game.Elapsed);
                 // Over everything, the screen coming up from black after a fall hides the camera's cut.
                 float fade = RespawnFade;
                 if (fade > 0f) NightUi.Block(new Rect(0, 0, width, height), new Color(0f, 0f, 0f, fade));
@@ -199,6 +244,9 @@ namespace ProtoHarness.ChainRush
 
         private bool FromLobby => assembler != null && assembler.IsLaunched;
 
+        // The tutorial's stages in a tutorial; null in a race.
+        private TutorialDirector Tutorial => assembler != null ? assembler.Tutorial : null;
+
         private void DrawLoading(float width, float height)
         {
             Rect panel = new Rect(width / 2f - 210, height / 2f - 40, 420, 80);
@@ -206,15 +254,26 @@ namespace ProtoHarness.ChainRush
             GUI.Label(panel, "트랙을 불러오는 중", waiting);
         }
 
-        // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen.
-        private void DrawCue(float width, float height, string text)
+        // The countdown's 3, 2, 1 and the "GO!" after it, large in the middle of the screen, since seconds after it appeared.
+        private void DrawCue(float width, float height, string text, float since)
         {
-            NightUi.ShadowLabel(new Rect(width / 2f - 170, height / 2f - 130, 340, 220), text, cue);
+            Vector3 center = new Vector3(width / 2f, height / 2f - 20f, 0f);
+            float size = FeedbackLook.CueScale(since, CueSeconds) * CueSize / CueDrawSize;
+            Matrix4x4 previous = GUI.matrix;
+            GUI.matrix = previous * Matrix4x4.TRS(center, Quaternion.identity, new Vector3(size, size, 1f)) * Matrix4x4.Translate(-center);
+            NightUi.ShadowLabel(new Rect(center.x - CueBoxWidth / 2f, center.y - CueBoxHeight / 2f, CueBoxWidth, CueBoxHeight), text, cue, CueShadow);
+            GUI.matrix = previous;
         }
 
         private void DrawHeader(float width)
         {
             NightUi.ShadowLabel(new Rect(64, 38, 410, 54), Heading, heading);
+            // A mission map: no health, laps or clock to show.
+            if (Tutorial != null)
+            {
+                GUI.Label(new Rect(66, 97, 350, 28), "STAGE " + (Tutorial.StageIndex + 1) + " / " + Tutorial.StageCount, small);
+                return;
+            }
             GUI.Label(new Rect(66, 97, 350, 28), game.IsCircuit ? "SINGLE RACE / CIRCUIT" : "SKYLINE TRIAL", small);
             for (int i = 0; i < 3; i++)
                 NightUi.Block(new Rect(66 + i * 39, 138, 30, 5), i < game.Health ? Mint : Row);
@@ -269,10 +328,10 @@ namespace ProtoHarness.ChainRush
         private void DrawPlay(float width, float height, float scale)
         {
             NightUi.Block(new Rect(66, 163, 300, 4), Row);
-            NightUi.Block(new Rect(66, 163, 300 * game.Progress, 4), Mint);
+            NightUi.Block(new Rect(66, 163, 300 * (Tutorial != null ? Tutorial.StageProgress : game.Progress), 4), Mint);
             if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
-            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), player.HorizontalSpeed.ToString("00.0"), speedNumber);
-            GUI.Label(new Rect(width - 150, height - 169, 90, 26), "M / S", small);
+            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), SpeedText, speedNumber);
+            GUI.Label(new Rect(width - 150, height - 169, 90, 26), "KM / H", small);
             int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
             for (int i = 0; i < 20; i++) NightUi.Block(new Rect(width - 332 + i * 13, height - 125, 9, 5), i < speedMarks ? Mint : Row);
             DrawBoost(width, height);
@@ -286,6 +345,8 @@ namespace ProtoHarness.ChainRush
             }
             if (player.IsSwinging || grapple.HasPoleCandidate) DrawPoleCandidate(width, height, scale);
             DrawMiss(scale);
+            if (Tutorial != null) DrawTutorial(Tutorial, width, height, scale);
+            DrawPadWind(width, height);
             DrawBoostFlash(width, height);
             if (game.DamageFlash)
             {
@@ -308,7 +369,91 @@ namespace ProtoHarness.ChainRush
             float flash = FeedbackLook.Fade(since, swinging ? FeedbackLook.HookRingTime : FeedbackLook.PoleEnterTime);
             Color color = Color.Lerp(Mint, Color.white, flash);
             float fill = swinging ? 0f : Mathf.Lerp(FeedbackLook.TargetFillMin, FeedbackLook.TargetFillMax, FeedbackLook.Pulse(since));
-            Vector3 screen = viewCamera.WorldToScreenPoint(SwingLook.PoleBite(pole));
+            DrawPinnedTarget(SwingLook.PoleBite(pole), size, color, fill, width, height, scale);
+        }
+
+        // The tutorial's stage and goal, and where the goal is when it has a place.
+        private void DrawTutorial(TutorialDirector tutorial, float width, float height, float scale)
+        {
+            DrawTutorialPanel(tutorial);
+            if (tutorial.IsStageCleared)
+            {
+                NightUi.ShadowLabel(new Rect(width / 2f - 400, height / 2f - 140, 800, 110), "STAGE CLEAR", clearWord);
+                return;
+            }
+            TutorialCourse.Goal goal = tutorial.CurrentGoal;
+            if (goal.HasZone) DrawPinnedTarget(goal.Point + Vector3.up * GoalMarkHeight, 1f, GoalColor, 0f, width, height, scale);
+        }
+
+        private const float GoalMarkHeight = 3f;
+
+        private void DrawBriefing(TutorialDirector tutorial, float width, float height)
+        {
+            NightUi.Block(new Rect(0, 0, width, height), Dim);
+            float x = (width - 1120f) * 0.5f, y = (height - 740f) * 0.5f;
+            NightUi.PanelCard(new Rect(x, y, 1120, 740));
+            GUI.Label(new Rect(x + 48, y + 26, 1024, 28),
+                "STAGE " + (tutorial.StageIndex + 1) + " / " + tutorial.StageCount + "   ·   " + tutorial.CurrentStage.Name, small);
+            TutorialCourse.Page page = tutorial.CurrentPage;
+            TutorialFigures.Draw(page.Figure, new Rect(x + 48, y + 72, 1024, 280), waiting, small, button, GoalColor);
+            NightUi.Block(new Rect(x + 48, y + 376, 1024, 1), Row);
+            GUI.Label(new Rect(x + 48, y + 400, 1024, 54), page.Title, heading);
+            GUI.Label(new Rect(x + 48, y + 468, 1024, 96), page.Body, body);
+            for (int i = 0; i < tutorial.PageCount; i++)
+                NightUi.Block(new Rect(x + 48 + i * 24, y + 580, 12, 12), i == tutorial.PageIndex ? Mint : Row);
+            GUI.Label(new Rect(x + 48 + tutorial.PageCount * 24, y + 574, 160, 28),
+                (tutorial.PageIndex + 1) + " / " + tutorial.PageCount, small);
+            bool wasEnabled = GUI.enabled;
+            GUI.enabled = wasEnabled && tutorial.PageIndex > 0;
+            bool previous = NightUi.CardButton(new Rect(x + 48, y + 620, 220, 60), "←   이전", pauseItem);
+            GUI.enabled = wasEnabled && tutorial.PageIndex + 1 < tutorial.PageCount;
+            bool next = NightUi.CardButton(new Rect(x + 288, y + 620, 220, 60), "다음   →", pauseItem);
+            GUI.enabled = wasEnabled;
+            bool close = NightUi.CardButton(new Rect(x + 724, y + 620, 348, 60), "닫기 · 시작", button, NightUi.CardLook.Action);
+            GUI.Label(new Rect(x + 48, y + 702, 1024, 26),
+                "← / → 페이지 이동     ENTER 다음 · 마지막 쪽에서 시작     ESC 로비로", small);
+            // Apply after drawing so a click cannot mix two pages in one OnGUI pass.
+            if (previous) tutorial.PreviousPage();
+            else if (next) tutorial.NextPage();
+            else if (close) tutorial.CloseBriefing();
+        }
+
+        private void DrawTutorialPanel(TutorialDirector tutorial)
+        {
+            var panel = new Rect(66, 184, 560, 138);
+            NightUi.Block(panel, Ink);
+            NightUi.Block(new Rect(panel.x, panel.y, panel.width, 3), GoalColor);
+            GUI.Label(new Rect(panel.x + 22, panel.y + 14, 516, 26), tutorial.CurrentStage.Name, small);
+            GUI.Label(new Rect(panel.x + 22, panel.y + 44, 516, 66), tutorial.IsStageCleared ? "잘했습니다." : tutorial.GoalText, body);
+            int goals = tutorial.CurrentStage.Goals.Count;
+            int done = tutorial.IsStageCleared ? goals : tutorial.GoalIndex;
+            for (int i = 0; i < goals; i++)
+                NightUi.Block(new Rect(panel.x + 22 + i * 30, panel.yMax - 16, 24, 4), i < done ? Mint : Row);
+        }
+
+        // The end of the tutorial (user 2026-11-06): a popup over the stopped game, whose button goes back to the lobby.
+        private void DrawTutorialComplete(float width, float height)
+        {
+            NightUi.Block(new Rect(0, 0, width, height), Dim);
+            float x = width / 2f - 300, y = height / 2f - 180;
+            NightUi.Block(new Rect(x, y, 600, 340), Ink);
+            NightUi.Block(new Rect(x, y, 600, 5), Mint);
+            GUI.Label(new Rect(x + 44, y + 44, 512, 60), "튜토리얼 완료", heading);
+            GUI.Label(new Rect(x + 44, y + 118, 512, 70), "모든 과제를 마쳤습니다.\n이제 싱글 레이스에서 기록에 도전해 보세요.", body);
+            if (NightUi.CardButton(new Rect(x + 44, y + 234, 512, 68), "ENTER   /   로비로", button, NightUi.CardLook.Action)) LeaveTutorial();
+        }
+
+        private void LeaveTutorial()
+        {
+            UiSound.Play(UiSound.Cue.Confirm);
+            assembler.ReturnToLobby();
+        }
+
+        // A target on a world point; off the screen (to the side, or behind the camera) it stays pinned at the screen's
+        // edge toward it, smaller, with an arrow pointing at it.
+        private void DrawPinnedTarget(Vector3 world, float size, Color color, float fill, float width, float height, float scale)
+        {
+            Vector3 screen = viewCamera.WorldToScreenPoint(world);
             var point = new Vector2(screen.x / scale, (Screen.height - screen.y) / scale);
             // Behind the camera the projection comes out mirrored through the screen's center.
             if (screen.z < 0f) point = new Vector2(width - point.x, height - point.y);
@@ -330,7 +475,7 @@ namespace ProtoHarness.ChainRush
         // The pole's target is bolder than an anchor's bracket (user 2026-10-29 "사각형 타겟 … 잘 보이게"): all four
         // corners, thicker, outlined in ink so it reads against bright scenery, over a faint fill that breathes with the
         // ring on the pole.
-        private static void DrawTarget(float x, float y, float size, Color color, float fill)
+        internal static void DrawTarget(float x, float y, float size, Color color, float fill)
         {
             const float Arm = 18f, Thick = 5f, Edge = 2f;
             float half = PoleTargetHalf * size, arm = Arm * size;
@@ -358,7 +503,7 @@ namespace ProtoHarness.ChainRush
         // A small triangle whose base is centered on at, pointing along direction (HUD coordinates, y down): columns of
         // blocks narrowing to the tip over a slightly larger one in ink, like the target's outline. Drawn in a turned
         // GUI matrix and put back after.
-        private static void DrawArrow(Vector2 at, Vector2 direction, Color color)
+        internal static void DrawArrow(Vector2 at, Vector2 direction, Color color)
         {
             const int Columns = 6;
             const float Column = 3f, Base = 26f, Step = 4f, Edge = 2f;
@@ -407,6 +552,31 @@ namespace ProtoHarness.ChainRush
             DrawBracket(screen.x / scale + FeedbackLook.ShakeOffset(since), (Screen.height - screen.y) / scale, 1f, color);
         }
 
+        // Boost pad wind: thin white streaks on the screen's own ellipse, each running out from 62% of the way to the rim to
+        // past the edge and starting again, longer and brighter with PadWind. Each streak's angle, phase and length are a
+        // fixed scatter of its index, so nothing is allocated.
+        private void DrawPadWind(float width, float height)
+        {
+            float wind = PadWind;
+            if (wind <= 0f) return;
+            var middle = new Vector2(width * 0.5f, height * 0.5f);
+            Matrix4x4 previous = GUI.matrix;
+            for (int i = 0; i < FeedbackLook.PadWindStreaks; i++)
+            {
+                float around = (i + 0.4f * Mathf.Sin(i * 12.9898f)) * (Mathf.PI * 2f / FeedbackLook.PadWindStreaks);
+                float phase = Mathf.Repeat(Time.time / FeedbackLook.PadWindCycle + i * 0.618f, 1f);
+                Vector2 rim = new Vector2(Mathf.Cos(around) * middle.x, Mathf.Sin(around) * middle.y);
+                Vector2 at = middle + rim * Mathf.Lerp(0.62f, 1.08f, phase);
+                float length = (60f + 70f * Mathf.Repeat(i * 0.37f, 1f)) * (0.5f + 0.5f * wind);
+                Color color = Color.white;
+                color.a = wind * 0.55f * Mathf.Sin(phase * Mathf.PI);
+                float angle = Mathf.Atan2(rim.y, rim.x) * Mathf.Rad2Deg;
+                GUI.matrix = previous * Matrix4x4.TRS(new Vector3(at.x, at.y, 0f), Quaternion.Euler(0f, 0f, angle), Vector3.one);
+                NightUi.Block(new Rect(0f, -1f, length, 2f), color);
+            }
+            GUI.matrix = previous;
+        }
+
         // Layered edge strips fall off toward the view, with short lines moving inward as the burst fades.
         private void DrawBoostFlash(float width, float height)
         {
@@ -437,30 +607,34 @@ namespace ProtoHarness.ChainRush
         // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
         private void DrawBoost(float width, float height)
         {
+            DrawBoostGauge(width / 2f - (300f + (int)RacerState.MaxGauge * 56f) / 2f, height - 184f,
+                player.Gauge, FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.GaugeBurstTime),
+                feedback.SpentBoostSlot, small, button);
+        }
+
+        // Shared by the live HUD and briefing figures; values and styles come from the caller.
+        internal static void DrawBoostGauge(float left, float top, float gauge, float burst, int spentBoostSlot,
+            GUIStyle labelStyle, GUIStyle itemStyle)
+        {
             const float BarWidth = 300f, Box = 48f, Gap = 8f;
             int boxes = (int)RacerState.MaxGauge;
-            float left = width / 2f - (BarWidth + boxes * (Gap + Box)) / 2f;
-            float top = height - 184f;
-            float gauge = player.Gauge;
             int boosters = Mathf.Min(boxes, Mathf.FloorToInt(gauge));
             bool full = boosters >= boxes;
             float fill = full ? 1f : gauge - boosters;
             NightUi.Block(new Rect(left, top, BarWidth, Box), Ink);
-            GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", small);
-            GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", small);
+            GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", labelStyle);
+            GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", labelStyle);
             var bar = new Rect(left + 18, top + 32, BarWidth - 36, 8);
             NightUi.Block(bar, Row);
             bar.width *= fill;
             NightUi.Block(bar, Mint);
-            float burst = FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.GaugeBurstTime);
-            int spentBoostSlot = feedback.SpentBoostSlot;
             for (int i = 0; i < boxes; i++)
             {
                 var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
                 NightUi.Block(slot, Ink);
                 var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
                 NightUi.Block(item, i < boosters ? Mint : Row);
-                if (i < boosters) GUI.Label(item, "▶▶", button);
+                if (i < boosters) GUI.Label(item, "▶▶", itemStyle);
                 if (i == spentBoostSlot && burst > 0f)
                 {
                     Color color = Color.Lerp(Mint, Color.white, burst);
@@ -564,6 +738,7 @@ namespace ProtoHarness.ChainRush
         // "LAP 2 / 3   01:23.4": the lap being run and the whole race time so far.
         private string CircuitLine()
         {
+            if (Tutorial != null) return "STAGE  " + (Tutorial.StageIndex + 1) + " / " + Tutorial.StageCount + "     " + Tutorial.CurrentStage.Name;
             LapCounter laps = game.Circuit.Laps;
             return "LAP  " + laps.CurrentLap + " / " + laps.LapCount + "     " + FormatTime(game.Elapsed);
         }

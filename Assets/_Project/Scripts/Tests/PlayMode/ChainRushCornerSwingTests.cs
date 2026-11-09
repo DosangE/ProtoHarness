@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
+using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -36,7 +37,8 @@ namespace ProtoHarness.Tests.PlayMode
         private const double WideArcStart = 40d;
         private const float RopeRate = 6f;
         private const float MetersPerSlot = 35f;
-        private const float CarryFalloff = 3f;
+        // The share of a let-go swing's speed above running speed lost each second (RunnerMotor.swingCarryDecay, 2026-10-30).
+        private const float CarryDecay = 0.8f;
         private static readonly double ArcEnd = ArcStart + Radius * Mathf.PI / 2d;
         private static readonly Vector3 Pole = new Vector3(RoadX + Radius, 0f, (float)ArcStart);
 
@@ -140,10 +142,11 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(gained, Is.EqualTo(swung / MetersPerSlot).Within(0.03f), "One gauge slot per 35 m swung.");
         }
 
-        // The R30 arc turns right, so D (steer +1) is the key toward the pole: it shortens the rope and speeds the swing
-        // up, A lets the rope out and slows it, and the speed always follows hooked rope / rope now within 0.8 .. 1.5.
+        // The R30 arc turns right, so D (steer +1) is the key toward the pole: it shortens the rope, A lets it out, and the
+        // speed stays the hook's either way (user 2026-10-30: it followed hooked rope / rope now, 0.8 .. 1.5, so steering
+        // harder sped the swing up).
         [UnityTest]
-        public IEnumerator Swing_InsideKeyShortensTheRopeAndSpeedsUp_OutsideKeyLetsItOut_WithinTheSpeedLimits()
+        public IEnumerator Swing_InsideKeyShortensTheRope_OutsideKeyLetsItOut_TheSpeedStaysTheHooks()
         {
             Centerline line = CurveRoad();
             var bot = new TrackFollower(line, player);
@@ -159,26 +162,16 @@ namespace ProtoHarness.Tests.PlayMode
             float rope = game.Racer.SwingRadius;
             for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
             Assert.That(rope - game.Racer.SwingRadius, Is.EqualTo(25 * RopeRate * Ticks.Seconds).Within(0.01f), "The inside key shortens the rope by 6 m/s.");
-            AssertSwingSpeed(hookSpeed, hookRope, "shortened");
-            Assert.That(player.ForwardSpeed, Is.GreaterThan(hookSpeed + 0.5f), "A shorter rope is faster.");
+            Assert.That(hookRope - game.Racer.SwingRadius, Is.GreaterThan(1f), "precondition: the rope is shorter than hooked.");
+            AssertSwingSpeed(hookSpeed, "shortened");
             Assert.That(Level(player.transform.position - game.Racer.SwingCenter), Is.EqualTo(game.Racer.SwingRadius).Within(0.05f), "The runner is pulled in with the rope.");
 
             bot.Override = -1f;
             rope = game.Racer.SwingRadius;
             for (int i = 0; i < 50; i++) yield return new WaitForFixedUpdate();
             Assert.That(game.Racer.SwingRadius - rope, Is.EqualTo(50 * RopeRate * Ticks.Seconds).Within(0.01f), "The outside key lets it out by 6 m/s.");
-            AssertSwingSpeed(hookSpeed, hookRope, "let out");
-            Assert.That(player.ForwardSpeed, Is.LessThan(hookSpeed - 0.3f), "A longer rope than the hooked one is slower.");
-
-            // Out to 0.8 times the hook's speed (a rope of hookRope / 0.8) and past it: the speed stops there.
-            while (game.IsRunning && player.IsSwinging && game.Racer.SwingRadius < hookRope / 0.8f + 1f) yield return new WaitForFixedUpdate();
-            Assert.That(player.IsSwinging, Is.True, "The swing must last until the rope is past the slow limit.");
-            Assert.That(player.ForwardSpeed, Is.EqualTo(hookSpeed * 0.8f).Within(0.05f), "The speed is not lower than 0.8 times the hook's.");
-
-            bot.Override = 1f;
-            while (game.IsRunning && player.IsSwinging && game.Racer.SwingRadius > hookRope / 1.5f - 1f) yield return new WaitForFixedUpdate();
-            Assert.That(player.IsSwinging, Is.True, "The swing must last until the rope is past the fast limit.");
-            Assert.That(player.ForwardSpeed, Is.EqualTo(hookSpeed * 1.5f).Within(0.05f), "The speed is not higher than 1.5 times the hook's.");
+            Assert.That(game.Racer.SwingRadius - hookRope, Is.GreaterThan(1f), "precondition: the rope is longer than hooked.");
+            AssertSwingSpeed(hookSpeed, "let out");
         }
 
         [UnityTest]
@@ -262,22 +255,22 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsSwinging, Is.True, "A press on the ground hooks.");
         }
 
+        // Let go, the extra speed wears off in proportion to itself (user 2026-10-30, as a boost pad's): hard at first, easing
+        // as it nears running speed. It was 3 m/s a second, which held a shortcut's 31 m/s for seconds.
         [UnityTest]
-        public IEnumerator Swing_LettingGo_GoesStraightOnAtTheSwingSpeed_ThenTheExtraFallsOffByThreeASecond()
+        public IEnumerator Swing_LettingGo_GoesStraightOnAtTheSwingSpeed_ThenTheExtraWearsOffInProportion()
         {
             Centerline line = CurveRoad();
             var bot = new TrackFollower(line, player);
             yield return StartOn(line, bot, OpenHalfWidth, false);
             yield return RunTo(line, HookS);
-            // The throttle is let go on the swing, so it runs at the rope's speed alone, and taken again with the release:
-            // letting go of it would cut the carry.
-            throttle.LetGo = true;
-            yield return Hook(bot, 1f);
-            // A rope about 9 m shorter: about 1.4 times the hook's speed, so the carry is still above run speed a second later.
+            // The throttle held on the swing raises it to 1.2 times the run speed (the rope no longer does), so the carry is
+            // above run speed; it stays held, since letting go of it would cut the carry.
+            yield return Hook(bot, 0f);
             for (int i = 0; i < 75; i++) yield return new WaitForFixedUpdate();
             Assert.That(player.IsSwinging, Is.True);
             float swingSpeed = player.ForwardSpeed;
-            Assert.That(swingSpeed, Is.GreaterThan(game.Racer.SwingHookSpeed + 0.5f), "precondition: the shortened rope swings faster than the hook.");
+            Assert.That(swingSpeed, Is.GreaterThan(player.RunSpeed + 1f), "precondition: the throttle swung faster than running.");
             bot.Override = 0f;
             bot.SwingHold = false;
             throttle.LetGo = false;
@@ -285,16 +278,23 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsSwinging, Is.False, "Letting go of the swing key ends the swing.");
             float heading = player.Heading;
             float carried = player.ForwardSpeed;
-            Assert.That(carried, Is.EqualTo(swingSpeed - CarryFalloff * Ticks.Seconds).Within(0.02f), "It goes on at the swing's speed, less one tick's falloff.");
-            for (int i = 0; i < 50; i++) yield return new WaitForFixedUpdate();
+            float run = player.RunSpeed;
+            Assert.That(carried, Is.EqualTo(swingSpeed - CarryDecay * (swingSpeed - run) * Ticks.Seconds).Within(0.02f),
+                "It goes on at the swing's speed, less one tick's share.");
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            float half = player.ForwardSpeed;
+            for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
+            float second = player.ForwardSpeed;
             Assert.That(Mathf.Abs(Mathf.DeltaAngle(player.Heading, heading)), Is.LessThan(0.5f), "With no steering it goes straight on.");
-            Assert.That(player.ForwardSpeed, Is.EqualTo(carried - 50 * CarryFalloff * Ticks.Seconds).Within(0.02f), "The extra speed falls off by 3 m/s a second.");
-            Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(10f), "Still above the run speed after a second.");
+            Assert.That(carried - half, Is.GreaterThan(half - second), "Harder at first, easing as it nears running speed.");
+            // (1 - 0.8 / 50) ^ 50 = 0.446 of the extra is left after a second.
+            Assert.That((second - run) / (carried - run), Is.EqualTo(0.446f).Within(0.03f), "A second takes off a little over half the extra.");
+            Assert.That(game.Racer.SwingCarrySpeed, Is.GreaterThan(run), "Still above the run speed after a second.");
         }
 
         // A booster fired while swinging speeds the swing up like a booster on the ground (user 2026-10-19 "C"): the hook's
-        // speed rises toward the pull's 28 m/s, the rope's ratio still applies on top. Until then the swing ignored it and the
-        // booster's time ran out unused while the key was held.
+        // speed, the swing's, rises toward the pull's top speed. Until then the swing ignored it and the booster's time ran
+        // out unused while the key was held.
         [UnityTest]
         public IEnumerator Swing_BoosterWhileSwinging_SpeedsTheSwingUp()
         {
@@ -317,14 +317,14 @@ namespace ProtoHarness.Tests.PlayMode
                 + " m/s after 0.5 s, swing speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
             Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 2f), "Half a second of booster speeds the swing up.");
             Assert.That(game.Racer.SwingHookSpeed, Is.LessThanOrEqualTo(player.SlingTopSpeed), "No faster than the booster's own speed.");
-            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "boosted");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, "boosted");
         }
 
-        // A booster on a rope already shortened (2026-10-27, the review of the rope's acceleration limit): the limit holds back
-        // only what the rope adds, so the booster's rise still comes through times the rope's ratio. A runner with a tenth of
-        // the run acceleration (3 m/s² here) makes the limit far smaller than the booster's rise, so cutting it would show.
+        // A booster on a rope already shortened (user 2026-10-30): the swing goes at the booster-raised hook's speed, the
+        // rope multiplying nothing (a shortcut's inner key with a booster reached 31.5 m/s when it did). A runner with a
+        // tenth of the run acceleration (3 m/s² here), as when the rope's gain had a limit.
         [UnityTest]
-        public IEnumerator Swing_BoosterOnAShortenedRope_SpeedsUpByTheRopesRatio()
+        public IEnumerator Swing_BoosterOnAShortenedRope_GoesAtTheHooksSpeed()
         {
 #if UNITY_EDITOR
             RunnerProfile slow = ScriptableObject.CreateInstance<RunnerProfile>();
@@ -345,14 +345,14 @@ namespace ProtoHarness.Tests.PlayMode
             throttle.LetGo = true;
             yield return Hook(bot, 1f);
             Assert.That(player.IsSwinging, Is.True);
-            // The inside key for half a second (3 m of rope), then held still for a second while the rope's gain builds up.
+            // The inside key for half a second (3 m of rope), then held still for a second.
             for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
             bot.Override = 0f;
             for (int i = 0; i < 50; i++) yield return new WaitForFixedUpdate();
             float hookRope = game.Racer.SwingHookRadius;
             Assert.That(player.IsSwinging, Is.True);
             Assert.That(hookRope / game.Racer.SwingRadius, Is.GreaterThan(1.05f), "precondition: the rope is shorter than hooked.");
-            AssertSwingSpeed(game.Racer.SwingHookSpeed, hookRope, "shortened, before the booster");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, "shortened, before the booster");
 
             float hookSpeed = game.Racer.SwingHookSpeed;
             game.Racer.AddGauge(1f);
@@ -363,13 +363,13 @@ namespace ProtoHarness.Tests.PlayMode
             {
                 yield return new WaitForFixedUpdate();
                 Assert.That(player.IsSwinging, Is.True);
-                AssertSwingSpeed(game.Racer.SwingHookSpeed, hookRope, "shortened, boosted for " + (i + 1) + " ticks");
+                AssertSwingSpeed(game.Racer.SwingHookSpeed, "shortened, boosted for " + (i + 1) + " ticks");
             }
             Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(hookSpeed + 1f), "precondition: the booster raised the hook's speed.");
         }
 
         // The throttle held on a swing speeds it up without a booster (user 2026-10-22, "스윙중에도 앞키로 가속"): the hook's
-        // speed rises by the run acceleration up to 1.2 times the run speed, the rope's ratio still applies on top. Let go,
+        // speed, the swing's, rises by the run acceleration up to 1.2 times the run speed. Let go,
         // the hook's speed stays (it neither rises nor falls).
         [UnityTest]
         public IEnumerator Swing_ThrottleHeld_SpeedsTheSwingUpToOnePointTwoTimesTheRunSpeed_LetGoKeepsIt()
@@ -392,13 +392,13 @@ namespace ProtoHarness.Tests.PlayMode
                 + " m/s after 1 s, swing speed " + player.ForwardSpeed.ToString("0.00") + " m/s.");
             Assert.That(player.IsSwinging, Is.True);
             Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(top).Within(1e-4f), "No faster than 1.2 times the run speed.");
-            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "throttled");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, "throttled");
 
             throttle.LetGo = true;
             for (int i = 0; i < 25; i++) yield return new WaitForFixedUpdate();
             Assert.That(player.IsSwinging, Is.True, "Letting go of the throttle does not end the swing.");
             Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(top).Within(1e-4f), "Let go, the hook's speed stays.");
-            AssertSwingSpeed(game.Racer.SwingHookSpeed, game.Racer.SwingHookRadius, "let go");
+            AssertSwingSpeed(game.Racer.SwingHookSpeed, "let go");
         }
 
         // Held past the arc the runner keeps circling, crosses the straight after it and meets the inside guard there
@@ -462,7 +462,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(chain.enabled, Is.True);
             Vector3 bite = chain.GetPosition(1);
             Assert.That(new Vector2(bite.x, bite.z), Is.EqualTo(new Vector2(Pole.x, Pole.z)).Using(Vector2EqualityComparer(1e-3f)), "The chain must bite the pole at the arc's center.");
-            Assert.That(bite.y - game.Racer.SwingCenter.y, Is.EqualTo(SwingLook.BiteHeight).Within(1e-3f), "It bites the pole's band near hand height.");
+            Assert.That(bite.y - game.Racer.SwingCenter.y, Is.EqualTo(SwingLook.BiteHeight).Within(1e-3f), "It bites the pole's band.");
 
             bot.SwingHold = false;
             yield return new WaitForSeconds(SwingLook.BlendTime + 0.25f);
@@ -473,9 +473,152 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(Quaternion.Angle(player.transform.rotation, root), Is.LessThan(1e-3f));
         }
 
+        // M6: sparks and the thin tail while swinging; letting go stops the sparks and snaps the chain, which is gone after
+        // its time, and the tail runs on a little longer.
+        [UnityTest]
+        public IEnumerator SwingEffects_WhileSwinging_SparksAndTail_LettingGoSnapsTheChain()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            Assert.That(feedback.SwingSparksEmitting, Is.False, "No sparks before the swing.");
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.SwingSparksEmitting, Is.True, "Sparks fly while swinging.");
+            Assert.That(feedback.HandSparksEmitting, Is.True, "Sparks fly by the runner too.");
+            Assert.That(feedback.SwingTailEmitting, Is.True, "The tail runs while swinging.");
+            Assert.That(feedback.ChainSnapShown, Is.False);
+            bot.SwingHold = false;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.IsSwinging, Is.False);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.ChainSnapShown, Is.True, "Letting go snaps the chain.");
+            Assert.That(feedback.SwingSparksEmitting, Is.False);
+            Assert.That(feedback.SwingTailEmitting, Is.True, "The tail runs on past the swing.");
+            yield return new WaitForSeconds(FeedbackLook.ChainSnapTime + 0.05f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.ChainSnapShown, Is.False, "The snap is gone after its time.");
+            yield return new WaitForSeconds(FeedbackLook.SwingTailAfter - FeedbackLook.ChainSnapTime);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingTailEmitting, Is.False, "The tail stops after its time.");
+        }
+
+        // A respawn cuts a swing short (RunnerMotor.RespawnOnTrack): the runner jumps, so no chain snaps and no tail joins
+        // the two places.
+        [UnityTest]
+        public IEnumerator SwingEffects_SwingCutByARespawn_ShowsNoSnap()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingSparksEmitting, Is.True);
+            game.Racer.SwingTicks = 0;
+            game.Racer.RespawnHoldTicks = 50;
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsRespawning, Is.True);
+            Assert.That(feedback.ChainSnapShown, Is.False, "A respawn does not snap the chain.");
+            Assert.That(feedback.SwingSparksEmitting, Is.False);
+            Assert.That(feedback.SwingTailEmitting, Is.False);
+        }
+
+        // Paused, every swing effect hides; resuming mid-swing brings the sparks back without a snap.
+        [UnityTest]
+        public IEnumerator SwingEffects_Paused_HidesThem_ResumingBringsTheSparksBack()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.SwingSparksEmitting, Is.True);
+            game.TogglePause();
+            try
+            {
+                yield return null;
+                yield return new WaitForEndOfFrame();
+                Assert.That(feedback.SwingSparksEmitting, Is.False);
+                Assert.That(feedback.SwingTailEmitting, Is.False);
+            }
+            finally
+            {
+                if (game.IsPaused) game.TogglePause();
+            }
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.SwingSparksEmitting, Is.True, "The sparks come back with the swing.");
+            Assert.That(feedback.ChainSnapShown, Is.False, "A pause is not the swing's end.");
+        }
+
+        // A booster on a swing shows its own tail, in place of the swing's or the booster's, and the wind lines.
+        [UnityTest]
+        public IEnumerator SpeedTrails_BoosterOnASwing_ShowsItsOwnTailAndTheWindLines()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.Swing));
+            Assert.That(feedback.TrailEmitting, Is.False, "No booster yet, so no mint tail.");
+            Assert.That(feedback.WindLinesShown, Is.False, "No booster yet, so no wind lines.");
+            game.Racer.AddGauge(1f);
+            bot.ChainAction = true;
+            for (int i = 0; i < 5; i++) yield return new WaitForFixedUpdate();
+            yield return new WaitForEndOfFrame();
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.SwingBooster));
+            Assert.That(feedback.SwingBoostTailEmitting, Is.True, "Both have a tail of their own.");
+            Assert.That(feedback.TrailEmitting, Is.False, "Not the booster's alone.");
+            Assert.That(feedback.SwingTailEmitting, Is.False, "Not the swing's alone.");
+            Assert.That(feedback.WindLinesShown, Is.True);
+        }
+
+        // A boost pad's carry shows the booster's tail, without a booster or a swing.
+        [UnityTest]
+        public IEnumerator SpeedTrails_BoostZoneCarry_ShowsTheBoosterTail()
+        {
+            ControlFeedback feedback = Feedback();
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.None));
+            Assert.That(feedback.WindLinesShown, Is.False);
+            game.Racer.BoostZoneCarrySpeed = player.BoostZoneSpeed;
+            yield return new WaitForEndOfFrame();
+            Assert.That(feedback.TrailStyle, Is.EqualTo(SpeedTrails.Style.BoostZone));
+            Assert.That(feedback.TrailEmitting, Is.True);
+            Assert.That(feedback.SwingTailEmitting, Is.False);
+            Assert.That(feedback.WindLinesShown, Is.True);
+        }
+
+        private static ControlFeedback Feedback()
+        {
+            foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+            {
+                var feedback = root.GetComponentInChildren<ControlFeedback>(true);
+                if (feedback != null) return feedback;
+            }
+            Assert.Fail("The bench must have a HUD with its control feedback.");
+            return null;
+        }
+
         // A pole beside a straight (Centerline.AddPole, user 2026-10-22, the Skyway's wide straight) hooks like a corner pole:
-        // on a road 30 m across, abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
-        // fills the gauge by the distance swung; letting go ends the swing.
+        // on a road 30 m across, coming abeam of a pole 11 m to the left, the runner circles it to the left, stays on the road and
+        // fills the gauge by the distance swung; letting go ends the swing. A pole once passed is not offered (user 2026-10-30):
+        // RunTo stops on the tick past its S, so the hook is checked 1 m before abeam.
         [UnityTest]
         public IEnumerator Swing_PoleBesideAStraight_HooksAbeamCirclesTowardItAndFillsTheGauge()
         {
@@ -489,14 +632,17 @@ namespace ProtoHarness.Tests.PlayMode
             yield return StartOn(line, bot, sideHalfWidth, true);
             yield return RunTo(line, poleS - 25d);
             Assert.That(player.TryFindPole(out _), Is.False, "27 m away the pole is past 10 + 6 m.");
-            yield return RunTo(line, poleS);
-            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "Abeam, 11 m aside, the pole is in reach.");
+            yield return RunTo(line, poleS - 1d);
+            Assert.That(player.TryFindPole(out Vector3 offered), Is.True, "1 m before abeam, 11 m aside, the pole is in reach.");
             Assert.That(Level(offered - sidePole), Is.LessThan(1e-3f));
 
             float headingFrom = player.Heading;
             Vector3 hookedAt = player.transform.position;
+            var heard = new List<RaceCue>();
+            game.CuePlayed += heard.Add;
             yield return Hook(bot, 0f);
             Assert.That(player.IsSwinging, Is.True, "A swing key press with the side pole in reach must hook it.");
+            Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.PoleHook));
             Assert.That(Level(game.Racer.SwingCenter - sidePole), Is.LessThan(1e-3f), "It hooks the side pole.");
             Assert.That(game.Racer.SwingRadius, Is.EqualTo(Level(hookedAt - sidePole)).Within(0.5f), "The rope is the distance when it hooked.");
 
@@ -539,10 +685,10 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // The swing's speed is the hook's speed times the hooked rope over the rope now, within 0.8 .. 1.5 times.
-        private void AssertSwingSpeed(float hookSpeed, float hookRope, string when)
+        // The swing goes at the hook's speed, whatever the rope (user 2026-10-30).
+        private void AssertSwingSpeed(float hookSpeed, string when)
         {
-            float expected = hookSpeed * Mathf.Clamp(hookRope / game.Racer.SwingRadius, 0.8f, 1.5f);
-            Assert.That(player.ForwardSpeed, Is.EqualTo(expected).Within(0.02f), "Swing speed after the rope was " + when + ".");
+            Assert.That(player.ForwardSpeed, Is.EqualTo(hookSpeed).Within(0.02f), "Swing speed after the rope was " + when + ".");
         }
 
         // Straight 30 m, an R30 right-hand quarter arc, straight 40 m.

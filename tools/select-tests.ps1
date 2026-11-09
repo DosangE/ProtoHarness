@@ -6,7 +6,7 @@
 
   -Range 를 주지 않으면 `dev...HEAD` + 커밋하지 않은 변경 + 추적하지 않는 파일을 본다.
   바뀐 파일마다 아래 표의 위에서부터 처음 맞는 줄을 쓰고, 고른 테스트 클래스·메서드의 합집합을
-  Unity_RunCommand 에 넣을 TestRunnerApi 호출 한 줄로 출력한다. 하나라도 "전체" 면 전체다.
+  Unity_RunCommand 에 넣을 TestRunnerApi 호출을 출력한다. 범위를 못 정하면 영향 평가로 이름을 고른다.
 
   ① 은 기본 범위로, ② 병합은 -Range dev...HEAD(커밋한 것만)로 돌린다 (CLAUDE.md §9-2, docs/RULES/VERIFICATION.md §4-4,
   docs/DECISIONS.md 2026-10-18 "병합은 바뀐 부분만").
@@ -15,7 +15,7 @@
   표는 2026-10-14 런타임 타입별 참조 grep 으로 정했다(docs/DECISIONS.md 2026-10-14 "테스트 3단").
   2026-10-26 부터 한 줄이 클래스 일부(테스트 이름 접두사, Tests)만 고를 수 있고, 시뮬이 읽지 않는 경로는
   지문을 넣지 않는다(Fingerprint = $false). 바뀐 것을 읽는 쪽만 고른다 (docs/DECISIONS.md 2026-10-26 "영향 범위 테스트").
-  표에 없는 Assets/ 경로는 전체로 떨어진다. 테스트 클래스가 표와 어긋나면 경고하고 전체로 떨어진다.
+  표에 없는 Assets/ 경로나 표와 어긋나는 테스트 클래스는 경고/범위 미확정으로 보고한다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장해야 한다.
         Windows PowerShell 5.1 은 BOM 이 없으면 .ps1 을 ANSI(cp949)로 읽어 한글이 깨진다.
@@ -48,6 +48,16 @@ $explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
 # 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Tests = 클래스 일부('클래스.이름접두사정규식'),
 # Fingerprint = $false 면 지문을 넣지 않는다, Note = 보고에 붙일 말.
 $rules = @(
+    # Lap eligibility is separate from the ordinary test table; see VERIFICATION §4-4 (one rule source).
+    @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast|SummitDrop)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
+    @{ Pattern = '^Assets/_Project/Data/TrackLook_'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '트랙 표현 SO (주행 시뮬 참조 없음)' }
+    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/(\w+Exterior_|StadiumSports_))|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
+    # Revisit when a prefab or builder starts using this model (docs/DECISIONS.md 2026-11-09 "Blender 시험 제작").
+    @{ Pattern = '^Assets/_Project/Art/Models/ShortcutSign\.fbx(\.meta)?$'; Classes = @(); Fingerprint = $false; Why = '지름길 표지판 FBX (아직 참조하는 코드·씬·프리팹 없음)' }
+    @{ Pattern = '^' + $scripts + 'Editor/ChainRush/(.*EnvironmentBuilder|ExteriorAssets|ExteriorKit|RoadCorridor)\.cs$'; Classes = @(); Fingerprint = $false; Why = '장식 빌더 (침범 검사와 구조 테스트로 확인)' }
+    @{ Pattern = '^' + $scripts + 'Editor/ChainRush/ChainRushCircuitSceneBuilder\.cs$'; Classes = @('ChainRushCircuitTests'); LapTracks = @('*'); Why = '트랙 생성: 개별 Create...Track만 바뀌었으면 영향 평가로 그 트랙만 좁힌다' }
+    @{ Pattern = '^' + $runtime + 'Race/TrackLook\.cs$'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '도로·벽·차선 표현 (시뮬 참조 없음)' }
+    @{ Pattern = '^' + $runtime + 'Race/CircuitScenery\.cs$'; Classes = @('ChainRushCircuitTests', 'ChainRushRoadTests'); CheckPaint = $true; Why = '도로 깔기·가드 틈과 차선 칠을 diff로 구분' }
     @{ Pattern = '^(Packages|ProjectSettings)/';                    All = $true;  Why = '패키지·프로젝트 설정' }
     @{ Pattern = '^Assets/_Project/(Data|Scenes)/';                 All = $true;  Why = 'SO 값·씬은 시뮬에 들어간다' }
     @{ Pattern = '^' + $scripts + 'Editor/';                        All = $true;  Why = '씬 빌더·테스트 메뉴' }
@@ -57,22 +67,26 @@ $rules = @(
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/NetworkRaceTests\.cs$'; Classes = @(); Why = '네트워크 레이스'; Note = 'NetworkRaceTests 는 [Explicit] 이라 여기서 고르지 않는다. 플레이어 빌드 뒤 이름으로 따로 돌린다 (HANDOFF 1절)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(\w+)\.cs$';      Own = $true;  Why = '테스트 클래스 파일' }
     @{ Pattern = '^' + $scripts + 'Runtime/Net/';                   Classes = $net; Why = 'ProtoHarness.Net (다른 런타임·에디터 어셈블리가 참조하지 않는다)' }
-    @{ Pattern = '^' + $runtime + '(RunnerMotor|GrappleController|ChainRushGame|RacerState|Ticks|SimSnapshot|RunRules|CourseTarget)\.cs$'; All = $true; Why = '코어 시뮬' }
-    @{ Pattern = '^' + $runtime + 'Motion/';                        All = $true;  Why = '코어 시뮬 (RunnerMotor 가 부르는 이동 규칙)' }
-    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true;  Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
-    @{ Pattern = '^' + $runtime + 'Track/(TrackFrame|TrackCoord)\.cs$'; All = $true; Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
-    @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
-    @{ Pattern = '^' + $runtime + 'Track/';                         Classes = $course + @('ChainRushPresentationTests', 'ChainRushReplayTests'); Why = '노면·트랙 조각' }
+    @{ Pattern = '^' + $runtime + '(RunnerMotor|GrappleController|ChainRushGame|RacerState|Ticks|SimSnapshot|RunRules|CourseTarget)\.cs$'; All = $true; LapTracks = @('*'); Why = '코어 시뮬' }
+    @{ Pattern = '^' + $runtime + 'Motion/';                        All = $true; LapTracks = @('*'); Why = '코어 시뮬 (RunnerMotor 가 부르는 이동 규칙)' }
+    @{ Pattern = '^' + $runtime + 'Track/Centerline\.cs$';          All = $true; LapTracks = @('*'); Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
+    @{ Pattern = '^' + $runtime + 'Track/(TrackFrame|TrackCoord)\.cs$'; All = $true; LapTracks = @('*'); Why = 'RunnerMotor·GrappleController 가 쓰는 트랙 좌표계' }
+    @{ Pattern = '^' + $runtime + 'Track/(LapCounter|TrackDefinition)\.cs$'; Classes = @('ChainRushCircuitTests') + $net; LapTracks = @('*'); Why = '서킷 랩·정의 (RaceOrder·SimSnapshotCodec 이 쓴다)' }
+    @{ Pattern = '^' + $runtime + 'Track/';                         Classes = $course + @('ChainRushPresentationTests', 'ChainRushReplayTests'); LapTracks = @('*'); Why = '노면·트랙 조각' }
+    @{ Pattern = '^' + $runtime + 'Race/CircuitRace\.cs$'; Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; LapTracks = @('*'); Why = '서킷 구성·랩·앵커' }
+    @{ Pattern = '^' + $runtime + 'Control/(IInputSource|TickInput)\.cs$'; All = $true; LapTracks = @('*'); Why = '시뮬이 소비하는 컨트롤러 입력' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; Why = '서킷 레이스·격리 월드 (RaceAssembler 가 정의를 바꿔 끼운다)' }
+    @{ Pattern = '^' + $runtime + 'Tutorial(/|$)'; Classes = @('ChainRushTutorialTests'); Fingerprint = $false; Why = '튜토리얼 스테이지·진행 판정 (레이스 시뮬은 읽지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Flow/(GameSettings|ScreenOptions)\.cs$'; Classes = @('ChainRushPresentationTests'); Tests = @('ChainRushFlowTests.Lobby_'); Fingerprint = $false; Why = '설정 값 (로비 설정 페이지가 바꾸고 레이스에서는 ChainRushAudio·FollowCamera 가 읽는다. 시뮬은 읽지 않는다)' }
-    @{ Pattern = '^' + $runtime + 'Flow/(Lobby(/|$)|LobbyMenu\.cs$|RunnerPreview\.cs$|TitleScreen\.cs$)'; Tests = @('ChainRushFlowTests.(Lobby|Loop)_', 'ChainRushFlowTests.Race_(Skyway|FingerLanes)FromTheLobby_'); Fingerprint = $false; Why = '타이틀·로비 화면 (로비 메뉴로 트랙을 고르는 레이스 2건 포함, Codex 리뷰 2026-10-26. 시뮬은 읽지 않는다)' }
+    @{ Pattern = '^' + $runtime + 'Flow/(RaceAssembler|RaceSetup|SpeedScale)\.cs$'; Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); LapTracks = @('*'); Why = '트랙 정의·속도·프로필을 러너에 전달 (표현만 바뀌면 영향 평가로 Lap 제외)' }
+    @{ Pattern = '^' + $runtime + 'Flow/(Lobby(/|$)|LobbyMenu\.cs$|RunnerPreview\.cs$|TitleScreen\.cs$)'; Tests = @('ChainRushFlowTests.Lobby_', 'ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn'); Fingerprint = $false; Why = '타이틀·로비 화면 (Lobby_TrackChoices가 실제 메뉴와 저장 원본을 비교, 시뮬은 읽지 않는다)' }
     @{ Pattern = '^' + $runtime + 'Flow/';                          Classes = @('ChainRushFlowTests', 'ChainRushProfileTests'); Why = '타이틀·로비·레이스 조립 (DECISIONS 2026-10-19 "M2 씬 구성")' }
-    @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
-    @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
+    @{ Pattern = '^' + $runtime + 'RunnerProfile\.cs$';             Classes = @('ChainRushProfileTests', 'ChainRushFlowTests', 'ChainRushReplayTests'); LapTracks = @('*'); Why = '러너 프로필 (DECISIONS 2026-10-19 "M2-b 러너 프로필")' }
+    @{ Pattern = '^' + $runtime + 'Control/(KeyboardMouseInputSource|InputLatch)\.cs$'; Classes = @('ChainRushInputSourceTests'); LapTracks = @('*'); Why = '장치 입력 경로'; Note = '②에서 Run Device Input Tests 도 1회 (§9-2)' }
     @{ Pattern = '^' + $runtime + 'Control/(InputLog|InputLogFile|InputRecorder|InputReplay|TickInputCodec)\.cs$'; Classes = @('ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushWorldTests') + $net; Why = '입력 기록·재생' }
     @{ Pattern = '^' + $runtime + 'Visuals/(NightUi|RunnerTilt|RunnerLook)\.cs$'; Classes = @('ChainRushPresentationTests', 'ChainRushInputSourceTests'); Fingerprint = $false; Why = '표현 (시뮬 참조는 RunnerProfile 의 RunnerLook 주석뿐)' }
     @{ Pattern = '^' + $runtime + 'Visuals/';                       Classes = @('ChainRushPresentationTests', 'ChainRushInputSourceTests'); Why = '표현 (RunnerTilt 를 쓰는 테스트 포함)' }
-    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Tests = @('ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn(\(|$)', 'ChainRushFlowTests.Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby(\(|$)', 'ChainRushFlowTests.Race_PauseMenuOpenedDirectly_OffersOnlyWhatTheRaceCanDo(\(|$)', 'ChainRushFlowTests.Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter(\(|$)', 'ChainRushFlowTests.Race_SkywayFromTheLobby_BotFinishesTwoLaps(\(|$)', 'ChainRushFlowTests.Race_FingerLanesFromTheLobby_BotFinishesTwoLaps(\(|$)', 'ChainRushFlowTests.Lobby_TrackPage_'); Fingerprint = $false; Why = 'HUD 레이스 6건·로비 트랙 페이지 (TrackPage.FormatTime, 시뮬 참조는 주석뿐)' }
+    @{ Pattern = '^' + $runtime + 'ChainRushHud\.cs$';              Tests = @('ChainRushFlowTests.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn(\(|$)', 'ChainRushFlowTests.Race_PauseMenuFromTheLobby_ContinuesRestartsAndGoesBackToTheLobby(\(|$)', 'ChainRushFlowTests.Race_PauseMenuOpenedDirectly_OffersOnlyWhatTheRaceCanDo(\(|$)', 'ChainRushFlowTests.Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter(\(|$)', 'ChainRushFlowTests.Lobby_TrackChoices_', 'ChainRushFlowTests.Lobby_TrackPage_'); Fingerprint = $false; Why = 'HUD 레이스 4건·로비 트랙 설정/페이지 (TrackPage.FormatTime, 시뮬 참조는 주석뿐)' }
     @{ Pattern = '^' + $runtime + 'Audio/UiSound\.cs$';              Classes = @('ChainRushPresentationTests'); Fingerprint = $false; Why = 'UI 효과음 (시뮬 참조 없음)' }
     @{ Pattern = '^' + $runtime + '(Audio/|FollowCamera\.cs$)';     Classes = @('ChainRushPresentationTests'); Why = '표현' }
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
@@ -87,6 +101,51 @@ function Invoke-GitLines([string[]]$gitArgs) {
 function Invoke-Git([string[]]$gitArgs) {
     $out = Invoke-GitLines $gitArgs
     return @($out | Where-Object { $_ -ne '' })
+}
+
+# PaintMarkings and its helpers end immediately before Destroy; they make no colliders (2026-11-02 reference grep).
+# Check both sides of every hunk, so deleting road code cannot masquerade as a paint-only change.
+function Test-OnlyPaintChange([string]$path) {
+    $base = @(Invoke-Git @('merge-base', 'dev', 'HEAD'))[0]
+    $tip = $null
+    if ($Range -ne '') {
+        if ($Range -notmatch '^([^\s]+?)(\.{2,3})([^\s]+)$') {
+            Write-Warning '차선 변경 범위를 해석하지 못했다. CircuitScenery의 구조 영향을 직접 확인한다.'
+            return $false
+        }
+        $left = $Matches[1]; $dots = $Matches[2]; $tip = $Matches[3]
+        $base = if ($dots -eq '...') { @(Invoke-Git @('merge-base', $left, $tip))[0] } else { $left }
+    }
+    $oldLines = @(Invoke-GitLines @('show', "$base`:$path"))
+    $newLines = if ($tip) { @(Invoke-GitLines @('show', "$tip`:$path")) }
+                else { @(Get-Content -LiteralPath (Join-Path $root $path) -Encoding UTF8) }
+    $bounds = @()
+    foreach ($lines in @($oldLines, $newLines)) {
+        $start = -1; $end = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^        public void PaintMarkings\(') { $start = $i + 1 }
+            if ($lines[$i] -match '^        public void Destroy\(') { $end = $i }
+        }
+        if ($start -lt 0 -or $end -le $start) {
+            Write-Warning 'PaintMarkings/Destroy 경계를 확인하지 못했다. CircuitScenery의 구조 영향을 직접 확인한다.'
+            return $false
+        }
+        $bounds += [pscustomobject]@{ Start = $start; End = $end }
+    }
+    $diffArgs = @('diff', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0', $base)
+    if ($tip) { $diffArgs += $tip }
+    $diff = @(Invoke-GitLines ($diffArgs + @('--', $path)))
+    $hunks = 0
+    foreach ($line in $diff) {
+        if ($line -notmatch '^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') { continue }
+        $hunks++
+        $oldStart = [int]$Matches[1]; $newStart = [int]$Matches[3]
+        $oldCount = if ($Matches[2] -eq '') { 1 } else { [int]$Matches[2] }
+        $newCount = if ($Matches[4] -eq '') { 1 } else { [int]$Matches[4] }
+        if ($oldStart -lt $bounds[0].Start -or $oldStart + [Math]::Max(1, $oldCount) - 1 -gt $bounds[0].End -or
+            $newStart -lt $bounds[1].Start -or $newStart + [Math]::Max(1, $newCount) - 1 -gt $bounds[1].End) { return $false }
+    }
+    return $hunks -gt 0
 }
 
 # 프로젝트의 8칸 멤버 들여쓰기를 따른다. 해석 못 한 형태는 범위를 만들지 않는다.
@@ -238,6 +297,7 @@ $touchesNonTest = $false
 $selected = New-Object System.Collections.Generic.List[string]
 $partial = New-Object System.Collections.Generic.List[string]
 $notes = New-Object System.Collections.Generic.List[string]
+$lapTracks = New-Object System.Collections.Generic.List[string]
 
 Write-Output "바뀐 파일 ($source): $($changed.Count)개"
 foreach ($path in $changed) {
@@ -249,9 +309,26 @@ foreach ($path in $changed) {
         Write-Output "  $path  →  없음 (Unity 가 읽지 않는다)"
         continue
     }
+    $paintOnly = $rule.CheckPaint -and (Test-OnlyPaintChange $p)
     if ($p -like 'Assets/*') { $touchesAssets = $true }
-    if ($p -like 'Assets/*' -and $p -notlike ($scripts + 'Tests/*') -and $p -notlike ($scripts + 'Runtime/Net/*') -and $rule.Fingerprint -ne $false) { $touchesNonTest = $true }
+    if ($p -like 'Assets/*' -and $p -notlike ($scripts + 'Tests/*') -and $p -notlike ($scripts + 'Runtime/Net/*') -and $rule.Fingerprint -ne $false -and -not $paintOnly) { $touchesNonTest = $true }
 
+    if ($rule.LapAsset) {
+        $trackName = switch -Regex ($p) {
+            'Circuit_Stadium\.' { 'STADIUM' }
+            'Circuit_Skyway\.' { 'SKYWAY LOOP' }
+            'Circuit_FingerLanes\.' { 'FINGER LANES' }
+            'Circuit_PalmCoast\.' { 'PALM COAST' }
+            'Circuit_SummitDrop\.' { 'SUMMIT DROP' }
+        }
+        $lapTracks.Add($trackName)
+    }
+    foreach ($trackName in $rule.LapTracks) { $lapTracks.Add($trackName) }
+    if ($rule.CheckPaint) {
+        if ($paintOnly) {
+            $notes.Add('CircuitScenery: PaintMarkings 및 visual helpers only; Lap/지문 없음.')
+        } else { $lapTracks.Add('*') }
+    }
     if ($rule.All) {
         $all = $true
         Write-Output "  $path  →  전체 ($($rule.Why))"
@@ -294,8 +371,20 @@ Write-Output ''
 Write-Output '고른 테스트 (① 빠른 확인 / ② 병합은 -Range dev...HEAD 로):'
 Write-Output '  EditMode: 전체 (Enemy 카테고리 제외: categoryNames = { "!Enemy" })'
 
+$lapTitles = @($lapTracks | Sort-Object -Unique)
+if ($lapTitles -contains '*') { $lapTitles = @('STADIUM', 'SKYWAY LOOP', 'FINGER LANES', 'PALM COAST', 'SUMMIT DROP') }
+if ($lapTitles.Count -eq 0) {
+    Write-Output '  Lap: 없음 (구조/주행 경로 변경을 찾지 못함; 새 Lap 테스트 검증을 명시한 작업은 이름으로 따로 실행)'
+} else {
+    $titlePattern = ($lapTitles | ForEach-Object { [regex]::Escape($_) }) -join '|'
+    $lapGroups = @('ChainRushFlowTests.Race_BotLap_.*\(.*(' + $titlePattern + ').*\)')
+    if ($lapTitles -contains 'FINGER LANES') { $lapGroups += 'ChainRushFlowTests.Race_FingerLanesShortcuts_' }
+    $lapQuoted = ($lapGroups | ForEach-Object { '"^ProtoHarness.Tests.PlayMode.' + $_.Replace('\', '\\') + '"' }) -join ', '
+    Write-Output ("  Lap: " + ($lapTitles -join ', ') + ' × Normal/Fast/VeryFast (FINGER면 지름길 2건 포함; Explicit 진단은 별도)')
+    Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $lapQuoted + ' }, categoryNames = new[] { "^Lap$" } }));')
+}
 if ($all) {
-    Write-Output '  PlayMode: 전체. 메뉴 ProtoHarness > Chain Rush > Run PlayMode Tests'
+    Write-Output '  PlayMode: 표에서 범위 확정 못 함. 영향 평가로 이름 선택 (게이트 메뉴 실행 금지, 일반 선택은 !^Lap$; 위 Lap 칸은 별도).'
     exit 0
 }
 if (-not $touchesAssets) {
@@ -318,4 +407,4 @@ $fpText = if ($touchesNonTest) { ' + 지문 1건' } else { ' (시뮬이 읽는 �
 $partText = if ($tests.Count -gt 0) { " + 클래스 일부 $($tests.Count)개($($tests -join ', '))" } else { '' }
 Write-Output "  PlayMode: 클래스 $($classes.Count)개$partText$fpText"
 Write-Output '  Unity_RunCommand 로 실행 (결과 XML 은 메뉴 실행과 같은 파일):'
-Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Enemy", "!NetEndReplay" } }));')
+Write-Output ('  ScriptableObject.CreateInstance<TestRunnerApi>().Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode, assemblyNames = new[] { "ProtoHarness.Tests.PlayMode" }, groupNames = new[] { ' + $quoted + ' }, categoryNames = new[] { "!Device", "!Enemy", "!NetEndReplay", "!^Lap$" } }));')

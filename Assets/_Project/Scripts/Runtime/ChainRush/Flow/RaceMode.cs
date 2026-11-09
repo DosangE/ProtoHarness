@@ -4,6 +4,8 @@ namespace ProtoHarness.ChainRush.Flow
     public enum RaceMode
     {
         Single,
-        Multi
+        Multi,
+        // The mission map (Tutorial/TutorialCourse): no laps, records or ghost.
+        Tutorial
     }
 }

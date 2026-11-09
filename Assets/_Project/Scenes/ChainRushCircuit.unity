@@ -1951,7 +1951,10 @@ MonoBehaviour:
   turnAcceleration: 200
   airTurnScale: 0.5
   minTurnRadius: 25
+  boostTurnRadiusScale: 2
   turnSpeedLoss: 0.2
+  turnSpeedLossScale: 0.5
+  turnFalloffScale: 0.11111111
   runAcceleration: 8
   coastDeceleration: 6
   brakeDeceleration: 20
@@ -1962,6 +1965,7 @@ MonoBehaviour:
   airSideGrip: 18
   guardSpeedLoss: 0.4
   guardScrapeDecel: 25
+  guardTurnRate: 60
   slopeSpeedFactor: 1.5
   minSlopeSpeedScale: 0.7
   maxSlopeSpeedScale: 1.3
@@ -1969,23 +1973,24 @@ MonoBehaviour:
   groundSnapDistance: 0.3
   slingLead: 18
   slingPullTime: 0.4
-  slingPullAcceleration: 30
-  slingTopSpeed: 28
-  slingTurnRate: 90
+  slingPullAcceleration: 240
+  slingTopSpeed: 32
   slingCarryTime: 2.6
-  slingCarrySpeed: 26
+  slingCarrySpeed: 32
+  boostZoneSpeed: 55
+  boostZoneFalloff: 0.8
   empoweredReleaseSpeed: 26
   poleMaxAngle: 95
   poleReach: 6
+  poleHookArcShare: 0.5
   ropeRate: 6
   minRopeLength: 2
-  minSwingSpeedScale: 0.8
-  maxSwingSpeedScale: 1.5
   swingThrottleSpeedScale: 1.2
   swingMetersPerSlot: 35
-  swingCarryFalloff: 3
+  swingCarryDecay: 0.8
   respawnBackoff: 4
   respawnHoldTime: 1
+  respawnPadReach: 50
 --- !u!143 &1925527728
 CharacterController:
   m_ObjectHideFlags: 0
@@ -2482,6 +2487,9 @@ MonoBehaviour:
   music: {fileID: 2105445620}
   effects: {fileID: 2105445619}
   ambience: {fileID: 2105445618}
+  poleHookRecording: {fileID: 8300000, guid: 4af058d23097cab48923474d59fed128, type: 3}
+  grappleRecording: {fileID: 8300000, guid: a8cad1b9fd5f39f47a410aae57f46a12, type: 3}
+  swingRecording: {fileID: 8300000, guid: 5265da6f06d780847917428b75cdce71, type: 3}
   musicVolume: 0.32
   effectsVolume: 0.65
 --- !u!82 &2105445618
@@ -2790,6 +2798,7 @@ MonoBehaviour:
   game: {fileID: 2105445612}
   circuit: {fileID: 1927120373}
   player: {fileID: 1925527727}
+  viewCamera: {fileID: 493584858}
 --- !u!1001 &1256964004434069242
 PrefabInstance:
   m_ObjectHideFlags: 0

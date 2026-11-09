@@ -38,6 +38,8 @@ namespace ProtoHarness.ChainRush
         public bool IsCountingDown => phase == Phase.Countdown;
         // 3, 2, 1 while counting down; 0 otherwise.
         public int CountdownNumber => IsCountingDown ? Mathf.CeilToInt(countdownLeft) : 0;
+        // How long the number now showing has been up, in seconds; 0 when not counting down.
+        public float CountdownNumberAge => IsCountingDown ? CountdownNumber - countdownLeft : 0f;
         // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
         // so the keyboard cannot restart a run the server is simulating.
         public bool ManualStart { get; set; } = true;
@@ -56,6 +58,13 @@ namespace ProtoHarness.ChainRush
         public CircuitRace Circuit => circuit;
         public RunnerMotor Player => player;
         public bool HasPresentation => enhancedPresentation;
+        // Presentation only; RaceAssembler may supply the track's clips before the audio's Awake.
+        public void UseTrackSounds(AudioClip music, AudioClip ambience)
+        {
+            if (!enhancedPresentation) return;
+            if (presentationAudio == null) throw new System.InvalidOperationException("ChainRushGame: enhanced presentation requires audio.");
+            presentationAudio.UseTrackSounds(music, ambience);
+        }
         public RacerState Racer => racer;
         public Centerline Track => track;
         public double Distance => System.Math.Max(0d, PlayerS - 5d);
@@ -232,6 +241,9 @@ namespace ProtoHarness.ChainRush
                 throw new System.NotSupportedException("ChainRushGame: snapshots are only supported in a circuit race.");
         }
 
+        // Resets the runner and camera to their start pose, ready without advancing simulation or counting down.
+        public void ReturnToStart() => ResetRun();
+
         // Starts a run at once. Servers, rollbacks and tests start here; a player at the keyboard goes through StartCountdown.
         public void StartRun()
         {
@@ -300,21 +312,27 @@ namespace ProtoHarness.ChainRush
             attackVisual.gameObject.SetActive(false);
         }
 
-        private void CompleteRun()
+        // Ends the run as finished: a race when its last lap is done, the tutorial when its last stage is.
+        public void CompleteRun()
         {
             if (!IsRunning) return;
             phase = Phase.Complete;
             grapple.Release(false);
             attackVisual.gameObject.SetActive(false);
-            PlayCue(RaceCue.Action);
+            PlayCue(RaceCue.Finish);
         }
 
-        // Only the first four cues (Jump..Damage) have a plain fallback clip; any later one is refused here too.
+        // Every cue as it plays, whichever clips play it (a test listens here).
+        public event System.Action<RaceCue> CuePlayed;
+
+        // Only the first four cues (Jump..Damage) have a plain fallback clip; without the presentation any later one
+        // sounds like Finish, as every move did before they had their own sounds (2026-11-05).
         public void PlayCue(RaceCue cue)
         {
-            if (cue < RaceCue.Jump || (int)cue >= cues.Length) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            if (cue < RaceCue.Jump || cue > RaceCue.Respawn) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            CuePlayed?.Invoke(cue);
             if (enhancedPresentation) { presentationAudio.PlayCue(cue); return; }
-            audioSource.PlayOneShot(cues[(int)cue]);
+            audioSource.PlayOneShot(cues[(int)cue < cues.Length ? (int)cue : (int)RaceCue.Finish]);
         }
 
         private void OnDestroy()

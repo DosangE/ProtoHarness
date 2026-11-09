@@ -15,9 +15,9 @@
 - **Blender 아트 에이전트 (다른 세션, `docs/blender-art-agent`, `dev` `60b5c2c`, DECISIONS 2026-11-09 "Blender 아트 에이전트")**: `blender-artist` 는 `art-src/` 까지만 쓴다. 첫 모델 요청서·FBX 축/스케일·Unity 임포트·`select-tests` 판정표는 그 항목 "남은 것" 에서 따로 합의한다.
 - **`fix/stadium-flicker` 삭제**: 사용자 "더이상 안깜빡인다 삭제 ㄱ". `dev` 의 LED 수정(2026-11-06 "플레이 피드백")으로 충분했다. 허들·축구장 라인 수정(`38f418a`)은 버렸다 — reflog 에만 남는다.
 - **같은 작업 트리를 다른 세션이 쓸 수 있다**: 2026-11-09 리뷰 도중 아트 세션이 `docs/blender-art-agent` 를 체크아웃했고 Unity 에디터도 닫혔다. 브랜치를 바꾸기 전에 `git branch --show-current`·`git status` 로 다른 세션의 커밋 안 한 파일이 없는지 본다.
-- **`dev` 병합 커밋**: 훅이 `dev`/`main` 에서의 `git commit` 을 막는다(병합 커밋도). 기능 브랜치에서 `git commit-tree "HEAD^{tree}" -p dev -p HEAD` + `git update-ref refs/heads/dev` 로 병합해 왔다. 충돌이 있으면 기능 브랜치에 `dev` 를 먼저 병합해 풀고 나서 한다.
+- **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다(2026-11-09 `f740b46`). 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 풀고 나서 병합한다.
 - **남은 M6 마감 (사용자 "일단 대기")**: SUMMIT DROP 플레이 확인, 플레이어 빌드 1회, `TitleScreen.Version` 0.6, 마일스톤 조건 ③(EditMode 전체 1회·PlayMode 게이트 전체 2회·Device 1회), `dev → main`, 태그 `v0.6`. 게이트 전체는 그동안의 시뮬 변경이 다른 트랙에 주는 영향을 처음 보는 자리다(2026-10-30 아래 줄).
-- **로컬에만 있는 것**: stash `sound round 1`(첫 효과음 시도, 이제 쓰지 않는다 — 지울지는 사용자), stash `feature/circuit-fall-respawn`(GitHub Desktop). `docs/NEXT_REQUESTS.md` "M6 효과음 2차" Codex 지시서는 쓸 일이 끝났다.
+- **stash 는 없다**: 사용자 "스태쉬 남아있다면 제거"(2026-11-09). `sound round 1`(첫 효과음 시도, `96919af`)과 GitHub Desktop 의 `feature/circuit-fall-respawn`(제안서 3개는 이미 `dev` 에 있었다, `993b952`)을 지웠다. `docs/NEXT_REQUESTS.md` "M6 효과음 2차" Codex 지시서는 쓸 일이 끝났다.
 
 ### 2026-11-06
 

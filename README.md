@@ -82,6 +82,7 @@ AI 에이전트(Claude Code, Codex)와 함께 개발하는 Unity 6 3D 레이싱 
 - `Run Device Input Tests` — 가상 키보드 장치 테스트만
 - `Run Long Tests`, `Run Course Sweep` — 무한 모드 장거리 테스트 (무한 모드 보류 동안 게이트에서 돌리지 않는다)
 - 작업 중에 바꾼 부분만 돌리려면 `tools/select-tests.ps1` 이 고를 테스트를 알려 준다. 언제 무엇을 돌리는지는 `CLAUDE.md` §9-2.
+- 실행이 끝나면 `tools/test-runs.ps1 -Record` 로 남기고, `-Last -Passed` 로 마지막 통과 이후 바뀐 파일을 본다 (`docs/RULES/VERIFICATION.md` §4-4).
 
 ## 폴더
 

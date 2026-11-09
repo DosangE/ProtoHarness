@@ -7,6 +7,24 @@
 
 ---
 
+## 2026-11-09 · 테스트 실행 기록: 실행마다 기준점·필터·결과·에디터 버전을 남긴다 (`docs/test-run-records`)
+
+- **결정 (사용자, 2026-11-09)**: 다른 AI 의 하네스 점검("가장 부족한 건 에이전트가 한 작업을 같은 조건에서 다시 검증할 수 있는 실행 기록") 중 1·3번에 "괜찮아보인다", 합의 요청서 A 에 "A ㄱㄱ". `tools/test-runs.ps1` 을 새로 두고 `docs/RULES/VERIFICATION.md` §4-4 에 "실행 기록" 한 줄, `CLAUDE.md` §9-2 "작업 중 실행을 다시 쓴다" 의 근거를 그 출력으로 바꿨다.
+- **이유**: 결과 XML 은 한 경로에 덮어쓰인다(`ChainRushSceneBuilder.cs:282`). 그래서 "마지막 통과 실행" 과 "그 뒤 바뀐 파일" 을 사람이 DECISIONS 검증 줄과 git 으로 맞춰 왔고, 범위 지적이 네 번 나왔다(같은 날 "테스트 범위: 마지막 통과 이후"). 그 항목이 버린 대안("select-tests 가 스스로 계산 — XML 이 덮어쓰여 기준점이 흔들린다")의 원인을 기록으로 없앤다.
+- **기록하는 것**: XML 사본, `testcasecount`·`result`·`passed`·`failed`·`skipped`·시각, 돌린 필터(호출한 쪽이 준다), HEAD·브랜치, 그때 커밋하지 않은 `Assets/` 파일과 git 해시, 에디터 로그의 `Version is`, 돈 테스트 이름. 위치는 리포 밖 `$env:LOCALAPPDATA\ProtoHarness\test-runs`(PC 마다 에디터 버전이 달라 기록도 PC 마다다. `.gitignore` 를 건드리지 않는다).
+- **"바뀐 파일" 계산**: 파일마다 기록 때 내용(그때 커밋하지 않은 파일은 그때 해시, 나머지는 기록 HEAD 의 blob)과 지금 작업 트리 내용을 git 해시로 비교한다. 실행 뒤 같은 내용을 커밋한 것은 바뀐 것이 아니다. `Packages/`·`ProjectSettings/` 는 보지 않는다(이 PC 의 버전 드리프트가 늘 바뀐 것으로 보인다).
+- **시끄럽게**: XML 이 없거나, XML 의 `start-time` 이 `-StartedAt` 보다 이르거나(실행이 XML 을 못 쓰고 옛 파일이 남은 경우, 2026-11-02 플레이 모드 중 실행이 그랬다), 에디터 버전을 못 읽거나, 같은 실행을 두 번 기록하면 거부한다. 기록 HEAD 를 저장소에서 못 찾으면(리베이스 등) 계산하지 않고 실패한다.
+- **버린 대안**: `TestCallbacks.RunFinished`(Assets/)에서 자동 기록 — 잊지 않지만 콜백은 돌린 필터를 모르고, `Assets/` 변경이라 Unity 검증이 따른다. 기록을 빠뜨리는 일이 생기면 다시 본다. 리포 안 `test-runs/` 에 커밋 — PC 마다 다른 기록이 이력에 섞이고 `.gitignore` 변경이 따른다. `select-tests.ps1` 에 바로 연결 — 기록이 먼저 쌓여야 판단을 맡길 수 있다(점검 1번 "선택기를 자동 실행에 연결하기 전에 이 기록부터").
+- **검증 (문서 검증 + 스크립트 실행, `CLAUDE.md` §9-2 적용 범위)**: 스크래치에 `git clone --local` + sparse checkout(`Audio/`)으로 만든 사본과 스크래치 기록 폴더로 돌렸다. 기존 XML(2026-11-09 03:50:41Z, 13건)을 기록 → `-Last -Passed` "바뀐 파일: 없음, 판정: 커밋한 코드". 작업 트리에서 `ChainRushAudio.cs` 를 바꾸면 1개(작업 트리), 커밋하면 1개(커밋됨). `UiSound.cs` 를 고친 채 두 번째 실행을 기록 → "작업 트리와 같다, 아직 커밋 안 함", 같은 내용을 커밋 → "커밋한 코드와 같다". 다시 고치고 새 파일·삭제를 더하면 3개(내용 바뀜·새로 생김·지워짐). 실패 실행(`Failed(Child)`, failed=1)은 `-Last` 에 나오고 `-Last -Passed` 는 건너뛴다. 거부 넷(늦은 `-StartedAt`, 같은 실행 두 번, XML 없음, 모드 둘)이 원문 메시지로 실패했다. `-StartedAt` 의 초 아래(04:59:59.700 → XML 05:00:00)는 받는다. 실제 리포 기본 경로로 `-List`·`-Last -Passed` 는 "기록 없음".
+  - 고친 결함: 처음에는 경로를 `git hash-object --stdin-paths` 로 파이프했는데, Windows PowerShell 5.1 이 `$OutputEncoding` 을 BOM 없는 UTF-8 로 두어도 첫 줄에 BOM 을 붙여 `fatal: could not open '﻿Assets/…'` (exit 128)로 실패했다. 인자로 100개씩 넘기게 바꿨다.
+  - 확인 못 한 것: LFS 파일(`git lfs ls-files` 24개)의 해시 비교는 sparse 사본에 LFS 파일이 없어 돌지 않았다(`hash-object` 는 clean 필터를 거치므로 pointer 끼리 비교할 것으로 보지만 실측 아님). ~~경로에 ASCII 밖 글자가 있으면 git 출력이 cp949 로 읽혀 깨질 수 있다(지금 `Assets/` 1,045개 중 0개).~~ → 아래 리뷰 ① 로 고쳤다. 실제 Unity 실행 직후의 기록은 다음 테스트 실행에서 처음 한다.
+- **리뷰 (Codex 설계 리뷰, `20b6359` 에 대해, `needs-attention` high 2·medium 2)**: 넷 다 실제 결함이거나 실제 한계였다.
+  - ① high, 한글 경로: `Invoke-Git` 이 git 의 UTF-8 출력을 cp949 로 읽어 경로가 깨지면 해시가 null 로 남고, 나중 비교가 "같다" 가 될 수 있었다. git 을 부르는 동안만 `[Console]::OutputEncoding` 을 UTF-8 로 둔다. 지우지 않았다는 파일·HEAD 에 있는 파일을 찾지 못하면 null 로 두지 않고 실패한다. 시험: 한글 이름 파일을 고친 채 기록 → "바뀐 것 없음", 다시 고침 → 1개(작업 트리), 커밋 → 1개(커밋됨), 이름이 제대로 나온다.
+  - ② high, 뒤의 실패를 숨김: `-Last -Passed` 가 마지막 통과만 골라 그 뒤 실패를 보이지 않았다(§9-2 "마지막 실행이 통과", "원인을 설명하지 못하면 병합하지 않는다"). 고른 통과 뒤의 실패 실행(플랫폼과 무관)을 보이고 판정을 "재사용 불가" 로 한다. 마지막 실행 자체가 실패면 "재사용할 통과가 아니다". 시험: 통과 → 실패 기록 뒤 `-Last -Passed` 가 실패 1건과 "재사용 불가" 를 낸다.
+  - ④ medium, LFS: `Assets/` 에 LFS 파일 20개(텍스처 14·오디오 5·TutorialInfo 1)가 있다. clean 필터 해시는 pointer 와 내용이 같아 pointer 상태로 기록한 뒤 내용을 받으면 잡히지 않는다. `Assets/` 에 pointer 가 있으면 `-Record`·`-Last` 를 거부한다. 시험: `GIT_LFS_SKIP_SMUDGE=1` 로 오디오를 받은 사본에서 둘 다 "LFS 파일 5개가 … pointer" 로 거부, 기록 파일 0개. 실제 리포(내용을 받은 상태)에서는 지나간다.
+  - ③ medium, 다른 실행이 덮어쓴 XML: 시각 검사는 이번 실행보다 오래된 XML 만 막는다. 이 PC 에서 그 파일 이름을 쓰는 코드는 ProtoHarness 하나다(PCUBE 폴더 grep, `ChainRushSceneBuilder.cs:282`). 실행마다 고유한 결과 경로를 쓰려면 `Assets/` 콜백을 바꿔야 해 이번 범위 밖이다. 한계로 스크립트 머리말과 VERIFICATION §4-4 에 적었다(같은 PC 에서 두 에디터로 동시에 돌리지 않는다). 후속 후보: `TestCallbacks` 가 실행마다 다른 경로에 쓰고 그 경로를 로그에 남기기.
+  - 고친 뒤 처음부터 다시 돌린 시나리오 T0~T14 가 모두 위와 같이 나왔다.
+
 ## 2026-11-09 · 효과음: 녹음을 못 쓰면 이름과 이유를 남기고 끈다 (`fix/audio-recording-failures`)
 
 - **결정 (사용자, 2026-11-09)**: 효과음 병합 리뷰의 보통 2건에 "1. 보통 2건 수정", "커밋 병합 푸쉬 ㄱㄱ".

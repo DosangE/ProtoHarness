@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-11-09 · Blender 시험 제작: 지름길 표지판 한 개로 Blender → `art-src/` → `Assets/` → Unity 확인을 한 번 돌렸다, FBX 는 축·스케일을 적용해 내보낸다 (`feature/art-shortcut-sign`)
+
+- **결정 (사용자)**: 다른 AI 의 점검 3번("소품 하나로 미리보기 → 선택 → FBX 전달 → Unity 에서 크기·방향 확인까지 한 번 끝내 보면 어디가 반복 작업인지 드러난다")을 M6 마감 전에 하기로 했다 — "마감 전에 블렌더 작업 한번 해보겟ㅆ다", 요청서에 "ㄱㄱ". 소품은 SUMMIT DROP 지름길 나무 표지판(비대칭이라 축이 틀리면 화살표가 뒤집혀 보인다). 시안 A(빌더 모양: 상자 판 + 화살표 막대)·B(화살 판자)를 Blender 에서 보고 "A가 낫네". 첫 임포트에서 루트 회전·스케일이 나와 Blender 쪽 설정을 바꿔 보기로 "해봐".
+- **FBX 설정 (이 프로젝트의 기본)**: `bpy.ops.export_scene.fbx(use_selection=True, apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True)`, 나머지는 Blender 5.2.3 기본값(`axis_forward='-Z'`, `axis_up='Y'`, `global_scale=1.0`, `apply_unit_scale=True` 등, 에이전트가 연산자 속성에서 읽음). Unity 임포트 설정은 기본값 그대로.
+  - 기본값으로 낸 첫 FBX: Unity 루트 Transform 이 회전 (270, 0, 0)·스케일 100, `fileScale=0.01`. 놓기만 하면 바로 서지만, 코드가 인스턴스의 회전을 덮어쓰면(빌더의 `SetPositionAndRotation`) −90° 보정이 사라져 눕는다.
+  - 위 설정으로 다시 낸 FBX: 루트 회전 (0, 0, 0)·스케일 1, `fileScale=1`, 크기 2.800 × 3.600 × 0.535 m, 피벗 바닥 가운데. 미리보기 씬에서 `SetPositionAndRotation(0, identity)` 뒤에도 크기가 같고 서 있다(렌더 확인).
+  - `use_selection=True` 가 필요하다: 에이전트는 사용자의 열린 Blender 에서 새 장면에 작업하는데, `.blend` 의 `copy=True` 저장은 사용자의 기존 장면(Cube·Light·Camera)까지 담는다. FBX 에는 A 만 들어갔다(파일 안 문자열: `ShortcutSign_A` 와 머티리얼 3개, `Cube`·`Light`·B 없음, `Camera` 는 전역 설정 `DefaultCamera` 뿐).
+- **축 대응 (측정)**: Blender 앞면(−Y, Front 뷰) → Unity **+Z**, Blender 위(+Z) → Unity +Y. 앞에서 보면 같은 모습이다(화살표가 Blender 에서 +X 를 가리키면 Unity 에서 +Z 쪽에서 볼 때 오른쪽, 좌표로는 −X). 지금 빌더는 표지판의 읽는 면을 −Z 에 둔다(진행 방향을 바라보게 놓고 러너가 뒤에서 본다, `SummitDropEnvironmentBuilder.cs:496-501`). 빌더에 이 모델을 쓰려면 180° 돌리거나 Blender 에서 앞면을 +Y 로 만든다 — 배치할 때 정한다.
+- **버린 대안**: Unity 쪽 `ModelImporter.bakeAxisConversion` — FBX 마다 설정해야 하고, 자동으로 하려면 AssetPostprocessor 코드가 새로 생긴다. Blender 쪽 설정은 내보내는 곳 한 곳에서 끝난다. 기본값 그대로 쓰고 코드에서 회전을 곱하기 — 모든 사용처가 보정을 알아야 한다.
+- **흐름에서 본 것 (반복 작업 후보)**:
+  - `blender-artist` 3회(시안 → 내보내기 → 재내보내기, 같은 에이전트에 이어서). 세이프 모드 거부 2회(변수에 담은 함수 호출, 계산한 `getattr` 이름) — 둘 다 우회하지 않고 다시 썼다. MCP 첫 상태 조회가 `WinError 10053` 으로 한 번 실패했다.
+  - 복사(`unity-implementer` 2회, 24k·27k 토큰)는 `cp` 한 줄인데 규칙(CONVENTIONS §1-2)상 에이전트를 거쳤다. 임포트·확인·렌더는 메인이 Unity MCP 로 했다(코드 3개). **복사 → 임포트 → 크기·루트 Transform·축 확인 → 렌더** 가 다음 모델에서도 그대로 반복된다 — 도구로 묶을지는 따로 합의한다.
+  - `.blend` 를 다시 저장하면 Blender 가 `ShortcutSign.blend1` 백업을 만든다. `.gitignore` 의 `*.blend1` 로 무시된다.
+- **select-tests**: `tools/select-tests.ps1` 에 `ShortcutSign.fbx` 와 `.meta` 판정을 넣었다. `Assets/` 에서 파일명과 GUID `f38d83b018bf0ac48b92e6cbfb318b34` 를 검색했으며, 이 모델을 읽는 코드·씬·프리팹이 없어 PlayMode 와 지문을 고르지 않는다. 배치할 때 참조 경로에 맞춰 이 판정을 다시 본다.
+- **에이전트 반영**: 사용자 승인 후 `blender-artist` 정의에 위 내보내기 설정을 프로젝트 기본값으로 넣었다(사용자가 시킨 Codex 작업). Codex 는 `.codex` 동기화와 커밋이 권한 오류로 막혀, 메인이 `sync-agents.ps1` 로 `.codex/agents/blender-artist.toml` 을 다시 만들고(`-Check` "일치") 커밋·병합했다(사용자 "권한에 막힌건 너가 직접해").
+- **안 한 것**: SUMMIT DROP 에 배치(빌더·씬), 화살표 방향 고치기.
+
 ## 2026-11-09 · 기획 에이전트: `gameplay-designer`, 읽기 전용, 피드백을 가설·변경안·플레이테스트로 (`docs/gameplay-designer-agent`)
 
 - **결정 (사용자, 2026-11-09)**: 다른 AI 의 제안("플레이 피드백을 다음에 시험할 가설로 바꾸고, 구현 전에 성공 기준을 정하는 역할")에 합의 요청서 B 로 "B ㄱㄱ". `.claude/agents/gameplay-designer.md`(+ 생성물 `.codex/agents/gameplay-designer.toml`)를 두고 `docs/RULES/SUBAGENTS.md` §7-1 을 7종으로 했다. 첫 적용으로 `docs/PLAYTEST_SUMMIT_DROP.md`(M6 의 SUMMIT DROP 플레이 확인지)를 만들었다.

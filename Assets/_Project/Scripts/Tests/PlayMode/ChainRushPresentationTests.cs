@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
+using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
@@ -205,6 +206,61 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(zoneRoughness, Is.LessThan(0.045d), "Boost zone must not crackle.");
             yield return null;
         }
+
+#if UNITY_EDITOR
+        // A recording that cannot make the loop turns the component off with its field named, instead of an exception out
+        // of Awake that left it on and half built; cues and resets after that drop quietly but say so once (review 2026-11-09).
+        [UnityTest]
+        public IEnumerator Audio_UnusableSwingRecording_TurnsOffWithItsName_AndLaterCallsDoNotThrow()
+        {
+            AudioClip shortClip = (AudioClip)new SerializedObject(sound).FindProperty("poleHookRecording").objectReferenceValue;
+            Assert.That(shortClip.length, Is.LessThan(8.25f), "The short case borrows the pole hook recording, which must stay under the 8.25 s the loop needs.");
+            var silent = AudioClip.Create("Silent swing", 48000 * 9, 1, 48000, false);
+            // Sound only in its first second: the file is not silent, the 4..8.25 s the loop plays is.
+            var quietLoop = AudioClip.Create("Swing quiet where it loops", 48000 * 9, 1, 48000, false);
+            var opening = new float[48000];
+            for (int i = 0; i < opening.Length; i++) opening[i] = 0.5f * Mathf.Sin(i * 0.05f);
+            Assert.That(quietLoop.SetData(opening, 0), Is.True);
+            var cases = new[]
+            {
+                (clip: shortClip, says: @"swingRecording \(Chain_PoleHook\) is [0-9.]+ s; it needs 8\.25 s"),
+                (clip: silent, says: @"swingRecording \(Silent swing\) is silent\."),
+                (clip: quietLoop, says: @"swingRecording is silent from 4\.00 s to 8\.25 s"),
+            };
+            foreach (var test in cases)
+            {
+                ChainRushAudio made = MakeAudio(test.clip);
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(test.says));
+                made.gameObject.SetActive(true);
+                yield return null;
+                Assert.That(made.enabled, Is.False, test.clip.name);
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ChainRushAudio: off since Awake"));
+                Assert.DoesNotThrow(() => { made.PlayCue(RaceCue.Boost); made.PlayCue(RaceCue.PoleHook); made.ResetAudio(); made.SetMuted(true); }, test.clip.name);
+                Assert.That(made.CueCount, Is.Zero, test.clip.name);
+                Assert.That(made.SwingVolume, Is.Zero, test.clip.name);
+                Assert.Throws<InvalidOperationException>(() => made.GetCue(0), test.clip.name);
+                UnityEngine.Object.Destroy(made.gameObject);
+                yield return null;
+            }
+            UnityEngine.Object.Destroy(silent);
+            UnityEngine.Object.Destroy(quietLoop);
+        }
+
+        // An inactive copy of the scene's audio wiring with its own swing recording, so Awake runs when the test activates it.
+        private ChainRushAudio MakeAudio(AudioClip swing)
+        {
+            var holder = new GameObject("Audio under test");
+            holder.SetActive(false);
+            var made = holder.AddComponent<ChainRushAudio>();
+            var data = new SerializedObject(made);
+            var source = new SerializedObject(sound);
+            foreach (string name in new[] { "game", "player", "music", "effects", "ambience", "poleHookRecording", "grappleRecording" })
+                data.FindProperty(name).objectReferenceValue = source.FindProperty(name).objectReferenceValue;
+            data.FindProperty("swingRecording").objectReferenceValue = swing;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            return made;
+        }
+#endif
 
         // The chain sounds are the recordings the user picked, cut so they start on the hit (DECISIONS 2026-11-07).
         [UnityTest]

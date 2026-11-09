@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-11-09 · 효과음: 녹음을 못 쓰면 이름과 이유를 남기고 끈다 (`fix/audio-recording-failures`)
+
+- **결정 (사용자, 2026-11-09)**: 효과음 병합 리뷰의 보통 2건에 "1. 보통 2건 수정", "커밋 병합 푸쉬 ㄱㄱ".
+- **고친 것** (`ChainRushAudio.cs` 만, `ChainRushGame.cs` 는 그대로):
+  - `Awake` 가 녹음 3개를 다른 준비보다 먼저 `ReadRecording` 으로 읽어 비어 있음·가져오기 설정(Decompress On Load)·길이(샘플, 루프가 자르는 것보다 1샘플 더)·무음을 검사하고, 스윙은 루프가 쓰는 4~8.25초의 무음도 본다(`SwingSectionFault`). 틀리면 틀린 녹음을 모두 필드 이름과 이유로 `LogError(…, this)` 하고 끈다. 전에는 `throw` 가 `enabled = false` 를 거치지 않아 반쯤 켜진 채 남았다.
+  - 꺼진 상태에서 `PlayCue`·`ResetAudio`·`SetMuted` 는 무시하고 처음 한 번 `off since Awake` 를 `LogError` 한다. `CueCount`·`SwingVolume` 은 0, `GetCue` 는 `InvalidOperationException`. 전에는 시뮬 틱 안(`RunnerMotor.Step` 의 `PlayCue`)에서 NRE 가 났다.
+  - `OnValidate` 가 가져오기 설정을 편집 중에 알린다. `PlayCue` 의 `Enum.GetValues` 할당을 정적 `CueTotal` 로 바꿨다.
+- **버린 대안**: `ChainRushGame.PlayCue` 에서 오디오가 꺼졌는지 보기 — 코어 시뮬 파일을 건드려 지문까지 돌려야 하고, 꺼진 이유를 아는 쪽은 `ChainRushAudio` 다. `Awake` 를 try/catch 로 감싸기 — 검사로 막을 수 있는 실패를 예외로 다루게 된다.
+- **검증** (테스트를 걸기 전에 범위 한 줄을 먼저 썼다, 2026-11-09 "테스트 범위: 마지막 통과 이후"):
+  - 수정 전: 새 테스트 `Audio_UnusableSwingRecording_TurnsOffWithItsName_AndLaterCallsDoNotThrow` `testcasecount=1 failed=1`, 2026-11-09 03:25:25Z, 원문 `Unhandled log message: '[Exception] InvalidOperationException: Swing recording is too short: Chain_PoleHook'`.
+  - 1차 수정(`0e7dd22`): Presentation 12 + `ChainRushFlowTests.Race_FingerLanesLook_PlaysTheTracksMusicAndAmbience` → `testcasecount=13 result=Passed passed=13 failed=0 skipped=0`, 2026-11-09 03:28:36Z~03:29:00Z.
+  - 2차 수정(`292280d`, 리뷰 반영): 같은 13건 → `testcasecount=13 result=Passed passed=13 failed=0 skipped=0`, 2026-11-09 03:50:41Z~03:51:01Z. 시뮬 코드는 바뀌지 않아 지문·Lap 은 뺐다. 그 사이 `dev` 병합(`3b7d94c`)은 문서·에이전트 정의뿐이다.
+  - 컴파일 `*** Tundra build success (10.87 seconds), 29 items updated, 1618 evaluated`, Console 에러 0건. `AudioClip.Create` 로 만든 클립의 `loadType` 은 `DecompressOnLoad` 다(실측). 그래서 테스트의 "전체 무음" 경우가 무음 검사를 지난다.
+  - 확인 못 한 것: 가져오기 설정이 틀린 녹음은 에셋 설정을 바꿔야 해서 테스트하지 않았다.
+- **리뷰** (1차 수정 `0e7dd22` 에 대해): Codex 설계 리뷰 `needs-attention` medium 2 — ① 녹음 전체의 피크만 봐서 스윙 구간만 무음이면 NaN 루프 ② 꺼진 뒤 `CueCount`·`SwingVolume`·`GetCue` 의 NRE. 둘 다 실제 결함이라 2차 수정에서 고쳤다. `unity-reviewer` 치명 0·중대 0·보통 1(Codex ① 과 같음)·제안 8, 68,294 토큰. 제안 중 넣은 것: 틀린 녹음을 모두 알리기, 길이 검사 주석 정정, 테스트를 이유별 메시지로 구별, 짧은 경우 전제를 먼저 확인. 넣지 않은 것: `loadType` 메시지가 `OnValidate`·`ReadRecording` 두 곳에 있음, "see the error above" 가 Awake 전 호출을 가정, `Update` 의 `initialized` 가드, `UnloadAudioData`, WebGL 의 `GetData`. 2차 수정은 다시 리뷰하지 않았다(브랜치당 1회, 다시 부르는 것은 지시가 있을 때). Codex 비용은 `/status` 를 읽지 않아 모른다.
+- **알아둘 것**: 리뷰 도중 다른 세션이 같은 작업 트리에서 `docs/blender-art-agent` 를 체크아웃했다(12:31:15). 그 세션이 끝날 때까지 이 브랜치를 멈췄고, 그 사이 Unity 에디터가 12:30:27 에 닫혀 다시 열었다.
+
 ## 2026-11-09 · Blender 아트 에이전트: `mcp-for-blender` + 세이프 모드, `art-src/` 까지만 (`docs/blender-art-agent`)
 
 - **결정 (사용자)**: "블렌더 환경을 만들어두고 아트관련 에이전트를 두고 작업을 전담시키고 싶다". 다른 AI 의 추천(1 `mcp-for-blender` + Safe Mode, 2 `art-src/` 경유 후 `unity-implementer` 가 반영, 3 Codex 는 평소 차단, 4 직접 설치)을 받아 합의안을 고쳤고, 설치·등록 7단계 "ㄱㄱ", 실측 뒤 에이전트·문서 "ㄱㄱ".

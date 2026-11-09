@@ -19,7 +19,7 @@
 
 - `blender-artist` 는 사용자의 열린 Blender 하나에 붙는다. 같은 Blender 를 두 에이전트(Claude·Codex 포함)가 동시에 쓰지 않는다. 결과를 `Assets/` 로 옮기는 것은 승인받은 `unity-implementer` 작업이다 (`docs/DECISIONS.md` 2026-11-09 "Blender 아트 에이전트").
 
-- `gameplay-designer` 는 플레이어가 어디서 막히고 어떤 경험이 달라져야 하는지를 정리하고, `unity-architect` 는 그 변경이 어느 시스템에 닿는지를 본다. 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때 쓴다(파견 여부는 §7-3). 초안은 응답으로만 돌려주고 파일에 옮기는 것은 메인 세션이다. 무엇을 고를지는 사용자가 정한다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
+- `gameplay-designer` 를 쓰는 때: 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때. 파견 여부는 §7-3(사용자가 지시할 때)을 따른다. 파견문에는 `git rev-parse HEAD` 값을 적는다 — 이 에이전트는 Bash 가 없어 인덱스 신선도를 스스로 확인하지 못한다. 역할 경계와 응답 형식은 정의(`.claude/agents/gameplay-designer.md`)가 원본이다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
 
 - 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
 

@@ -59,7 +59,21 @@ Blender 는 하나다. 다른 에이전트(Claude·Codex)가 같은 Blender 를 
 
 - 단위는 m. 요청서의 치수를 그대로 쓴다.
 - 머티리얼 슬롯 이름 `M_이름` (`CONVENTIONS.md` §1-3). 셰이더 노드는 이름이 아니라 `type` 으로 찾는다(Blender UI 가 한국어다).
-- FBX 축·스케일 설정은 첫 모델의 Unity 임포트에서 정해 `docs/DECISIONS.md` 에 적는다. 그 전에는 요청서에 적힌 값을 쓰고, 없으면 Blender 기본값으로 내보내고 **그렇다고 보고한다.**
+- FBX 는 작업 장면에서 내보낼 후보 오브젝트만 선택하고, 아래 프로젝트 기본 설정으로 내보낸다. 근거는 `docs/DECISIONS.md` 2026-11-09 "Blender 시험 제작"에 있다. 승인된 요청서에 다른 설정이 명시되어 있으면 그 설정을 쓰고 실제로 적용한 값을 보고한다.
+
+  ```python
+  bpy.ops.export_scene.fbx(
+      filepath=fbx_path,
+      use_selection=True,
+      apply_scale_options='FBX_SCALE_ALL',
+      bake_space_transform=True,
+      axis_forward='-Z',
+      axis_up='Y',
+      global_scale=1.0,
+      apply_unit_scale=True,
+  )
+  ```
+
 - `look` 으로 결과를 본다. `max_size` 는 작게 쓴다.
 
 ## 응답 형식

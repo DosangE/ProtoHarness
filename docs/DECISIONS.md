@@ -7,6 +7,18 @@
 
 ---
 
+## 2026-11-09 · README 갱신: v0.6 화면으로 다시 찍고, 말투를 합니다체 + 개조식으로 (`docs/readme-refresh`)
+
+- **결정 (사용자, 2026-11-09)**: "Readme에 있는 gif같은거나 설명이나 최신화하고 ai말투 같은거 없애고싶다(러너는 달린다, ~ㄴ다 같은 말투 + 추상적인 말투)". 말투 보기 중 ⓒ(소개 문단은 합니다체, 표·목록은 개조식)를 골랐고, 새 화면 목록(주행 GIF·봉 스윙 GIF, PALM COAST·FINGER LANES·튜토리얼·결과 화면)에 "좋다".
+- **문장**: "플레이할 수 있는 단위로 쌓는다", "하네싱 연습", "같이 달리는 맛"·"다시 할 이유" 같은 마일스톤 별칭을 빼고, 버전 표는 들어간 기능으로 적었다. "~다" 로 끝나던 설명을 합니다체(소개 문단)와 명사형 개조식(표·목록)으로 바꿨다.
+- **화면** (`docs/images/`): v0.6 에디터 Play 중 `ScreenCapture.CaptureScreenshot`. 메뉴는 `LobbyMenu.Highlight`·`Confirm` 으로 실제 경로대로 넘겼고(빠름·ALPHA), 주행은 시험 봇 `TrackFollower`·`ShortcutBot` 과 같은 식을 `Unity_RunCommand` 안에 복사해 붙였다(저장소에 남기지 않음). `Time.captureFramerate = 10`(게임 시간 0.1초 간격).
+  - `race.gif`: SUMMIT DROP 48.5~65.5초(부스트 패드 점프 → 표지판 → 봉 스윙 지름길), 170프레임, 588px, 64색, 8.2 MB. 봇 결승 90.0초(4500틱, 지름길 포함).
+  - `swing.gif`: FINGER LANES 첫 지름길 봉 스윙 16~20.6초, 46프레임, 2.7 MB.
+  - 정지 화면: `title.png`·`lobby.png`·`tutorial.png`(3단계 "후진" 설명 팝업)·`palm-coast.png`·`result.png` 는 2배(1176×748), `finger-lanes.png` 는 1배 프레임(588×374).
+  - Game 뷰가 588×374 라 해상도가 낮다. 더 크게 찍으려면 Game 뷰 크기를 바꿔야 한다(이번에는 바꾸지 않았다).
+- **기록 보호**: 봇 판은 `RaceAssembler.Records`·`Ghosts` 를 임시 저장소(`BestRecords("ProtoHarness.ReadmeCapture.")`, 스크래치패드 폴더)로 바꿔 끼웠다. SUMMIT DROP 결승(4500틱)은 그 저장소에만 들어갔고 캡처 뒤 지웠다. 사용자 기록(SUMMIT DROP 빠름 3358틱, ALPHA)은 그대로임을 확인했다.
+- **남긴 것**: `skyway.png` 는 README 에서 더 쓰지 않지만 이 문서의 v0.3 항목들("HUD 트랙 이름", "main v0.3")이 고치기 전 화면의 증거로 가리켜 지우지 않았다.
+
 ## 2026-11-09 · SUMMIT DROP 지름길 표지판: 화살표를 지름길 쪽으로, 기둥은 판 뒤로, 1.6배 (`fix/summit-sign-arrow`)
 
 - **결정 (사용자, 2026-11-09)**: 미리보기 렌더로 화살표가 지름길(오른쪽)과 반대(왼쪽)를 가리키는 것을 확인한 뒤 "화살표방향만 바꿔". 이어서 뒷면 확인을 요청하고 "화살표랑 지면에서 올라오는 막대랑 만나는게 이상해보여", "1.5배 이상 크게", "화살표 있는 면에는 막대가 겹쳐보이면 안된다".

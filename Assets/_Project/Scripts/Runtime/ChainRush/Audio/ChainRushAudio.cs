@@ -21,6 +21,8 @@ namespace ProtoHarness.ChainRush.Audio
         private const int SampleRate = 44100;
         private const float SwingFromSeconds = 4f;
         private const int SwingSeconds = 4;
+        private const float SwingBlendSeconds = 0.25f;
+        private static readonly int CueTotal = Enum.GetValues(typeof(RaceCue)).Length;
         private AudioClip[] cues;
         private AudioClip score;
         private AudioClip wind;
@@ -31,6 +33,7 @@ namespace ProtoHarness.ChainRush.Audio
         private AudioClip trackAmbienceClip;
         private float swingGain;
         private bool initialized;
+        private bool toldOff;
         private bool paused;
         private bool playing;
         // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
@@ -53,18 +56,33 @@ namespace ProtoHarness.ChainRush.Audio
         private void Awake()
         {
             if (settings == null) settings = GameSettings.Player;
-            if (game == null || player == null || music == null || effects == null || ambience == null
-                || poleHookRecording == null || grappleRecording == null || swingRecording == null)
+            if (game == null || player == null || music == null || effects == null || ambience == null)
             {
-                Debug.LogError("ChainRushAudio: game, runner, three audio sources and three chain recordings are required.", this);
+                Debug.LogError("ChainRushAudio: game, runner and three audio sources are required.", this);
                 enabled = false;
                 return;
             }
-            cues = new AudioClip[Enum.GetValues(typeof(RaceCue)).Length];
-            for (int cue = 0; cue < cues.Length; cue++) cues[cue] = MakeCue((RaceCue)cue);
+            // Every recording is read and checked before anything is built, so a bad one turns the component off whole.
+            string hookFault = ReadRecording(poleHookRecording, nameof(poleHookRecording), 0f, out double[] hook);
+            string grappleFault = ReadRecording(grappleRecording, nameof(grappleRecording), 0f, out double[] grapple);
+            string swingFault = ReadRecording(swingRecording, nameof(swingRecording), SwingFromSeconds + SwingSeconds + SwingBlendSeconds, out double[] swingSource);
+            string fault = hookFault ?? grappleFault ?? swingFault;
+            if (fault != null)
+            {
+                Debug.LogError("ChainRushAudio: " + fault, this);
+                enabled = false;
+                return;
+            }
+            cues = new AudioClip[CueTotal];
+            for (int cue = 0; cue < cues.Length; cue++)
+            {
+                if ((RaceCue)cue == RaceCue.PoleHook) cues[cue] = MakeRecordedCue("CR pole hook", hook, poleHookRecording.frequency);
+                else if ((RaceCue)cue == RaceCue.Grapple) cues[cue] = MakeRecordedCue("CR grapple", grapple, grappleRecording.frequency);
+                else cues[cue] = MakeCue((RaceCue)cue);
+            }
             score = MakeScore();
             wind = MakeWind();
-            swingLoop = MakeSwingLoop(swingRecording);
+            swingLoop = MakeSwingLoop(swingSource, swingRecording.frequency);
             swing = LoopSource(effects);
             swing.clip = swingLoop;
             trackAmbience = LoopSource(ambience);
@@ -118,6 +136,22 @@ namespace ProtoHarness.ChainRush.Audio
         {
             if (musicVolume < 0f || musicVolume > 1f || effectsVolume < 0f || effectsVolume > 1f)
                 Debug.LogError("ChainRushAudio: volumes must be within 0..1.", this);
+            AudioClip[] recordings = { poleHookRecording, grappleRecording, swingRecording };
+            foreach (AudioClip recording in recordings)
+                if (recording != null && recording.loadType != AudioClipLoadType.DecompressOnLoad)
+                    Debug.LogError($"ChainRushAudio: {recording.name} must be imported as Decompress On Load to be read (it is {recording.loadType}).", this);
+        }
+
+        // Off since Awake: nothing is built, so cues, resets and mute do nothing. The first call says so (Awake said why).
+        private bool IsOff()
+        {
+            if (initialized) return false;
+            if (!toldOff)
+            {
+                Debug.LogError("ChainRushAudio: off since Awake (see the error above); cues, resets and mute do nothing.", this);
+                toldOff = true;
+            }
+            return true;
         }
 
         private void Update()
@@ -153,11 +187,13 @@ namespace ProtoHarness.ChainRush.Audio
         public void SetMuted(bool muted)
         {
             Muted = muted;
+            if (IsOff()) return;
             music.mute = effects.mute = ambience.mute = swing.mute = trackAmbience.mute = muted;
         }
 
         public void ResetAudio()
         {
+            if (IsOff()) return;
             music.Stop(); effects.Stop(); ambience.Stop(); swing.Stop(); trackAmbience.Stop();
             swingGain = 0f; swing.volume = 0f;
             playing = false; paused = false;
@@ -165,7 +201,8 @@ namespace ProtoHarness.ChainRush.Audio
 
         public void PlayCue(RaceCue cue)
         {
-            if (cue < RaceCue.Jump || (int)cue >= cues.Length) throw new ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushAudio: no such cue.");
+            if (cue < RaceCue.Jump || (int)cue >= CueTotal) throw new ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushAudio: no such cue.");
+            if (IsOff()) return;
             if (game.IsPaused) return;
             effects.PlayOneShot(cues[(int)cue]);
         }
@@ -183,12 +220,11 @@ namespace ProtoHarness.ChainRush.Audio
             return clip;
         }
 
-        private AudioClip MakeCue(RaceCue cue)
+        private static AudioClip MakeCue(RaceCue cue)
         {
             if (cue == RaceCue.Boost) return MakeKartBoost();
             if (cue == RaceCue.BoostZone) return MakePassBy();
-            if (cue == RaceCue.PoleHook) return MakeRecordedCue("CR pole hook", poleHookRecording);
-            if (cue == RaceCue.Grapple) return MakeRecordedCue("CR grapple", grappleRecording);
+            if (cue == RaceCue.PoleHook || cue == RaceCue.Grapple) throw new ArgumentException("ChainRushAudio: " + cue + " is recorded, not synthesized.", nameof(cue));
             // Keep the accepted wall hit and the unused cues' synthesis unchanged.
             if (cue != RaceCue.GuardHit && cue != RaceCue.Attack && cue != RaceCue.Damage && cue != RaceCue.Beeps && cue != RaceCue.Buzz)
                 return MakeLayeredCue(cue);
@@ -316,29 +352,41 @@ namespace ProtoHarness.ChainRush.Audio
             return leveled;
         }
 
-        // The importer leaves preload off and Decompress On Load on; only that load type can give its samples back.
-        private static double[] ReadMono(AudioClip recording)
+        // Mono samples of a recording, or why it cannot be used. Only Decompress On Load gives samples back, and the import
+        // leaves preload off, so the data is asked for here.
+        private static string ReadRecording(AudioClip recording, string field, float minimumSeconds, out double[] mono)
         {
-            if (!recording.LoadAudioData()) throw new InvalidOperationException("Could not load recording " + recording.name);
+            mono = null;
+            if (recording == null) return field + " is empty. Connect it in the inspector.";
+            if (recording.loadType != AudioClipLoadType.DecompressOnLoad)
+                return $"{field} ({recording.name}) must be imported as Decompress On Load to be read (it is {recording.loadType}).";
+            // One sample over the seconds covers the rounding where the swing loop cuts it into samples.
+            if (recording.samples < Mathf.CeilToInt(minimumSeconds * recording.frequency) + 1)
+                return $"{field} ({recording.name}) is {recording.length:F2} s; it needs {minimumSeconds:F2} s.";
+            if (!recording.LoadAudioData()) return $"{field} ({recording.name}) could not be loaded.";
             var interleaved = new float[recording.samples * recording.channels];
-            if (!recording.GetData(interleaved, 0)) throw new InvalidOperationException("Could not read recording " + recording.name);
-            var mono = new double[recording.samples];
-            for (int i = 0; i < interleaved.Length; i++) mono[i / recording.channels] += interleaved[i] / (double)recording.channels;
-            return mono;
+            if (!recording.GetData(interleaved, 0)) return $"{field} ({recording.name}) could not be read.";
+            var samples = new double[recording.samples];
+            double peak = 0d;
+            for (int i = 0; i < interleaved.Length; i++) samples[i / recording.channels] += interleaved[i] / (double)recording.channels;
+            foreach (double sample in samples) peak = Math.Max(peak, Math.Abs(sample));
+            if (peak <= 0d) return $"{field} ({recording.name}) is silent.";
+            mono = samples;
+            return null;
         }
 
-        // The recordings open with up to 170 ms of room, which would play as input lag on a hook.
-        private static AudioClip MakeRecordedCue(string name, AudioClip recording)
+        // The recordings open with up to 170 ms of room, which would play as input lag on a hook. ReadRecording made sure
+        // there is a peak, so the search stops on it at the latest.
+        private static AudioClip MakeRecordedCue(string name, double[] mono, int rate)
         {
-            double[] mono = ReadMono(recording);
             double peak = 0d;
             foreach (double sample in mono) peak = Math.Max(peak, Math.Abs(sample));
             int onset = 0;
             while (Math.Abs(mono[onset]) < peak * 0.05d) onset++;
-            int start = Math.Max(0, onset - recording.frequency / 200);
+            int start = Math.Max(0, onset - rate / 200);
             var trimmed = new double[mono.Length - start];
             Array.Copy(mono, start, trimmed, 0, trimmed.Length);
-            return Clip(name, Leveled(trimmed, recording.frequency), recording.frequency);
+            return Clip(name, Leveled(trimmed, rate), rate);
         }
 
         // Band-limited (polyBLEP) oscillator: a plain saw at these pitches folds back into a metallic fizz.
@@ -464,12 +512,11 @@ namespace ProtoHarness.ChainRush.Audio
         }
 
         // Four seconds of the recording. What follows them fades in over their start, so the end runs straight into the start.
-        private static AudioClip MakeSwingLoop(AudioClip recording)
+        private static AudioClip MakeSwingLoop(double[] source, int rate)
         {
-            double[] source = ReadMono(recording);
-            int rate = recording.frequency;
-            int from = Mathf.RoundToInt(SwingFromSeconds * rate), length = SwingSeconds * rate, blend = rate / 4;
-            if (from + length + blend > source.Length) throw new InvalidOperationException("Swing recording is too short: " + recording.name);
+            int from = Mathf.RoundToInt(SwingFromSeconds * rate), length = SwingSeconds * rate, blend = Mathf.RoundToInt(SwingBlendSeconds * rate);
+            // ReadRecording already turned a short recording away; reaching this is a bug in that check.
+            if (from + length + blend > source.Length) throw new InvalidOperationException("ChainRushAudio: the swing length check let a short recording through.");
             var samples = new double[length];
             Array.Copy(source, from, samples, 0, length);
             for (int i = 0; i < blend; i++)

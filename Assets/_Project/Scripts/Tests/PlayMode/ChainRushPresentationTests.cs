@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
+using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
@@ -205,6 +206,45 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(zoneRoughness, Is.LessThan(0.045d), "Boost zone must not crackle.");
             yield return null;
         }
+
+#if UNITY_EDITOR
+        // A recording that cannot make the loop turns the component off with its field named, instead of an exception out
+        // of Awake that left it on and half built; cues and resets after that drop quietly but say so once (review 2026-11-09).
+        [UnityTest]
+        public IEnumerator Audio_UnusableSwingRecording_TurnsOffWithItsName_AndLaterCallsDoNotThrow()
+        {
+            var silent = AudioClip.Create("Silent swing", 48000 * 9, 1, 48000, false);
+            AudioClip shortClip = (AudioClip)new SerializedObject(sound).FindProperty("poleHookRecording").objectReferenceValue;
+            foreach (AudioClip swing in new[] { shortClip, silent })
+            {
+                ChainRushAudio made = MakeAudio(swing);
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ChainRushAudio: swingRecording"));
+                made.gameObject.SetActive(true);
+                yield return null;
+                Assert.That(made.enabled, Is.False, swing.name);
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ChainRushAudio: off since Awake"));
+                Assert.DoesNotThrow(() => { made.PlayCue(RaceCue.Boost); made.PlayCue(RaceCue.PoleHook); made.ResetAudio(); made.SetMuted(true); }, swing.name);
+                UnityEngine.Object.Destroy(made.gameObject);
+                yield return null;
+            }
+            UnityEngine.Object.Destroy(silent);
+        }
+
+        // An inactive copy of the scene's audio wiring with its own swing recording, so Awake runs when the test activates it.
+        private ChainRushAudio MakeAudio(AudioClip swing)
+        {
+            var holder = new GameObject("Audio under test");
+            holder.SetActive(false);
+            var made = holder.AddComponent<ChainRushAudio>();
+            var data = new SerializedObject(made);
+            var source = new SerializedObject(sound);
+            foreach (string name in new[] { "game", "player", "music", "effects", "ambience", "poleHookRecording", "grappleRecording" })
+                data.FindProperty(name).objectReferenceValue = source.FindProperty(name).objectReferenceValue;
+            data.FindProperty("swingRecording").objectReferenceValue = swing;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            return made;
+        }
+#endif
 
         // The chain sounds are the recordings the user picked, cut so they start on the hit (DECISIONS 2026-11-07).
         [UnityTest]

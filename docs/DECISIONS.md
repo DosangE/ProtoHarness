@@ -7,6 +7,31 @@
 
 ---
 
+## 2026-11-09 · main v0.6: M6 "보고 듣는 맛" — `dev` 를 `main` 에 병합하고 태그 `v0.6`
+
+- **결정 (사용자, 2026-11-09)**: M6 완료 조건 확인을 모두 받았다. 소리 구분 "확인했다 커밋 푸쉬 진행", 새 트랙 SUMMIT DROP "플레이 결과 괜찮았다", 플레이어 빌드에서 고스트 투명·프레임·화면 설정·봉 스윙 이펙트 시야 "확인했다. 괜찮다". 절차는 "main v0.5" 와 같다: `feature/m6-release-prep`(타이틀 버전 표기 `0.6`·README, 사용자 세션) → `dev` → `main` `--no-ff`, 주석 태그 `v0.6`, 병합·푸시는 지시 때만.
+- **v0.6 에 든 것** (`main` v0.5 뒤): 동작별 효과음(부스터·부스트존 합성음, 봉 걸림·그래플·스윙 CC0 녹음, 녹음을 못 쓰면 이름과 이유를 남기고 끈다), 봉 스윙 이펙트(불꽃·줄 끊김·상태별 꼬리·바람 선), 고저차 1랩 다운힐 `SUMMIT DROP`(열린 코스 구조·숲과 바위 장식), 벽·부스터가 방향을 강제하지 않는 조향, 속도 km/h·카운트다운 연출, 튜토리얼(스테이지 6개, 마일스톤 밖). 각각 이 문서의 같은 이름 항목.
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `feature/m6-release-prep` `a30b540`(뒤 커밋은 `docs/` 만), 에디터 **6000.3.19f1**(`Application.unityVersion`, 이 PC). 실행마다 `tools/test-runs.ps1 -Record` 로 남겼다(첫 실제 사용, 기록 6건). 시각은 UTC(결과 XML):
+  - **1차 시도 (`da766d3`, 사용자가 시킨 Codex 의 Unity MCP 실행)** — 실패한 실행도 적는다:
+    - EditMode `testcasecount="394" result="Passed" passed="394" failed="0"` (06:04:51Z~06:04:55Z).
+    - PlayMode 게이트 `testcasecount="299" result="Failed(Child)" passed="288" failed="1" skipped="10"` (06:06:03Z~06:21:30Z). 실패 `ChainRushRoadTests.Road_NoSteeringIntoR30_ProceduralGuardTurnsRunner`: `Expected: greater than or equal to 92.123891115188599d But was: 76.974979400634766d`. 단독 재실행 `testcasecount="1" failed="1"` (06:22:40Z~06:23:01Z) `But was: 76.981975555419922d`.
+    - `Run Device Input Tests` `testcasecount="3" result="Failed(Child)" passed="1" failed="2"` (06:23:35Z~06:23:39Z). `Input_ArrowKeys_StartsSteersJumpsGrapplesAndRestarts`(`ChainRushTests.cs:354` `game.IsCountingDown` `But was: False`), `Input_ShiftAndCtrl_SwingsOnThePoleAndFiresChainAction`(`:449` `game.IsRunning` `But was: False`). 포커스는 기록되지 않았다.
+    - Windows x64 빌드 성공(오류 0, 경고 485 — 경고 내용은 보지 않았다). 빌드가 바꾼 설정 파일 5개는 빌드 전 상태로 되돌렸다. 기록은 `%LOCALAPPDATA%\Temp\ProtoHarness-v0.6-test-records\`.
+  - **원인**:
+    - R30 — 2026-11-04 "벽·부스터가 방향을 트랙 쪽으로 강제하지 않는다" 때 쌍둥이 `Curve_NoSteering_*` 는 고쳤지만 이 테스트는 그날 고른 PlayMode 74건에 `ChainRushRoadTests` 가 없어 남았다. "벽이 러너를 돌려 커브를 빠져나간다" 는 옛 사양을 단언했고, 러너는 새 사양대로 벽에 붙어 76.97 m 에 섰다. ② 를 바뀐 부분만 돌리고 번진 회귀는 ③ 에서 잡는 설계(2026-10-30 "테스트 범위") 그대로 드러났다. `a30b540` 에서 이름을 `…ProceduralGuardHoldsTheRunnerWithoutTurningIt` 로, 단언을 Curve 테스트(`ChainRushCurveTests.cs:101-104`)와 같게(떨어지지 않는다·바깥 벽에 닿는다·뚫지 않는다·방향 그대로·커브를 끌려 나가지 않는다) 바꿨다. 사용자 "ㄱㄱ".
+    - Device — 가상 Enter 뒤 카운트다운이 시작되지 않았다. 2026-10-15 이 PC 의 같은 모양 실패(에디터 포커스 없음 2/3 실패, 포커스 3/3 통과)와 같고, 아래 통과 실행은 포커스가 3초 유지된 뒤에만 시작하도록 걸었다. 1차 실행의 포커스는 기록이 없어 **원인을 포커스로 확정하지는 못했다**.
+  - **2차 (`a30b540`, 메인, Unity MCP)** — 모두 통과:
+    - 고친 테스트 확인: `ChainRushRoadTests` `testcasecount="4" result="Passed" passed="4" failed="0"` (09:25:59Z~09:26:42Z, 커밋 전 작업 트리 — `test-runs.ps1 -Last -Passed` 가 커밋 뒤 "실행한 코드 = 지금 커밋한 코드" 로 판정했다).
+    - EditMode (`!Enemy`): `testcasecount="394" result="Passed" passed="394" failed="0" skipped="0"` (09:27:21Z~09:27:30Z).
+    - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="299" result="Passed" passed="289" failed="0" skipped="10"` (09:28:08Z~09:46:01Z, 1072.7초).
+    - PlayMode 게이트 2회차 (같은 코드): `testcasecount="299" result="Passed" passed="289" failed="0" skipped="10"` (09:47:04Z~10:04:58Z, 1074.0초). 두 회차 모두 skipped 10 은 `[Explicit]` — `ChainRushProbeTests` 7건, `NetworkRaceTests` 3건. 서킷 지문 `hash 0xEF92FB76BFD1D767` (2026-11-04 기준과 같다).
+    - `Run Device Input Tests` 1회: `testcasecount="3" result="Passed" passed="3" failed="0"` (10:29:18Z~10:29:35Z). 에디터에 포커스가 3초 유지되면 시작하도록 걸었다(걸 때 `focused=True`). 시작 순간의 로그 줄은 플레이 진입 때 Console 이 지워져 남지 않았다. 첫 걸기(10:05:34Z)는 10분 동안 포커스가 없어 시작하지 않았다.
+  - ② 의 하한: 이 브랜치의 `Assets/` 변경은 `TitleScreen.Version`(읽는 곳은 화면 글자, 시뮬 밖)과 R30 테스트 한 메서드다. 게이트 전체가 포함한다.
+  - 사용자 플레이 확인: 위 결정 줄. 빌드는 `da766d3` 에서 만들었고, 그 뒤 바뀐 것은 테스트 어셈블리뿐이라 빌드에 들어가는 코드는 같다.
+  - 하지 않은 것: 네트워크 레이스(M7 부터).
+- **v0.6 에 없는 것**: SUMMIT DROP 지름길 표지판 화살표 방향(코드로는 갈림 방향과 반대, 화면 확인 답 없음). 표지판 FBX(`Art/Models/ShortcutSign.fbx`)는 트랙에 놓지 않았다. 튜토리얼 리뷰 후속 ①~⑦, 녹음 리뷰 제안 4건은 그대로다.
+- **함께 기록**: `feature/art-shortcut-sign` 의 Codex 설계 리뷰는 병합 뒤 끝났다 — `Verdict: approve`, "No material findings"(FBX 설정과 측정 일치, `.codex` 동기화 일치, GUID 참조 없음. 임포터 전체 값의 기본값 일치와 `.meta` 생성 경로는 확정 못 함).
+
 ## 2026-11-09 · Blender 시험 제작: 지름길 표지판 한 개로 Blender → `art-src/` → `Assets/` → Unity 확인을 한 번 돌렸다, FBX 는 축·스케일을 적용해 내보낸다 (`feature/art-shortcut-sign`)
 
 - **결정 (사용자)**: 다른 AI 의 점검 3번("소품 하나로 미리보기 → 선택 → FBX 전달 → Unity 에서 크기·방향 확인까지 한 번 끝내 보면 어디가 반복 작업인지 드러난다")을 M6 마감 전에 하기로 했다 — "마감 전에 블렌더 작업 한번 해보겟ㅆ다", 요청서에 "ㄱㄱ". 소품은 SUMMIT DROP 지름길 나무 표지판(비대칭이라 축이 틀리면 화살표가 뒤집혀 보인다). 시안 A(빌더 모양: 상자 판 + 화살표 막대)·B(화살 판자)를 Blender 에서 보고 "A가 낫네". 첫 임포트에서 루트 회전·스케일이 나와 Blender 쪽 설정을 바꿔 보기로 "해봐".

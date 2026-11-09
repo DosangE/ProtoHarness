@@ -11,7 +11,7 @@
 - **M6 끝, `main` v0.6 (DECISIONS 2026-11-09 "main v0.6")**: `feature/m6-release-prep` → `dev` (`3011725`) → `main` `--no-ff` (`e8a66d3`), 주석 태그 `v0.6`. `main`·`dev`·태그 모두 `origin` 에 있다(2026-11-09 `git fetch` 뒤 `git rev-parse`·`git ls-remote --tags` 로 확인). `dev` 에는 `main` 에 없는 커밋이 없다.
 - **다음은 M5 (v0.7) "같이 달리는 맛"** (`DESIGN.md` §5-1 표의 M5 줄): **MP1** 여러 레이서 구조(RF6, 한 월드에 러너 여럿 — 공유 월드) → **MP2** 물리 AI 상대(봇 경로 추종을 게임용으로, 충돌·추월·러너 무게, `RaceStandings` 재사용, 상대 달리기 모션) → **MP3** 여러 레이서의 결정성(리플레이·롤백 비트 일치). 완료 조건 "봇과 몸싸움하며 겨뤄 순위가 나온다". 셋 다 시뮬 변경이라 MP1 은 구현 전에 구조 설계 요청서(§3-2)부터 올린다.
 - **M5 전에 정리할 후보** (가벼운 순서, 각각 따로 합의):
-  1. 표지판 화살표 방향 — 사용자 답 대기(코드로는 갈림 방향과 반대, DECISIONS "main v0.6" 의 "v0.6 에 없는 것").
+  1. ~~표지판 화살표 방향~~ 끝(`fix/summit-sign-arrow`, DECISIONS 2026-11-09 "SUMMIT DROP 지름길 표지판").
   2. `unity-explorer`·`unity-reviewer` 의 Bash (`.claude/` 규칙 변경).
   3. `select-tests` 하한 규칙과 실제 실행 범위 (`tools/` + 규칙).
   4. 녹음 리뷰 제안 4건 (아래 2026-11-09 의 "녹음 실패 경로" 줄, `Assets/` — 테스트 필요).

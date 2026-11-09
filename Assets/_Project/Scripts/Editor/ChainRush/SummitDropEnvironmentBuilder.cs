@@ -490,15 +490,26 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 TrackDefinition.Shortcut shortcut = definition.Shortcuts[0];
                 TrackFrame f = line.FrameAt(shortcut.FromS);
-                if (!Place(shortcut.FromS - 8d, -1, 5.3f, 1.4f, 4f, out Vector3 p))
+                // 1.6 times the first sign so it reads from farther up the road (user 2026-11-09 "1.5배 이상").
+                const float k = 1.6f;
+                if (!Place(shortcut.FromS - 8d, -1, 5.3f, 1.4f * k, 4f * k, out Vector3 p))
                     throw new InvalidOperationException("The shortcut's wooden direction sign has no clear placement.");
                 Transform sign = Group("Shortcut wooden direction sign", parent);
                 sign.SetPositionAndRotation(p, Flat(f.Forward));
-                Box("Post", sign, Vector3.up * 1.7f, new Vector3(0.3f, 3.8f, 0.3f), wood);
-                Box("Sign board", sign, new Vector3(0f, 3f, 0f), new Vector3(2.8f, 1f, 0.2f), cutWood);
-                Beam("Arrow", sign, new Vector3(0.9f, 3f, -0.15f), new Vector3(-0.9f, 3f, -0.15f), 0.14f, ink);
-                Beam("Arrow", sign, new Vector3(-0.9f, 3f, -0.15f), new Vector3(-0.2f, 3.35f, -0.15f), 0.14f, ink);
-                Beam("Arrow", sign, new Vector3(-0.9f, 3f, -0.15f), new Vector3(-0.2f, 2.65f, -0.15f), 0.14f, ink);
+                // The read face is -Z, toward the runner coming down the road. The post stands behind the board (+Z)
+                // and stops below its top edge, so no part of it shows on the arrow face (user 2026-11-09).
+                float boardY = 3f * k, boardTop = boardY + 0.5f * k, boardHalfDepth = 0.1f * k, postWidth = 0.3f * k;
+                float postTop = boardTop - 0.15f * k;
+                Box("Post", sign, new Vector3(0f, (postTop - 0.3f) * 0.5f, boardHalfDepth + postWidth * 0.5f),
+                    new Vector3(postWidth, postTop + 0.3f, postWidth), wood);
+                Box("Sign board", sign, new Vector3(0f, boardY, 0f), new Vector3(2.8f * k, 1f * k, boardHalfDepth * 2f), cutWood);
+                // The head sits on +X: seen from the -Z side that is the runner's right, the side the shortcut leaves on
+                // (user 2026-11-09, a render showed the old -X head pointing away from the shortcut).
+                float inkZ = -(boardHalfDepth + 0.05f * k), inkWidth = 0.14f * k;
+                Vector3 tip = new Vector3(0.9f * k, boardY, inkZ);
+                Beam("Arrow", sign, tip, new Vector3(-0.9f * k, boardY, inkZ), inkWidth, ink);
+                Beam("Arrow", sign, tip, new Vector3(0.2f * k, boardY + 0.35f * k, inkZ), inkWidth, ink);
+                Beam("Arrow", sign, tip, new Vector3(0.2f * k, boardY - 0.35f * k, inkZ), inkWidth, ink);
                 for (double s = 1196d; s < 1525d; s += 14d)
                     for (int side = -1; side <= 1; side += 2)
                     {

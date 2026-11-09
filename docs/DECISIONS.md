@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-11-09 · SUMMIT DROP 지름길 표지판: 화살표를 지름길 쪽으로, 기둥은 판 뒤로, 1.6배 (`fix/summit-sign-arrow`)
+
+- **결정 (사용자, 2026-11-09)**: 미리보기 렌더로 화살표가 지름길(오른쪽)과 반대(왼쪽)를 가리키는 것을 확인한 뒤 "화살표방향만 바꿔". 이어서 뒷면 확인을 요청하고 "화살표랑 지면에서 올라오는 막대랑 만나는게 이상해보여", "1.5배 이상 크게", "화살표 있는 면에는 막대가 겹쳐보이면 안된다".
+- **확인한 것**: 판이 거꾸로 서 있던 것은 아니다. 읽는 면(화살표)은 처음부터 −Z, 즉 러너가 다가오는 쪽이었고 뒷면은 빈 판이었다. 화살촉만 −X(러너 기준 왼쪽)에 있었다. 기둥(0.3 m 각)은 판 가운데를 뚫어 판 앞면보다 0.05 m, 윗면보다 0.1 m 나와 화살대를 세로로 갈랐다.
+- **바꾼 것** (`SummitDropEnvironmentBuilder.Fork`): 화살촉을 +X(러너 기준 오른쪽)로. 표지판 전체 1.6배(판 4.48 × 1.6 m, 판 중심 4.8 m), 배치 여유 반경도 1.6배. 기둥은 판 뒤(+Z)에 붙고 판 윗면보다 0.24 m 아래에서 끝난다. 다시 짓기에서 바뀐 것은 표지판 메시 3개(`SummitDropExterior_04_M_Summit{Wood,CutWood,Ink}.asset`)뿐이고 프리팹 GUID 는 그대로다.
+- **검증**: 다시 짓기 검사 `Summit Drop validation PASS: main road and shortcut clear; 15 pole shafts clear; 38 renderers; 932829 vertices; decoration physics=0.` 메시 정점으로 기둥이 판 뒷면 뒤·판 윗면 아래임을 확인했다. 미리보기 씬 렌더(앞 5각도·뒤·옆)에서 화살표 면에 기둥이 보이지 않는다(위에서 내려다볼 때만 판 너머로 기둥 끝이 보인다). Play 모드 화면은 아니다. 테스트 — 영향 평가: 장식 빌더 → `SummitDropExterior.prefab` → 이 프리팹을 읽는 `TrackDefinitionTests.SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround`(`TrackDefinitionTests.cs:201-204`). 장식만이라 Lap 은 고르지 않았다(VERIFICATION §4-4). 이 PC 에 통과 기록이 없어 영향 평가로 정했다. EditMode `testcasecount="1" result="Passed" passed="1" failed="0"` (11:34:56Z, 화살촉·크기 수정 뒤), 기둥 높이를 낮춘 뒤 다시 `testcasecount="1" result="Passed" passed="1" failed="0"` (11:39:15Z). 둘 다 `test-runs.ps1 -Record`.
+- **알아둘 것**: 다시 지은 직후 같은 에디터 세션의 렌더는 GPU 에 남은 옛 메시를 썼다(첫 확인 캡처가 수정 전과 픽셀까지 같았다). 메시 데이터는 새것이었고, 복사본을 붙여 렌더하면 새 모양이 나왔다. Blender 표지판 FBX(아래 "Blender 시험 제작")를 쓸 때는 빌더의 읽는 면이 −Z 이고 화살표가 +X 라는 이 항목을 기준으로 맞춘다. 표지판은 여전히 도로 왼쪽에 서서 오른쪽 지름길을 가리킨다(위치는 바꾸지 않았다).
+
 ## 2026-11-09 · main v0.6: M6 "보고 듣는 맛" — `dev` 를 `main` 에 병합하고 태그 `v0.6`
 
 - **결정 (사용자, 2026-11-09)**: M6 완료 조건 확인을 모두 받았다. 소리 구분 "확인했다 커밋 푸쉬 진행", 새 트랙 SUMMIT DROP "플레이 결과 괜찮았다", 플레이어 빌드에서 고스트 투명·프레임·화면 설정·봉 스윙 이펙트 시야 "확인했다. 괜찮다". 절차는 "main v0.5" 와 같다: `feature/m6-release-prep`(타이틀 버전 표기 `0.6`·README, 사용자 세션) → `dev` → `main` `--no-ff`, 주석 태그 `v0.6`, 병합·푸시는 지시 때만.

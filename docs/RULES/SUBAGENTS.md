@@ -5,7 +5,7 @@
 > 파견할지 말지(§7-3 파견 기준)와 **병렬 절대 금지**는 CLAUDE.md §7 에 있다. 파견 여부는 그쪽에서 먼저 판단한다.
 > 이 내용을 고칠 때는 이 파일만 고친다. CLAUDE.md 에 사본을 두지 않는다.
 
-### 7-1. 6종
+### 7-1. 7종
 
 | 에이전트 | 작업 | 쓰기 | 모델 | 노력 |
 |---|---|---|---|---|
@@ -15,8 +15,11 @@
 | `unity-implementer` | 생성 | `Assets/` | `claude-opus-5-5` | high |
 | `unity-verifier` | 검증 (Unity MCP) | ❌ | `claude-opus-5-5` | high |
 | `blender-artist` | 모델링 (Blender MCP) | `art-src/` 만 | `claude-opus-5-5` | high |
+| `gameplay-designer` | 기획 (피드백 → 가설·변경안·플레이테스트 설계·요청서 초안) | ❌ | `claude-opus-5-5` | high |
 
 - `blender-artist` 는 사용자의 열린 Blender 하나에 붙는다. 같은 Blender 를 두 에이전트(Claude·Codex 포함)가 동시에 쓰지 않는다. 결과를 `Assets/` 로 옮기는 것은 승인받은 `unity-implementer` 작업이다 (`docs/DECISIONS.md` 2026-11-09 "Blender 아트 에이전트").
+
+- `gameplay-designer` 는 플레이어가 어디서 막히고 어떤 경험이 달라져야 하는지를 정리하고, `unity-architect` 는 그 변경이 어느 시스템에 닿는지를 본다. 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때 쓴다(파견 여부는 §7-3). 초안은 응답으로만 돌려주고 파일에 옮기는 것은 메인 세션이다. 무엇을 고를지는 사용자가 정한다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
 
 - 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
 

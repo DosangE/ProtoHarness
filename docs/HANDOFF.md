@@ -16,7 +16,9 @@
 - **`fix/stadium-flicker` 삭제**: 사용자 "더이상 안깜빡인다 삭제 ㄱ". `dev` 의 LED 수정(2026-11-06 "플레이 피드백")으로 충분했다. 허들·축구장 라인 수정(`38f418a`)은 버렸다 — reflog 에만 남는다.
 - **같은 작업 트리를 다른 세션이 쓸 수 있다**: 2026-11-09 리뷰 도중 아트 세션이 `docs/blender-art-agent` 를 체크아웃했고 Unity 에디터도 닫혔다. 브랜치를 바꾸기 전에 `git branch --show-current`·`git status` 로 다른 세션의 커밋 안 한 파일이 없는지 본다.
 - **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다(2026-11-09 `f740b46`). 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 풀고 나서 병합한다.
-- **남은 M6 마감 (사용자 "일단 대기")**: SUMMIT DROP 플레이 확인, 플레이어 빌드 1회, `TitleScreen.Version` 0.6, 마일스톤 조건 ③(EditMode 전체 1회·PlayMode 게이트 전체 2회·Device 1회), `dev → main`, 태그 `v0.6`. 게이트 전체는 그동안의 시뮬 변경이 다른 트랙에 주는 영향을 처음 보는 자리다(2026-10-30 아래 줄).
+- **테스트 실행 기록 (`docs/test-run-records`, `dev` `ffbbe63` 병합·푸시, DECISIONS 2026-11-09 "테스트 실행 기록")**: 테스트가 끝나면 `& .\tools\test-runs.ps1 -Record -Xml <XML> -Filter "<필터>" -StartedAt <시작 직전 시각>`, 다시 돌릴 범위는 `-Last -Passed` 로 본다(VERIFICATION §4-4). 이 PC 의 기록 폴더는 아직 비어 있다 — 다음 테스트 실행이 실제 Unity 실행 직후 기록의 첫 실측이다. 후속 후보: `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(`Assets/`, 합의 필요).
+- **기획 에이전트 (`docs/gameplay-designer-agent`, DECISIONS 2026-11-09 "기획 에이전트")**: `gameplay-designer` 는 읽기 전용, 플레이 피드백 → 가설·변경안(최대 2개)·플레이테스트 설계·요청서 초안. 첫 적용이 `docs/PLAYTEST_SUMMIT_DROP.md` 다. 플레이 결과가 들어오면 그 문서의 "답:" 칸과 함께 이 에이전트로 수정 후보를 좁힌다.
+- **남은 M6 마감 (사용자 "일단 대기")**: SUMMIT DROP 플레이 확인(확인지 `docs/PLAYTEST_SUMMIT_DROP.md` — 플레이 전에 0절의 지름길 표지판 화살표 방향을 본다), 플레이어 빌드 1회, `TitleScreen.Version` 0.6, 마일스톤 조건 ③(EditMode 전체 1회·PlayMode 게이트 전체 2회·Device 1회), `dev → main`, 태그 `v0.6`. 게이트 전체는 그동안의 시뮬 변경이 다른 트랙에 주는 영향을 처음 보는 자리다(2026-10-30 아래 줄).
 - **stash 는 없다**: 사용자 "스태쉬 남아있다면 제거"(2026-11-09). `sound round 1`(첫 효과음 시도, `96919af`)과 GitHub Desktop 의 `feature/circuit-fall-respawn`(제안서 3개는 이미 `dev` 에 있었다, `993b952`)을 지웠다. `docs/NEXT_REQUESTS.md` "M6 효과음 2차" Codex 지시서는 쓸 일이 끝났다.
 
 ### 2026-11-06

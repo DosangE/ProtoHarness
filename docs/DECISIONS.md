@@ -18,6 +18,7 @@
   - Game 뷰가 588×374 라 해상도가 낮다. 더 크게 찍으려면 Game 뷰 크기를 바꿔야 한다(이번에는 바꾸지 않았다).
 - **기록 보호**: 봇 판은 `RaceAssembler.Records`·`Ghosts` 를 임시 저장소(`BestRecords("ProtoHarness.ReadmeCapture.")`, 스크래치패드 폴더)로 바꿔 끼웠다. SUMMIT DROP 결승(4500틱)은 그 저장소에만 들어갔고 캡처 뒤 지웠다. 사용자 기록(SUMMIT DROP 빠름 3358틱, ALPHA)은 그대로임을 확인했다.
 - **남긴 것**: `skyway.png` 는 README 에서 더 쓰지 않지만 이 문서의 v0.3 항목들("HUD 트랙 이름", "main v0.3")이 고치기 전 화면의 증거로 가리켜 지우지 않았다.
+- **`main` 에도 올림 (마일스톤 밖 예외)**: 사용자 "Readme 관련해선 메인까지 올려줘". `main` 은 마일스톤에서만 갱신하고(`CLAUDE.md` §9) `dev` 에는 표지판 수정(`Assets/`)도 있어, 방법을 물었고 사용자가 "README만 main에" 를 골랐다. `main` 에서 딴 `docs/readme-to-main` 에 `dev` `4adaffe` 의 `README.md`·`docs/images/` 만 가져와(`398bddc`) `main` 에 `--no-ff` 병합·푸시했다(`e7bbc0d`). 태그는 없다(`v0.6` 그대로). 문서 검증: 바뀐 파일은 README 와 이미지 8개뿐이고 README 의 링크 대상이 `main` 에 모두 있다. 이 항목 자체는 `dev` 에만 있고 다음 `dev → main` 때 올라간다. 그때 README·이미지는 양쪽이 같은 내용이라 충돌하지 않아야 한다.
 
 ## 2026-11-09 · SUMMIT DROP 지름길 표지판: 화살표를 지름길 쪽으로, 기둥은 판 뒤로, 1.6배 (`fix/summit-sign-arrow`)
 

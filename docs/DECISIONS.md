@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-11-09 · Blender 아트 에이전트: `mcp-for-blender` + 세이프 모드, `art-src/` 까지만 (`docs/blender-art-agent`)
+
+- **결정 (사용자)**: "블렌더 환경을 만들어두고 아트관련 에이전트를 두고 작업을 전담시키고 싶다". 다른 AI 의 추천(1 `mcp-for-blender` + Safe Mode, 2 `art-src/` 경유 후 `unity-implementer` 가 반영, 3 Codex 는 평소 차단, 4 직접 설치)을 받아 합의안을 고쳤고, 설치·등록 7단계 "ㄱㄱ", 실측 뒤 에이전트·문서 "ㄱㄱ".
+- **환경 (리포 밖)**: Blender 5.2.3 LTS(`C:\Program Files\Blender Foundation\Blender 5.2`, 사용자 설치 — 처음 받은 5.3 candidate 대신). 애드온 `blender_mcp.py`(애드온 1.8, 프로토콜 15)를 `BLENDERMCP_ADDONS_DIR` 로 5.2 폴더를 지정해 `uvx mcp-for-blender@2.2.7 install-addon`. Claude Code 는 user 범위 `blender` = `uvx mcp-for-blender@2.2.7`, env `BLENDER_MCP_SAFE_MODE=1`·`DISABLE_TELEMETRY=true`. Codex 는 `~/.codex/config.toml` 에 같은 서버를 `enabled = false` 로. 패키지 버전은 고정한다(PyPI 최신 2.2.7, 2026-11-04).
+- **실측 (12:37, 세이프 모드)**: `get_addon_status` — `5.2.3 LTS`, `telemetry_consent: false`, 라이브러리·생성기 모두 `off`. ① `bpy.ops.wm.save_as_mainfile(copy=True)` `{'FINISHED'}`, `art-src/_probe/safe_probe.blend` 98,275 B(zstd 머리 `28 B5 2F FD`). ② `bpy.ops.export_scene.fbx` `{'FINISHED'}`, `safe_probe.fbx` 28,908 B(`Kaydara FBX Binary`). ③ 대조군 `open(..., "w")` 거부: `Rejected by safe mode - line 1: open() is forbidden: open() grants raw filesystem access; use bpy operators for file work`, 파일 없음. Codex 는 `codex mcp list` 에 `blender ... disabled` — 새 Codex 세션에서 도구가 안 보이는지는 Codex 를 부르지 않아 확인하지 않았다.
+- **에이전트** `blender-artist` (`.claude/agents/blender-artist.md`): 쓰기는 `art-src/` 만, `승인:`·`브랜치:` 관문, 도구는 상태·장면 조회·코드 실행·`look` 만(외부 에셋·생성형 `search_assets`·`import_asset`·`generate_3d` 는 뺐다 — 외부 호출·비용). 사용자의 열린 파일은 `copy=True` 저장으로만, 작업은 새 장면에서. 세이프 모드 거부는 우회하지 않는다. 파일 확인은 Bash `ls`(세이프 모드에서 Python 파일 접근이 막힌다).
+- **`.blend` 를 `Assets/` 에 두지 않는다**: Unity 6.3 매뉴얼 "It's best practice to use the .fbx file format whenever possible", 독점 형식은 "files fail to import unless you have the corresponding 3D modeling software installed".
+- **버린 대안**: Blender Lab 공식 MCP(5.1 이상, 가드를 켤 수 없다 — "will execute LLM generated code in Blender without any guards"), dcc-mcp-blender(4.5 이상, 도구 200여 개·검증 도구가 있지만 임의 스크립트 차단 변수를 원문으로 확인하지 못함 — 반복 제작 단계에서 다시 볼 후보), 에이전트가 FBX 를 `Art/Models/` 로 바로 내보내기(임포트 시점과 `.meta` 발급을 승인 하나로 묶으려고 뺐다, 반복 제작 때 넓힐 수 있다), 리포 `.mcp.json`(리포 설정 변경 — user 범위로).
+- **남은 것**: 첫 모델(요청서·FBX 축/스케일 설정·Unity 임포트·`select-tests` 판정표의 `Art/Models` 정규식) — 따로 합의. Codex 로 Blender 를 부르는 방식. `tools/codex-unity.ps1:38` 이 쓰는 서버 이름 `unity-mcp` 와 설정의 `unity_mcp`(`config.toml:163`)가 다르다 — 확인 못 함, `fix/` 후보. 실측 파일 `art-src/_probe/` 는 커밋하지 않았다.
+- **병합 (문서 검증, `CLAUDE.md` §9-2 적용 범위; 사용자 "커밋과 병합 진행하라 네 추천대로 진행")**: 바뀐 파일은 `.claude/agents/blender-artist.md`(새)·`.codex/agents/blender-artist.toml`(새, 생성물)·`CLAUDE.md`·`README.md`·`docs/ARCHITECTURE.md`·`docs/DECISIONS.md`·`docs/RULES/CONVENTIONS.md`·`docs/RULES/SUBAGENTS.md` 뿐이다(`Assets/`·`Packages/`·`ProjectSettings/` 0개). ① 새 정의와 문서의 `§` 참조(§0·§1-3·§3·§3-4·§7·"병렬 절대 금지"·§7-1 "6종")가 모두 `CLAUDE.md` 또는 `docs/RULES/` 의 제목으로 해석된다. ② `tools/sync-agents.ps1` exit 0, `-Check` "동기화 상태: 일치", `.codex` 변경은 새 `blender-artist.toml` 하나. ③ 옮긴 내용은 없다. 작업 트리의 에디터 버전 차이 4개 파일은 넣지 않았다. 새 에이전트를 실제로 파견해 보지는 않았다.
+
 ## 2026-11-09 · 테스트 범위: 마지막 통과 이후 바뀐 것만 다시 돌린다 (`docs/test-scope-since-last-pass`)
 
 - **결정 (사용자, 2026-11-09)**: 효과음 병합 직전에 브랜치가 건드린 7개 클래스 전체와 지문을 다시 걸자 "테스트 클래스 전체 돌린다는데 결국 사운드밖에 바뀐게 없는데 돌려서 뭐하나", 이어서 "테스트 돌려보는 것에 대해 반복해서 범위를 과하게 설정하는 것 방지해보자 제발". 합의안에 "ㄱㄱ". `docs/RULES/VERIFICATION.md` §4-4 에 "다시 돌리는 범위는 마지막 통과 이후 바뀐 것" 한 줄을 넣었다.

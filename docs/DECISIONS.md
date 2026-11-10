@@ -7,6 +7,23 @@
 
 ---
 
+## 2026-11-10 · K4 바위: SUMMIT DROP 바위를 RockKit 3종으로, 밑동은 비탈을 따른다 (`feature/art-rockkit`)
+
+- **결정 (사용자, 2026-11-10)**: Unity 연결 합의 요청서에 "ㄱㄱ". 첫 플레이 답: "기존 바위와 뭔 차이가 있는지 모르겠다", "바위 종류가 적어서 그런건지 배치에 있어서 어색하다. 보이기에 공중에 떠있는 바위도 있다". 바닥 맞추기에 "A로 ㄱㄱ", 세 번 실패한 뒤 "비탈에 놓여있으니 크기를 늘려도 안맞는거지 이것에 대한 해결법을 고안해내라" → 밑동 맞추기 설계에 "해결될거같으면 해봐". 두 번째 플레이 "괜찮다 정리해봐".
+- **연결**: `ExteriorKit.KitMesh(kit, name)` — `Assets/_Project/Art/Models/<kit>.fbx` 의 메시를 이름으로 찾고 없으면 예외(`ExteriorKit.cs:25-33`). FBX 임포트는 기본 설정 그대로: 메시 bounds (2.00, 1.00, 1.70), 가운데 원점, 노드 회전 0·스케일 1, 각진 면 유지(CragB 134/136 삼각형, `importNormals=Import`), `isReadable=False` 여도 에디터 빌드에서 정점을 읽는다.
+- **떠 있던 바위**: 원인은 메시가 아니라 배치였다. 이전·새 메시 모두 바닥이 폭·깊이 100% 로 평평하다(측정). `Place` 가 중심 한 점의 지면만 읽어(`SummitDropEnvironmentBuilder.cs` `Place`) 폭 10~16 m 바닥이 비탈 아래쪽으로 떴다 — 30개 중 29개, 3~12 m, 낭떠러지에서 최대 33 m(바위별 임시 로그로 잼, 로그는 지웠다). 이전 바위도 같은 식이었으니 같은 자리에서 떠 있었을 것이다(이전 화면이 없어 확인 못 함).
+- **버린 해결 (실패 셋)**: ① 바위를 통째로 내려 모든 모서리를 묻기 — 30개 모두 내려가고 최대 32.6 m, 통째로 묻힘. ② 위는 두고 바닥만 아래로 늘리기 — 통로 검사 실패 `Crag 20: margin 0.66 m`, `Crag 35: margin 0.70 m`. ③ ② + 높이의 절반까지 — `Crag 35: margin 0.56 m`, 8개는 여전히 1~23 m 뜸. 한 덩어리로 내리거나 늘리면 낮은 쪽을 맞추는 만큼 높은 쪽이 묻히거나 아래 도로에 닿는다. 그 밖에 비탈 방향으로 기울이기(키 큰 바위가 눕는다), 밑동에 돌무더기 메시(새 아트)도 버렸다.
+- **고른 해결 (밑동 맞추기)**: 바위마다 킷 메시 사본을 만들어 기울기·크기를 정점에 넣고, 아래 40%(`CragFoot`) 의 정점을 그 밑 지면 −0.45 m 까지 끌어내린다(맨 아래 전부, 40% 지점 0). 위 60% 는 그대로. 낮은 쪽만 내려가 묻히지 않는다. 높이의 60%(`CragReach`) 넘게 늘려야 하는 자리는 낭떠러지라 놓지 않는다 — 바위벽은 건너뛰고 굽이 바위는 다음 후보 거리로, 굽이 넷 중 모든 후보가 낭떠러지인 S1605 는 필수 표지라 첫 빈 자리에 끝까지 늘려 놓는다. 노멀은 사본에서 다시 계산(각진 면). SUMMIT 은 어차피 머티리얼별로 병합하므로 실행 비용은 같다. 바위 그룹 02·05 의 병합 전 검사는 상자 경계가 기운 바위에서 도로 쪽으로 부풀어 정점 검사로 넘겼다(그룹 10 과 같은 이유). 병합 뒤 전체 정점 검사는 그대로다.
+- **검증**: 컴파일 `Tundra build success`, 에러 0. 재빌드 `Summit Drop placed 333 pines and 27 crags (26 with a foot reaching down the slope, longest 31.67 m; 6 spots skipped at a drop)`, `Summit Drop validation PASS: main road and shortcut clear; 15 pole shafts clear; 38 renderers; 945081 vertices; decoration physics=0` (이전 932,829). 테스트(영향 평가: 바뀐 `Assets/` = RockKit.fbx·빌더·`ExteriorKit`·SUMMIT 장식 메시 → 장식 프리팹을 읽는 유일한 테스트 `TrackDefinitionTests.cs:204`, 시뮬 참조 없어 지문·Lap 없음): `TrackDefinitionTests.SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround` 1건 2회 — 04:47:54Z(밑동 맞추기 전) `testcasecount=1 result=Passed passed=1 failed=0`, 05:14:07Z(최종 코드) 같은 값. `tools/test-runs.ps1 -Record` 로 남겼다. `select-tests` 실행: `RockKit.fbx → PlayMode 없음, 지문 없음`.
+- **렌더**: 처음 고른 전 렌더 세 각도에는 바위가 하나도 없었다(전후 PNG 해시가 같았다) — 바위 자리는 메시 정점에서 찾아야 한다. 이전 모습은 지운 `CragMesh` 를 메모리에 다시 만들어 새 3종과 같은 크기(12 × 26 × 10)·머티리얼·카메라로 따로 찍었다.
+- **배운 것**: 단위 크기 소품을 크게 늘려 도로에서 멀리 두면 모양 개선이 달리는 중에 잘 보이지 않는다(첫 플레이). 요청서 K4 "다음 킷에 적용할 것".
+- **병합 전 리뷰** (`unity-reviewer` + Codex 설계 리뷰, `Assets/` 새 파일이라 "그 밖" 규모, SUBAGENTS §7-5):
+  - Codex (needs-attention, medium 1): `Place` 가 바위를 만들기 전에 자리를 예약해, 낭떠러지로 거절된 후보의 예약이 12 m 옆 정상 후보를 막았다(예약 간격 15.6 m = 1.45r + 1.15r). 그래서 S1605 가 31.67 m 예외 배치로 갔다. 맞았다 — 바위 호출은 `Place(..., reserve: false)` 로 부르고 `Rock` 이 놓은 뒤에만 예약한다. 고친 뒤 예외 배치는 0, 가장 긴 밑동 31.67 → 14.11 m. 풀린 빈 예약 자리에 소나무가 7그루 더 들어갔다(333 → 340). 권한 회귀 테스트는 빌더 내부 테스트가 없어 새 파일이 필요해 하지 않았고, 재빌드 로그로 확인했다.
+  - reviewer (치명 0, 중대 1, 보통 2, 제안 6): 중대 — 예외 배치가 로그 없이 합계에 묻힌다 → S 값·길이를 `LogWarning` 으로 남긴다(고친 뒤 이 경로는 쓰이지 않는다). 보통 — `KitMesh` 가 `ExteriorAssets.ModelFolder` 를 다시 적었다, 05 그룹 검사 제외 주석이 표지판을 빠뜨렸다 → 고침. 제안 중 고친 것: 슬롯 하나 계약을 `subMeshCount` 로 검사, 빈 인자 `ArgumentException`, 클래스 머리 주석, 0.45 를 `GroundSink` 하나로. 고치지 않은 것: 바위를 셀 때 쓰는 0.05 m 기준(로그 전용), `cone` 이 `KitMesh` 예외 때 메모리에 남는 것(결과물 오염 없음).
+- **최종 값** (리뷰 반영 뒤): `Summit Drop placed 340 pines and 26 crags (24 with a foot reaching down the slope, longest 14.11 m; 11 spots skipped at a drop)`, `Summit Drop validation PASS: ... 38 renderers; 945280 vertices; decoration physics=0`. 테스트 같은 1건 05:30:00Z `testcasecount=1 result=Passed passed=1 failed=0`(기록함).
+- **비용**: `unity-implementer` 54,099 토큰·16회, `unity-reviewer` 73,407·20회. Codex 리뷰는 사용량을 남기지 않는다. 나머지(재빌드·렌더·바닥 맞추기 다섯 번)는 메인이 Unity MCP 로 했다.
+- **남은 것**: 다음 킷 K3 나무. 프리팹 diff 는 그룹 자식 순서 한 줄(병합 순서가 바뀐 빌더 출력)이라 커밋에 넣었다.
+
 ## 2026-11-10 · 장식 소품 아트 요청서: 공통 킷 7종, 모양은 킷이 · 색은 트랙 팔레트가, 첫 킷 바위 (`docs/art-request-props`)
 
 - **결정 (사용자, 2026-11-10)**: M5 기획을 고민하는 동안 "blender로 기존 맵 스프라이트들 작업해보는건 어떤가", "리소스 낭비를 막기 위해 비슷하게 공통으로 사용될 수 있는 것은 공통으로 사용하는 등 하자. 모든 맵에 대해 아트적 디테일 추가해보자". 요청서 `docs/ART_REQUEST_PROPS.md` 의 A1~A6 를 `gameplay-designer`·`blender-artist` 에게 따로 판단시킨 뒤("둘에게 시켜서 판단해봐") 정했다: 첫 킷 "바위부터", 범위 "한킷씩 끝내고 순서대로"(K4 → K3 → K1 → K5 → K2 → K7 → K6), STADIUM 포함 "ㅇㅇ"(→ K7 깃발 천·벤치), 스타일·폴리곤·크기·두 색 "ㅇㅇ". 요청서가 원본이고 여기에는 이유만 둔다.

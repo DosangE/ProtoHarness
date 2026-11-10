@@ -98,10 +98,11 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material foam = Palette("Foam", new Color(0.71f, 0.79f, 0.76f));
             private readonly Material roof = Palette("Roof", new Color(0.29f, 0.26f, 0.21f));
             private Mesh cone;
-            private Mesh crag;
+            private Mesh[] crags;
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
-            private int trees, rocks;
+            private int trees, rocks, groundedRocks, skippedRocks;
+            private float longestCragReach, lastCragReach;
 
             internal Layout(TrackDefinition definition)
             {
@@ -141,7 +142,7 @@ namespace ProtoHarness.Editor.ChainRush
                 var root = new GameObject("Summit Drop Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
                 cone = ConeMesh();
-                crag = CragMesh();
+                crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
                 // Reserve the four required corner landmarks before scattering optional scenery.
@@ -155,16 +156,19 @@ namespace ProtoHarness.Editor.ChainRush
                 PoleSpires(Group("10 Rock spires under corner poles", root.transform));
                 // Validate bounds before merging; afterwards they span the whole mountain. A spire's tall bounds swell
                 // toward a road beside it, so 10 is left to the vertex check in ValidateClearance, with 01, 06 and 09.
+                // So are 02 and 05 (05's zigzag boards with its crags): a tilted crag whose foot follows the slope has
+                // bounds that swell over a road below it (2026-11-10).
                 foreach (Transform group in root.transform)
                     if (!group.name.StartsWith("01", StringComparison.Ordinal) && !group.name.StartsWith("06", StringComparison.Ordinal)
-                        && !group.name.StartsWith("09", StringComparison.Ordinal) && !group.name.StartsWith("10", StringComparison.Ordinal))
+                        && !group.name.StartsWith("09", StringComparison.Ordinal) && !group.name.StartsWith("10", StringComparison.Ordinal)
+                        && !group.name.StartsWith("02", StringComparison.Ordinal) && !group.name.StartsWith("05", StringComparison.Ordinal))
                         corridor.ValidateClearance(group.gameObject, float.NegativeInfinity);
                 var transient = new HashSet<Mesh>();
                 foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
                     if (!EditorUtility.IsPersistent(filter.sharedMesh)) transient.Add(filter.sharedMesh);
                 foreach (Transform group in root.transform) MergeByMaterial(group, group.name.Substring(0, 2));
                 foreach (Mesh mesh in transient) UnityEngine.Object.DestroyImmediate(mesh);
-                Debug.Log($"Summit Drop placed {trees} pines and {rocks} crags; terrain follows main road, shortcut, runway and runout.", root);
+                Debug.Log($"Summit Drop placed {trees} pines and {rocks} crags ({groundedRocks} with a foot reaching down the slope, longest {longestCragReach:F2} m; {skippedRocks} spots skipped at a drop); terrain follows main road, shortcut, runway and runout.", root);
                 return root;
             }
 
@@ -322,16 +326,21 @@ namespace ProtoHarness.Editor.ChainRush
                 MeshObject(name, parent, compact, triangles, material);
             }
 
-            private bool Place(double s, int side, float offset, float radius, float height, out Vector3 p)
+            // How far below the ground a placed thing's base sits.
+            private const float GroundSink = 0.45f;
+
+            // reserve false leaves the spot free for the caller to Reserve once it has really placed something there:
+            // a crag turned down at a drop must not block the next candidate 12 m on (Codex review 2026-11-10).
+            private bool Place(double s, int side, float offset, float radius, float height, out Vector3 p, bool reserve = true)
             {
                 TrackFrame f = line.FrameAt(s);
                 p = f.Position + f.Right * side * (definition.HalfWidthAt(s) + offset);
-                p.y = GroundAt(p) - 0.45f;
+                p.y = GroundAt(p) - GroundSink;
                 if (!corridor.Available(p, radius * 1.45f)) return false;
                 foreach (Vector3 pole in poles)
                     if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(pole.x, pole.z)) < radius + PoleRadius + 4f
                         && p.y + height > pole.y && p.y < pole.y + 21f) return false;
-                corridor.Reserve(p, radius * 1.15f);
+                if (reserve) corridor.Reserve(p, radius * 1.15f);
                 return true;
             }
 
@@ -437,18 +446,62 @@ namespace ProtoHarness.Editor.ChainRush
                     bool ledge = s >= 800d;
                     if (s >= 420d && !ledge && Hash(index + 67) < 0.55f) { index++; continue; }
                     float radius = ledge ? 6f : 5f + Hash(index * 7) * 3f;
-                    if (Place(s, 1, radius * 1.6f + 3f, radius, 24f, out Vector3 p))
+                    // A wall crag at a drop is left out (Rock returns false); the wall has more along it.
+                    if (Place(s, 1, radius * 1.6f + 3f, radius, 24f, out Vector3 p, false))
                         Rock(parent, p, radius, ledge ? 25f + Hash(index * 11) * 8f : 12f + Hash(index * 11) * 14f, index);
                     index++;
                 }
             }
 
-            private void Rock(Transform parent, Vector3 p, float radius, float height, int seed)
+            // Place reads the ground under the centre only, and a crag's flat bottom 10-16 m wide on a mountain slope
+            // floated 3-12 m at its downhill side, up to 33 m at a drop (playtest 2026-11-10, docs/ART_REQUEST_PROPS.md
+            // K4). Moving or stretching the whole rock buries its uphill side or reaches into the road below, so each crag
+            // gets its own copy of the kit mesh whose lowest part follows the slope: a vertex in the bottom CragFoot of the
+            // height comes down by how far the bottom floats over the ground under it, fully at the bottom and less going
+            // up, so the top keeps its shape and the foot spreads down the slope. Where the ground falls away more than
+            // CragReach of the height it is a drop, not a slope: no crag there (false).
+            // A placed crag reserves its spot here, not in Place, so a spot turned down at a drop stays free.
+            private const float CragFoot = 0.4f, CragReach = 0.6f;
+
+            private bool Rock(Transform parent, Vector3 p, float radius, float height, int seed, bool evenAtADrop = false)
             {
-                GameObject rock = Shape("Crag " + seed, parent, p + Vector3.up * height * 0.42f,
-                    new Vector3(radius * 2f, height, radius * 1.7f), Pick(seed * 41, rockA, rockB, rockC), crag);
-                rock.transform.localRotation = Quaternion.Euler(Hash(seed * 43) * 9f, Hash(seed * 47) * 360f, Hash(seed * 53) * 8f);
+                var size = new Vector3(radius * 2f, height, radius * 1.7f);
+                Quaternion tilt = Quaternion.Euler(Hash(seed * 43) * 9f, Hash(seed * 47) * 360f, Hash(seed * 53) * 8f);
+                Vector3 centre = p + Vector3.up * height * 0.42f;
+                Mesh source = crags[Mathf.Min(crags.Length - 1, (int)(Hash(seed * 59) * crags.Length))];
+                Bounds b = source.bounds;
+                var scale = new Vector3(size.x / b.size.x, size.y / b.size.y, size.z / b.size.z);
+                var vertices = new List<Vector3>();
+                source.GetVertices(vertices);
+                float reach = 0f;
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    Vector3 local = Vector3.Scale(vertices[i] - b.center, scale);
+                    Vector3 world = centre + tilt * local;
+                    float up = (local.y + size.y * 0.5f) / size.y;
+                    if (up < CragFoot)
+                    {
+                        float bottom = world.y - up * size.y;
+                        float drop = Mathf.Max(0f, bottom - (GroundAt(world) - GroundSink));
+                        reach = Mathf.Max(reach, drop);
+                        world.y -= drop * (1f - up / CragFoot);
+                    }
+                    vertices[i] = world - centre;
+                }
+                if (reach > height * CragReach && !evenAtADrop) { skippedRocks++; return false; }
+                var mesh = new Mesh { name = "SummitCrag_" + seed };
+                mesh.SetVertices(vertices);
+                mesh.SetTriangles(source.triangles, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                // The tilt and size are in the vertices, so the shape stands at scale 1 and no rotation.
+                Shape("Crag " + seed, parent, centre, mesh.bounds.size, Pick(seed * 41, rockA, rockB, rockC), mesh);
+                corridor.Reserve(p, radius * 1.15f);
                 rocks++;
+                lastCragReach = reach;
+                longestCragReach = Mathf.Max(longestCragReach, reach);
+                if (reach > 0.05f) groundedRocks++;
+                return true;
             }
 
             private void Jump(Transform parent)
@@ -555,12 +608,21 @@ namespace ProtoHarness.Editor.ChainRush
                         Beam("Chevron", board, new Vector3(arrow * 1.1f + direction * 0.3f, 3.4f, 0.14f), new Vector3(arrow * 1.1f - direction * 0.3f, 3.9f, 0.14f), 0.17f, amber);
                     }
                     bool rockPlaced = false;
+                    Vector3? firstClear = null;
                     foreach (float offset in new[] { 20f, 28f, 38f, 50f, 65f, 80f, 100f })
                     {
-                        if (!Place(middle, outside, offset, 6f, 20f, out Vector3 r)) continue;
-                        Rock(parent, r, 6f, 19f, index + 700);
+                        if (!Place(middle, outside, offset, 6f, 20f, out Vector3 r, false)) continue;
+                        if (firstClear == null) firstClear = r;
+                        if (!Rock(parent, r, 6f, 19f, index + 700)) continue; // at a drop: try further out
                         rockPlaced = true;
                         break;
+                    }
+                    // A required landmark: where every clear spot is at a drop, the first one takes a crag whose foot
+                    // reaches all the way down. Said aloud, since its long foot is checked by vertex only.
+                    if (!rockPlaced && firstClear.HasValue)
+                    {
+                        rockPlaced = Rock(parent, firstClear.Value, 6f, 19f, index + 700, true);
+                        Debug.LogWarning($"Zigzag outside crag at S{middle:F0}: every clear spot is at a drop, so its foot reaches {lastCragReach:F1} m down.");
                     }
                     if (!rockPlaced) throw new InvalidOperationException("Zigzag outside crag has no clear placement at S" + middle);
                     index++;
@@ -818,16 +880,6 @@ namespace ProtoHarness.Editor.ChainRush
                 }
                 var mesh = new Mesh { name = "SummitPineSource" };
                 mesh.SetVertices(vertices); mesh.SetTriangles(triangles, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
-                return mesh;
-            }
-
-            private static Mesh CragMesh()
-            {
-                var mesh = new Mesh { name = "SummitCragSource" };
-                mesh.vertices = new[] { new Vector3(-1f, -0.5f, -0.8f), new Vector3(0.8f, -0.5f, -1f), new Vector3(1f, -0.5f, 0.7f), new Vector3(-0.7f, -0.5f, 1f),
-                    new Vector3(-0.6f, 0.25f, -0.6f), new Vector3(0.45f, 0.5f, -0.5f), new Vector3(0.7f, 0.3f, 0.5f), new Vector3(-0.4f, 0.45f, 0.65f) };
-                mesh.triangles = new[] { 0,4,1, 1,4,5, 1,5,2, 2,5,6, 2,6,3, 3,6,7, 3,7,0, 0,7,4, 4,7,5, 5,7,6, 0,1,3, 1,2,3 };
-                mesh.RecalculateNormals(); mesh.RecalculateBounds();
                 return mesh;
             }
 

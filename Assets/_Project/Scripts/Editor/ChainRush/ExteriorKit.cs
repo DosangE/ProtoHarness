@@ -5,8 +5,8 @@ using UnityEngine.Rendering;
 
 namespace ProtoHarness.Editor.ChainRush
 {
-    // The shapes every exterior is made of (built-in cube, sphere and cylinder, no shadows, static batching) and the
-    // fixed scatter that varies them by place. The builders call these as their own (using static).
+    // The shapes every exterior is made of (built-in cube, sphere and cylinder, or a kit FBX's mesh; no shadows, static
+    // batching) and the fixed scatter that varies them by place. The builders call these as their own (using static).
     public static class ExteriorKit
     {
         private static Mesh cube, sphere, cylinder;
@@ -26,9 +26,16 @@ namespace ProtoHarness.Editor.ChainRush
         // slot, pivot at the bounds centre like the built-in shapes, so it replaces a Shape call's mesh without moving it.
         public static Mesh KitMesh(string kit, string name)
         {
-            string path = "Assets/_Project/Art/Models/" + kit + ".fbx";
+            if (string.IsNullOrEmpty(kit)) throw new ArgumentException("A kit name is required.", nameof(kit));
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("A mesh name is required.", nameof(name));
+            string path = ExteriorAssets.ModelFolder + kit + ".fbx";
             foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
-                if (asset is Mesh mesh && mesh.name == name) return mesh;
+                if (asset is Mesh mesh && mesh.name == name)
+                {
+                    if (mesh.subMeshCount != 1)
+                        throw new InvalidOperationException($"Kit mesh {name} in {path} has {mesh.subMeshCount} material slots; a kit mesh has one.");
+                    return mesh;
+                }
             throw new InvalidOperationException($"Missing decoration kit mesh {name} in {path}");
         }
 

@@ -17,8 +17,12 @@
 - **검증**: 컴파일 `Tundra build success`, 에러 0. 재빌드 `Summit Drop placed 333 pines and 27 crags (26 with a foot reaching down the slope, longest 31.67 m; 6 spots skipped at a drop)`, `Summit Drop validation PASS: main road and shortcut clear; 15 pole shafts clear; 38 renderers; 945081 vertices; decoration physics=0` (이전 932,829). 테스트(영향 평가: 바뀐 `Assets/` = RockKit.fbx·빌더·`ExteriorKit`·SUMMIT 장식 메시 → 장식 프리팹을 읽는 유일한 테스트 `TrackDefinitionTests.cs:204`, 시뮬 참조 없어 지문·Lap 없음): `TrackDefinitionTests.SummitDrop_Exterior_NoPoleShaftHangsAboveTheGround` 1건 2회 — 04:47:54Z(밑동 맞추기 전) `testcasecount=1 result=Passed passed=1 failed=0`, 05:14:07Z(최종 코드) 같은 값. `tools/test-runs.ps1 -Record` 로 남겼다. `select-tests` 실행: `RockKit.fbx → PlayMode 없음, 지문 없음`.
 - **렌더**: 처음 고른 전 렌더 세 각도에는 바위가 하나도 없었다(전후 PNG 해시가 같았다) — 바위 자리는 메시 정점에서 찾아야 한다. 이전 모습은 지운 `CragMesh` 를 메모리에 다시 만들어 새 3종과 같은 크기(12 × 26 × 10)·머티리얼·카메라로 따로 찍었다.
 - **배운 것**: 단위 크기 소품을 크게 늘려 도로에서 멀리 두면 모양 개선이 달리는 중에 잘 보이지 않는다(첫 플레이). 요청서 K4 "다음 킷에 적용할 것".
-- **비용**: `unity-implementer` 54,099 토큰·16회. 나머지(재빌드·렌더·바닥 맞추기 네 번)는 메인이 Unity MCP 로 했다.
-- **남은 것**: 다음 킷 K3 나무. 프리팹은 줄 끝만 바뀌어 커밋하지 않았다.
+- **병합 전 리뷰** (`unity-reviewer` + Codex 설계 리뷰, `Assets/` 새 파일이라 "그 밖" 규모, SUBAGENTS §7-5):
+  - Codex (needs-attention, medium 1): `Place` 가 바위를 만들기 전에 자리를 예약해, 낭떠러지로 거절된 후보의 예약이 12 m 옆 정상 후보를 막았다(예약 간격 15.6 m = 1.45r + 1.15r). 그래서 S1605 가 31.67 m 예외 배치로 갔다. 맞았다 — 바위 호출은 `Place(..., reserve: false)` 로 부르고 `Rock` 이 놓은 뒤에만 예약한다. 고친 뒤 예외 배치는 0, 가장 긴 밑동 31.67 → 14.11 m. 풀린 빈 예약 자리에 소나무가 7그루 더 들어갔다(333 → 340). 권한 회귀 테스트는 빌더 내부 테스트가 없어 새 파일이 필요해 하지 않았고, 재빌드 로그로 확인했다.
+  - reviewer (치명 0, 중대 1, 보통 2, 제안 6): 중대 — 예외 배치가 로그 없이 합계에 묻힌다 → S 값·길이를 `LogWarning` 으로 남긴다(고친 뒤 이 경로는 쓰이지 않는다). 보통 — `KitMesh` 가 `ExteriorAssets.ModelFolder` 를 다시 적었다, 05 그룹 검사 제외 주석이 표지판을 빠뜨렸다 → 고침. 제안 중 고친 것: 슬롯 하나 계약을 `subMeshCount` 로 검사, 빈 인자 `ArgumentException`, 클래스 머리 주석, 0.45 를 `GroundSink` 하나로. 고치지 않은 것: 바위를 셀 때 쓰는 0.05 m 기준(로그 전용), `cone` 이 `KitMesh` 예외 때 메모리에 남는 것(결과물 오염 없음).
+- **최종 값** (리뷰 반영 뒤): `Summit Drop placed 340 pines and 26 crags (24 with a foot reaching down the slope, longest 14.11 m; 11 spots skipped at a drop)`, `Summit Drop validation PASS: ... 38 renderers; 945280 vertices; decoration physics=0`. 테스트 같은 1건 05:30:00Z `testcasecount=1 result=Passed passed=1 failed=0`(기록함).
+- **비용**: `unity-implementer` 54,099 토큰·16회, `unity-reviewer` 73,407·20회. Codex 리뷰는 사용량을 남기지 않는다. 나머지(재빌드·렌더·바닥 맞추기 다섯 번)는 메인이 Unity MCP 로 했다.
+- **남은 것**: 다음 킷 K3 나무. 프리팹 diff 는 그룹 자식 순서 한 줄(병합 순서가 바뀐 빌더 출력)이라 커밋에 넣었다.
 
 ## 2026-11-10 · 장식 소품 아트 요청서: 공통 킷 7종, 모양은 킷이 · 색은 트랙 팔레트가, 첫 킷 바위 (`docs/art-request-props`)
 

@@ -22,6 +22,16 @@ namespace ProtoHarness.Editor.ChainRush
             return cache;
         }
 
+        // A mesh from a decoration kit FBX in Art/Models (docs/ART_REQUEST_PROPS.md): one object = one mesh = one material
+        // slot, pivot at the bounds centre like the built-in shapes, so it replaces a Shape call's mesh without moving it.
+        public static Mesh KitMesh(string kit, string name)
+        {
+            string path = "Assets/_Project/Art/Models/" + kit + ".fbx";
+            foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                if (asset is Mesh mesh && mesh.name == name) return mesh;
+            throw new InvalidOperationException($"Missing decoration kit mesh {name} in {path}");
+        }
+
         public static Transform Group(string name, Transform parent)
         {
             var group = new GameObject(name).transform;

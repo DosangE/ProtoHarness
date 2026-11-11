@@ -55,7 +55,7 @@ $rules = @(
     # Revisit when a prefab or builder starts using this model (docs/DECISIONS.md 2026-11-09 "Blender 시험 제작").
     @{ Pattern = '^Assets/_Project/Art/Models/ShortcutSign\.fbx(\.meta)?$'; Classes = @(); Fingerprint = $false; Why = '지름길 표지판 FBX (아직 참조하는 코드·씬·프리팹 없음)' }
     # Decoration kit FBX read only by the exterior builders (docs/ART_REQUEST_PROPS.md).
-    @{ Pattern = '^Assets/_Project/Art/Models/(RockKit|TreeKit)\.fbx(\.meta)?$'; Classes = @(); Fingerprint = $false; Why = '장식 킷 FBX (장식 빌더만 읽는다, 시뮬 참조 없음)' }
+    @{ Pattern = '^Assets/_Project/Art/Models/(RockKit|TreeKit|RoadsideKit)\.fbx(\.meta)?$'; Classes = @(); Fingerprint = $false; Why = '장식 킷 FBX (장식 빌더만 읽는다, 시뮬 참조 없음)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/(.*EnvironmentBuilder|ExteriorAssets|ExteriorKit|RoadCorridor)\.cs$'; Classes = @(); Fingerprint = $false; Why = '장식 빌더 (침범 검사와 구조 테스트로 확인)' }
     @{ Pattern = '^' + $scripts + 'Editor/ChainRush/ChainRushCircuitSceneBuilder\.cs$'; Classes = @('ChainRushCircuitTests'); LapTracks = @('*'); Why = '트랙 생성: 개별 Create...Track만 바뀌었으면 영향 평가로 그 트랙만 좁힌다' }
     @{ Pattern = '^' + $runtime + 'Race/TrackLook\.cs$'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '도로·벽·차선 표현 (시뮬 참조 없음)' }

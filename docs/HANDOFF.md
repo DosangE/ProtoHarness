@@ -17,7 +17,7 @@
   - K3 3차: SKYWAY 둥근 나무 58그루 → 수관 구 둘을 `RoundCrown` 하나로, 정점 +2.2%·렌더러 −58 (`feature/art-treekit-skyway`, DECISIONS 2026-11-11 "K3 나무 3차"). 사이프러스·덤불은 그대로.
   - K3 4차: PALM 야자 62그루 → `PalmTrunk`·`PalmFrond`, 잎 숙임 22° → 10°, 정점 +51% (`feature/art-treekit-palm`, DECISIONS 2026-11-11 "K3 나무 4차"). **K3 끝.** 킷 잎이 멀리서 성기게 보이는지는 플레이로 본다 — 문제면 `blender-artist` 에 넓고 가벼운 잎을 맡긴다.
   - K1 1차: `RoadsideKit` 5종 시안·FBX, FINGER LANES 화살표판 54·광고판 12 연결(광고판 면은 틀 안으로), 정점 +4.4% (`feature/art-roadsidekit`, DECISIONS 2026-11-11 "K1 RoadsideKit 1차").
-  - K1 2차: SKYWAY 화살표판 18(화살표 3개)·광고판 37 연결, 정점 +1.5%·렌더러 −17 (`feature/art-roadsidekit-skyway`, DECISIONS 2026-11-11 "K1 RoadsideKit 2차"). 사용자 플레이 확인("화살표 방향이 읽혔나") 아직.
+  - K1 2차: SKYWAY 화살표판 18(화살표 3개)·광고판 37 연결, 정점 +1.5%·렌더러 −17 (`feature/art-roadsidekit-skyway`, DECISIONS 2026-11-11 "K1 RoadsideKit 2차"). 사용자 플레이 확인 "플레이감도 확인했다."(2026-11-11).
 - **다음 (K1 나머지, 트랙 하나씩, 각각 §3-2 요청서부터)**: PALM(작은 판 0.947배, 색 반대) → SUMMIT(1.053배, 병합 트랙). 그 뒤 K5(집 벽 부품) — Blender 시안부터.
 - **배운 것 (다음 킷에 그대로 적용)**:
   - 크게 늘려 멀리 두는 소품은 모양을 바꿔도 달리며 안 보인다(K4 첫 플레이 "차이를 모르겠다"). 효과는 길가 소품·실루엣이 바뀌는 것에서.

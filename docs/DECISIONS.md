@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-11-11 · K1 RoadsideKit 2차: SKYWAY 코너 화살표판·광고판 (`feature/art-roadsidekit-skyway`)
+
+- **결정 (사용자, 2026-11-11)**: FINGER 에서 정한 방식을 그대로 SKYWAY 에 쓰는 §3-2 요청서에 "ㄱㄱ". 고속도로 대형 광고판(10.4 m)과 막다른 베이 판은 대상이 아니다. SKYWAY 막대(0.2)는 FINGER(0.22)보다 조금 가늘었지만, 킷 화살표가 한 가지 굵기라 FINGER 와 같은 모양이 된다.
+- **연결**: `SkywayEnvironmentBuilder` — 화살표판(`:599-606`): 판 `Box` → `ChevronPanel`(크기 그대로 3.8 × 1.4, `yellow`), 막대 여섯 → `ChevronArrow` 셋(x −1.1 / 0 / +1.1, 판 중앙 높이, FINGER 와 같은 (0.9, 1, 0.12), `black`, 판 앞 `ArrowOut` 0.135). 옛 막대 끝이 `outside > 0` 이면 +x 였으므로 FINGER 와 같은 규칙: `outside > 0` 이면 그대로, 아니면 판 법선(z)으로 180°. 광고판(`:635-646`): 틀 → `BoardFrame`(`ink`), 면 → `BoardFace`, 면·원판·글줄 셋을 `FaceRecess` 0.09 뒤로, 틀 위에 `BoardCap`(`ink`, 높이 `y + 2.8 + 1.6 + 0.125` — SKYWAY 틀 중심이 FINGER 의 3.6 이 아니라 2.8). 다리는 상자 그대로. 메시는 `Build()` 시작에서 `KitMesh`, 상수 `ArrowOut`·`FaceRecess` 는 FINGER 와 같은 형식.
+- **통로**: SKYWAY 광고판은 도로 가장자리 1.75 m 뒤. 앞으로 가장 나온 것이 원판(앞면 0.14)에서 차양(앞면 0.15)으로 바뀌어 1 cm 더 나오고, 가장자리에서 1.60 m(검사 여유 0.7 m). 재빌드의 가장 가까운 렌더러는 전후 모두 0.85 m(광고판이 아니다).
+- **측정** (프리팹을 프리뷰 씬에 꺼내 `MeshFilter.sharedMesh.vertexCount` 합): 화살표판 18개 정점 3,888 → 6,696(판마다 216 → 372, 다리 48 포함), 렌더러 162 → 108. 광고판 37개 정점 10,804 → 13,986(판마다 292 → 378), 렌더러 296 → 333. 장식 전체 정점 394,890 → 400,880(+1.5%), 렌더러 4,622 → 4,605. 요청서 추정(+2,808, +3,182, 렌더러 −54·+37)과 같다.
+- **검증** (에디터 6000.3.19f1): 컴파일 `*** Tundra build success (2.53 seconds), 2 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `Skyway Exterior clearance: nearest renderer bounds 0.85 m outside a road edge (at least 0.7 m below 9 m over the road); 200 parts under the slab; 190840 vertices checked one by one.`, `SkywayExterior: 4605 renderers; physics=0; runtime scripts=0; road corridor clear.`, Console 에러·경고 0. 전후 렌더(같은 카메라, 판 앞 오른쪽): `Corner chevrons 2` 전후 `<<<`(화살표 회전 0°), `Corner chevrons 0` 전후 `>>>`(180°) — 방향 그대로, 꺾쇠가 한 덩어리. `Advertising board 1`: 면이 틀 안으로 들어가 틀이 액자로 보이고 차양이 생겼다. 프리팹에 RoadsideKit GUID 183회(판 18 + 화살표 54 + 광고판 37 × 3). 테스트: 영향 평가 — 바뀐 `Assets/` = 빌더(에디터 전용)·SKYWAY 장식 프리팹. 프리팹 GUID 를 참조하는 곳은 `ChainRushTrackSkyway.unity` 하나이고 그 씬을 여는 테스트는 없다. 룩 `TrackLook_Skyway.asset` 은 재임포트만 되고 diff 가 없다(그것을 읽는 `ChainRushFlowTests.cs:913` 도 장식 씬 이름 `""` 로 장식을 열지 않는다). 시뮬 참조 없음 → 돌린 테스트 없음.
+- **남은 것 (K1)**: 사용자 플레이 SKYWAY LOOP 1랩 "화살표 방향이 읽혔나". PALM(판 0.947배, 화살표 3개, 판 어둡고 화살표 노랑), SUMMIT(1.053배, 병합 트랙) — 트랙마다 요청서.
+
 ## 2026-11-11 · K1 RoadsideKit 1차: FINGER LANES 코너 화살표판·광고판, 광고판 면은 틀 안으로 (`feature/art-roadsidekit`)
 
 - **결정 (사용자, 2026-11-11)**: `blender-artist` 시안 5종(`ChevronArrow`·`ChevronPanel`·`BoardFrame`·`BoardFace`·`BoardCap`)을 지금 모습과 나란히 본 비교, 15 m 도로 높이 비교에서 새 판을 골랐다("이거 말고 이거대로" — 옛 막대 화살표가 아니라 새 꺾쇠). 나머지는 권장대로: 화살표 굵기 시안 그대로(수직 0.245, 옛 0.22), 광고판 면을 틀 안으로, 화살표를 판 앞면에 붙인다. Unity 연결 요청서(첫 트랙 FINGER, 다른 트랙은 따로)에 "ㄱㄱ".

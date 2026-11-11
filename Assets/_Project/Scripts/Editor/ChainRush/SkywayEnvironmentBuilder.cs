@@ -179,6 +179,10 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material trunk = Palette("Trunk", new Color(0.47f, 0.35f, 0.24f));
             // The round planter tree from the decoration kit (docs/ART_REQUEST_PROPS.md K3), loaded when the build starts.
             private Mesh treePlanter, treeTrunk, treeCrown;
+            // The corner chevron board and the advertising board from the roadside kit (docs/ART_REQUEST_PROPS.md K1).
+            private Mesh chevronPanel, chevronArrow, boardFrame, boardFace, boardCap;
+            private const float ArrowOut = 0.135f;
+            private const float FaceRecess = 0.09f;
             private readonly Material yellow = Palette("Yellow", new Color(0.97f, 0.80f, 0.18f));
             private readonly Material black = Palette("Black", new Color(0.12f, 0.12f, 0.13f));
             private readonly Material red = Palette("Red", new Color(0.86f, 0.24f, 0.21f));
@@ -270,6 +274,8 @@ namespace ProtoHarness.Editor.ChainRush
                 var root = new GameObject("Skyway Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
                 treePlanter = KitMesh("TreeKit", "Planter"); treeTrunk = KitMesh("TreeKit", "TreeTrunk"); treeCrown = KitMesh("TreeKit", "RoundCrown");
+                chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
+                boardFrame = KitMesh("RoadsideKit", "BoardFrame"); boardFace = KitMesh("RoadsideKit", "BoardFace"); boardCap = KitMesh("RoadsideKit", "BoardCap");
                 Transform landscape = Group(LandGroup, root.transform);
                 Land(landscape);
 
@@ -591,14 +597,13 @@ namespace ProtoHarness.Editor.ChainRush
                         float y = frame.Position.y - Ground;
                         for (int leg = -1; leg <= 1; leg += 2)
                             Box("Board leg", board, new Vector3(leg * 1.5f, (y + 1.4f) * 0.5f, 0f), new Vector3(0.2f, y + 1.4f, 0.2f), black);
-                        Box("Board", board, new Vector3(0f, y + 2.1f, 0f), new Vector3(3.8f, 1.4f, 0.15f), yellow);
-                        // The board's +x is the way the runner goes (LookRotation toward the road from the outside).
-                        float point = outside;
+                        Shape("Board", board, new Vector3(0f, y + 2.1f, 0f), new Vector3(3.8f, 1.4f, 0.15f), yellow, chevronPanel);
+                        // The board's +x is the way the runner goes (LookRotation toward the road from the outside). The kit
+                        // arrow's tip is its +x and it is the same upside down, so the other way is a half turn on the board's
+                        // normal; it stands on the board's face (0.075 + half its 0.12), as on FINGER LANES (K1).
+                        Quaternion point = outside > 0 ? Quaternion.identity : Quaternion.Euler(0f, 0f, 180f);
                         for (int c = -1; c <= 1; c++)
-                        {
-                            Beam("Chevron", board, new Vector3(c * 1.1f - point * 0.3f, y + 1.6f, 0.1f), new Vector3(c * 1.1f + point * 0.3f, y + 2.1f, 0.1f), 0.2f, black);
-                            Beam("Chevron", board, new Vector3(c * 1.1f + point * 0.3f, y + 2.1f, 0.1f), new Vector3(c * 1.1f - point * 0.3f, y + 2.6f, 0.1f), 0.2f, black);
-                        }
+                            Shape("Chevron", board, new Vector3(c * 1.1f, y + 2.1f, ArrowOut), new Vector3(0.9f, 1f, 0.12f), black, chevronArrow).transform.localRotation = point;
                         near.Reserve(position, 2f);
                     }
                 }
@@ -628,13 +633,17 @@ namespace ProtoHarness.Editor.ChainRush
                         Material fore = Pick(index * 11 + 12, plaster, yellow, sky, pink);
                         for (int leg = -1; leg <= 1; leg += 2)
                             Box("Board leg", board, new Vector3(leg * 2.6f, (y + 1.3f) * 0.5f, -0.1f), new Vector3(0.2f, y + 1.3f, 0.2f), black);
-                        Box("Board frame", board, new Vector3(0f, y + 2.8f, -0.05f), new Vector3(6.4f, 3.2f, 0.12f), ink);
-                        Box("Board face", board, new Vector3(0f, y + 2.8f, 0.03f), new Vector3(6f, 2.8f, 0.06f), back);
-                        GameObject disc = Shape("Mascot disc", board, new Vector3(-1.6f, y + 2.8f, 0.08f), new Vector3(2.1f, 0.06f, 2.1f), fore, Cylinder);
+                        Shape("Board frame", board, new Vector3(0f, y + 2.8f, -0.05f), new Vector3(6.4f, 3.2f, 0.12f), ink, boardFrame);
+                        // The face and its poster move FaceRecess back together, the face 4 cm inside the frame's opening, as
+                        // on FINGER LANES (K1); the disc and the lines still stand proud of the face. The cap shades the
+                        // frame's top, 0.15 in front of the board's origin: the disc reached 0.14 before.
+                        Shape("Board cap", board, new Vector3(0f, y + 2.8f + 1.6f + 0.125f, -0.05f), new Vector3(6.6f, 0.25f, 0.4f), ink, boardCap);
+                        Shape("Board face", board, new Vector3(0f, y + 2.8f, 0.03f - FaceRecess), new Vector3(6f, 2.8f, 0.06f), back, boardFace);
+                        GameObject disc = Shape("Mascot disc", board, new Vector3(-1.6f, y + 2.8f, 0.08f - FaceRecess), new Vector3(2.1f, 0.06f, 2.1f), fore, Cylinder);
                         disc.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                        Box("Headline", board, new Vector3(1.1f, y + 3.4f, 0.08f), new Vector3(2.8f, 0.5f, 0.05f), fore);
-                        Box("Strapline", board, new Vector3(1.1f, y + 2.6f, 0.08f), new Vector3(2.4f, 0.3f, 0.05f), plaster);
-                        Box("Strapline", board, new Vector3(0.9f, y + 2.1f, 0.08f), new Vector3(2f, 0.3f, 0.05f), plaster);
+                        Box("Headline", board, new Vector3(1.1f, y + 3.4f, 0.08f - FaceRecess), new Vector3(2.8f, 0.5f, 0.05f), fore);
+                        Box("Strapline", board, new Vector3(1.1f, y + 2.6f, 0.08f - FaceRecess), new Vector3(2.4f, 0.3f, 0.05f), plaster);
+                        Box("Strapline", board, new Vector3(0.9f, y + 2.1f, 0.08f - FaceRecess), new Vector3(2f, 0.3f, 0.05f), plaster);
                         near.Reserve(position, 3.3f);
                     }
                 }

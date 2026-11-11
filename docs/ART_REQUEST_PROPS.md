@@ -88,11 +88,12 @@
 | `BoardFace` | 실제 · 6.0 × 2.8 × 0.06 | `M_Face` | S · 12 | 광고판 면. 틀 구멍에 꼭 맞는다(위치는 코드, 지금 틀보다 0.08 앞 `FingerLanes…:486-487`) |
 | `BoardCap` | 실제 · 6.6 × 0.25 × 0.4 | `M_Frame` | S · 12~44 | 광고판 위 차양(조명 받침). 위치는 코드가 틀 위에 둔다 |
 
-- 쓰는 곳: 코너 화살표 `FingerLanesEnvironmentBuilder.cs:430-441`(판 3.8×1.4, 화살표 2개), `PalmCoastEnvironmentBuilder.cs:586-597`(3.6×1.3, 3개, 판이 어둡고 화살표가 노랑), `SkywayEnvironmentBuilder.cs:586-597`(3.8×1.4, 3개), `SummitDropEnvironmentBuilder.cs:547-554`(4.0×1.5×0.2, 3개). 광고판 `FingerLanesEnvironmentBuilder.cs:480-492`, `SkywayEnvironmentBuilder.cs:621-627`.
+- 쓰는 곳: 코너 화살표 `FingerLanesEnvironmentBuilder.cs:430-441`(판 3.8×1.4, 화살표 2개), `PalmCoastEnvironmentBuilder.cs:586-597`(3.6×1.3, 3개, 판이 어둡고 화살표가 노랑), `SkywayEnvironmentBuilder.cs:599-606`(3.8×1.4, 3개), `SummitDropEnvironmentBuilder.cs:547-554`(4.0×1.5×0.2, 3개). 광고판 `FingerLanesEnvironmentBuilder.cs:480-492`, `SkywayEnvironmentBuilder.cs:635-646`.
 - 판은 한 크기(3.8)로 만들고 Unity 에서 균일 스케일(A5): PALM 0.947배, SUMMIT 1.053배(두께 0.158 — 화살표를 붙이는 앞 오프셋이 판 두께를 따라가야 한다). 화살표 개수·위치는 코드 그대로다.
 - SKYWAY 막다른 베이 판(`Skyway…:870-891`)은 폭이 베이에 따라 바뀌어 대상이 아니다.
 - K1 은 코너를 알리는 기능 소품이다. 시안·플레이 확인에 "코너 들어가기 전에 화살표 방향을 읽을 수 있었나" 를 더한다(`gameplay-designer`).
 - **결과 (2026-11-11, 1차 FINGER LANES, DECISIONS 같은 날 "K1 RoadsideKit 1차")**: 시안 5종 확정(화살표는 꺾쇠 한 덩어리, 수직 굵기 0.245). 화살표는 판 앞 0.135(판 앞면에 붙음), 광고판 면·포스터는 0.09 뒤로 틀 안에. 화살표판 54·광고판 12, 장식 정점 +4.4%, 렌더러 −96. Unity 정점은 삼각형 × 3 보다 적다(화살표 60, 판 144, 틀 80, 면 24, 차양 30). 남은 트랙: SKYWAY, PALM, SUMMIT.
+- **결과 (2026-11-11, 2차 SKYWAY, DECISIONS 같은 날 "K1 RoadsideKit 2차")**: FINGER 와 같은 방식. 화살표판 18(막대 6 → 화살표 3, x −1.1 / 0 / +1.1)·광고판 37(면·원판·글줄 3개 0.09 뒤로, 차양 `ink`). 장식 정점 +1.5%, 렌더러 −17. 남은 트랙: PALM, SUMMIT.
 
 ### K5. `FacadeKit` — 집 벽에 붙는 부품
 

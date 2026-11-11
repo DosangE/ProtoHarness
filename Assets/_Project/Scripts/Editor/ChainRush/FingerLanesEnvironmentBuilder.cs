@@ -492,8 +492,9 @@ namespace ProtoHarness.Editor.ChainRush
                         for (int leg = -1; leg <= 1; leg += 2)
                             Box("Board leg", board, new Vector3(leg * 2.6f, (y + 2f) * 0.5f, -0.1f), new Vector3(0.2f, y + 2f, 0.2f), dark);
                         Shape("Board frame", board, new Vector3(0f, y + 3.6f, -0.05f), new Vector3(6.4f, 3.2f, 0.12f), dark, boardFrame);
-                        // The face and its poster sit FaceRecess back from where they stood, inside the frame's opening, so
-                        // the board reads as a framed poster (user 2026-11-11, K1); the cap shades the top of the frame.
+                        // The face and its poster move FaceRecess back together, the face 4 cm inside the frame's opening, so
+                        // the board reads as a framed poster (user 2026-11-11, K1); the eye and the lines still stand up to
+                        // 5 cm proud of the frame, as they stood proud of the face before. The cap shades the frame's top.
                         Shape("Board cap", board, new Vector3(0f, y + 3.6f + 1.6f + 0.125f, -0.05f), new Vector3(6.6f, 0.25f, 0.4f), dark, boardCap);
                         Shape("Board face", board, new Vector3(0f, y + 3.6f, 0.03f - FaceRecess), new Vector3(6f, 2.8f, 0.06f), back, boardFace);
                         GameObject eye = Shape("Poster eye", board, new Vector3(-1.6f, y + 3.6f, 0.08f - FaceRecess), new Vector3(2.2f, 0.06f, 2.2f), white, Cylinder);

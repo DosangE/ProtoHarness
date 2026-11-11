@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-11-11 · K3 나무 2차: FINGER LANES 둥근 나무를 TreeKit 으로 (`feature/art-treekit-finger`)
+
+- **결정 (사용자, 2026-11-11)**: Unity 연결 요청서(FINGER 만, SKYWAY·PALM 은 따로)에 "ㄱㄱ". 재빌드·전후 렌더·비용 보고에 "굳".
+- **연결**: `FingerLanesEnvironmentBuilder` 의 `Tree()`(Round village tree) 세 도형 — 화분 `Box` → `Planter`, 줄기 `Box` → `TreeTrunk`, 수관 `Sphere` → `RoundCrown`. 위치·크기 식은 그대로. 메시는 `Build()` 시작에서 `KitMesh` 로 한 번 읽는다(SUMMIT 과 같은 형식). Blender 작업은 없었다 — 1차 FBX 에 이미 들어 있다. 모퉁이 화분(원기둥)·덤불·언덕은 이번 범위 밖.
+- **비용 (측정)**: 킷 메시 Unity 정점·삼각형 — `RoundCrown` 775 / 261, `TreeTrunk` 128 / 76, `Planter` 170 / 86. 내장 구 439 / 760, 큐브 24 / 12. 나무 한 그루 정점 487 → 1,073, 삼각형 784 → 423, 렌더러 3 그대로. FINGER 는 병합하지 않는 트랙이라 렌더러 수가 비용에 같이 잡힌다 — 2,865 그대로. 나무 65그루, 장식 전체 정점 159,880 → 197,970(+23.8%). 비율은 SUMMIT 1차(+9.9%)보다 크나 전체가 SUMMIT(1,038,780)의 약 1/5 이고, 이 나무들은 도로 옆 5.4 m·정원에 홀로 서 있어 소나무 숲처럼 가려지는 디테일이 아니다 — 그래서 가벼운 수관을 만들지 않았다.
+- **열린 수관**: `RoundCrown` 은 겹친 덩어리 안쪽 면을 지워 닫혀 있지 않다. 전후 렌더 세 시점(도로 옆 (37.8, −1.3, −3.2), 정원 (73.5, −0.8, 60.8), 도로 옆 줄 (187.4, −1.3, 5.8), 나무 자리는 프리팹에서 찾음)에서 구멍은 보이지 않았다.
+- **검증**: 컴파일 `*** Tundra build success (32.42 seconds), 7 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `FingerLanesExterior: 2865 renderers; physics=0; runtime scripts=0; road corridor clear.`, `Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge ...`, 에러·경고 0. 테스트: 영향 평가 — 바뀐 `Assets/` = 빌더·FINGER 장식 프리팹 → FINGER 장식 프리팹을 읽는 테스트 없음(`TrackDefinitionTests` 의 장식 테스트는 SUMMIT `:201`·STADIUM `:251` 뿐), 장식에 콜라이더가 없어 시뮬·지문 없음 → 돌린 테스트 없음.
+- **남은 것 (K3)**: SKYWAY 둥근 나무(`Crown`·`Crown top` 두 구, 화분 2.2·줄기 0.4 — 같은 킷, 사이프러스·덤불은 범위 밖으로 둘지 요청서에서), PALM 야자(`PalmTrunk`·`PalmFrond`, 잎 숙임 각도).
+
 ## 2026-11-11 · K3 나무 1차: SUMMIT DROP 소나무를 TreeKit 으로, 잎은 가벼운 판 (`feature/art-treekit`)
 
 - **결정 (사용자, 2026-11-10~11)**: 시안 6개(소나무 잎 한 층·둥근 수관·줄기·야자 줄기·야자 잎·화분)를 이전 모습(Unity 에서 같은 조립 값으로 다시 세워 찍음)과 비교하고 "ㄱㄱ 새것 좋다". Unity 연결 요청서(첫 트랙 SUMMIT DROP 소나무, 다른 트랙은 따로)에 "ㅇㅇ". 무거운 판의 비용(아래)을 보고 "B ㄱㄱ"(가벼운 잎). 플레이 "괜찮다".

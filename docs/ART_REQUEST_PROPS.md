@@ -72,7 +72,8 @@
 | `Planter` | 실제 · 2.4 × 0.5 × 2.4 | — | `M_Stone` | S · 36~100 | 나무 화분(테두리 + 흙 높이 차). SKYWAY 2.2 는 균일 0.92배 |
 
 - 쓰는 곳: 소나무 `SummitDropEnvironmentBuilder.cs:429-435`(2026-11-11 기준), 둥근 나무 `FingerLanesEnvironmentBuilder.cs:701-705`·`SkywayEnvironmentBuilder.cs:958-967`, 야자 `PalmCoastEnvironmentBuilder.cs:523-534`.
-- **결과 (2026-11-11, 1차 SUMMIT DROP 소나무, DECISIONS 같은 날 "K3 나무 1차")**: `PineCrownTier` 는 가벼운 판(삼각형 28, Unity 정점 84)으로 바꿨다 — 처음 판(176 / 474)은 숲에서 가려져 보이지 않는 디테일에 장식 정점 +52% 를 썼다. **다음 킷에 적용할 것**: 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 겹치거나 멀어서 가려지는 디테일에는 쓰지 않는다. 나머지 트랙(FINGER·SKYWAY 둥근 나무, PALM 야자)은 남았다.
+- **결과 (2026-11-11, 1차 SUMMIT DROP 소나무, DECISIONS 같은 날 "K3 나무 1차")**: `PineCrownTier` 는 가벼운 판(삼각형 28, Unity 정점 84)으로 바꿨다 — 처음 판(176 / 474)은 숲에서 가려져 보이지 않는 디테일에 장식 정점 +52% 를 썼다. **다음 킷에 적용할 것**: 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 겹치거나 멀어서 가려지는 디테일에는 쓰지 않는다.
+- **결과 (2026-11-11, 2차 FINGER LANES 둥근 나무, DECISIONS 같은 날 "K3 나무 2차")**: 화분·줄기·수관을 `Planter`·`TreeTrunk`·`RoundCrown` 으로. 나무 65그루, 렌더러 그대로, 장식 정점 +23.8%(그루당 487 → 1,073, 삼각형은 784 → 423). 홀로 서서 보이는 나무라 가벼운 판은 만들지 않았다. 남은 것은 SKYWAY 둥근 나무, PALM 야자.
 - 트랙 사이에 실제로 같은 오브젝트를 쓰는 것은 `TreeTrunk`(SUMMIT·FINGER·SKYWAY)·`RoundCrown`(FINGER·SKYWAY)·`Planter`(FINGER·SKYWAY) 다(`gameplay-designer` 지적). 소나무·야자는 트랙 하나씩이다.
 
 ### K1. `RoadsideKit` — 코너 화살표판·광고판

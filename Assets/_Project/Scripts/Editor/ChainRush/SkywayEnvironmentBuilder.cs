@@ -636,7 +636,7 @@ namespace ProtoHarness.Editor.ChainRush
                         Shape("Board frame", board, new Vector3(0f, y + 2.8f, -0.05f), new Vector3(6.4f, 3.2f, 0.12f), ink, boardFrame);
                         // The face and its poster move FaceRecess back together, the face 4 cm inside the frame's opening, as
                         // on FINGER LANES (K1); the disc and the lines still stand proud of the face. The cap shades the
-                        // frame's top, 0.15 in front of the board's origin: the disc reached 0.14 before.
+                        // frame's top, 0.15 in front of the board's origin: the disc reached 0.11 before.
                         Shape("Board cap", board, new Vector3(0f, y + 2.8f + 1.6f + 0.125f, -0.05f), new Vector3(6.6f, 0.25f, 0.4f), ink, boardCap);
                         Shape("Board face", board, new Vector3(0f, y + 2.8f, 0.03f - FaceRecess), new Vector3(6f, 2.8f, 0.06f), back, boardFace);
                         GameObject disc = Shape("Mascot disc", board, new Vector3(-1.6f, y + 2.8f, 0.08f - FaceRecess), new Vector3(2.1f, 0.06f, 2.1f), fore, Cylinder);

@@ -117,6 +117,8 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material dark = Require("M_ArtStadiumInk.mat");
             private readonly Material gold = Require("M_ArtStadiumAmber.mat");
             private readonly Material grass = Require("M_StadiumSportsTurfLight.mat");
+            // The round village tree from the decoration kit (docs/ART_REQUEST_PROPS.md K3), loaded when the build starts.
+            private Mesh treePlanter, treeTrunk, treeCrown;
 
             internal Layout(TrackDefinition definition)
             {
@@ -134,6 +136,7 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 var root = new GameObject("Finger Lanes Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
+                treePlanter = KitMesh("TreeKit", "Planter"); treeTrunk = KitMesh("TreeKit", "TreeTrunk"); treeCrown = KitMesh("TreeKit", "RoundCrown");
                 Landscape(Group("01 Landscape below road", root.transform));
                 Landmarks(Group("02 Clock tower and stone bridge", root.transform));
                 StartGate(Group("06 Start gate", root.transform));
@@ -700,9 +703,9 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 Transform tree = Group("Round village tree", parent);
                 tree.localPosition = position;
-                Box("Tree planter", tree, new Vector3(0f, 0.25f, 0f), new Vector3(2.4f, 0.5f, 2.4f), stone);
-                Box("Tree trunk", tree, new Vector3(0f, height * 0.4f, 0f), new Vector3(0.55f, height * 0.8f, 0.55f), wood);
-                Shape("Rounded crown", tree, new Vector3(0f, height * 0.8f, 0f), new Vector3(4.9f, height * 0.65f, 4.9f), sage, Sphere);
+                Shape("Tree planter", tree, new Vector3(0f, 0.25f, 0f), new Vector3(2.4f, 0.5f, 2.4f), stone, treePlanter);
+                Shape("Tree trunk", tree, new Vector3(0f, height * 0.4f, 0f), new Vector3(0.55f, height * 0.8f, 0.55f), wood, treeTrunk);
+                Shape("Rounded crown", tree, new Vector3(0f, height * 0.8f, 0f), new Vector3(4.9f, height * 0.65f, 4.9f), sage, treeCrown);
             }
 
             private double StartOf(int index)

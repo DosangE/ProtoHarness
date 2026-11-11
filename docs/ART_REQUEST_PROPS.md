@@ -9,7 +9,7 @@
 
 - 다섯 트랙 장식은 에디터 빌더가 코드로 짓는다: `Assets/_Project/Scripts/Editor/ChainRush/{FingerLanes,PalmCoast,Skyway,Stadium,SummitDrop}EnvironmentBuilder.cs`. 결과는 트랙별 장식 프리팹(`Assets/_Project/Prefabs/<트랙>Exterior.prefab`)이고 달리는 씬에 Additive 로 붙는다(`docs/ART_SKYWAY.md`).
 - 소품은 Unity 기본 도형 세 개(상자·구·원기둥)에 팔레트 머티리얼을 하나씩 입혀 조립한다(`ExteriorKit.cs:14-16,31-60`). `Shape` 는 **메시 bounds 로 나눠** 원하는 m 크기로 늘리고(`ExteriorKit.cs:46-49`), 머티리얼은 하나만 넣는다(`:53`). 기본 도형은 bounds 가운데가 원점이라, 지금 모든 `Box`/`Shape` 호출의 위치 값은 **도형 가운데**다.
-- SUMMIT DROP 만 원본 메시 두 개를 코드로 만든다: 소나무 잎 `ConeMesh`(`SummitDropEnvironmentBuilder.cs:806-822`, 쓰는 곳 `:426` 하나), 바위 `CragMesh`(`:824-833`, 쓰는 곳 `Rock` 의 `:449` 하나).
+- SUMMIT DROP 만 원본 메시 두 개(소나무 잎 `ConeMesh`, 바위 `CragMesh`)를 코드로 만들었다. 둘 다 킷으로 바뀌어 지웠다 — 바위는 K4(2026-11-10), 소나무 잎·줄기는 K3 1차(2026-11-11). 이 절의 나머지는 요청서를 쓸 때(2026-11-10)의 코드다.
 - 병합은 트랙마다 다르다.
   - SUMMIT DROP: 모든 그룹을 머티리얼별로 병합(`:165`, 함수 `:835-860`, 필터마다 머티리얼 하나만 읽음 `:840`).
   - SKYWAY: 지형과 외곽 도시만 병합(`SkywayEnvironmentBuilder.cs:378-379`, 함수 `:387`).
@@ -64,14 +64,14 @@
 
 | 오브젝트 | 크기 종류 · bounds | 늘려 쓰는 크기 | 슬롯 | 등급 · 추정 | 설명 |
 |---|---|---|---|---|---|
-| `PineCrownTier` | 단위 · 지름 2 × 높이 1 | 지름 2.6~7.8 × 높이 5~13 | `M_Foliage` | M · 9~60 | 소나무 잎 한 층. 아래 테가 들쭉날쭉한 원뿔. 코드가 3층 쌓는다(`SummitDrop…:424-426`) |
+| `PineCrownTier` | 단위 · 지름 2 × 높이 1 | 지름 2.6~7.8 × 높이 5~13 | `M_Foliage` | M · 9~60 | 소나무 잎 한 층. 아래 테가 들쭉날쭉한 원뿔. 코드가 3층 쌓는다(`SummitDrop…:433-435`, 2026-11-11 기준) |
 | `RoundCrown` | 단위 · 지름 2 × 높이 2 | 4.6~4.9 × 2.6~6.5 | `M_Foliage` | M · 240~320 | 둥근 수관. 덩어리 3~4개가 뭉친 실루엣. 지금 구(`Sphere`) |
 | `TreeTrunk` | 단위 · 0.5 × 1 × 0.5 | 0.4~0.6 × 3~20 | `M_Bark` | S · 40~50 | 줄기, 위로 가늘어짐. 뿌리 퍼짐은 bounds 안에서 아주 작게(본체가 가늘어지지 않게) |
 | `PalmTrunk` | 단위 · 0.7 × 1 × 0.7, 위 지름 0.5 | 0.55~0.75 × 토막 높이 | `M_Bark` | S · 32~48 | 마디 있는 야자 줄기 한 토막. 코드가 고리처럼 쌓는다(`PalmCoast…:531`) |
 | `PalmFrond` | 실제 · 1.2 × 1.2 × 4.0 | — | `M_Foliage` | S · 50~130 | 야자 잎 하나. 긴 축 Unity **+Z**(Blender −Y), 잎자루 끝에서 +Z 로 뻗어 **아래로(−Y) 1.2 처짐**, 두께 0.04, 중심맥으로 살짝 접힘. 코드가 정수리에 6~8장 돌려 꽂는다 |
 | `Planter` | 실제 · 2.4 × 0.5 × 2.4 | — | `M_Stone` | S · 36~100 | 나무 화분(테두리 + 흙 높이 차). SKYWAY 2.2 는 균일 0.92배 |
 
-- 쓰는 곳: 소나무 `SummitDropEnvironmentBuilder.cs:420-427`, 둥근 나무 `FingerLanesEnvironmentBuilder.cs:701-705`·`SkywayEnvironmentBuilder.cs:958-967`, 야자 `PalmCoastEnvironmentBuilder.cs:523-534`.
+- 쓰는 곳: 소나무 `SummitDropEnvironmentBuilder.cs:429-435`(2026-11-11 기준), 둥근 나무 `FingerLanesEnvironmentBuilder.cs:701-705`·`SkywayEnvironmentBuilder.cs:958-967`, 야자 `PalmCoastEnvironmentBuilder.cs:523-534`.
 - **결과 (2026-11-11, 1차 SUMMIT DROP 소나무, DECISIONS 같은 날 "K3 나무 1차")**: `PineCrownTier` 는 가벼운 판(삼각형 28, Unity 정점 84)으로 바꿨다 — 처음 판(176 / 474)은 숲에서 가려져 보이지 않는 디테일에 장식 정점 +52% 를 썼다. **다음 킷에 적용할 것**: 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 겹치거나 멀어서 가려지는 디테일에는 쓰지 않는다. 나머지 트랙(FINGER·SKYWAY 둥근 나무, PALM 야자)은 남았다.
 - 트랙 사이에 실제로 같은 오브젝트를 쓰는 것은 `TreeTrunk`(SUMMIT·FINGER·SKYWAY)·`RoundCrown`(FINGER·SKYWAY)·`Planter`(FINGER·SKYWAY) 다(`gameplay-designer` 지적). 소나무·야자는 트랙 하나씩이다.
 

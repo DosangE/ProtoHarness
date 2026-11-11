@@ -7,6 +7,15 @@
 
 ---
 
+## 2026-11-11 · K1 RoadsideKit 1차: FINGER LANES 코너 화살표판·광고판, 광고판 면은 틀 안으로 (`feature/art-roadsidekit`)
+
+- **결정 (사용자, 2026-11-11)**: `blender-artist` 시안 5종(`ChevronArrow`·`ChevronPanel`·`BoardFrame`·`BoardFace`·`BoardCap`)을 지금 모습과 나란히 본 비교, 15 m 도로 높이 비교에서 새 판을 골랐다("이거 말고 이거대로" — 옛 막대 화살표가 아니라 새 꺾쇠). 나머지는 권장대로: 화살표 굵기 시안 그대로(수직 0.245, 옛 0.22), 광고판 면을 틀 안으로, 화살표를 판 앞면에 붙인다. Unity 연결 요청서(첫 트랙 FINGER, 다른 트랙은 따로)에 "ㄱㄱ".
+- **시안·FBX**: 삼각형 — 화살표 32, 판 68(뒤 보강대 2개), 틀 48(구멍 6.0 × 2.8), 면 12, 차양 16(오각 단면, 내보내기 전 삼각화). 모두 닫힌 메시, 피벗 가운데, 슬롯 하나. 일부러 목표(S 200 의 1/3)보다 낮다 — K3 교훈, 화살표는 판마다 2~3개씩 찍힌다. `art-src/RoadsideKit/RoadsideKit.blend`·`.fbx`. 임포트: bounds 표와 같음, 가운데 원점, 노드 회전 0·스케일 1, 화살표 끝은 Unity +X(가운데 높이 정점 x 0.09~0.45, 위 끝 −0.45~−0.09). Unity 정점은 삼각형 × 3 보다 적다(같은 면의 사각형이 정점을 공유) — 화살표 60, 판 144, 틀 80, 면 24, 차양 30.
+- **연결**: `FingerLanesEnvironmentBuilder` — 화살표판: 판 `Box` → `ChevronPanel`(크기 그대로), 막대 넷 → `ChevronArrow` 둘(x ±0.8, 판 앞 `ArrowOut` 0.135 = 판 앞면 0.075 + 화살표 두께 절반 — 시안의 0.1 은 화살표 뒤 0.035 가 판에 묻혔다), 반대 방향은 판 법선(z)으로 180°(화살표가 위아래 대칭). 광고판: 틀 → `BoardFrame`, 면 → `BoardFace`, 면과 포스터 무늬(눈·눈동자·글줄)를 `FaceRecess` 0.09 뒤로 — 면 앞면이 틀 앞면보다 3 cm 안쪽(이전엔 면이 틀보다 5 cm 앞으로 나와 구멍을 덮어 새 틀이 보이지 않았다, 시안 비교), 틀 위에 `BoardCap`(틀 색, 깊이 가운데는 틀과 같게). 다리는 상자 그대로. 메시는 `Build()` 시작에서 `KitMesh`. `select-tests` 의 킷 FBX 줄에 `RoadsideKit` 을 더했다.
+- **측정**: 화살표판 54개, 광고판 12개. 장식 정점 197,970 → 206,778(+4.4%), 렌더러 2,865 → 2,769(화살표 막대 넷 → 둘로 −108, 차양 +12).
+- **검증**: 컴파일 `*** Tundra build success (2.70 seconds), 7 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge ...; 0 parts under the slab`, `FingerLanesExterior: 2769 renderers; physics=0; runtime scripts=0; road corridor clear.` 전후 렌더: 화살표판 `Corner chevrons 0`(`>`)·`18`(`<`)·`36`, 광고판 `Advertising board 4` — 러너가 오는 쪽 앞에서. 화살표 방향이 전후 같고, 꺾쇠가 한 덩어리로 또렷하다. 광고판은 틀이 액자처럼 보이고 차양이 생겼다. 테스트: 영향 평가 — 바뀐 `Assets/` = 새 킷 FBX·빌더·FINGER 장식 프리팹 → FINGER 장식 프리팹을 읽는 테스트 없음, 룩 에셋은 이번 재빌드에서 바뀌지 않았다, 시뮬 참조 없음 → 돌린 테스트 없음.
+- **남은 것 (K1)**: SKYWAY(화살표판 3개 x ±1.1, 광고판 같은 꼴), PALM(판 3.6 × 1.3 → 0.947배, 화살표 3개 작게 굵기 0.16, 판 어둡고 화살표 노랑), SUMMIT(판 4.0 × 1.5 × 0.2 → 1.053배, 병합 트랙) — 트랙마다 요청서.
+
 ## 2026-11-11 · K3 나무 4차: PALM COAST 야자를 TreeKit 으로, 잎 숙임 22° → 10° (`feature/art-treekit-palm`)
 
 - **결정 (사용자, 2026-11-11)**: 각도 비교 렌더(지금 상자 잎 22° / 킷 22° / 10° / −10°)와 비용(+51%)을 보고 "권장대로" — 잎 숙임 10°, 지금 잎 메시 그대로(가볍게 다시 만들지 않음, 플레이로 판단).

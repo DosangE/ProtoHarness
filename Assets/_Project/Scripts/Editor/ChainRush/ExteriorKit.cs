@@ -34,6 +34,10 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     if (mesh.subMeshCount != 1)
                         throw new InvalidOperationException($"Kit mesh {name} in {path} has {mesh.subMeshCount} material slots; a kit mesh has one.");
+                    // Shape places the mesh's origin, so an origin off the bounds centre would bake every copy floating
+                    // or buried without any check catching it (reviewer 2026-11-11).
+                    if (mesh.bounds.center.sqrMagnitude > 1e-4f * mesh.bounds.size.sqrMagnitude)
+                        throw new InvalidOperationException($"Kit mesh {name} in {path} has its origin off the bounds centre ({mesh.bounds.center}); export it with the pivot at the centre.");
                     return mesh;
                 }
             throw new InvalidOperationException($"Missing decoration kit mesh {name} in {path}");

@@ -97,7 +97,7 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material water = Palette("Water", new Color(0.31f, 0.49f, 0.52f));
             private readonly Material foam = Palette("Foam", new Color(0.71f, 0.79f, 0.76f));
             private readonly Material roof = Palette("Roof", new Color(0.29f, 0.26f, 0.21f));
-            private Mesh cone;
+            private Mesh pineTier, pineTrunk;
             private Mesh[] crags;
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
@@ -141,7 +141,7 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 var root = new GameObject("Summit Drop Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
-                cone = ConeMesh();
+                pineTier = KitMesh("TreeKit", "PineCrownTier"); pineTrunk = KitMesh("TreeKit", "TreeTrunk");
                 crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
@@ -428,11 +428,11 @@ namespace ProtoHarness.Editor.ChainRush
                             if (!Place(at, side, 5f + radius * 1.5f + row * 11f + Hash(seed * 29) * 7f, radius, height, out Vector3 p)) continue;
                             Transform tree = Group("Pine " + seed, parent);
                             tree.SetPositionAndRotation(p, Quaternion.Euler(0f, Hash(seed * 31) * 360f, 0f));
-                            Box("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood);
+                            Shape("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood, pineTrunk);
                             Material needles = Pick(seed * 37, pineA, pineB, pineC);
                             for (int tier = 0; tier < 3; tier++)
                                 Shape("Needle crown", tree, Vector3.up * height * (0.36f + tier * 0.20f),
-                                    new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, cone);
+                                    new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, pineTier);
                             trees++;
                         }
                     }
@@ -863,24 +863,6 @@ namespace ProtoHarness.Editor.ChainRush
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
                 return part;
-            }
-
-            private static Mesh ConeMesh()
-            {
-                var vertices = new List<Vector3>();
-                var triangles = new List<int>();
-                for (int i = 0; i < 9; i++)
-                {
-                    float a = i * Mathf.PI * 2f / 9f, b = (i + 1) * Mathf.PI * 2f / 9f;
-                    int first = vertices.Count;
-                    vertices.Add(new Vector3(Mathf.Cos(a), -0.5f, Mathf.Sin(a)));
-                    vertices.Add(Vector3.up * 0.5f);
-                    vertices.Add(new Vector3(Mathf.Cos(b), -0.5f, Mathf.Sin(b)));
-                    triangles.Add(first); triangles.Add(first + 1); triangles.Add(first + 2);
-                }
-                var mesh = new Mesh { name = "SummitPineSource" };
-                mesh.SetVertices(vertices); mesh.SetTriangles(triangles, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
-                return mesh;
             }
 
             // Same material merge and persistent mesh naming as SkywayEnvironmentBuilder.

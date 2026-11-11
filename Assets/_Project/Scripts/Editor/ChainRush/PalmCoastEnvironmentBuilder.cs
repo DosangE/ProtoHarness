@@ -92,6 +92,11 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material paving = Palette("Paving", new Color(0.74f, 0.74f, 0.72f));
             private readonly Material trunk = Palette("Trunk", new Color(0.50f, 0.37f, 0.25f));
             private readonly Material leaf = Palette("Leaf", new Color(0.27f, 0.52f, 0.30f));
+            // The palm from the decoration kit (docs/ART_REQUEST_PROPS.md K3), loaded when the build starts. The frond is
+            // used at its real size; its stalk end sits at (0, 0.56, -2) from its centre (measured 2026-11-11).
+            private Mesh palmTrunk, palmFrond;
+            private const float FrondTilt = 10f;
+            private static readonly Vector3 FrondStalk = new Vector3(0f, 0.56f, -2f);
             private readonly Material red = Palette("BridgeRed", new Color(0.74f, 0.22f, 0.18f));
             private readonly Material cyan = Palette("Cyan", new Color(0.62f, 0.78f, 0.82f));
             private readonly Material white = Palette("White", new Color(0.94f, 0.93f, 0.90f));
@@ -137,6 +142,7 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 var root = new GameObject("Palm Coast Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
+                palmTrunk = KitMesh("TreeKit", "PalmTrunk"); palmFrond = KitMesh("TreeKit", "PalmFrond");
                 Land(Group("01 Sea and land below road", root.transform));
                 StartArch(Group("02 Start arch", root.transform));
                 Bridges(Group("03 Red steel bridges", root.transform));
@@ -528,7 +534,7 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     float t = (i + 0.5f) / Rings;
                     Vector3 at = new Vector3(Mathf.Sin(t * 1.2f) * 1.4f, height * t, 0f);
-                    Shape("Trunk ring", palm, at, new Vector3(0.75f - t * 0.2f, height / Rings + 0.1f, 0.75f - t * 0.2f), trunk, Cylinder);
+                    Shape("Trunk ring", palm, at, new Vector3(0.75f - t * 0.2f, height / Rings + 0.1f, 0.75f - t * 0.2f), trunk, palmTrunk);
                     top = at + Vector3.up * height / Rings * 0.5f;
                 }
                 Shape("Coconuts", palm, top + Vector3.down * 0.3f, Vector3.one * 1f, trunk, Sphere);
@@ -536,8 +542,12 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     float angle = f * 360f / 7f;
                     Vector3 out1 = Quaternion.Euler(0f, angle, 0f) * new Vector3(0f, 0f, 1f);
-                    GameObject frond = Box("Frond", palm, top + out1 * 2.2f + Vector3.down * 0.4f, new Vector3(1.1f, 0.12f, 4.6f), leaf);
-                    frond.transform.localRotation = Quaternion.LookRotation(out1) * Quaternion.Euler(22f, 0f, 0f);
+                    // The kit frond droops 1.2 m by itself, so it tips down only 10 degrees, not the old flat board's 22
+                    // (user 2026-11-11, K3 PALM). Its stalk end is pinned at the coconuts, just out from the trunk.
+                    Quaternion tilt = Quaternion.LookRotation(out1) * Quaternion.Euler(FrondTilt, 0f, 0f);
+                    Vector3 stalk = top + out1 * 0.35f + Vector3.down * 0.3f;
+                    GameObject frond = Shape("Frond", palm, stalk - tilt * FrondStalk, new Vector3(1.2f, 1.2f, 4f), leaf, palmFrond);
+                    frond.transform.localRotation = tilt;
                 }
             }
 

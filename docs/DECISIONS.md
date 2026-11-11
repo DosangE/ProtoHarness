@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-11-11 · K3 나무 4차: PALM COAST 야자를 TreeKit 으로, 잎 숙임 22° → 10° (`feature/art-treekit-palm`)
+
+- **결정 (사용자, 2026-11-11)**: 각도 비교 렌더(지금 상자 잎 22° / 킷 22° / 10° / −10°)와 비용(+51%)을 보고 "권장대로" — 잎 숙임 10°, 지금 잎 메시 그대로(가볍게 다시 만들지 않음, 플레이로 판단).
+- **연결**: `PalmCoastEnvironmentBuilder.Palm()` — 줄기 고리 6개 `Cylinder` → `PalmTrunk`(위치·크기 식 그대로), 잎 7장 상자(1.1 × 0.12 × 4.6, 22°) → `PalmFrond` 실제 크기(1.2 × 1.2 × 4.0, 1배). 잎자루 끝(메시 중심에서 (0, 0.56, −2), Unity 에서 정점으로 잼 — 잎끝은 y −0.57 로 1.2 m 처진다)을 코코넛 높이(정수리 −0.3)·줄기에서 0.35 m 바깥에 고정하고 그 점을 축으로 `FrondTilt` 10° 숙인다. 코코넛 구는 킷에 없어 그대로.
+- **각도**: 22° 는 잎 자체 처짐과 겹쳐 접힌 우산처럼 늘어졌고, −10° 는 평평하게 퍼졌다. 10° 는 정수리에서 위로 휘었다 끝이 처지는 아치. 킷 잎은 얇고(0.04) 잎 조각이 갈라져 멀리서 상자 잎보다 가늘고 성기게 보인다 — 플레이에서 판단하기로 했다.
+- **측정**: 야자 62그루, 그루당 정점 1,351 → 3,193(줄기 124 → 144 × 6, 잎 24 → 270 × 7), 렌더러 그대로. 장식 전체 정점 223,894 → 338,098(+51%), 렌더러 5,361 그대로. 비율은 K3 중 가장 크나 절대량은 SKYWAY(394,890)보다 적고, 야자는 도로 7 m 옆에 줄지어 서 가려지지 않는다.
+- **부산물**: 재빌드가 룩을 다시 저장해 `TrackLook_PalmCoast.asset` 에 `music`·`ambience` 빈 필드 두 줄(SKYWAY 와 같음, 값 변화 없음, 커밋에 넣음). 같은 재빌드 중 `ProjectSettings/ProjectSettings.asset` 에서 iOS 열 상태 필드 3줄이 빠졌다 — 로컬 에디터 6000.3.19f1 과 리포 6000.3.25f1 의 버전 차이라 커밋하지 않았다.
+- **검증**: 컴파일 `*** Tundra build success (8.32 seconds), 7 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `Palm Coast Exterior clearance: nearest renderer bounds 0.97 m outside a road edge ...; 0 parts under the slab`, `PalmCoastExterior: 5361 renderers; physics=0; runtime scripts=0; road corridor clear.` 전후 렌더 세 시점(야자 (27.3, −2.9, 221.5)·(151.3, −2.9, 195.8)·(−112.7, −2.9, −53.8), 자리는 프리팹에서 찾음). 테스트: 영향 평가 — 바뀐 `Assets/` = 빌더·PALM 장식 프리팹·PALM 룩(값 변화 없음) → PALM 장식 프리팹을 읽는 테스트 없음, 룩은 로비 항목으로 `ChainRushFlowTests.Lobby_TrackChoices_AreChosenWithTheirSavedSetup("PALM COAST")` 가 읽는다 → 그 1건. 2026-11-11 05:19:57Z `testcasecount=1 result=Passed passed=1 failed=0`(기록함).
+- **K3 끝**: 소나무(SUMMIT)·둥근 나무(FINGER·SKYWAY)·야자(PALM). 다음 킷은 K1(코너 화살표판·광고판, 네 트랙) — Blender 시안부터.
+
 ## 2026-11-11 · K3 나무 3차: SKYWAY 둥근 나무를 TreeKit 으로, 수관 구 둘 → RoundCrown 하나 (`feature/art-treekit-skyway`)
 
 - **결정 (사용자, 2026-11-11)**: 요청서(수관 A 구마다 `RoundCrown` / B 두 구를 감싸는 `RoundCrown` 하나, B 권장)에 "ㄱㄱ" → B.

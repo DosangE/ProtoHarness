@@ -15,10 +15,8 @@
   - K3 1차: SUMMIT DROP 소나무 잎·줄기 → `TreeKit`, 잎은 가벼운 판(삼각형 28) (`39aefe2`)
   - K3 2차: FINGER LANES 둥근 나무 65그루 → `Planter`·`TreeTrunk`·`RoundCrown`, 장식 정점 +23.8%, 열린 수관 구멍 안 보임 (`feature/art-treekit-finger`, DECISIONS 2026-11-11 "K3 나무 2차")
   - K3 3차: SKYWAY 둥근 나무 58그루 → 수관 구 둘을 `RoundCrown` 하나로, 정점 +2.2%·렌더러 −58 (`feature/art-treekit-skyway`, DECISIONS 2026-11-11 "K3 나무 3차"). 사이프러스·덤불은 그대로.
-- **다음 (K3 나머지, §3-2 요청서부터)**:
-  1. ~~FINGER·SKYWAY 둥근 나무~~ 끝.
-  2. PALM 야자 — `PalmTrunk`·`PalmFrond` (`PalmCoastEnvironmentBuilder.cs` `Palm`). 코드의 잎 숙임 22° 가 새 잎의 처짐과 겹쳐 잎끝이 많이 내려간다 — 렌더 보고 각도 결정.
-  3. 그 뒤 K1(코너 화살표판·광고판, 네 트랙) — Blender 시안부터.
+  - K3 4차: PALM 야자 62그루 → `PalmTrunk`·`PalmFrond`, 잎 숙임 22° → 10°, 정점 +51% (`feature/art-treekit-palm`, DECISIONS 2026-11-11 "K3 나무 4차"). **K3 끝.** 킷 잎이 멀리서 성기게 보이는지는 플레이로 본다 — 문제면 `blender-artist` 에 넓고 가벼운 잎을 맡긴다.
+- **다음**: K1(코너 화살표판·광고판, 네 트랙) — Blender 시안부터(`ART_REQUEST_PROPS.md` K1, 5절 1).
 - **배운 것 (다음 킷에 그대로 적용)**:
   - 크게 늘려 멀리 두는 소품은 모양을 바꿔도 달리며 안 보인다(K4 첫 플레이 "차이를 모르겠다"). 효과는 길가 소품·실루엣이 바뀌는 것에서.
   - 수백 번 찍히는 오브젝트는 **Unity 정점**(플랫이면 삼각형 × 3)으로 비용을 세고, 겹쳐 가려지는 디테일에 쓰지 않는다(소나무 무거운 판 +52% → 가벼운 판 +9.9%). 목표 플랫폼에 모바일이 있다(`DESIGN.md:137`).

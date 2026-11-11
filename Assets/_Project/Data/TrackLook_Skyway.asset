@@ -24,3 +24,5 @@ MonoBehaviour:
   horizon: {r: 0.8, g: 0.85, b: 0.91, a: 1}
   fogStart: 180
   fogEnd: 620
+  music: {fileID: 0}
+  ambience: {fileID: 0}

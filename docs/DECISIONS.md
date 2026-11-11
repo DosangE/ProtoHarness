@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-11-11 · K3 나무 3차: SKYWAY 둥근 나무를 TreeKit 으로, 수관 구 둘 → RoundCrown 하나 (`feature/art-treekit-skyway`)
+
+- **결정 (사용자, 2026-11-11)**: 요청서(수관 A 구마다 `RoundCrown` / B 두 구를 감싸는 `RoundCrown` 하나, B 권장)에 "ㄱㄱ" → B.
+- **연결**: `SkywayEnvironmentBuilder.Tree()` 의 첫 갈래(kind < 0.5) — 화분 `Box` → `Planter`(2.2 × 0.5 × 2.2 그대로 — 킷 2.4 를 가로만 0.92배, 높이는 1배. 요청서의 "균일 0.92배" 와 다르다), 줄기 `Box` → `TreeTrunk`, 수관 `Crown`(4.6 × 4.2 at 4.6)·`Crown top`(2.8 × 2.6 at (0.6, 6, 0.4)) → 두 구를 감싸는 `RoundCrown` 하나(4.6 × 4.8 × 4.6 at 4.9, 모두 × size). 색은 `Crown` 의 고르기(leaf/leafDark, 같은 해시) 그대로, 위 구의 밝은 잎 섞임은 사라졌다. 메시는 `Build()` 시작에서 `KitMesh` 로(FINGER 와 같은 형식). 사이프러스 41·덤불 21무더기는 킷에 맞는 모양이 없어 범위 밖.
+- **B 를 고른 이유**: `RoundCrown` 이 이미 덩어리 3~4개가 뭉친 실루엣이라 구 두 개로 내던 "뭉친 수관" 을 하나가 낸다. A 는 정점 +53,476(+13.8%), B 는 +8,526(+2.2%)에 렌더러 −58.
+- **측정**: 둥근 나무 58그루, 그루당 정점 926 → 1,073, 렌더러 4 → 3. 장식 전체 정점 386,364 → 394,890(+2.2%), 렌더러 4,680 → 4,622.
+- **부산물**: 재빌드 메뉴가 룩도 다시 저장해 `TrackLook_Skyway.asset` 에 `music: {fileID: 0}`·`ambience: {fileID: 0}` 두 줄이 생겼다. 클래스에 이미 있는 필드가 직렬화된 것(FINGER·SUMMIT 룩 에셋에는 이미 있다), 값 변화 없음. 커밋에 넣었다.
+- **검증**: 컴파일 `*** Tundra build success (2.68 seconds), 7 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `SkywayExterior: 4622 renderers; physics=0; runtime scripts=0; road corridor clear.`, `Skyway Exterior clearance: nearest renderer bounds 0.85 m outside a road edge ...; 200 parts under the slab; 190840 vertices checked one by one.`, 에러·경고 0. 전후 렌더 세 시점(나무 (−13.6, −1.3, 40.4)·(117.7, −1.3, −33.8)·(−46.4, −1.3, −47.9), 자리는 프리팹에서 찾음): 수관이 덩어리 실루엣으로, 화분에 테두리, 열린 수관 구멍 안 보임. 테스트: 영향 평가 — 바뀐 `Assets/` = 빌더·SKYWAY 장식 프리팹·SKYWAY 룩(값 변화 없음) → SKYWAY 장식 프리팹을 읽는 테스트 없음(`TrackDefinitionTests` 장식 테스트는 SUMMIT·STADIUM 뿐, 프리팹 GUID 참조는 `ChainRushTrackSkyway.unity` 하나), 시뮬 참조 없음. 룩 에셋은 `ChainRushFlowTests.Race_SkywayHighway_ClosesBothEndsAndJoinsRampsWithoutInteriorGuards`(`:913`)가 읽어 그 1건을 돌렸다 — `select-tests` 가 고른 `Race_WithATrackLook_*` 는 PALM 에 테스트용 머티리얼을 써 이 에셋을 읽지 않는다(`:1468-1475`). 2026-11-11 05:03:39Z `testcasecount=1 result=Passed passed=1 failed=0`(기록함, 기준 `7fbad3f`).
+- **병합 전 리뷰** ("그 밖" 규모): Codex 설계 리뷰 approve, "No material findings." `unity-reviewer` 치명·중대 0, 보통 1 — 요청서 `Planter` 행이 "균일 0.92배" 로 남아 결과 줄과 어긋남 → 고침. 제안 — 룩을 읽는 테스트 1건을 영향 평가에 적기 → 위 줄. reviewer 는 프리팹에서 `Crown top` 0·`Crown` 58·TreeKit 메시 3종 각 58회를 grep 으로 확인했다.
+- **남은 것 (K3)**: PALM 야자(`PalmTrunk`·`PalmFrond`, 잎 숙임 각도는 렌더 보고).
+
 ## 2026-11-11 · K3 나무 2차: FINGER LANES 둥근 나무를 TreeKit 으로 (`feature/art-treekit-finger`)
 
 - **결정 (사용자, 2026-11-11)**: Unity 연결 요청서(FINGER 만, SKYWAY·PALM 은 따로)에 "ㄱㄱ". 재빌드·전후 렌더·비용 보고에 "굳".

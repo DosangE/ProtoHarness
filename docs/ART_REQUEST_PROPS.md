@@ -69,11 +69,12 @@
 | `TreeTrunk` | 단위 · 0.5 × 1 × 0.5 | 0.4~0.6 × 3~20 | `M_Bark` | S · 40~50 | 줄기, 위로 가늘어짐. 뿌리 퍼짐은 bounds 안에서 아주 작게(본체가 가늘어지지 않게) |
 | `PalmTrunk` | 단위 · 0.7 × 1 × 0.7, 위 지름 0.5 | 0.55~0.75 × 토막 높이 | `M_Bark` | S · 32~48 | 마디 있는 야자 줄기 한 토막. 코드가 고리처럼 쌓는다(`PalmCoast…:531`) |
 | `PalmFrond` | 실제 · 1.2 × 1.2 × 4.0 | — | `M_Foliage` | S · 50~130 | 야자 잎 하나. 긴 축 Unity **+Z**(Blender −Y), 잎자루 끝에서 +Z 로 뻗어 **아래로(−Y) 1.2 처짐**, 두께 0.04, 중심맥으로 살짝 접힘. 코드가 정수리에 6~8장 돌려 꽂는다 |
-| `Planter` | 실제 · 2.4 × 0.5 × 2.4 | — | `M_Stone` | S · 36~100 | 나무 화분(테두리 + 흙 높이 차). SKYWAY 2.2 는 균일 0.92배 |
+| `Planter` | 실제 · 2.4 × 0.5 × 2.4 | — | `M_Stone` | S · 36~100 | 나무 화분(테두리 + 흙 높이 차). SKYWAY 2.2 는 가로만 0.92배(높이 0.5 그대로, 2026-11-11 3차) |
 
-- 쓰는 곳: 소나무 `SummitDropEnvironmentBuilder.cs:429-435`(2026-11-11 기준), 둥근 나무 `FingerLanesEnvironmentBuilder.cs:702-709`(2026-11-11 기준)·`SkywayEnvironmentBuilder.cs:958-967`, 야자 `PalmCoastEnvironmentBuilder.cs:523-534`.
+- 쓰는 곳: 소나무 `SummitDropEnvironmentBuilder.cs:429-435`(2026-11-11 기준), 둥근 나무 `FingerLanesEnvironmentBuilder.cs:702-709`·`SkywayEnvironmentBuilder.cs:959-971`(둘 다 2026-11-11 기준), 야자 `PalmCoastEnvironmentBuilder.cs:523-534`.
 - **결과 (2026-11-11, 1차 SUMMIT DROP 소나무, DECISIONS 같은 날 "K3 나무 1차")**: `PineCrownTier` 는 가벼운 판(삼각형 28, Unity 정점 84)으로 바꿨다 — 처음 판(176 / 474)은 숲에서 가려져 보이지 않는 디테일에 장식 정점 +52% 를 썼다. **다음 킷에 적용할 것**: 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 겹치거나 멀어서 가려지는 디테일에는 쓰지 않는다.
-- **결과 (2026-11-11, 2차 FINGER LANES 둥근 나무, DECISIONS 같은 날 "K3 나무 2차")**: 화분·줄기·수관을 `Planter`·`TreeTrunk`·`RoundCrown` 으로. 나무 65그루, 렌더러 그대로, 장식 정점 +23.8%(그루당 487 → 1,073, 삼각형은 784 → 423). 홀로 서서 보이는 나무라 가벼운 판은 만들지 않았다. 남은 것은 SKYWAY 둥근 나무, PALM 야자.
+- **결과 (2026-11-11, 2차 FINGER LANES 둥근 나무, DECISIONS 같은 날 "K3 나무 2차")**: 화분·줄기·수관을 `Planter`·`TreeTrunk`·`RoundCrown` 으로. 나무 65그루, 렌더러 그대로, 장식 정점 +23.8%(그루당 487 → 1,073, 삼각형은 784 → 423). 홀로 서서 보이는 나무라 가벼운 판은 만들지 않았다.
+- **결과 (2026-11-11, 3차 SKYWAY 둥근 나무, DECISIONS 같은 날 "K3 나무 3차")**: 58그루, 수관 구 둘을 감싸는 `RoundCrown` 하나로(렌더러 −58), 장식 정점 +2.2%. 화분은 높이 0.5 그대로 가로만 0.92배. 사이프러스·덤불은 그대로. 남은 것은 PALM 야자.
 - 트랙 사이에 실제로 같은 오브젝트를 쓰는 것은 `TreeTrunk`(SUMMIT·FINGER·SKYWAY)·`RoundCrown`(FINGER·SKYWAY)·`Planter`(FINGER·SKYWAY) 다(`gameplay-designer` 지적). 소나무·야자는 트랙 하나씩이다.
 
 ### K1. `RoadsideKit` — 코너 화살표판·광고판

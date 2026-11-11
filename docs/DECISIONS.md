@@ -7,6 +7,17 @@
 
 ---
 
+## 2026-11-11 · K3 나무 4차: PALM COAST 야자를 TreeKit 으로, 잎 숙임 22° → 10° (`feature/art-treekit-palm`)
+
+- **결정 (사용자, 2026-11-11)**: 각도 비교 렌더(지금 상자 잎 22° / 킷 22° / 10° / −10°)와 비용(+51%)을 보고 "권장대로" — 잎 숙임 10°, 지금 잎 메시 그대로(가볍게 다시 만들지 않음, 플레이로 판단).
+- **연결**: `PalmCoastEnvironmentBuilder.Palm()` — 줄기 고리 6개 `Cylinder` → `PalmTrunk`(위치·크기 식 그대로), 잎 7장 상자(1.1 × 0.12 × 4.6, 22°) → `PalmFrond` 실제 크기(1.2 × 1.2 × 4.0, 1배). 잎자루 끝(메시 중심에서 (0, 0.56, −2), Unity 에서 정점으로 잼 — 잎끝은 y −0.57 로 1.2 m 처진다)을 코코넛 높이(정수리 −0.3)·줄기에서 0.35 m 바깥에 고정하고 그 점을 축으로 `FrondTilt` 10° 숙인다. 코코넛 구는 킷에 없어 그대로.
+- **각도**: 22° 는 잎 자체 처짐과 겹쳐 접힌 우산처럼 늘어졌고, −10° 는 평평하게 퍼졌다. 10° 는 정수리에서 위로 휘었다 끝이 처지는 아치. 킷 잎은 얇고(0.04) 잎 조각이 갈라져 멀리서 상자 잎보다 가늘고 성기게 보인다 — 플레이에서 판단하기로 했다.
+- **측정**: 야자 62그루, 그루당 정점 1,351 → 3,193(줄기 124 → 144 × 6, 잎 24 → 270 × 7), 렌더러 그대로. 장식 전체 정점 223,894 → 338,098(+51%), 렌더러 5,361 그대로. 비율은 K3 중 가장 크나 절대량은 SKYWAY(394,890)보다 적고, 야자는 도로 7 m 옆에 줄지어 서 가려지지 않는다.
+- **부산물**: 재빌드가 룩을 다시 저장해 `TrackLook_PalmCoast.asset` 에 `music`·`ambience` 빈 필드 두 줄(SKYWAY 와 같음, 값 변화 없음, 커밋에 넣음). 같은 재빌드 중 `ProjectSettings/ProjectSettings.asset` 에서 iOS 열 상태 필드 3줄이 빠졌다 — 로컬 에디터 6000.3.19f1 과 리포 6000.3.25f1 의 버전 차이라 커밋하지 않았다.
+- **검증**: 컴파일 `*** Tundra build success (8.32 seconds), 7 items updated, 1618 evaluated`, `error CS` 0. 재빌드 `Palm Coast Exterior clearance: nearest renderer bounds 0.97 m outside a road edge ...; 0 parts under the slab`, `PalmCoastExterior: 5361 renderers; physics=0; runtime scripts=0; road corridor clear.` 전후 렌더 세 시점(야자 (27.3, −2.9, 221.5)·(151.3, −2.9, 195.8)·(−112.7, −2.9, −53.8), 자리는 프리팹에서 찾음). 테스트: 영향 평가 — 바뀐 `Assets/` = 빌더·PALM 장식 프리팹·PALM 룩(값 변화 없음) → PALM 장식 프리팹을 읽는 테스트 없음, 룩은 로비 항목으로 `ChainRushFlowTests.Lobby_TrackChoices_AreChosenWithTheirSavedSetup("PALM COAST")` 가 읽는다 → 그 1건. 2026-11-11 05:19:57Z `testcasecount=1 result=Passed passed=1 failed=0`(기록함). `select-tests` 가 고른 `Race_WithATrackLook_*` 는 룩을 `CreateInstance` 로 만들어(`ChainRushFlowTests.cs:1478`) 이 에셋을 읽지 않는다.
+- **병합 전 리뷰** ("그 밖" 규모): Codex 설계 리뷰 approve, "No material findings." 다음 단계로 — 줄기 기울기를 넣은 잎끝 반경 약 5.71 m 가 배치 반지름 `PalmCrown` 5.2 를 넘는다, dev 의 상자 잎도 약 5.56 m 로 같은 문제, 새 충돌은 확인 못 함. 도로와의 간격은 통로 검사가 실제 bounds 로 잰다(0.97 m) — `PalmCrown` 은 야자끼리·다른 소품과의 예약 간격에만 쓰인다. 이번엔 고치지 않고 주석에 남겼다. `unity-reviewer` 치명·중대·보통 0, 제안 3 — 모두 반영: ① 낡은 "4.6 m" 주석 → 실제 반경과 위 사실 ② 잎자루 위치가 손으로 잰 크기에 기댐 → `FrondSize` 하나로 묶고 `Build()` 에서 메시 크기가 다르면 예외 ③ 0.56 이 윗면 0.58 − 두께 절반이라는 근거를 주석에. 고친 뒤 컴파일 `*** Tundra build success (4.46 seconds)`, 재빌드에서 검사 통과·`PalmCoastExterior: 5361 renderers; ... road corridor clear.`·정점 338,098 그대로. 재빌드한 프리팹은 fileID 와 오브젝트 순서만 달랐다(fileID 를 지우고 줄을 정렬하면 커밋한 것과 같음) — 22만 줄 잡음이라 커밋한 프리팹으로 되돌렸다. 테스트는 다시 돌리지 않았다: 그 뒤 바뀐 `Assets/` 는 에디터 빌더뿐이고 그것을 읽는 테스트가 없다. 비용 `unity-reviewer` 54,076 토큰.
+- **K3 끝**: 소나무(SUMMIT)·둥근 나무(FINGER·SKYWAY)·야자(PALM). 다음 킷은 K1(코너 화살표판·광고판, 네 트랙) — Blender 시안부터.
+
 ## 2026-11-11 · K3 나무 3차: SKYWAY 둥근 나무를 TreeKit 으로, 수관 구 둘 → RoundCrown 하나 (`feature/art-treekit-skyway`)
 
 - **결정 (사용자, 2026-11-11)**: 요청서(수관 A 구마다 `RoundCrown` / B 두 구를 감싸는 `RoundCrown` 하나, B 권장)에 "ㄱㄱ" → B.

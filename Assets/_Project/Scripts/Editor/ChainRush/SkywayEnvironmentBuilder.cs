@@ -177,6 +177,8 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material leaf = Palette("Leaf", new Color(0.33f, 0.58f, 0.32f));
             private readonly Material leafDark = Palette("LeafDark", new Color(0.22f, 0.45f, 0.27f));
             private readonly Material trunk = Palette("Trunk", new Color(0.47f, 0.35f, 0.24f));
+            // The round planter tree from the decoration kit (docs/ART_REQUEST_PROPS.md K3), loaded when the build starts.
+            private Mesh treePlanter, treeTrunk, treeCrown;
             private readonly Material yellow = Palette("Yellow", new Color(0.97f, 0.80f, 0.18f));
             private readonly Material black = Palette("Black", new Color(0.12f, 0.12f, 0.13f));
             private readonly Material red = Palette("Red", new Color(0.86f, 0.24f, 0.21f));
@@ -267,6 +269,7 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 var root = new GameObject("Skyway Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
+                treePlanter = KitMesh("TreeKit", "Planter"); treeTrunk = KitMesh("TreeKit", "TreeTrunk"); treeCrown = KitMesh("TreeKit", "RoundCrown");
                 Transform landscape = Group(LandGroup, root.transform);
                 Land(landscape);
 
@@ -961,10 +964,11 @@ namespace ProtoHarness.Editor.ChainRush
                 float size = 0.85f + Hash(index * 61 + 30) * 0.35f;
                 if (kind < 0.5f)
                 {
-                    Box("Planter", tree, new Vector3(0f, 0.25f, 0f), new Vector3(2.2f, 0.5f, 2.2f), concrete);
-                    Box("Trunk", tree, new Vector3(0f, 1.8f * size, 0f), new Vector3(0.4f, 3.6f * size, 0.4f), trunk);
-                    Shape("Crown", tree, new Vector3(0f, 4.6f * size, 0f), new Vector3(4.6f, 4.2f, 4.6f) * size, Pick(index * 67 + 31, leaf, leafDark), Sphere);
-                    Shape("Crown top", tree, new Vector3(0.6f, 6f * size, 0.4f), new Vector3(2.8f, 2.6f, 2.8f) * size, leaf, Sphere);
+                    Shape("Planter", tree, new Vector3(0f, 0.25f, 0f), new Vector3(2.2f, 0.5f, 2.2f), concrete, treePlanter);
+                    Shape("Trunk", tree, new Vector3(0f, 1.8f * size, 0f), new Vector3(0.4f, 3.6f * size, 0.4f), trunk, treeTrunk);
+                    // One kit crown over the bounds of the two spheres it replaces (4.6 x 4.2 at 4.6 and 2.8 x 2.6 at 6):
+                    // the kit crown is already a cluster of lumps (user 2026-11-11, K3 SKYWAY "B").
+                    Shape("Crown", tree, new Vector3(0f, 4.9f * size, 0f), new Vector3(4.6f, 4.8f, 4.6f) * size, Pick(index * 67 + 31, leaf, leafDark), treeCrown);
                 }
                 else if (kind < 0.8f)
                 {

@@ -14,8 +14,9 @@
   - K4 바위: SUMMIT DROP 바위 → `RockKit` 3종, 비탈에 밑동 맞추기, 낭떠러지 자리 건너뛰기 (`890112b`)
   - K3 1차: SUMMIT DROP 소나무 잎·줄기 → `TreeKit`, 잎은 가벼운 판(삼각형 28) (`39aefe2`)
   - K3 2차: FINGER LANES 둥근 나무 65그루 → `Planter`·`TreeTrunk`·`RoundCrown`, 장식 정점 +23.8%, 열린 수관 구멍 안 보임 (`feature/art-treekit-finger`, DECISIONS 2026-11-11 "K3 나무 2차")
-- **다음 (K3 나머지, 트랙 하나씩, 각각 §3-2 요청서부터)**:
-  1. SKYWAY 둥근 나무 — `SkywayEnvironmentBuilder.cs` "Planter tree" 의 첫 갈래(화분 2.2·줄기 0.4·수관 `Crown`+`Crown top` 두 구). 사이프러스·덤불(구)은 킷에 맞는 모양이 없다 — 범위에 넣을지 요청서에서 묻는다.
+  - K3 3차: SKYWAY 둥근 나무 58그루 → 수관 구 둘을 `RoundCrown` 하나로, 정점 +2.2%·렌더러 −58 (`feature/art-treekit-skyway`, DECISIONS 2026-11-11 "K3 나무 3차"). 사이프러스·덤불은 그대로.
+- **다음 (K3 나머지, §3-2 요청서부터)**:
+  1. ~~FINGER·SKYWAY 둥근 나무~~ 끝.
   2. PALM 야자 — `PalmTrunk`·`PalmFrond` (`PalmCoastEnvironmentBuilder.cs` `Palm`). 코드의 잎 숙임 22° 가 새 잎의 처짐과 겹쳐 잎끝이 많이 내려간다 — 렌더 보고 각도 결정.
   3. 그 뒤 K1(코너 화살표판·광고판, 네 트랙) — Blender 시안부터.
 - **배운 것 (다음 킷에 그대로 적용)**:

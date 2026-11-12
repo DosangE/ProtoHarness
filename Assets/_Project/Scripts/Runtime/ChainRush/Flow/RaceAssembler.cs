@@ -13,6 +13,10 @@ namespace ProtoHarness.ChainRush.Flow
     // (GhostFiles), which every race there shows running alongside, whichever runner (GhostRunner). After the race, ESC or the HUD's button goes back to the lobby. Without a request (the scene opened directly) it does nothing and
     // the scene runs as saved, Enter to start. A tutorial (RaceMode.Tutorial) lays the round floor instead of a road, has a
     // TutorialDirector run its stages, and keeps no record or ghost.
+    // A race with opponents (RaceSetup.WithOpponents) loads one more copy of the race scene for each of them, on a physics
+    // scene of its own, and hands them to a RaceField that steps every world on the same tick; only then does it count the
+    // race in. In such a copy (RaceSetup.IsOpponentWorld) this assembles the simulation and the runner's model and
+    // switches off everything else there is to see or hear: the player's world draws the road and plays the sound.
     // Runs before the game and the circuit so the definition is in place when either Awake builds the circuit.
     [DefaultExecutionOrder(-100)]
     public sealed class RaceAssembler : MonoBehaviour
@@ -37,6 +41,12 @@ namespace ProtoHarness.ChainRush.Flow
         // A finish in this race saved a new ghost; the next count-in shows it.
         private bool ghostReplaced;
         private TutorialDirector tutorial;
+        private RaceField field;
+        // A request for an opponent's world is waiting in RaceLaunch for the copy being loaded to take.
+        private bool requestedWorld;
+
+        // The opponents' worlds and their stepping, in a race with opponents once it is assembled; null otherwise.
+        public RaceField Field => field;
 
         // Where a finish from the lobby is kept (the player's records; a test gives its own).
         public BestRecords Records
@@ -112,6 +122,16 @@ namespace ProtoHarness.ChainRush.Flow
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
+            if (setup.IsOpponentWorld)
+            {
+                // Before the first frame: two AudioListeners log an error on every frame they are both on.
+                foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+                {
+                    foreach (AudioListener listener in root.GetComponentsInChildren<AudioListener>(true)) listener.enabled = false;
+                    foreach (Camera camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+                }
+                return;
+            }
             if (isTutorial)
             {
                 player.ReachPolesFrom(TutorialCourse.FloorRadius);
@@ -125,6 +145,8 @@ namespace ProtoHarness.ChainRush.Flow
         private void OnDestroy()
         {
             if (launched && game != null) game.TickCompleted -= RecordTick;
+            // A copy that was being loaded when the race was left will not take its request; the next race must not find it.
+            if (requestedWorld) RaceLaunch.Clear();
             // The ring was made for this tutorial (TutorialCourse.Setup), so it goes with it.
             if (tutorial != null) Destroy(setup.Track);
         }
@@ -178,11 +200,18 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (!launched) return;
             started = true;
+            if (setup.IsOpponentWorld)
+            {
+                // Every Awake of the copy has run, so its road is laid and can be hidden. The field starts its run.
+                HideAllButTheRunner();
+                countedIn = true;
+                return;
+            }
             if (setup.Look != null && setup.Look.Sky != null) UseSky(setup.Look);
             if (tutorial == null) ShowGhost();
             if (setup.EnvironmentScene.Length == 0)
             {
-                CountIn();
+                GatherTheField();
                 return;
             }
             AsyncOperation load = SceneManager.LoadSceneAsync(setup.EnvironmentScene, LoadSceneMode.Additive);
@@ -193,7 +222,83 @@ namespace ProtoHarness.ChainRush.Flow
                 enabled = false;
                 return;
             }
-            load.completed += _ => CountIn();
+            load.completed += _ => GatherTheField();
+        }
+
+        // Counts the race in, after loading the opponents' worlds when the race has opponents.
+        private void GatherTheField()
+        {
+            if (setup.OpponentCount == 0) CountIn();
+            else StartCoroutine(LoadOpponents());
+        }
+
+        // One copy of the race scene for each opponent, one after another (RaceLaunch holds one request at a time), each
+        // on a physics scene of its own; then the field that steps them with the player's game, and the count-in. A copy
+        // that does not come up as a race world stops the race, loudly: there is no race to run without it.
+        private System.Collections.IEnumerator LoadOpponents()
+        {
+            var worlds = new System.Collections.Generic.List<RaceWorld>(setup.OpponentCount);
+            for (int i = 0; i < setup.OpponentCount; i++)
+            {
+                if (leaving) yield break;
+                RaceLaunch.Request(setup.ForOpponent(i));
+                requestedWorld = true;
+                AsyncOperation load = SceneManager.LoadSceneAsync(RaceLaunch.RaceScene, RaceWorld.IsolatedLoad);
+                if (load == null)
+                {
+                    StopAssembling($"could not load a copy of the scene '{RaceLaunch.RaceScene}' for opponent {i}. Is it in the build's scene list?");
+                    yield break;
+                }
+                yield return load;
+                if (RaceLaunch.HasPending)
+                {
+                    StopAssembling($"the world loaded for opponent {i} did not take its race setup.");
+                    yield break;
+                }
+                requestedWorld = false;
+                try
+                {
+                    worlds.Add(RaceWorld.FromScene(SceneManager.GetSceneAt(SceneManager.sceneCount - 1)));
+                }
+                catch (System.Exception e) when (e is System.ArgumentException || e is System.InvalidOperationException)
+                {
+                    Debug.LogException(e, this);
+                    StopAssembling($"the scene loaded for opponent {i} is not a race world.");
+                    yield break;
+                }
+            }
+            field = gameObject.AddComponent<RaceField>();
+            field.Initialize(game, worlds);
+            CountIn();
+        }
+
+        private void StopAssembling(string why)
+        {
+            Debug.LogError("RaceAssembler: " + why + " The race is not run.", this);
+            if (requestedWorld) RaceLaunch.Clear();
+            requestedWorld = false;
+            game.enabled = false;
+            enabled = false;
+        }
+
+        // In an opponent's world only the runner's model is left to see and nothing to hear: the road, the lights, the HUD
+        // and the sound are the player's world's (the copies stand in the same place). Presentation only, so the copy's
+        // run is unchanged: the simulation is stepped by calls (ChainRushGame.StepTick), not by these components.
+        private void HideAllButTheRunner()
+        {
+            foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+            {
+                foreach (Renderer shown in root.GetComponentsInChildren<Renderer>(true))
+                    if (!shown.transform.IsChildOf(player.transform)) shown.enabled = false;
+                foreach (Light lamp in root.GetComponentsInChildren<Light>(true)) lamp.enabled = false;
+                foreach (AudioSource source in root.GetComponentsInChildren<AudioSource>(true)) source.mute = true;
+                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    if (behaviour == null || behaviour.transform.IsChildOf(player.transform)) continue;
+                    if (behaviour is ChainRushGame || behaviour is CircuitRace || behaviour is RaceAssembler) continue;
+                    behaviour.enabled = false;
+                }
+            }
         }
 
         // The track look's sky behind everything and its horizon colour as the fog (user 2026-11-02, "최외곽이 살짝
@@ -217,6 +322,8 @@ namespace ProtoHarness.ChainRush.Flow
         // runs without a ghost, and says why (the file stays until the next best replaces it).
         private void ShowGhost()
         {
+            // An opponent's world shows no ghost, whichever store it is given.
+            if (setup.IsOpponentWorld) return;
             ghostReplaced = false;
             if (ghost != null)
             {
@@ -255,7 +362,8 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Update()
         {
-            if (!launched) return;
+            // An opponent's world keeps no record and does not leave for the lobby by itself.
+            if (!launched || setup.IsOpponentWorld) return;
             // Each finish counts once; a restart (pause menu or RUN AGAIN) clears it and the next finish counts again.
             // Marked before it is kept, so a store that throws is not tried (and the flags not overwritten) every frame.
             bool finished = game.HasFinished;

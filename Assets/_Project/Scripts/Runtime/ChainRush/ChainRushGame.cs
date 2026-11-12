@@ -43,6 +43,9 @@ namespace ProtoHarness.ChainRush
         // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
         // so the keyboard cannot restart a run the server is simulating.
         public bool ManualStart { get; set; } = true;
+        // Whether FixedUpdate advances the simulation. A race of several worlds (Race/RaceField) turns this off in every
+        // one of them and steps them itself, all on the same tick; a tick is the same tick either way.
+        public bool SelfStepping { get; set; } = true;
         public bool HasFailed => phase == Phase.Failed;
         public bool HasFinished => phase == Phase.Complete;
         public int Health => racer.Health;
@@ -175,7 +178,14 @@ namespace ProtoHarness.ChainRush
             if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(racer.AttackTicksLeft(tick)) * 4f);
         }
 
-        private void FixedUpdate() => StepTick(inputSource);
+        private void FixedUpdate()
+        {
+            if (SelfStepping) StepTick(inputSource);
+        }
+
+        // One tick on the game's own input source (SetInputSource), for whoever steps the game in FixedUpdate's place
+        // (SelfStepping off).
+        public void StepTick() => StepTick(inputSource);
 
         // The only simulation entry point. One call is one tick, and the order below is the
         // contract: consumed input, runner, hazards, finish. FixedUpdate calls it

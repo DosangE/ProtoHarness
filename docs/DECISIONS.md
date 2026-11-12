@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-11-12 · MP1: 상대마다 격리 월드를 띄우고 `RaceField` 가 같은 틱으로 돌린다 (`feature/mp1-race-field`)
+
+- **결정 (사용자, 2026-11-12 "모두 승인한다" — 아래 "MP1 구조" 뒤에 올린 §3-2 구현 요청서)**: 상대가 있는 레이스는 상대마다 서킷 씬 복사본을 격리 로드하고(`RaceWorld.IsolatedLoad`), 조정자 `Race/RaceField` 가 매 고정 틱에 플레이어 게임 → 상대들 순서로 한 틱씩 진행시킨다. 상대가 없는 레이스는 지금과 같다(조정자 없음, 게임이 스스로 틱을 돈다).
+- **만든 것**
+  - `ChainRushGame.SelfStepping`(`:48`, 기본 `true`): 끄면 `FixedUpdate` 가 틱을 돌지 않는다(`:183`). `StepTick()`(`:188`)은 게임의 자기 입력원으로 한 틱. 틱 안의 순서(`RunTick`)는 건드리지 않았다.
+  - `Race/RaceField.cs`(새 파일, MonoBehaviour, `RaceAssembler` 가 런타임에 붙인다): `Initialize` 가 플레이어 게임과 상대 월드들을 받아 전부 `SelfStepping` 을 끄고 상대의 `ManualStart` 를 끈다(물리 씬이 같거나 월드가 겹치면 예외). `FixedUpdate`(`:70`) — 플레이어 게임이 달리는 중일 때만: 틱 0 이면 상대 전원 `StartRun`(같은 틱에 출발) → 플레이어 한 틱 → 상대들 한 틱 → 달리는 상대의 틱이 플레이어와 다르면 `LogError` 뒤 멈춘다. `Update`(`:63`) — 플레이어가 일시정지면 상대도 일시정지, 준비·카운트다운이면 상대를 출발선에 세운다. 플레이어 런이 끝나면 아무도 진행하지 않는다(끝 규칙 D7 은 MP2).
+  - `Flow/RaceSetup`: `WithOpponents(params RunnerProfile[])`(`:42`, 싱글만·최대 `MaxOpponents` 7·null 거부·목록은 사본), `ForOpponent(i)`(`:57`, 그 상대가 러너인 설정 — 장식 씬·트랙 look 없음, `IsOpponentWorld`), `OpponentCount`·`Opponent(i)`. 기존 생성자와 부르는 곳은 그대로다.
+  - `Flow/RaceAssembler`: 상대가 있으면 장식 로드 뒤 `LoadOpponents`(`:238`) — 상대마다 `RaceLaunch.Request(setup.ForOpponent(i))` → 격리 로드 → `RaceWorld.FromScene`, 다 모이면 `RaceField` 를 붙이고 카운트다운. 복사본이 설정을 가져가지 않았거나 레이스 월드가 아니면 `StopAssembling`(`:275`)으로 알리고 레이스를 돌리지 않는다. 상대 월드에서는(`:125,203`) `Awake` 에 카메라·`AudioListener` 를 끄고, `Start` 에 `HideAllButTheRunner`(`:287`) — 러너 아래가 아닌 렌더러·조명을 끄고 `AudioSource` 를 음소거하고, 러너 아래가 아닌 `MonoBehaviour` 는 `ChainRushGame`·`CircuitRace`·`RaceAssembler` 만 남기고 끈다. 상대 월드는 기록·고스트·카운트다운·로비 복귀가 없다(`:326,366`).
+- **요청서와 달라진 것 (밝힌다)**
+  - 요청서는 틱 순서를 "전원 입력 수집 → 전원 이동 → 접촉 → 판정" 으로 적었다. MP1 은 월드마다 `StepTick` 을 통째로 차례로 부른다 — 월드끼리 닿지 않아 결과가 같고, 단계로 나누려면 `ChainRushGame` 의 틱을 세 메서드로 쪼개야 해서(공개 API 변경) 접촉이 들어오는 MP2 요청서로 넘겼다.
+  - 요청서는 조정자가 복사본을 로드한다고 적었다. 로드는 `RaceAssembler` 가 한다 — `Race/` 가 `Flow/`(`RaceSetup`·`RaceLaunch`)를 모르게 하기 위해서다.
+  - 공개 API 가 늘었다: `ChainRushGame.SelfStepping`·`StepTick()`, `RaceAssembler.Field`, `RaceSetup` 의 위 멤버.
+- **지금 닿는 곳이 없다**: 로비는 상대를 주지 않는다(D10 로비 진입은 MP2). 플레이로 확인할 것이 아직 없고, 완료는 테스트로 본다.
+- **검증** (에디터 6000.3.19f1, 기준 `574de5c` + 커밋 전 작업 트리)
+  - 컴파일: `*** Tundra build success (14.74 seconds), 31 items updated, 1618 evaluated`, `error CS` 0.
+  - 새 테스트 `ChainRushRaceFieldTests` 5건: `testcasecount="5" result="Passed" total="5" passed="5" failed="0" skipped="0"`, 2026-11-12 06:37:59Z ~ 06:38:23Z. 상대 3명(BETA·THETA·DELTA, 각자 봇)을 실시간으로 같이 돌린 플레이어 런 1,700틱이 혼자 런과 비트 일치 — `ChainRush race field: the player's 1700 ticks with three opponents alongside equal its solo run (hash 0xEF92FB76BFD1D767); opponents' progress 607.1 / 638.7 / 609.2 m, the player's 623.9 m.` 플레이어 틱 안에서 상대는 늘 한 틱 뒤, 스텝 사이에는 같은 틱. 상대 월드마다 자기 물리 씬·자기 프로필, 카메라·리스너·조명·HUD 꺼짐, 러너만 그려짐. 일시정지·카운트다운·재출발을 상대가 따라간다.
+  - 영향 평가: `ChainRushGame.FixedUpdate`(틱 진입) → 지문·롤백·월드·네트워크 보정이 `StepTick` 과 `FixedUpdate` 를 지난다 / `RaceAssembler.Start`·`Awake`·`Update`·`ShowGhost`, `RaceSetup` → Flow 의 `Race*` 테스트(로비 출발·결승·기록·고스트·로비 복귀)와 튜토리얼(`RaceMode.Tutorial` 조립). 고른 것: `groupNames = { "ChainRushWorldTests", "ChainRushRollbackTests", "ChainRushReplayTests\.Replay_CircuitBotRun_RepeatsEveryTickBitForBit", "ChainRushTutorialTests", "ChainRushFlowTests\.Race", "NetReconcileTests" }`, `categoryNames = { "!Device", "!Enemy", "!NetEndReplay", "!^Lap$" }` → `testcasecount="74" result="Passed" total="74" passed="74" failed="0" skipped="0"`, 06:39:27Z ~ 06:43:27Z, 240.1 s (Flow 19, 지문 1, 롤백 10, 튜토리얼 17, 월드 5, 네트워크 보정 22). 서킷 지문 `0xEF92FB76BFD1D767` 그대로.
+  - Lap 은 돌리지 않았다: 혼자 판의 주행에 들어가는 코드는 `FixedUpdate` 의 `if (SelfStepping)`(기본 `true`) 한 줄과 `Start` 의 `CountIn` 을 부르는 자리뿐이고, 지문과 `Race_FinishFromTheLobby…` 가 그 경로를 지난다. 게이트 전체도 돌리지 않았다(§9-2).
+  - `tools/test-runs.ps1 -Last -Passed`: "그 뒤 Assets/ 에서 바뀐 파일: 없음", "실행한 코드 = 지금 작업 트리".
+- **확인 못 한 것**: 레이스를 떠나는 도중의 복사본 로드(`requestedWorld` 를 비우는 경로)와 `StopAssembling` 세 경로는 테스트가 없다. 상대 러너 아래에 남는 잔상·바람 선(`SpeedTrails`, `ControlFeedback` 이 움직이는데 그것을 껐다)이 어떻게 보이는지. 상대 4명 이상, 다른 트랙, 플레이어 빌드, 프레임.
+- **`tools/select-tests.ps1` 표**: `ChainRushRaceFieldTests` 를 `Race/` 줄과 `Flow/(RaceAssembler|RaceSetup|SpeedScale)` 줄에 배정했다(VERIFICATION §4-4 "PlayMode 테스트 클래스를 새로 만들면 표에 배정한다").
+- **남은 것**: 상대가 있는 판의 기록·고스트(D4 — 지금은 플레이어 월드가 혼자 판처럼 기록을 남긴다, MP2). `docs/ARCHITECTURE.md` 시스템 지도에 `RaceField` 줄(문서 다이어트에서).
+
 ## 2026-11-12 · MP1 구조: 격리 월드 + 조정자, 첫 범위는 봇 3명 — 2026-10-30 의 공유 월드를 뒤집는다 (스파이크 `spike/mp1-isolated-worlds`)
 
 - **결정 (사용자, 2026-11-12 "1. 권고대로 하겠다.")**: MP1 은 한 씬에 러너 여럿(공유 월드)이 아니라 **러너마다 서킷 씬 복사본(격리 월드, `RaceWorld.IsolatedLoad`)을 유지하고, 조정자가 모든 게임을 같은 틱으로 돌린다.** 러너끼리의 접촉(MP2)은 조정자가 위치로 계산해 각자의 월드에서 밀어낸다(D2a 직접 밀어내기). 첫 범위는 봇 3명(복사본 4개, D1 "첫 판정은 봇 3명"). 8명으로 늘릴 때 복사본의 로드 고정 비용을 줄이는 작업을 따로 한다.

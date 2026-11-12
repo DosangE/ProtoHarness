@@ -22,6 +22,53 @@ namespace ProtoHarness.ChainRush.Flow
         public TrackLook Look { get; }
         // Where a tutorial starts (a row of TutorialCourse.Stages); 0 for a race.
         public int FirstStage { get; }
+        // The most runners that race alongside the player's: eight racers in all (DESIGN.md §6).
+        public const int MaxOpponents = 7;
+        // The runners racing alongside the player's, each in a world of its own (Race/RaceField); none for a race alone.
+        private readonly RunnerProfile[] opponents;
+        public int OpponentCount => opponents == null ? 0 : opponents.Length;
+        // Whether this is the setup of one of those worlds (ForOpponent): the race scene then assembles only the
+        // simulation and the runner's model, with no view, sound, record or ghost of its own (RaceAssembler).
+        public bool IsOpponentWorld { get; }
+
+        public RunnerProfile Opponent(int index)
+        {
+            if (index < 0 || index >= OpponentCount)
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"This race has {OpponentCount} opponents.");
+            return opponents[index];
+        }
+
+        // The same race with these runners alongside. Only a single race takes opponents.
+        public RaceSetup WithOpponents(params RunnerProfile[] runners)
+        {
+            if (runners == null) throw new ArgumentNullException(nameof(runners));
+            if (Track == null) throw new InvalidOperationException("The setup is empty; build it with its constructor.");
+            if (Mode != RaceMode.Single) throw new InvalidOperationException($"Only a single race takes opponents, not {Mode}.");
+            if (IsOpponentWorld) throw new InvalidOperationException("An opponent's world has no opponents of its own.");
+            if (runners.Length > MaxOpponents)
+                throw new ArgumentOutOfRangeException(nameof(runners), runners.Length, $"A race takes at most {MaxOpponents} opponents.");
+            for (int i = 0; i < runners.Length; i++)
+                if (runners[i] == null) throw new ArgumentException($"Opponent {i} is missing.", nameof(runners));
+            return new RaceSetup(this, Runner, EnvironmentScene, Look, (RunnerProfile[])runners.Clone(), false);
+        }
+
+        // The setup of one opponent's world: the same track and speed with that opponent as its runner, and nothing
+        // that is only for looking at (no environment scene, no track look).
+        public RaceSetup ForOpponent(int index) => new RaceSetup(this, Opponent(index), "", null, null, true);
+
+        private RaceSetup(in RaceSetup from, RunnerProfile runner, string environmentScene, TrackLook look, RunnerProfile[] opponents, bool opponentWorld)
+        {
+            Track = from.Track;
+            Title = from.Title;
+            EnvironmentScene = environmentScene;
+            Mode = from.Mode;
+            Speed = from.Speed;
+            Runner = runner;
+            Look = look;
+            FirstStage = from.FirstStage;
+            this.opponents = opponents;
+            IsOpponentWorld = opponentWorld;
+        }
 
         public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner,
             TrackLook look = null, int firstStage = 0)
@@ -41,6 +88,8 @@ namespace ProtoHarness.ChainRush.Flow
             Runner = runner;
             Look = look;
             FirstStage = firstStage;
+            opponents = null;
+            IsOpponentWorld = false;
         }
     }
 }

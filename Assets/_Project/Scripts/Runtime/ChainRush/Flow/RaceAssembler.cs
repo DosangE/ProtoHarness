@@ -44,6 +44,8 @@ namespace ProtoHarness.ChainRush.Flow
         private RaceField field;
         // A request for an opponent's world is waiting in RaceLaunch for the copy being loaded to take.
         private bool requestedWorld;
+        // The opponents' copies of the race scene loaded so far, unloaded again if the race cannot be assembled.
+        private readonly System.Collections.Generic.List<Scene> opponentScenes = new System.Collections.Generic.List<Scene>();
 
         // The opponents' worlds and their stepping, in a race with opponents once it is assembled; null otherwise.
         public RaceField Field => field;
@@ -95,6 +97,14 @@ namespace ProtoHarness.ChainRush.Flow
                 Debug.Log("RaceAssembler: no race was requested; the scene runs as saved (opened directly).", this);
                 return;
             }
+            // An opponent's world has nothing to show from its own camera or hear through its own listener, even when it
+            // fails to assemble below: two AudioListeners log on every frame they are both on.
+            if (setup.IsOpponentWorld)
+                foreach (GameObject root in gameObject.scene.GetRootGameObjects())
+                {
+                    foreach (AudioListener listener in root.GetComponentsInChildren<AudioListener>(true)) listener.enabled = false;
+                    foreach (Camera camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+                }
             // Only what the simulation can race today: multi is locked in the lobby.
             if (setup.Mode == RaceMode.Multi)
             {
@@ -122,16 +132,7 @@ namespace ProtoHarness.ChainRush.Flow
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
-            if (setup.IsOpponentWorld)
-            {
-                // Before the first frame: two AudioListeners log an error on every frame they are both on.
-                foreach (GameObject root in gameObject.scene.GetRootGameObjects())
-                {
-                    foreach (AudioListener listener in root.GetComponentsInChildren<AudioListener>(true)) listener.enabled = false;
-                    foreach (Camera camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
-                }
-                return;
-            }
+            if (setup.IsOpponentWorld) return;
             if (isTutorial)
             {
                 player.ReachPolesFrom(TutorialCourse.FloorRadius);
@@ -234,7 +235,8 @@ namespace ProtoHarness.ChainRush.Flow
 
         // One copy of the race scene for each opponent, one after another (RaceLaunch holds one request at a time), each
         // on a physics scene of its own; then the field that steps them with the player's game, and the count-in. A copy
-        // that does not come up as a race world stops the race, loudly: there is no race to run without it.
+        // that does not come up as a race world, or whose own assembler refused its setup (and switched its game off),
+        // stops the race, loudly: there is no race to run without it.
         private System.Collections.IEnumerator LoadOpponents()
         {
             var worlds = new System.Collections.Generic.List<RaceWorld>(setup.OpponentCount);
@@ -250,15 +252,18 @@ namespace ProtoHarness.ChainRush.Flow
                     yield break;
                 }
                 yield return load;
+                Scene copy = SceneManager.GetSceneAt(SceneManager.sceneCount - 1);
+                opponentScenes.Add(copy);
                 if (RaceLaunch.HasPending)
                 {
                     StopAssembling($"the world loaded for opponent {i} did not take its race setup.");
                     yield break;
                 }
                 requestedWorld = false;
+                RaceWorld world;
                 try
                 {
-                    worlds.Add(RaceWorld.FromScene(SceneManager.GetSceneAt(SceneManager.sceneCount - 1)));
+                    world = RaceWorld.FromScene(copy);
                 }
                 catch (System.Exception e) when (e is System.ArgumentException || e is System.InvalidOperationException)
                 {
@@ -266,12 +271,41 @@ namespace ProtoHarness.ChainRush.Flow
                     StopAssembling($"the scene loaded for opponent {i} is not a race world.");
                     yield break;
                 }
+                RaceAssembler its = AssemblerOf(copy);
+                if (its == null || !its.IsLaunched || !its.enabled || !world.Game.enabled)
+                {
+                    StopAssembling($"the world loaded for opponent {i} did not assemble itself (see its error before this).");
+                    yield break;
+                }
+                worlds.Add(world);
             }
             field = gameObject.AddComponent<RaceField>();
-            field.Initialize(game, worlds);
+            try
+            {
+                field.Initialize(game, worlds);
+            }
+            catch (System.ArgumentException e)
+            {
+                Debug.LogException(e, this);
+                Destroy(field);
+                field = null;
+                StopAssembling("the opponents' worlds could not make a field.");
+                yield break;
+            }
             CountIn();
         }
 
+        private static RaceAssembler AssemblerOf(Scene scene)
+        {
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                RaceAssembler found = root.GetComponentInChildren<RaceAssembler>(true);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        // Stops this race before it counts in and takes down the opponents' worlds loaded for it, so nothing of it runs on.
         private void StopAssembling(string why)
         {
             Debug.LogError("RaceAssembler: " + why + " The race is not run.", this);
@@ -279,6 +313,9 @@ namespace ProtoHarness.ChainRush.Flow
             requestedWorld = false;
             game.enabled = false;
             enabled = false;
+            foreach (Scene copy in opponentScenes)
+                if (copy.isLoaded) SceneManager.UnloadSceneAsync(copy);
+            opponentScenes.Clear();
         }
 
         // In an opponent's world only the runner's model is left to see and nothing to hear: the road, the lights, the HUD

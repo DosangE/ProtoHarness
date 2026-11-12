@@ -26,6 +26,7 @@ namespace ProtoHarness.Tests.PlayMode
         private const string CircuitScene = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         private const string StadiumPath = "Assets/_Project/Data/Circuit_Stadium.asset";
         private const string ProfilePath = "Assets/_Project/Data/RunnerProfile_{0}.asset";
+        private const string WrongLookPath = "Assets/_Project/Art/Models/ShortcutSign.fbx";
         private const int BotTicks = 1700;
 
         private float timeScale;
@@ -163,6 +164,59 @@ namespace ProtoHarness.Tests.PlayMode
             foreach (Renderer renderer in All<Renderer>(player.Scene))
                 if (renderer.enabled && !renderer.transform.IsChildOf(player.Player.transform)) roads++;
             Assert.That(roads, Is.GreaterThan(0), "The player's world draws the road.");
+        }
+
+        // An opponent's world that fails to assemble itself (here its runner's look does not fit the runner model, so the
+        // copy's RaceAssembler refuses it and switches its game off) must stop the race, loudly, as every other failure to
+        // assemble does: no field, no count-in, and the copies already loaded go away.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Race_AnOpponentWhoseWorldFailsToAssemble_StopsTheRaceAndUnloadsTheCopies()
+        {
+            RunnerProfile misfit = UnityEngine.Object.Instantiate(Profile("Theta"));
+            try
+            {
+#if UNITY_EDITOR
+                // An asset, not a scene object: loading the race scene would destroy a GameObject made here. The road sign
+                // model has nothing of the runner model's hierarchy.
+                var wrongLook = AssetDatabase.LoadAssetAtPath<GameObject>(WrongLookPath);
+                Assert.That(wrongLook, Is.Not.Null, "No model at " + WrongLookPath);
+                var data = new SerializedObject(misfit);
+                data.FindProperty("look").objectReferenceValue = wrongLook;
+                data.ApplyModifiedPropertiesWithoutUndo();
+                Assert.That(misfit.Look, Is.SameAs(wrongLook));
+#endif
+                LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("ArgumentException"));
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(@"RaceAssembler: .*opponent 1.* The race is not run\."));
+
+#if UNITY_EDITOR
+                RaceLaunch.Request(Setup().WithOpponents(Profile("Beta"), misfit));
+                yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
+#else
+                Assert.Fail("Race field tests require the Unity Editor.");
+                yield break;
+#endif
+                Scene scene = SceneManager.GetActiveScene();
+                player = RaceWorld.FromScene(scene);
+                assembler = Find<RaceAssembler>(scene);
+                assembler.Records = records;
+                assembler.Ghosts = ghosts;
+                float deadline = Time.realtimeSinceStartup + 60f;
+                while (assembler.enabled && assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+                // The copies are unloaded asynchronously.
+                deadline = Time.realtimeSinceStartup + 10f;
+                while (SceneManager.sceneCount > 1 && Time.realtimeSinceStartup < deadline) yield return null;
+
+                Assert.That(assembler.enabled, Is.False, "The assembler must stop when an opponent's world did not assemble.");
+                Assert.That(assembler.Field, Is.Null, "A field must not be made with a world that switched itself off.");
+                Assert.That(player.Game.enabled, Is.False, "The race must not be run.");
+                Assert.That(player.Game.IsCountingDown || player.Game.IsRunning, Is.False);
+                Assert.That(RaceLaunch.HasPending, Is.False, "No request may be left for the next race.");
+                Assert.That(SceneManager.sceneCount, Is.EqualTo(1), "The opponents' copies must be unloaded.");
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(misfit);
+            }
         }
 
         [UnityTest, Timeout(120000)]

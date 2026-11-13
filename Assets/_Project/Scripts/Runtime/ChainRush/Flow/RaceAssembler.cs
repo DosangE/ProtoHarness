@@ -1,4 +1,6 @@
 using ProtoHarness.ChainRush.Race;
+using ProtoHarness.ChainRush.Bots;
+using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Tutorial;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
@@ -44,6 +46,7 @@ namespace ProtoHarness.ChainRush.Flow
         private RaceField field;
         // A request for an opponent's world is waiting in RaceLaunch for the copy being loaded to take.
         private bool requestedWorld;
+        private Scene loadedOpponent;
         // The opponents' copies of the race scene loaded so far, unloaded again if the race cannot be assembled.
         private readonly System.Collections.Generic.List<Scene> opponentScenes = new System.Collections.Generic.List<Scene>();
 
@@ -97,6 +100,11 @@ namespace ProtoHarness.ChainRush.Flow
                 Debug.Log("RaceAssembler: no race was requested; the scene runs as saved (opened directly).", this);
                 return;
             }
+            if (setup.Mode == RaceMode.Bots && !setup.IsOpponentWorld && setup.OpponentCount == 0)
+            {
+                StopAssembling("a bot race needs opponents.");
+                return;
+            }
             // An opponent's world has nothing to show from its own camera or hear through its own listener, even when it
             // fails to assemble below: two AudioListeners log on every frame they are both on.
             if (setup.IsOpponentWorld)
@@ -140,12 +148,13 @@ namespace ProtoHarness.ChainRush.Flow
                 tutorial.Initialize(game, player, circuit.LightMaterial, setup.FirstStage);
                 return;
             }
-            game.TickCompleted += RecordTick;
+            if (setup.Mode != RaceMode.Bots) game.TickCompleted += RecordTick;
         }
 
         private void OnDestroy()
         {
             if (launched && game != null) game.TickCompleted -= RecordTick;
+            SceneManager.sceneLoaded -= OpponentLoaded;
             // A copy that was being loaded when the race was left will not take its request; the next race must not find it.
             if (requestedWorld) RaceLaunch.Clear();
             // The ring was made for this tutorial (TutorialCourse.Setup), so it goes with it.
@@ -240,11 +249,14 @@ namespace ProtoHarness.ChainRush.Flow
         private System.Collections.IEnumerator LoadOpponents()
         {
             var worlds = new System.Collections.Generic.List<RaceWorld>(setup.OpponentCount);
+            var inputs = new System.Collections.Generic.List<IInputSource>(setup.OpponentCount);
             for (int i = 0; i < setup.OpponentCount; i++)
             {
                 if (leaving) yield break;
                 RaceLaunch.Request(setup.ForOpponent(i));
                 requestedWorld = true;
+                loadedOpponent = default;
+                SceneManager.sceneLoaded += OpponentLoaded;
                 AsyncOperation load = SceneManager.LoadSceneAsync(RaceLaunch.RaceScene, RaceWorld.IsolatedLoad);
                 if (load == null)
                 {
@@ -252,7 +264,13 @@ namespace ProtoHarness.ChainRush.Flow
                     yield break;
                 }
                 yield return load;
-                Scene copy = SceneManager.GetSceneAt(SceneManager.sceneCount - 1);
+                SceneManager.sceneLoaded -= OpponentLoaded;
+                Scene copy = loadedOpponent;
+                if (!copy.IsValid() || !copy.isLoaded)
+                {
+                    StopAssembling($"the sceneLoaded event did not supply opponent {i}'s world.");
+                    yield break;
+                }
                 opponentScenes.Add(copy);
                 if (RaceLaunch.HasPending)
                 {
@@ -278,11 +296,12 @@ namespace ProtoHarness.ChainRush.Flow
                     yield break;
                 }
                 worlds.Add(world);
+                inputs.Add(new CircuitBot(world.Game, world.Player, world.Grapple, world.Circuit));
             }
             field = gameObject.AddComponent<RaceField>();
             try
             {
-                field.Initialize(game, worlds);
+                field.Initialize(game, worlds, inputs);
             }
             catch (System.ArgumentException e)
             {
@@ -293,6 +312,12 @@ namespace ProtoHarness.ChainRush.Flow
                 yield break;
             }
             CountIn();
+        }
+
+        private void OpponentLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (requestedWorld && mode == LoadSceneMode.Additive && scene.name == RaceLaunch.RaceScene)
+                loadedOpponent = scene;
         }
 
         private static RaceAssembler AssemblerOf(Scene scene)
@@ -308,6 +333,7 @@ namespace ProtoHarness.ChainRush.Flow
         // Stops this race before it counts in and takes down the opponents' worlds loaded for it, so nothing of it runs on.
         private void StopAssembling(string why)
         {
+            SceneManager.sceneLoaded -= OpponentLoaded;
             Debug.LogError("RaceAssembler: " + why + " The race is not run.", this);
             if (requestedWorld) RaceLaunch.Clear();
             requestedWorld = false;
@@ -360,7 +386,7 @@ namespace ProtoHarness.ChainRush.Flow
         private void ShowGhost()
         {
             // An opponent's world shows no ghost, whichever store it is given.
-            if (setup.IsOpponentWorld) return;
+            if (setup.IsOpponentWorld || setup.Mode == RaceMode.Bots) return;
             ghostReplaced = false;
             if (ghost != null)
             {
@@ -406,7 +432,7 @@ namespace ProtoHarness.ChainRush.Flow
             bool finished = game.HasFinished;
             bool newFinish = finished && !wasFinished;
             wasFinished = finished;
-            if (newFinish && tutorial == null) KeepFinish();
+            if (newFinish && tutorial == null && setup.Mode != RaceMode.Bots) KeepFinish();
             // RUN AGAIN or a restart after a new best: race the new ghost from this count-in.
             if (ghostReplaced && game.IsCountingDown) ShowGhost();
             if (!(finished || game.HasFailed)) return;

@@ -4,11 +4,11 @@ using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 
-namespace ProtoHarness.Tests.PlayMode
+namespace ProtoHarness.ChainRush.Bots
 {
     // A test bot for the circuit: follows the closed centerline (TrackFollower), jumps near the edge of each
     // gap, and grapples across gaps that have an anchor.
-    internal sealed class CircuitBot : IInputSource
+    public sealed class CircuitBot : IInputSource
     {
         // The straight course's long-run test jumped within 4.5 m of the deck edge and grappled above 2.6 m;
         // that suits a grapple gap. A flat jump carries 10.25 m (COURSE.md 6-1), so a jump-only gap of up to

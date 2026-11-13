@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Flow.Lobby;
 using ProtoHarness.ChainRush.Race;
@@ -19,7 +20,7 @@ namespace ProtoHarness.ChainRush.Flow
     public sealed class LobbyMenu : MonoBehaviour
     {
         // In the order of the page list built in Awake.
-        public enum Page { Main, Settings, Track, Speed, Runner, Keys, Tutorial }
+        public enum Page { Main, Settings, Track, Speed, Runner, Keys, Tutorial, Mode }
 
         // One track the lobby offers: what the circuit is built from and the scene loaded around it for looks.
         [Serializable]
@@ -147,6 +148,7 @@ namespace ProtoHarness.ChainRush.Flow
             {
                 new MainPage(context), new SettingsPage(context), trackPage,
                 new SpeedPage(context), new RunnerPage(context), new KeysPage(context), new TutorialPage(context),
+                new SingleModePage(context),
             };
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i].Id != (Page)i)
@@ -236,8 +238,12 @@ namespace ProtoHarness.ChainRush.Flow
         public RaceSetup BuildSetup()
         {
             TrackChoice track = tracks[context.Track];
-            return new RaceSetup(track.Definition, track.Title, track.EnvironmentScene, RaceMode.Single,
-                SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look);
+            var setup = new RaceSetup(track.Definition, track.Title, track.EnvironmentScene, context.Mode,
+                SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look, seed: context.Seed);
+            if (context.Mode != RaceMode.Bots) return setup;
+            RunnerProfile[] opponents = BotLineup.Pick(runners, setup.Runner, setup.Seed);
+            Debug.Log($"ChainRush bot lineup: seed {setup.Seed}", this);
+            return setup.WithOpponents(opponents);
         }
 
         // The tutorial from a stage on: the first runner, with the first track's materials and sky on its round floor.

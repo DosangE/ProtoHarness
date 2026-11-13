@@ -40,5 +40,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public int Track { get; set; }
         public int Speed { get; set; } = 1;
         public int Runner { get; set; }
+        public RaceMode Mode { get; set; } = RaceMode.Single;
+        public int Seed { get; set; }
     }
 }

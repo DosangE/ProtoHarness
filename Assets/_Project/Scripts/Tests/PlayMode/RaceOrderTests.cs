@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Race;
 using System.IO;
 using NUnit.Framework;
 using ProtoHarness.Net;

@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -70,7 +71,7 @@ namespace ProtoHarness.Tests.PlayMode
         [Test]
         public void RaceSetup_WithOpponents_KeepsThemAndRefusesWhatCannotRace()
         {
-            RaceSetup alone = Setup();
+            RaceSetup alone = Setup(RaceMode.Bots);
             Assert.That(alone.OpponentCount, Is.EqualTo(0));
             Assert.That(alone.IsOpponentWorld, Is.False);
             Assert.Throws<ArgumentOutOfRangeException>(() => alone.Opponent(0));
@@ -101,7 +102,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.Throws<InvalidOperationException>(() => world.WithOpponents(beta));
             Assert.Throws<InvalidOperationException>(() => default(RaceSetup).WithOpponents(beta));
             var tutorial = new RaceSetup(alone.Track, "TUTORIAL", "", RaceMode.Tutorial, SpeedClass.Fast, alone.Runner);
-            Assert.Throws<InvalidOperationException>(() => tutorial.WithOpponents(beta));
+            Assert.Throws<ArgumentException>(() => tutorial.WithOpponents(beta));
         }
 
         // ---- the worlds --------------------------------------------------------------------------------
@@ -110,7 +111,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Race_WithThreeOpponents_LoadsAnIsolatedWorldForEach_ShowingOnlyItsRunner()
         {
             RunnerProfile[] runners = { Profile("Beta"), Profile("Theta"), Profile("Delta") };
-            yield return LoadRace(Setup().WithOpponents(runners));
+            yield return LoadRace(Setup(RaceMode.Bots).WithOpponents(runners));
             RaceField field = assembler.Field;
             Assert.That(field, Is.Not.Null, "A race with opponents has a field.");
             Assert.That(field.RacerCount, Is.EqualTo(4));
@@ -189,7 +190,7 @@ namespace ProtoHarness.Tests.PlayMode
                 LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(@"RaceAssembler: .*opponent 1.* The race is not run\."));
 
 #if UNITY_EDITOR
-                RaceLaunch.Request(Setup().WithOpponents(Profile("Beta"), misfit));
+                RaceLaunch.Request(Setup(RaceMode.Bots).WithOpponents(Profile("Beta"), misfit));
                 yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
 #else
                 Assert.Fail("Race field tests require the Unity Editor.");
@@ -250,7 +251,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.Game.IsRunning, Is.True, $"The replay ended at tick {player.Game.Tick}.");
             Time.timeScale = timeScale;
 
-            yield return LoadRace(Setup().WithOpponents(Profile("Beta"), Profile("Theta"), Profile("Delta")));
+            yield return LoadRace(Setup(RaceMode.Bots).WithOpponents(Profile("Beta"), Profile("Theta"), Profile("Delta")));
             RaceField field = assembler.Field;
             foreach (RaceWorld world in field.Opponents) world.Game.SetInputSource(Bot(world));
             StateTrace together = Trace(player, new InputReplay(log));
@@ -299,7 +300,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest, Timeout(120000)]
         public IEnumerator Field_PauseAndRestart_TheOpponentsFollowThePlayersGame()
         {
-            yield return LoadRace(Setup().WithOpponents(Profile("Beta"), Profile("Omega")));
+            yield return LoadRace(Setup(RaceMode.Bots).WithOpponents(Profile("Beta"), Profile("Omega")));
             RaceField field = assembler.Field;
             ChainRushGame game = player.Game;
             var idle = new InputReplay(new InputLog());
@@ -352,12 +353,12 @@ namespace ProtoHarness.Tests.PlayMode
 #endif
         }
 
-        private static RaceSetup Setup()
+        private static RaceSetup Setup(RaceMode mode = RaceMode.Single)
         {
 #if UNITY_EDITOR
             var stadium = AssetDatabase.LoadAssetAtPath<TrackDefinition>(StadiumPath);
             Assert.That(stadium, Is.Not.Null);
-            return new RaceSetup(stadium, "STADIUM", "", RaceMode.Single, SpeedClass.Fast, Profile("Alpha"));
+            return new RaceSetup(stadium, "STADIUM", "", mode, SpeedClass.Fast, Profile("Alpha"));
 #else
             Assert.Fail("Race field tests require the Unity Editor.");
             return default;

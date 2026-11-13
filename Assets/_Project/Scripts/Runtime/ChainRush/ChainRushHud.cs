@@ -1,5 +1,7 @@
 using System;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Flow;
+using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Tutorial;
 using ProtoHarness.ChainRush.Visuals;
@@ -40,6 +42,27 @@ namespace ProtoHarness.ChainRush
         private GUIStyle compareDelta;
         private GUIStyle compareNew;
         private GUIStyle clearWord;
+        private GUIStyle placeNumber;
+        private RaceField botField;
+        private string botPlace = "";
+        private string[] botRows;
+        private int[] botPlaces;
+        private int[] botTicks;
+        private int[] botMetres;
+        private int[] botRowOrder;
+        private string[] botNames;
+        private int cachedPlace = -1;
+        private int cachedSpeed = -1;
+        private int cachedTenths = -1;
+        private int cachedLap = -1;
+        private string botSpeed = "", botTime = "", botLap = "";
+        public string BotPlaceText => botPlace;
+        public int BotResultCount => botField != null && botField.HasResult ? botRows.Length : 0;
+        public string BotResultRow(int row)
+        {
+            if (row < 0 || row >= BotResultCount) throw new ArgumentOutOfRangeException(nameof(row));
+            return botRows[botRowOrder[row]];
+        }
         private int pauseCursor;
         private StateEdge respawn;
         // Notices the control moments for both the world effects and this HUD, so the two never disagree (review
@@ -73,6 +96,109 @@ namespace ProtoHarness.ChainRush
 
         // The speed at the bottom right, in km/h.
         public string SpeedText => FeedbackLook.Kmh(player.HorizontalSpeed).ToString("0");
+
+        // Public so the displayed spelling, including the teens, is covered without driving IMGUI.
+        public static string Ordinal(int place)
+        {
+            if (place < 1) throw new ArgumentOutOfRangeException(nameof(place));
+            int teen = place % 100;
+            string suffix = teen >= 11 && teen <= 13 ? "th"
+                : place % 10 == 1 ? "st" : place % 10 == 2 ? "nd" : place % 10 == 3 ? "rd" : "th";
+            return place.ToString() + suffix;
+        }
+
+        private bool IsBotRace => FromLobby && assembler.Setup.Mode == RaceMode.Bots;
+
+        private void LateUpdate()
+        {
+            if (!IsBotRace) return;
+            RaceField field = assembler.Field;
+            if (field != null && field != botField) BindBotField(field);
+            CacheBotClock();
+        }
+
+        private void BindBotField(RaceField field)
+        {
+            if (botField != null) botField.StandingsChanged -= CacheBotStandings;
+            botField = field;
+            int count = field.RacerCount;
+            botRows = new string[count];
+            botNames = new string[count];
+            botPlaces = new int[count];
+            botTicks = new int[count];
+            botMetres = new int[count];
+            botRowOrder = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                botNames[i] = field.RunnerName(i);
+                botPlaces[i] = botTicks[i] = botMetres[i] = -1;
+            }
+            cachedPlace = -1;
+            field.StandingsChanged += CacheBotStandings;
+            CacheBotStandings();
+        }
+
+        private void CacheBotClock()
+        {
+            int speed = Mathf.RoundToInt(FeedbackLook.Kmh(player.HorizontalSpeed));
+            if (cachedSpeed != speed) { cachedSpeed = speed; botSpeed = speed.ToString(); }
+            int tenths = Mathf.FloorToInt(game.Elapsed * 10f);
+            if (cachedTenths != tenths) { cachedTenths = tenths; botTime = FormatTime(game.Elapsed); }
+            int lap = game.Circuit.Laps.CurrentLap;
+            if (cachedLap != lap) { cachedLap = lap; botLap = lap + " / " + game.Circuit.Laps.LapCount + " LAP"; }
+        }
+
+        private void CacheBotStandings()
+        {
+            int place = botField.Place(0);
+            if (cachedPlace != place)
+            {
+                cachedPlace = place;
+                botPlace = place > 0 ? Ordinal(place) : "";
+            }
+            // The rows are shown only on the result screen; building them every tick before then would be waste.
+            if (!botField.HasResult) return;
+            for (int i = 0; i < botRows.Length; i++)
+            {
+                int rank = botField.Place(i), ticks = botField.FinishTick(i);
+                int metres = (int)Math.Floor(botField.Progress(i));
+                if (botPlaces[i] != rank || botTicks[i] != ticks || (ticks == 0 && botMetres[i] != metres))
+                {
+                    botPlaces[i] = rank;
+                    botTicks[i] = ticks;
+                    botMetres[i] = metres;
+                    botRows[i] = (rank > 0 ? Ordinal(rank) : "—") + "   " + botNames[i] + "   "
+                        + (ticks > 0 ? FormatTime(Ticks.ToSeconds(ticks)) : "진행 중 " + metres.ToString("N0") + " m");
+                }
+                // Stable ordering of tied finishers: same displayed place, original runner order.
+                int at = i;
+                while (at > 0 && botPlaces[botRowOrder[at - 1]] > rank)
+                {
+                    botRowOrder[at] = botRowOrder[at - 1];
+                    at--;
+                }
+                botRowOrder[at] = i;
+            }
+        }
+
+        private const float PlaceShineSpeed = 4f;
+        private static readonly Color Gold = new Color(1f, 0.8f, 0.26f);
+        private static readonly Color Silver = new Color(0.78f, 0.82f, 0.88f);
+        private static readonly Color Bronze = new Color(0.8f, 0.5f, 0.27f);
+
+        // The place's colour in the bot race's corner: gold, silver, bronze, then white.
+        public static Color PlaceTint(int place)
+        {
+            if (place < 1) throw new ArgumentOutOfRangeException(nameof(place));
+            return place == 1 ? Gold : place == 2 ? Silver : place == 3 ? Bronze : Color.white;
+        }
+
+        // How far the place's colour pulses toward white at the top of its shine: 1st most, 3rd least, 4th on not at all.
+        public static float PlaceShine(int place)
+        {
+            if (place < 1) throw new ArgumentOutOfRangeException(nameof(place));
+            return place == 1 ? 0.55f : place == 2 ? 0.32f : place == 3 ? 0.16f : 0f;
+        }
 
         private void Awake()
         {
@@ -188,6 +314,8 @@ namespace ProtoHarness.ChainRush
             number = NightUi.Style(displayFont, 44, Color.white, FontStyle.BoldAndItalic);
             speedNumber = NightUi.Style(displayFont, 94, Color.white, FontStyle.BoldAndItalic);
             speedNumber.alignment = TextAnchor.MiddleRight;
+            placeNumber = NightUi.Style(displayFont, 96, Color.white, FontStyle.BoldAndItalic);
+            placeNumber.alignment = TextAnchor.MiddleLeft;
             raceWord = NightUi.Style(displayFont, 112, Color.white, FontStyle.BoldAndItalic);
             accentWord = NightUi.Style(displayFont, 112, Mint, FontStyle.BoldAndItalic);
             totalTime = NightUi.Style(displayFont, 84, Color.white, FontStyle.BoldAndItalic);
@@ -268,6 +396,14 @@ namespace ProtoHarness.ChainRush
         private void DrawHeader(float width)
         {
             NightUi.ShadowLabel(new Rect(64, 38, 410, 54), Heading, heading);
+            if (IsBotRace)
+            {
+                GUI.Label(new Rect(66, 97, 350, 28), "BOT RACE / CIRCUIT", small);
+                NightUi.ShadowLabel(new Rect(width - 330, 31, 266, 72), botLap, number);
+                GUI.Label(new Rect(width - 330, 118, 100, 26), "TIME", small);
+                NightUi.ShadowLabel(new Rect(width - 226, 100, 190, 58), botTime, heading);
+                return;
+            }
             // A mission map: no health, laps or clock to show.
             if (Tutorial != null)
             {
@@ -327,10 +463,17 @@ namespace ProtoHarness.ChainRush
 
         private void DrawPlay(float width, float height, float scale)
         {
+            if (IsBotRace && cachedPlace > 0)
+            {
+                // Bottom left (user 2026-11-13): gold, silver and bronze shine, each less than the one above; 4th on is plain white.
+                float wave = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * PlaceShineSpeed);
+                placeNumber.normal.textColor = Color.Lerp(PlaceTint(cachedPlace), Color.white, PlaceShine(cachedPlace) * wave);
+                NightUi.ShadowLabel(new Rect(64, height - 236, 320, 120), botPlace, placeNumber);
+            }
             NightUi.Block(new Rect(66, 163, 300, 4), Row);
             NightUi.Block(new Rect(66, 163, 300 * (Tutorial != null ? Tutorial.StageProgress : game.Progress), 4), Mint);
             if (!game.IsCircuit) GUI.Label(new Rect(66, 185, 460, 26), "ROUTE / " + Mathf.FloorToInt(game.Progress * 496f) + " M", small);
-            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), SpeedText, speedNumber);
+            NightUi.ShadowLabel(new Rect(width - 346, height - 302, 274, 124), IsBotRace ? botSpeed : SpeedText, speedNumber);
             GUI.Label(new Rect(width - 150, height - 169, 90, 26), "KM / H", small);
             int speedMarks = Mathf.CeilToInt(20 * Mathf.Clamp01(player.HorizontalSpeed / Mathf.Max(player.RunSpeed, player.SlingTopSpeed)));
             for (int i = 0; i < 20; i++) NightUi.Block(new Rect(width - 332 + i * 13, height - 125, 9, 5), i < speedMarks ? Mint : Row);
@@ -647,6 +790,7 @@ namespace ProtoHarness.ChainRush
 
         private void DrawResult(float width, float height)
         {
+            if (IsBotRace) { DrawBotResult(width, height); return; }
             NightUi.Backdrop(nightBackground, width, height);
             GUI.Label(new Rect(64, 35, 500, 56), "CHAIN RUSH", heading);
             float left = width * .06f, x = width * .53f, y = height * .22f;
@@ -698,6 +842,28 @@ namespace ProtoHarness.ChainRush
                 UiSound.Play(UiSound.Cue.Confirm);
                 game.StartCountdown();
             }
+        }
+
+        private void DrawBotResult(float width, float height)
+        {
+            NightUi.Backdrop(nightBackground, width, height);
+            GUI.Label(new Rect(64, 35, 500, 56), "CHAIN RUSH", heading);
+            float left = width * .06f, x = width * .49f, y = height * .20f, panelWidth = width * .45f;
+            GUI.Label(new Rect(left, y, width * .40f, 142), "RACE", raceWord);
+            GUI.Label(new Rect(left, y + 118, width * .40f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
+            GUI.Label(new Rect(left + 4, y + 280, width * .38f, 40), "봇전 · 기록과 고스트는 남지 않습니다.", small);
+            NightUi.Surface(new Rect(x, y, panelWidth, 520));
+            NightUi.Block(new Rect(x, y, panelWidth, 3), Mint);
+            GUI.Label(new Rect(x + 34, y + 26, panelWidth - 68, 32), "BOT RACE / RESULTS", small);
+            if (botField != null && botField.HasResult)
+                for (int i = 0; i < botRows.Length; i++)
+                    GUI.Label(new Rect(x + 34, y + 88 + i * 62, panelWidth - 68, 38), botRows[botRowOrder[i]], body);
+            float actionWidth = (panelWidth - 82) / 2f;
+            bool again = game.ManualStart && NightUi.CardButton(new Rect(x + 34, y + 405, actionWidth, 72), "다시 달리기", button, NightUi.CardLook.Action);
+            bool lobby = NightUi.CardButton(new Rect(x + 48 + actionWidth, y + 405, actionWidth, 72), "ESC / 로비로", pauseItem);
+            DrawControls(width, height);
+            if (lobby) { UiSound.Play(UiSound.Cue.Back); assembler.ReturnToLobby(); }
+            else if (again) { UiSound.Play(UiSound.Cue.Confirm); game.StartCountdown(); }
         }
 
         // Below the laps (three at most end at y + 344 of the panel) and above the buttons: this finish against the
@@ -762,6 +928,7 @@ namespace ProtoHarness.ChainRush
 
         private void OnDestroy()
         {
+            if (botField != null) botField.StandingsChanged -= CacheBotStandings;
             if (font != null) Destroy(font);
             if (displayFont != null) Destroy(displayFont);
         }

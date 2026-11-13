@@ -16,6 +16,7 @@ namespace ProtoHarness.ChainRush.Flow
         // Scene name, loaded additively; empty for none.
         public string EnvironmentScene { get; }
         public RaceMode Mode { get; }
+        public int Seed { get; }
         public SpeedClass Speed { get; }
         public RunnerProfile Runner { get; }
         // The track's own road and wall materials; null keeps the race scene's.
@@ -38,13 +39,14 @@ namespace ProtoHarness.ChainRush.Flow
             return opponents[index];
         }
 
-        // The same race with these runners alongside. Only a single race takes opponents.
+        // The same bot race with these runners alongside. An empty lineup cannot race.
         public RaceSetup WithOpponents(params RunnerProfile[] runners)
         {
             if (runners == null) throw new ArgumentNullException(nameof(runners));
             if (Track == null) throw new InvalidOperationException("The setup is empty; build it with its constructor.");
-            if (Mode != RaceMode.Single) throw new InvalidOperationException($"Only a single race takes opponents, not {Mode}.");
+            if (Mode != RaceMode.Bots) throw new ArgumentException($"Only a bot race takes opponents, not {Mode}.");
             if (IsOpponentWorld) throw new InvalidOperationException("An opponent's world has no opponents of its own.");
+            if (runners.Length == 0) throw new ArgumentException("A bot race needs opponents.", nameof(runners));
             if (runners.Length > MaxOpponents)
                 throw new ArgumentOutOfRangeException(nameof(runners), runners.Length, $"A race takes at most {MaxOpponents} opponents.");
             for (int i = 0; i < runners.Length; i++)
@@ -62,6 +64,7 @@ namespace ProtoHarness.ChainRush.Flow
             Title = from.Title;
             EnvironmentScene = environmentScene;
             Mode = from.Mode;
+            Seed = from.Seed;
             Speed = from.Speed;
             Runner = runner;
             Look = look;
@@ -71,7 +74,7 @@ namespace ProtoHarness.ChainRush.Flow
         }
 
         public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner,
-            TrackLook look = null, int firstStage = 0)
+            TrackLook look = null, int firstStage = 0, int seed = 0)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A race needs the track's title for the HUD.", nameof(title));
@@ -84,6 +87,7 @@ namespace ProtoHarness.ChainRush.Flow
             Title = title;
             EnvironmentScene = environmentScene;
             Mode = mode;
+            Seed = seed;
             Speed = speed;
             Runner = runner;
             Look = look;

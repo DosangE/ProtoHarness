@@ -10,6 +10,34 @@
 
 ---
 
+## 2026-11-13 · MP2 단계 A: 봇전 판 — `RaceMode.Bots`, 싱글 안의 타임어택/봇전, 시드로 뽑은 시험 봇 3명, 왼쪽 아래 금·은·동 순위, 봇전은 기록·고스트 없음 (`feature/mp2-bot-race`)
+
+- **결정 (사용자, 2026-11-13)**: 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md` "승인" — 두 단계(A 봇전 판, B 몸싸움)로 나눠 병합하고, 구현은 Codex(`-Write` + Unity MCP), 대조는 Claude. 사용자 답은 요청서 0절이 원본이다. 요지: D9 시드로 무작위 / D10·RaceMode "추가해야한다. 싱글플레이 중 혼자하는건 기록용, 봇은 말그대로 시나리오 모드나 멀티 대신 하는 용이다." / D3b "일단은 시험 봇과 유사하게 … 시험 봇이 쉬움 기준" / D7 (a) 플레이어가 들어오면 끝 / D2b "서로의 방향대로 밀리는 그런 물리 값" / 스윙 중 접촉은 끊긴다 / 출발은 가로 한 줄, 자리는 시드로("a로").
+- **만든 것**
+  - `RaceMode.Bots`(끝에 추가). `RaceSetup.Seed`, `WithOpponents` 는 Bots 만·빈 목록은 `ArgumentException`, 상대 없는 Bots 는 `RaceAssembler` 가 거부.
+  - 시험 봇 `CircuitBot`·`TrackFollower` 를 `Tests/PlayMode/` → `Runtime/ChainRush/Bots/` 로 옮겼다(`git mv`, `.meta` 그대로, 코드는 네임스페이스·`public` 만). `RaceOrder` 를 `Runtime/Net/` → `Runtime/ChainRush/Race/` 로(Net 은 `using` 한 줄씩). `Bots/BotLineup`(static, 시드로 중복 없이 3명, 플레이어 러너 제외).
+  - `RaceField`: 상대마다 입력원을 받는다(키보드 거부), 매 틱 `RaceOrder.Advance(Laps.Progress)`, 순위 = 완주자(결승 틱 순) + 달리는 러너(`RaceOrder` 순위 + 완주자 수), 결과는 `FixedUpdate` 끝에 전원이 그 틱을 마친 뒤 확정(Codex 계획 반박 6-1·6-2). `RaceAssembler`: 상대 입력원 = `CircuitBot`, Bots 면 고스트·주행 추적·기록 저장 없음(D4), 상대 씬은 `sceneLoaded` 로 받는다(MP1 리뷰 넘김).
+  - 로비: 메인 '싱글 레이스' → 새 `Flow/Lobby/SingleModePage`(타임어택 / 봇전, 봇전이면 여기서 시드) → 속도 → 트랙 → 러너. `LobbyMenu.Page.Mode`.
+  - HUD(Bots 만): 왼쪽 아래 서수 순위 — 1st 금 · 2nd 은 · 3rd 동, 흰색 쪽으로 오가는 폭 0.55 / 0.32 / 0.16, 4th 부터 흰색·반짝임 없음(`ChainRushHud.PlaceTint`·`PlaceShine`). 결과 화면 전원 행(순위·이름·시간, 못 들어온 봇은 "진행 중 … m"). 머리 위 이름은 넣었다가 사용자 "빼자" 로 뺐다.
+- **진행에서 생긴 일 (하네스 실험 기록)**
+  - Codex 쓰기 실행 3회 중 끝까지 간 것은 없다: ① `git mv` 6건 거부 — `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용, 승인 정책 `never`(`fatal: Unable to create '…/.git/index.lock': Permission denied`) → Claude 가 이동 ② 질문으로 턴을 끝냄(빈 상대 거부 위치) → Claude 가 답하고 이어 가기 ③ 구현·테스트 시작 뒤 사용 한도(`You've hit your usage limit … try again at 5:39 PM`) → 사용자 "claude가 이어서 작업". 대책 설계는 HANDOFF 2절 7번 "Codex 샌드박스 계약"(단계 A 뒤 `fix/codex-sandbox-contract`, 사용자 "설계대로 단계 뒤에 진행").
+  - 첫 실행의 백그라운드 껍데기가 Codex 가 14:11 에 끝난 뒤에도 36분 "돌고 있음" 으로 남았다(완료 알림 없음) — 같은 대책의 ③.
+  - 사용자가 플레이 중일 때 Claude 가 스크립트를 고쳐, 앞에 있던 에디터가 자동 컴파일 → 플레이 중 도메인 리로드 → `RunnerMotor.IsSwinging` 에서 매 프레임 NRE(`game.Racer` 가 비었다). 코드 결함이 아니다. 스크립트를 고치기 전에 플레이 중인지 먼저 본다.
+- **요청서와 달라진 것 (밝힌다)**
+  - Lap 1칸(STADIUM 보통)은 돌리지 않았다: 봇 코드는 옮기기만 했고 지문 해시가 같아 입력이 같음을 보였으며, 혼자 판 주행 코드는 바뀌지 않았다(VERIFICATION §4-4 Lap 선택 기준).
+  - 테스트 기대가 바뀐 곳: `ChainRushRaceFieldTests` 의 `WithOpponents` 거부 예외 `InvalidOperationException` → `ArgumentException`(모드 검사를 잘못된 인자로, §5), MP1 테스트의 상대 있는 설정 `Single` → `Bots`. 로비를 지나는 `ChainRushFlowTests.Lobby_*` 11건은 모드 페이지를 한 번 더 지나도록 경로만 고쳤다(사용자가 지시한 흐름 변경).
+  - Codex 가 쓴 `ChainRushBotRaceTests` 의 로비 테스트는 로비 출발 뒤 레이스 씬을 기다리지 않아(로비를 레이스로 집었다) 실패했고, 그 로드가 다음 테스트로 새어 서수 테스트 1건이 연쇄 실패했다 — 테스트 결함이라 씬 전환을 기다리게 고쳤다. HUD 결과 행은 결과가 확정된 뒤에만 만들게 바꿨다(그 전에는 봇이 1 m 갈 때마다 안 보이는 문자열을 만들었다).
+- **검증** (에디터 6000.3.19f1, 기준 `f6be824` + 커밋 전 작업 트리, 실행 기록 `tools/test-runs.ps1 -Record`)
+  - ① PlayMode `groupNames = { "ChainRushBotRaceTests", "ChainRushRaceFieldTests", "ChainRushReplayTests\.Replay_CircuitBotRun_RepeatsEveryTickBitForBit", "ChainRushFlowTests\.Race", "ChainRushTutorialTests", "NetReconcileTests", "RaceOrderTests", "RaceStandingsTextTests" }`, `categoryNames = { "!Device", "!Enemy", "!NetEndReplay", "!^Lap$" }` (Codex 가 시작): `testcasecount="105" result="Failed(Child)" total="105" passed="103" failed="2" skipped="0"`, 05:47:26Z ~ 05:50:32Z — 실패는 위 테스트 결함 1건과 연쇄 1건. 지문 로그 `hash 0xEF92FB76BFD1D767` 그대로. 기록 `20261113T054726Z-PlayMode-f6be824.xml`.
+  - 컴파일(테스트 결함·HUD 수정 뒤): `*** Tundra build success (2.02 seconds), 3 items updated, 1618 evaluated`, `error CS` 0.
+  - ② EditMode `groupNames = { "BotLineupTests", "TutorialCourseTests" }`: `testcasecount="24" result="Passed" passed="24" failed="0"`, 05:54:23Z.
+  - ③ PlayMode `ChainRushBotRaceTests`: `testcasecount="21" result="Passed" passed="21" failed="0" skipped="0"`, 05:54:53Z ~ 05:55:14Z.
+  - 플레이 확인 피드백 반영(HUD 위치·색, 이름 제거, 모드 페이지) 뒤 컴파일: `*** Tundra build success (6.22 seconds), 30 items updated, 1618 evaluated`, `error CS` 0.
+  - ④ PlayMode `groupNames = { "ChainRushBotRaceTests", "ChainRushFlowTests\.Lobby_", "ChainRushFlowTests\.Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn", "ChainRushFlowTests\.Race_PauseMenu", "ChainRushFlowTests\.Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter", "ChainRushTutorialTests\.Lobby_" }`, 같은 제외: `testcasecount="45" result="Passed" total="45" passed="45" failed="0" skipped="0"`, 06:11:23Z ~ 06:12:06Z. 기록 `20261113T061123Z-PlayMode-f6be824.xml`.
+  - 영향 평가: `RaceAssembler`·`RaceSetup`·`RaceMode` → 싱글·튜토리얼 조립(`ChainRushFlowTests.Race`, `ChainRushTutorialTests`) / `CircuitBot`·`TrackFollower` 이동 → 지문·`ChainRushRaceFieldTests` / `RaceOrder` 이동 → Net 의 `NetReconcileTests`·`RaceOrderTests`·`RaceStandingsTextTests` / HUD·로비 → `select-tests` 표의 HUD·Lobby 줄. ①의 Flow·튜토리얼·RaceField·Net 통과 뒤 바뀐 것은 HUD·로비·테스트 파일뿐이라 ④ 범위로 다시 돌렸다.
+  - **사용자 플레이 확인** (STADIUM, 봇 3명): "추월 가능했고 그 떄마다 순위도 바뀌었다", 첫 랩 끝 봇 "나왔다", 고친 뒤 "다 잘 나왔다". 겨루는 느낌은 "아직 난이도 디테일이 없으니 나중에 판단해야할것".
+- **남은 것**: 병합 전 리뷰(Codex 설계 리뷰 — 사용 한도가 풀린 뒤, `unity-reviewer`), 단계 B(`feature/mp2-contact` — 틱 분해·밀어내기·충돌 임펄스·가로 한 줄 격자, 최소 너비 규칙 `docs/COURSE.md` §7-2a), 봇 난이도 3단계와 자동 개선 루프(사용자 "추후에 쉬움 포함 난이도 3개 정도").
+
 ## 2026-11-13 · 하네스 비용 기준선: 세션 기록으로 처음 쟀다 · B모드(인덱스)를 라우터에서 내린다 · 세션 경계 한 줄 · C모드는 보류 유지 (`docs/harness-cost-baseline`)
 
 - **배경**: 하네스 실험이 공동 주목적인데(아래 "방향 재설정") 하네스가 무엇에 비용을 쓰는지 잰 적이 없었다. 사용자 "후보에 넣었다면 작업 시작하자"(2026-11-13)로 이 PC 의 Claude Code 세션 기록을 읽어 쟀고, 결과를 보고 "진행해봐" 뒤 질문 대화에서 아래 셋을 골랐다.

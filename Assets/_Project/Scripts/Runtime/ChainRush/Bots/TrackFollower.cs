@@ -3,11 +3,11 @@ using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 
-namespace ProtoHarness.Tests.PlayMode
+namespace ProtoHarness.ChainRush.Bots
 {
     // A test bot that steers toward a centerline: feed-forward for the curve, plus heading and offset
     // correction. Steering off sends Override instead. SwingHold is held as set; SwingPress and ChainAction fire once.
-    internal sealed class TrackFollower : IInputSource
+    public sealed class TrackFollower : IInputSource
     {
         private readonly Centerline line;
         private readonly RunnerMotor runner;

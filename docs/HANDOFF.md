@@ -28,7 +28,10 @@
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
 7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**: `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
-   - **재측정 (2026-11-27 이후)**: `python -I tools/harness-cost.py` 를 `--since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 숫자(요청당 컨텍스트 중앙값·20만 넘는 요청의 입력 몫·조회 분류)와 비교한다. 비교 결과를 같은 항목에 덧붙인다.
+   - **재측정** (사용자 2026-11-13 "다 네 추천대로 ㄱㄱ"): **2026-11-27 이후, 그리고 2026-11-13 이후 시작한 세션이 10개 이상일 때** `python -I tools/harness-cost.py --since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 표와 비교하고, 결과를 같은 항목에 덧붙인다.
+     - 비교할 것: 요청당 컨텍스트 중앙값, 20만 넘는 요청의 입력 몫, 조회 분류. 세션마다 작업 종류(코드·아트·문서)를 붙여 같은 종류끼리 본다.
+     - B모드 부작용: 인덱스를 내린 뒤 `.cs` Read 가 늘었는지 본다(기준선 385).
+     - **먼저 할 것 (도구 변경, §3-2 합의)**: 지금 도구는 세션 경계 규칙(`CLAUDE.md` §8)이 지켜졌는지 세지 않는다 — 보고에 `새 세션 권장:` 이 붙은 횟수와, 그 뒤 실제로 새 세션이 시작됐는지를 지표로 넣는다.
 8. **M7 (v1.0 밖, 다시 열 때 볼 것)**: R2 브랜치의 예측기 고장 기록, P3 C1 마무리 측정(3인 이상·100 ms 체감·패킷 유실·모바일/IL2CPP), 롤백 재실행 중 효과음(`docs/NEXT_REQUESTS.md` RF2 결정 2-1), `NetEndReplay` 테스트 탐색 다시 짜기(`CLAUDE.md` §9-2), C1c 의 따라잡기 S+L 상한 시험. MP1 이 격리 월드라 서버를 공유 월드로 다시 짤 필요는 없어졌다.
 
 ## 3. 사용자에게서 아직 받지 못한 것
@@ -62,6 +65,7 @@
 - **네트워크 레이스** (M7): 도는 중에는 `Unity_RunCommand` 를 부르지 않는다(2026-10-12 예측기 고장). 서버·클라 겸용 플레이어는 `BuildPipeline.BuildPlayer`(서킷 씬만, 출력은 리포 밖 `Path.GetTempPath()/ProtoHarnessRaceBuild/`). 에디터에는 `NetworkManager` 가 프로세스당 하나라 두 번째 클라는 별도 프로세스다.
 - **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`). 커밋하지 않고 파일을 지정해 되돌린다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
 - `Assets/DefaultNetworkPrefabs.asset`(NGO 가 만든 빈 목록)은 커밋돼 있다. `.codex/agents/` 가 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음).
+- **세션 기록 보존**: Claude Code 는 세션 기록(`~/.claude/projects/<리포 경로>/*.jsonl`)을 기본 30일 뒤 지운다(`cleanupPeriodDays`). `tools/harness-cost.py` 의 재측정에 기록이 필요해 사용자 설정 `~/.claude/settings.json` 에 `"cleanupPeriodDays": 365` 를 넣는다 — `C:/Users/User/Desktop/PCUBE` PC 는 2026-11-13 에 넣었고, **`D:/PCUBE` PC 는 아직이다**(그 PC 에서 처음 작업할 때 넣는다. 사용자 설정이라 리포에 없다).
 - `index/symbols.tsv` 는 2026-11-13 부터 선택 도구다(B모드는 코드 `Grep`). SessionStart 훅은 더 이상 인덱스가 낡았다고 알리지 않는다. 쓴다면 먼저 재생성한다(§6-2).
 - 훅 3개(`.claude/settings.json`, DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
 - GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다.

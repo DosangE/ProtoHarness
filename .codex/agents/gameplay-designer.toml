@@ -42,10 +42,10 @@ developer_instructions = '''
 
 ## 읽는 순서
 
-1. `CLAUDE.md` (규칙)와 `docs/RULES/LOOKUP.md` (인덱스를 쓰기 전)
+1. `CLAUDE.md` (규칙)
 2. `docs/DESIGN.md` §5-1 (마일스톤과 완료 조건), `docs/HANDOFF.md` 1절 (대기 중인 플레이 확인), `docs/DECISIONS.md` 의 관련 항목
 3. `docs/COURSE.md` (트랙 설계)
-4. 코드·데이터: `index/symbols.tsv` 헤더의 `git-head` 를 파견문에 적힌 HEAD 와 대조한다. 다르거나 파견문에 HEAD 가 없으면 인덱스를 쓰지 않고 그 사실을 보고한 뒤 Grep 으로 간다. Read 는 최소로 한다.
+4. 코드·데이터: `Grep` 으로 파일 목록부터 찾는다 (CLAUDE.md §6-1 B모드). Read 는 최소로 한다.
 
 ## 금지
 

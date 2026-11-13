@@ -150,6 +150,8 @@ namespace ProtoHarness.Tests.PlayMode
             for (int i = 0; i < 3; i++)
             {
                 Assert.That(Field.OpponentInput(i), Is.TypeOf<CircuitBot>());
+                // The source the opponent's game really steps on, not only the one the field was handed (review 2026-11-13).
+                Assert.That(Field.Opponents[i].Game.InputSource, Is.SameAs(Field.OpponentInput(i)), $"opponent {i}");
                 Assert.That(Field.Opponents[i].Player.Profile, Is.SameAs(first.Opponent(i)));
             }
         }
@@ -243,7 +245,9 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest, Timeout(120000)]
-        public IEnumerator Field_BotPassesThePlayerOnTheFinishTick_ResultUsesItsLastTickDistance()
+        // One bot passes another inside the player's finishing tick, after the player's world has stepped: the result
+        // must take every world's distance after that tick (proposal 6-1), so the passing bot is placed ahead.
+        public IEnumerator Field_BotPassesAnotherOnThePlayersFinishTick_ResultUsesTheLastTickDistance()
         {
             yield return LoadRace();
             yield return StartField();

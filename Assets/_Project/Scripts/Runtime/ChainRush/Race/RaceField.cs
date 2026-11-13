@@ -68,6 +68,7 @@ namespace ProtoHarness.ChainRush.Race
                 if (opponentInputs[i] == null || opponentInputs[i] is KeyboardMouseInputSource)
                     throw new ArgumentException($"Opponent {i} needs an input source of its own, never the keyboard.", nameof(opponentInputs));
                 if (world.Game == playerGame) throw new ArgumentException($"Opponent world {i} is the player's own world.", nameof(opponentWorlds));
+                if (world.Game.Circuit == null) throw new ArgumentException($"Opponent world {i} needs a circuit.", nameof(opponentWorlds));
                 if (world.PhysicsWorld == playerPhysics)
                     throw new ArgumentException($"Opponent world {i} shares the player's physics scene; load it with RaceWorld.IsolatedLoad.", nameof(opponentWorlds));
                 for (int k = 0; k < i; k++)

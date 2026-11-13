@@ -239,7 +239,8 @@ namespace ProtoHarness.ChainRush.Flow
         {
             TrackChoice track = tracks[context.Track];
             var setup = new RaceSetup(track.Definition, track.Title, track.EnvironmentScene, context.Mode,
-                SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look, seed: context.Seed);
+                SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look,
+                seed: context.Mode == RaceMode.Bots ? context.Seed : 0);
             if (context.Mode != RaceMode.Bots) return setup;
             RunnerProfile[] opponents = BotLineup.Pick(runners, setup.Runner, setup.Seed);
             Debug.Log($"ChainRush bot lineup: seed {setup.Seed}", this);

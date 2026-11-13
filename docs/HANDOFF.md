@@ -17,6 +17,7 @@
 ## 2. 다음 작업 (각각 §3-2 요청서부터, 사용자가 고른다)
 
 1. **MP2 물리 AI 상대** — 게임용 봇(시험 봇 `Tests/PlayMode/CircuitBot`·`TrackFollower`·`ShortcutBot` 을 게임 코드로), 러너끼리 직접 밀어내기와 무게(D2a·D2b), 순위 표시(D5, `ChainRushHud` 형식), 출발 격자(D8), 로비 진입(D10). 요청서에서 물을 것: **D9 봇 러너 구성·D10 로비 진입**(권고 없음), D2b 감속 여부, D3b 봇이 쓰는 기술(사용자 67.16 s 대 시험 봇 90.0 s — 시험 봇 수준이면 겨루기가 안 된다는 것이 Claude 판단), D7 끝 규칙, 봇전의 기록·고스트(D4 — 지금은 상대가 있어도 플레이어 월드가 기록을 남긴다). 결정 원본은 `docs/PROPOSAL_M5_AI_OPPONENTS.md` 의 "답:" 칸. MP1 에서 미룬 것: 틱을 "전원 입력 → 전원 이동 → 접촉 → 판정" 으로 나누기(`ChainRushGame` 의 틱 분해, 공개 API 변경).
+   - **하네스 실험을 붙인다 — 봇 실력 자동 개선 루프** (사용자 2026-11-13 "6번은 붙이는거 핸드오프에 넣어줘"): D3b 를 사람이 값을 고르는 대신, 사람은 **목표(랩타임 목표값)와 금지선**(결정성 유지 — 서킷 지문, 봇이 플레이어가 못 하는 입력·정보를 쓰지 않기)만 정하고, 에이전트가 봇 값·전략 변경 → 배치 실행 → 랩타임 기록 → 채택/폐기를 반복한다. 요청서에서 정할 것: 목표값(사용자 67.16 s 기준 몇 %), 반복 상한(횟수·시간), 한 번에 바꾸는 값의 범위, 반복마다 남길 기록(바꾼 값·랩타임·지문)과 위치. 결과는 DECISIONS 에 반복 횟수·처음/마지막 랩타임·폐기 수로 남긴다(2026-11-13 "하네스 비용 기준선" 과 같은 방식).
 2. **캐릭터·모션 아트 요청서** (아트 우선순위 1번, DECISIONS "방향 재설정"): 스타일 유지 여부, 스켈레탈 리그·`Animator` 도입(지금 0파일 — 첫 사례), 5종 범위. 조건 후보: 러너 하나의 렌더러 수(지금 모형 하나 ≈ 150 드로 배치, DECISIONS "MP1 구조" 측정).
 3. **K1 RoadsideKit 남은 트랙**: PALM(판 0.947배, 화살표 3개, 판 어둡고 화살표 노랑) → SUMMIT(1.053배, 병합 트랙). 방법은 `docs/ART_REQUEST_PROPS.md` K1. K5·K2·K7·K6 은 보류.
 4. **측정**: 트랙별 프레임·드로콜(PALM 렌더러 5,361, STADIUM 정점 약 98만, 재지 않음), MP1 복사본 프레임(에디터가 포커스 밖이라 판정 못 함 — Unity 창을 앞에 두고), 플레이어 빌드.
@@ -26,7 +27,8 @@
    - 녹음 리뷰 제안 4건 (DECISIONS 2026-11-09 "녹음을 못 쓰면"): `loadType` 메시지 중복, `Update` 의 `initialized` 가드, `UnloadAudioData`(스윙 원본 약 5 MB), WebGL 의 `GetData`(미확인).
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
-7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**: `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, C모드 재논의(우리 `.cs` 가 §6-3 의 재논의 트리거 60개를 넘었다), SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨.
+7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**: `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
+   - **재측정 (2026-11-27 이후)**: `python -I tools/harness-cost.py` 를 `--since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 숫자(요청당 컨텍스트 중앙값·20만 넘는 요청의 입력 몫·조회 분류)와 비교한다. 비교 결과를 같은 항목에 덧붙인다.
 8. **M7 (v1.0 밖, 다시 열 때 볼 것)**: R2 브랜치의 예측기 고장 기록, P3 C1 마무리 측정(3인 이상·100 ms 체감·패킷 유실·모바일/IL2CPP), 롤백 재실행 중 효과음(`docs/NEXT_REQUESTS.md` RF2 결정 2-1), `NetEndReplay` 테스트 탐색 다시 짜기(`CLAUDE.md` §9-2), C1c 의 따라잡기 S+L 상한 시험. MP1 이 격리 월드라 서버를 공유 월드로 다시 짤 필요는 없어졌다.
 
 ## 3. 사용자에게서 아직 받지 못한 것
@@ -60,7 +62,7 @@
 - **네트워크 레이스** (M7): 도는 중에는 `Unity_RunCommand` 를 부르지 않는다(2026-10-12 예측기 고장). 서버·클라 겸용 플레이어는 `BuildPipeline.BuildPlayer`(서킷 씬만, 출력은 리포 밖 `Path.GetTempPath()/ProtoHarnessRaceBuild/`). 에디터에는 `NetworkManager` 가 프로세스당 하나라 두 번째 클라는 별도 프로세스다.
 - **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`). 커밋하지 않고 파일을 지정해 되돌린다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
 - `Assets/DefaultNetworkPrefabs.asset`(NGO 가 만든 빈 목록)은 커밋돼 있다. `.codex/agents/` 가 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음).
-- `index/symbols.tsv` 는 헤더의 `git-head` 뒤 커밋이 생기면 낡는다. SessionStart 훅이 알린다. B모드 전에 재생성한다(§6-2).
+- `index/symbols.tsv` 는 2026-11-13 부터 선택 도구다(B모드는 코드 `Grep`). SessionStart 훅은 더 이상 인덱스가 낡았다고 알리지 않는다. 쓴다면 먼저 재생성한다(§6-2).
 - 훅 3개(`.claude/settings.json`, DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
 - GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다.
 - 서브에이전트는 `.claude/agents/*.md` frontmatter 의 `model`·`effort` 가 원본이다(DECISIONS 2026-10-10 "서브에이전트 모델·노력 고정").

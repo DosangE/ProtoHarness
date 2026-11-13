@@ -19,7 +19,7 @@ effort: high
 ## 작업 순서
 
 1. `docs/ARCHITECTURE.md` 를 먼저 읽어 현재 기록된 상태를 파악한다.
-2. `index/symbols.tsv` 로 실제 타입/의존을 확인한다. 인덱스가 낡았거나(git-head 불일치) 비었으면 그 사실을 먼저 보고한다.
+2. 코드 `Grep` 으로 실제 타입/의존을 확인한다 (CLAUDE.md §6-1 B모드). `index/symbols.tsv` 를 쓴다면 `docs/RULES/LOOKUP.md` §6-2 의 신선도 확인을 먼저 한다.
 3. 문서와 코드가 다르면 **문서가 틀린 것**이다. 문서를 고친다.
 
 ## 문서 규칙

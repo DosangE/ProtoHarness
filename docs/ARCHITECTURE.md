@@ -99,9 +99,9 @@ CharacterController.Move로 충돌을 처리하고, `RunnerMotor.Step`에서 중
 | 결정 이력 | `docs/DECISIONS.md`(이번 달) + `docs/archive/DECISIONS-<YYYY-MM>.md`(지난 달, 날짜로 찾는다) |
 | 인계 | `docs/HANDOFF.md` — 다음 세션이 이어받을 일만 |
 | 설계·로드맵 | `docs/DESIGN.md` (§5-1 마일스톤), 다음 작업 요청서 묶음 `docs/NEXT_REQUESTS.md` |
-| 심볼 인덱스 (B모드) | `index/symbols.tsv` — 생성물, `tools/reindex.ps1` 로 재생성 |
+| 심볼 인덱스 (선택 도구) | `index/symbols.tsv` — 생성물, `tools/reindex.ps1` 로 재생성. 2026-11-13 부터 조회 라우터의 첫 조회가 아니다(`CLAUDE.md` §6-1) |
 | 서브에이전트 정의 | `.claude/agents/*.md` (7종) |
-| 인덱스 재생성 | `tools/reindex.ps1` |
+| 하네스 비용 측정 | `tools/harness-cost.py` — 이 PC 의 Claude Code 세션 기록에서 토큰·조회·파견·훅 지표를 뽑는다. 읽기만 한다 |
 | 테스트 실행 기록 | `tools/test-runs.ps1` — `-Record` 로 실행마다 남기고 `-Last -Passed` 로 그 뒤 바뀐 `Assets/` 를 본다. 기록은 리포 밖(이 PC 의 `LOCALAPPDATA`) |
 | 게임 씬 | 플레이: `ChainRushTitle.unity` 에서 Play(타이틀 → 로비 → 달리는 씬). 달리는 씬 `ChainRushCircuit.unity` 를 바로 열면 저장된 대로 돈다. 테스트 작업대: `ChainRushTestBench.unity` |
 | 처음 만들기 | Unity 메뉴 `ProtoHarness > Chain Rush > Create Test Bench Scene` (작업대), `Create Circuit Scene` (서킷), `Create <트랙> Track` (트랙 정의), `Create/Rebuild <트랙> Exterior` (장식). 기존 게임 씬을 덮어쓰지 않는다. |

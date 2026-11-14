@@ -58,15 +58,42 @@ $config = Join-Path $codexHome 'config.toml'
 if (-not (Test-Path -LiteralPath $config)) { throw "codex-unity: no Codex config at $config" }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
+# A table header line may end in a comment ("[a.b] # note" is valid TOML).
+$headerEnd = '\][ \t]*(?:#[^\r\n]*)?\r?\n'
+
 function Test-Open {
     $text = [System.IO.File]::ReadAllText($config, $utf8)
     $text.Contains($begin) -or $text.Contains($inline)
 }
 
+# Every read-check-write of the config runs under one lock per user session, so two runs starting together cannot both see a
+# closed config and both open it, and a run cannot close while another opens (Codex review 2026-11-14). A run killed while
+# holding it leaves the mutex abandoned, which the next run takes over.
+function Invoke-Locked([scriptblock]$body) {
+    $mutex = New-Object System.Threading.Mutex($false, 'Local\protoharness-codex-unity')
+    $held = $false
+    try {
+        try { $held = $mutex.WaitOne(30000) } catch [System.Threading.AbandonedMutexException] { $held = $true }
+        if (-not $held) { throw "codex-unity: another run held the config lock for 30 s. Check with -Status." }
+        & $body
+    }
+    finally {
+        if ($held) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+}
+
+# Written to a side file and moved over the config, so a run killed mid-write never leaves half a config behind.
+function Write-Config([string]$text) {
+    $temp = "$config.codex-unity.tmp"
+    [System.IO.File]::WriteAllText($temp, $text, $utf8)
+    Move-Item -LiteralPath $temp -Destination $config -Force
+}
+
 # The one MCP server whose table has a line matching $door.Find (the Unity relay, the mcp-for-blender package). None or
 # several is a fault to fix by hand, not a guess to make.
 function Get-Server([string]$text, [hashtable]$door) {
-    $pattern = '(?m)^\[mcp_servers\.([^\].]+)\][ \t]*\r?\n(?:(?!\[)[^\r\n]*\r?\n)*?' + $door.Find
+    $pattern = '(?m)^\[mcp_servers\.([^\].]+)' + $headerEnd + '(?:(?!\[)[^\r\n]*\r?\n)*?' + $door.Find
     $found = @([regex]::Matches($text, $pattern) | ForEach-Object { $_.Groups[1].Value })
     if ($found.Count -ne 1) { throw "codex-unity: expected one $($door.What) server in $config, found $($found.Count): $($found -join ', ')" }
     $found[0]
@@ -74,6 +101,7 @@ function Get-Server([string]$text, [hashtable]$door) {
 
 # Opens every door in $doors in one write, under one owner: a door that fails to open leaves the file as it was.
 function Open-Door([hashtable[]]$doors) {
+    Invoke-Locked {
     if (Test-Open) { throw "codex-unity: the block is already in $config. Another run, or a run that was killed: check, then -Close." }
     $text = [System.IO.File]::ReadAllText($config, $utf8)
     if (-not $text.EndsWith("`n")) { $text += "`n" }
@@ -82,12 +110,12 @@ function Open-Door([hashtable[]]$doors) {
         $server = Get-Server $text $door
         if ($door.Enable) {
             # The server's own enabled line, before any sub-table ([mcp_servers.<name>.env] and the like).
-            $enabled = '(?m)(^\[mcp_servers\.' + [regex]::Escape($server) + '\][ \t]*\r?\n(?:(?!\[)[^\r\n]*\r?\n)*?)enabled[ \t]*=[ \t]*(true|false)[ \t]*(?=\r?$)'
+            $enabled = '(?m)(^\[mcp_servers\.' + [regex]::Escape($server) + $headerEnd + '(?:(?!\[)[^\r\n]*\r?\n)*?)enabled[ \t]*=[ \t]*(true|false)[ \t]*(?=\r?$)'
             if (-not [regex]::IsMatch($text, $enabled)) { throw "codex-unity: $server has no plain enabled line. Fix it by hand." }
             $text = [regex]::Replace($text, $enabled, '${1}enabled = true ' + "$inline $PID was " + '$2')
         }
         foreach ($tool in $door.Tools) {
-            $table = '(?m)^(\[mcp_servers\.' + [regex]::Escape($server) + '\.tools\.' + $tool + '\][ \t]*\r?\n)'
+            $table = '(?m)^(\[mcp_servers\.' + [regex]::Escape($server) + '\.tools\.' + $tool + $headerEnd + ')'
             if (-not [regex]::IsMatch($text, $table)) { $lines += "[mcp_servers.$server.tools.$tool]", 'approval_mode = "approve"'; continue }
             $value = $table + 'approval_mode[ \t]*=[ \t]*"(\w+)"[ \t]*(?=\r?$)'
             if (-not [regex]::IsMatch($text, $value)) { throw "codex-unity: $server's $tool table does not start with a plain approval_mode. Fix it by hand." }
@@ -95,10 +123,18 @@ function Open-Door([hashtable[]]$doors) {
         }
     }
     if ($lines.Count -gt 2) { $text += (($lines + $end) -join "`n") + "`n" }
-    [System.IO.File]::WriteAllText($config, $text, $utf8)
+    Write-Config $text
+    }
 }
 
-function Close-Door {
+# Closes the block. With $owner, only when that run still owns it (a run's finally and the watcher); 0 closes whatever is
+# there (-Close, by hand).
+function Close-Door([int]$owner = 0) {
+    Invoke-Locked {
+    if ($owner -gt 0 -and (Get-Owner) -ne $owner) {
+        [Console]::Error.WriteLine("codex-unity: the block in $config is not run $owner's (owner $(Get-Owner)); left as it is.")
+        return
+    }
     $text = [System.IO.File]::ReadAllText($config, $utf8)
     $text = [regex]::Replace($text, 'approval_mode = "approve" ' + [regex]::Escape($inline) + ' \d+ was (\w+)', 'approval_mode = "$1"')
     $text = [regex]::Replace($text, 'enabled = true ' + [regex]::Escape($inline) + ' \d+ was (true|false)', 'enabled = $1')
@@ -110,7 +146,8 @@ function Close-Door {
         if ($to -lt $text.Length -and $text[$to] -eq "`n") { $to++ }
         $text = $text.Remove($from, $to - $from)
     }
-    [System.IO.File]::WriteAllText($config, $text, $utf8)
+    Write-Config $text
+    }
 }
 
 # The block's owner, so a watcher that wakes late never closes a later run's block.
@@ -237,7 +274,7 @@ function Invoke-Node([string[]]$argv) {
 
 if ($Watch -gt 0) {
     Wait-Process -Id $Watch -ErrorAction SilentlyContinue
-    if ((Get-Owner) -eq $Watch) { Close-Door }
+    if ((Get-Owner) -eq $Watch) { Close-Door $Watch }
     if ($WatchResult -and -not (Test-Path -LiteralPath $WatchResult)) {
         Write-Result $WatchResult @{ code = 13; kind = 'killed'; reason = "codex-unity process $Watch ended without writing a result. Check Codex is not still running." }
     }
@@ -300,7 +337,7 @@ catch {
 }
 finally {
     # Only a block this run opened is closed: without -Unity/-Blender, or when Open-Door refused, another run's block is not ours to take.
-    try { if ($opened) { Close-Door } }
+    try { if ($opened) { Close-Door $PID } }
     catch {
         if ($null -eq $result) { $result = @{ code = 13; kind = 'error'; reason = '' } }
         $result.code = 13; $result.kind = 'error'

@@ -32,6 +32,8 @@
   - 쓰기 실행: 러너 아트 2차(같은 날 "러너 캐릭터 아트") — `p2a` 코드 12(요청서 모순을 찾아 멈춤), `p2b` `-ResumeLast` 코드 0, `p3` OMEGA 수정. 세이프 모드 거부 1회(`as_pointer`)는 Codex 가 다시 써서 해결.
 - **발견 (고치지 않았다)**: 이 PC 의 Codex 설정에 Unity relay 서버가 둘(`unity_mcp`, `unity-mcp`)이라 `-Unity` 는 "expected one Unity relay server … found 2" 로 실패한다(서버 찾기 패턴은 `dev` 와 같다). 사용자 설정이라 손대지 않고 사용자에게 물었다.
 - **버린 대안**: (나) Codex 가 Blender 스크립트만 쓰고 `blender-artist` 가 실행 — Codex 가 결과를 보지 못한다. (다) `blender-artist` 그대로 — 사용자 지시와 다르다. 서버를 늘 켜 두고 도구 승인만 여닫기 — 닫힌 동안 `search_assets`·`generate_3d` 같은 도구가 목록에 보이고, 승인 정책이 바뀌면 그대로 열린다.
+- **Codex 설계 리뷰** (`adversarial-review --base dev`, 판정 needs-attention, 3건 모두 반영 — 셋 다 `-Unity` 경로에도 있던 결함이다): ① [high] 열림 검사와 쓰기 사이에 잠금이 없어 동시에 시작한 두 실행이 둘 다 열고, 먼저 끝난 쪽이 소유 확인 없이 남의 문을 닫는다 → 검사·쓰기·복원을 `Local\protoharness-codex-unity` 뮤텍스로 묶고, finally·감시 프로세스의 `Close-Door` 는 소유자가 자기일 때만 닫는다(`-Close` 는 강제) ② [high] 설정을 제자리에 덮어써 쓰는 중 종료되면 끝 표지 없는 파일이 남고 `-Close` 도 실패한다 → 임시 파일에 쓰고 옮긴다(`Write-Config`) ③ [medium] `[…tools.look] # 메모` 처럼 주석이 붙은 표 머리를 못 찾아 같은 표를 하나 더 만든다 → 표 머리 끝에 주석을 허용(`$headerEnd`). TOML 파서로 결과를 검증하라는 권고는 하지 않았다(PowerShell 5.1 에 파서가 없다 — 형식이 다르면 지금처럼 쓰기 전에 오류로 멈춘다).
+  - 반영 뒤 시험(설정 사본): 6개 프로세스가 동시에 열기 → 1개 `ok`·5개 `refused`, 소유자 아닌 닫기는 남겨 두고 오류 줄, 주석 머리 표는 1개 그대로(`prompt` → `approve` → `prompt`), 임시 파일 남지 않음, Unity 단독·Unity + Blender 열고 닫으면 원본과 같다. 실제 Codex `-Blender` 읽기 실행 1회(`allow4`, 17:21) 코드 0 · `get_addon_status` 성공 · 뒤에 `closed`.
 - **병합 (문서 검증)**: (병합할 때 채운다)
 
 ---

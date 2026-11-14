@@ -3,7 +3,8 @@
 # minutes instead of at the wait's cap (docs/RULES/SUBAGENTS.md §7-5 "기다리기", DECISIONS 2026-11-14 "Codex 무활동 알림").
 #
 # What counts as activity, checked every -PollSeconds:
-#   - the byte size of today's and yesterday's Codex session logs (<CODEX_HOME>/sessions/yyyy/MM/dd/*.jsonl). The size, not
+#   - the byte size of this run's Codex session log (<CODEX_HOME>/sessions/yyyy/MM/dd/*.jsonl, today's and yesterday's;
+#     which log is this run's: see -Thread). The size, not
 #     the time: Windows does not update the modified time of a file another process keeps open (measured 2026-11-14:
 #     2,765,103 -> 2,776,397 bytes in 20 s while the time stayed at the run's start);
 #   - the byte size of the Unity Editor log (the run compiles and tests through Unity MCP);
@@ -31,6 +32,10 @@ param(
     [double]$CapMinutes = 90,
     [double]$PollSeconds = 30,
     [string[]]$Watch = @(),
+    # The thread id of the run to watch (a -ResumeLast run continues the thread named in the earlier result's threadId).
+    # Without it, only session logs created from two minutes before this script started count: the new thread of a run
+    # launched just before. Other Codex sessions write logs too, and counting them would hide this run going quiet.
+    [string]$Thread,
     [string]$SessionsRoot,
     [string]$EditorLog,
     [string]$Repo
@@ -63,9 +68,14 @@ function Get-SessionLogs {
     }
 }
 
+$started = Get-Date
+function Get-TargetLogs {
+    @(Get-SessionLogs) | Where-Object { if ($Thread) { $_.Name -like "*$Thread*" } else { $_.CreationTime -ge $started.AddMinutes(-2) } }
+}
+
 function Get-Signature {
     $sessionBytes = 0L
-    foreach ($log in @(Get-SessionLogs)) { $sessionBytes += $log.Length }
+    foreach ($log in @(Get-TargetLogs)) { $sessionBytes += $log.Length }
     $editorBytes = if (Test-Path -LiteralPath $EditorLog -PathType Leaf) { (Get-Item -LiteralPath $EditorLog).Length } else { -1L }
     $watched = foreach ($path in $Watch) { if (Test-Path -LiteralPath $path -PathType Leaf) { (Get-Item -LiteralPath $path).Length } else { -1L } }
     # stderr is not redirected: Windows PowerShell 5.1 turns redirected native stderr into errors that 'Stop' throws on.
@@ -76,8 +86,8 @@ function Get-Signature {
 
 # The last few kilobytes of the newest session log, for the event types the run stopped on.
 function Get-LastEvents {
-    $newest = @(Get-SessionLogs) | Sort-Object CreationTime -Descending | Select-Object -First 1
-    if ($null -eq $newest) { return '(no session log found)' }
+    $newest = @(Get-TargetLogs) | Sort-Object CreationTime -Descending | Select-Object -First 1
+    if ($null -eq $newest) { return '(no session log of this run; a review has none - see its -Watch file)' }
     $stream = [System.IO.File]::Open($newest.FullName, 'Open', 'Read', 'ReadWrite')
     try {
         $take = [int][Math]::Min(8192L, $stream.Length)
@@ -107,6 +117,8 @@ while ($true) {
         exit 4
     }
     Start-Sleep -Milliseconds ([int]($PollSeconds * 1000))
+    # A result that landed during the sleep wins over a quiet spell that also ended during it.
+    if (Test-Path -LiteralPath $Result -PathType Leaf) { continue }
     $now = Get-Signature
     if ($now -ne $last) {
         $last = $now

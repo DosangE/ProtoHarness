@@ -121,6 +121,30 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.Game.IsCountingDown, Is.True, "The race counts in once the field is gathered.");
             Assert.That(player.Player.Profile, Is.SameAs(Profile("Alpha")));
 
+            const float GridToleranceMetres = 0.001f;
+            const float BodyDiameterMetres = 0.76f;
+            int[] slots = StartGrid.Assign(field.RacerCount, assembler.Setup.Seed);
+            var starts = new Vector3[field.RacerCount];
+            void AssertGridSlot(RaceWorld world, int racer, string which)
+            {
+                Vector2 offset = StartGrid.Slot(world.Circuit.Definition, field.RacerCount, slots[racer]);
+                TrackFrame frame = world.Game.Track.FrameAt(-offset.x);
+                Vector3 expected = frame.TransformPoint(new Vector3(offset.y, 0f, 0f));
+                Vector3 actual = world.Player.transform.position;
+                TrackCoord coordinate = world.Game.Track.Project(actual);
+                Assert.That(coordinate.S, Is.EqualTo(-(double)offset.x).Within(GridToleranceMetres), which + " stands on its grid slot (S).");
+                Assert.That(coordinate.D, Is.EqualTo(offset.y).Within(GridToleranceMetres), which + " stands on its grid slot (D).");
+                var horizontalError = new Vector2(actual.x - expected.x, actual.z - expected.z);
+                Assert.That(horizontalError.magnitude, Is.LessThanOrEqualTo(GridToleranceMetres), which + " stands on its grid slot (horizontal error).");
+                starts[racer] = actual;
+                for (int other = 0; other < racer; other++)
+                {
+                    var separation = new Vector2(actual.x - starts[other].x, actual.z - starts[other].z);
+                    Assert.That(separation.magnitude, Is.GreaterThanOrEqualTo(BodyDiameterMetres), which + " stands at least one body diameter from racer " + other + ".");
+                }
+            }
+            AssertGridSlot(player, 0, "player");
+
             var physics = new List<PhysicsScene> { player.PhysicsWorld };
             for (int i = 0; i < field.Opponents.Count; i++)
             {
@@ -135,7 +159,7 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(world.Game.SelfStepping, Is.False, which);
                 Assert.That(world.Game.ManualStart, Is.False, which);
                 Assert.That(world.Game.IsReady, Is.True, which + " waits on the start line.");
-                Assert.That(world.Player.transform.position, Is.EqualTo(player.Player.transform.position), which + " stands where a race starts.");
+                AssertGridSlot(world, i + 1, which);
 
                 RaceAssembler its = Find<RaceAssembler>(world.Scene);
                 Assert.That(its.Setup.IsOpponentWorld, Is.True, which);
@@ -238,6 +262,9 @@ namespace ProtoHarness.Tests.PlayMode
         {
             yield return LoadRace(Setup());
             Time.timeScale = 0f;
+            // D11/MP2: compare the same grid slot with contact disabled; solo's default start stays unchanged.
+            int playerSlot = StartGrid.Assign(4, Setup(RaceMode.Bots).Seed)[0];
+            player.Circuit.UseStartSlot(4, playerSlot);
             var log = new InputLog();
             var recorder = new InputRecorder(Bot(player), log);
             player.Game.SetInputSource(recorder);
@@ -253,6 +280,7 @@ namespace ProtoHarness.Tests.PlayMode
 
             yield return LoadRace(Setup(RaceMode.Bots).WithOpponents(Profile("Beta"), Profile("Theta"), Profile("Delta")));
             RaceField field = assembler.Field;
+            field.ContactEnabled = false;
             foreach (RaceWorld world in field.Opponents) world.Game.SetInputSource(Bot(world));
             StateTrace together = Trace(player, new InputReplay(log));
             player.Game.SetInputSource(together);
@@ -260,10 +288,10 @@ namespace ProtoHarness.Tests.PlayMode
             int checkedTicks = 0;
             Action<int> onTick = tick =>
             {
-                // Raised inside the field's step, after the player's tick and before the opponents': they are one behind.
+                // D11: all inputs and movements have run before the first runner's judgment completes.
                 checkedTicks++;
                 foreach (RaceWorld world in field.Opponents)
-                    if (world.Game.IsRunning && world.Game.Tick != tick - 1) outOfStep++;
+                    if (world.Game.IsRunning && world.Game.Tick != tick) outOfStep++;
             };
             player.Game.TickCompleted += onTick;
             try
@@ -282,7 +310,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.Game.Tick, Is.GreaterThan(BotTicks), "The race did not run long enough.");
             Assert.That(field.enabled, Is.True, "The field stopped the race.");
             Assert.That(checkedTicks, Is.GreaterThan(BotTicks));
-            Assert.That(outOfStep, Is.EqualTo(0), "An opponent was not one tick behind the player inside the step.");
+            Assert.That(outOfStep, Is.EqualTo(0), "An opponent was not on the same tick during judgment.");
             for (int i = 0; i < field.Opponents.Count; i++)
             {
                 RaceWorld world = field.Opponents[i];

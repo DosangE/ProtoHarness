@@ -39,6 +39,7 @@ namespace ProtoHarness.ChainRush.Race
         private List<(double Start, double End)> gaps;
         private bool initialized;
         private double lastS;
+        private float? startBack;
 
         // The race's state between ticks: the lap counter and where the runner was last seen.
         public struct Snapshot
@@ -144,13 +145,21 @@ namespace ProtoHarness.ChainRush.Race
         // A new race: the clock is at tick 0 and the runner is on the start slot.
         public void ResetRace()
         {
-            lastS = -definition.StartSlot(0);
+            lastS = -(startBack ?? definition.StartSlot(0));
             counter.Begin(lastS, 0);
             track.SetFocus(lastS);
             MaxStepMilliseconds = 0d;
         }
 
         public Snapshot Capture() => new Snapshot { Laps = counter.Capture(), LastS = lastS };
+
+        public void UseStartSlot(int count, int slot)
+        {
+            if (game.IsRunning || game.IsPaused) throw new InvalidOperationException("CircuitRace: set the start slot before the run.");
+            Vector2 offset = StartGrid.Slot(definition, count, slot);
+            startBack = offset.x;
+            player.UseStartPosition(track.FrameAt(-offset.x).TransformPoint(new Vector3(offset.y, 1.05f, 0f)));
+        }
 
         public void Restore(in Snapshot snapshot)
         {

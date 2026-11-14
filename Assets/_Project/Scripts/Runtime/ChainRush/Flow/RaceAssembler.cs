@@ -298,6 +298,14 @@ namespace ProtoHarness.ChainRush.Flow
                 worlds.Add(world);
                 inputs.Add(new CircuitBot(world.Game, world.Player, world.Grapple, world.Circuit));
             }
+            if (setup.Mode == RaceMode.Bots)
+            {
+                int count = worlds.Count + 1;
+                int[] slots = StartGrid.Assign(count, setup.Seed);
+                circuit.UseStartSlot(count, slots[0]);
+                game.ReturnToStart();
+                for (int i = 0; i < worlds.Count; i++) worlds[i].Circuit.UseStartSlot(count, slots[i + 1]);
+            }
             field = gameObject.AddComponent<RaceField>();
             try
             {

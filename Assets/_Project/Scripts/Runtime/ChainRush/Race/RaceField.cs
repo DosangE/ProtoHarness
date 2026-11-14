@@ -7,9 +7,7 @@ namespace ProtoHarness.ChainRush.Race
 {
     // A race of several runners, each in a world of its own (RaceWorld; DECISIONS 2026-11-12 "MP1 구조"): the player's
     // game and one isolated copy of the race scene for every opponent. No game steps itself here (SelfStepping off);
-    // every FixedUpdate the field steps all of them one tick, the player's first and then the opponents in their order,
-    // so all of them are always on the same tick. The worlds do not touch (contact between runners comes with MP2), so
-    // each run is exactly the run it would be alone.
+    // every FixedUpdate runs everyone's input, everyone's movement, contact, then everyone's judgment on the same tick.
     // The opponents follow the player's game: they stand on the start line while it is ready or counting down, start
     // on the tick it starts, and are paused while it is paused. Once the player's run has ended nobody is stepped.
     // RaceAssembler adds the field when the opponents' worlds are loaded.
@@ -25,6 +23,17 @@ namespace ProtoHarness.ChainRush.Race
         private int[] finishTicks;
         private double[] progress;
         private bool[] ended;
+        private bool[] stepping;
+        private RunnerMotor[] contactMotors;
+        private Vector3[] contactPositions;
+        private Vector3[] contactVelocities;
+        private float[] contactRadii;
+        private float[] contactHeights;
+        private float[] contactWeights;
+        private Vector3[] contactMoves;
+        private Vector3[] contactChanges;
+        private Vector3[] contactWallNormals;
+        public bool ContactEnabled { get; set; } = true;
         // Match the existing running-order hysteresis (RaceServer); finishers are ranked separately below.
         private const double OrderMarginMetres = 1d;
 
@@ -84,6 +93,16 @@ namespace ProtoHarness.ChainRush.Race
             finishTicks = new int[RacerCount];
             progress = new double[RacerCount];
             ended = new bool[RacerCount];
+            stepping = new bool[RacerCount];
+            contactMotors = new RunnerMotor[RacerCount];
+            contactPositions = new Vector3[RacerCount];
+            contactVelocities = new Vector3[RacerCount];
+            contactRadii = new float[RacerCount];
+            contactHeights = new float[RacerCount];
+            contactWeights = new float[RacerCount];
+            contactMoves = new Vector3[RacerCount];
+            contactChanges = new Vector3[RacerCount];
+            contactWallNormals = new Vector3[RacerCount];
             game.SelfStepping = false;
             for (int i = 0; i < opponents.Length; i++)
             {
@@ -127,8 +146,10 @@ namespace ProtoHarness.ChainRush.Race
                 }
                 staged = false;
             }
-            game.StepTick();
-            for (int i = 0; i < opponents.Length; i++) opponents[i].Game.StepTick();
+            for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
+            for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick();
+            if (ContactEnabled) ResolveContact();
+            for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].JudgeTick();
             int tick = game.Tick;
             for (int i = 0; i < opponents.Length; i++)
             {
@@ -140,6 +161,35 @@ namespace ProtoHarness.ChainRush.Race
                 return;
             }
             CollectStandings();
+        }
+
+        private void ResolveContact()
+        {
+            // Pack only running racers, preserving their field index order, into a prefix of the cached arrays.
+            Array.Clear(contactWallNormals, 0, contactWallNormals.Length);
+            for (int pass = 0; pass < 3; pass++)
+            {
+                int count = 0;
+                for (int i = 0; i < RacerCount; i++)
+                {
+                    if (!games[i].IsRunning) continue;
+                    RunnerMotor motor = games[i].Player;
+                    contactMotors[count] = motor;
+                    contactPositions[count] = motor.ContactCenter;
+                    contactVelocities[count] = motor.Velocity;
+                    contactRadii[count] = motor.ContactRadius;
+                    contactHeights[count] = motor.ContactHeight;
+                    if (motor.Profile == null) throw new InvalidOperationException("RaceField: contact needs a configured runner profile.");
+                    contactWeights[count++] = motor.Profile.Weight;
+                }
+                RunnerContact.Solve(contactPositions, contactVelocities, contactRadii, contactHeights, contactWeights,
+                    RunnerContact.Restitution, contactMoves, contactChanges, count, contactWallNormals);
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3 wall = contactMotors[i].ApplyContact(contactMoves[i], contactChanges[i]);
+                    if (wall != Vector3.zero) contactWallNormals[i] = wall;
+                }
+            }
         }
 
         private void ResetStandings()

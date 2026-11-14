@@ -10,6 +10,15 @@
 
 ---
 
+## 2026-11-14 · Codex 직접 사용 때 Blender MCP: 설정은 `false` 그대로, 세션만 `codex -c mcp_servers.blender.enabled=true` (`docs/codex-direct-blender`)
+
+- **결정 (사용자, 2026-11-14)**: Claude 한도가 차거나 토큰이 한쪽에 몰릴 때 Codex 에 Blender 작업을 직접 시키려고 사용자가 `~/.codex/config.toml` 의 `[mcp_servers.blender]` 를 `enabled = true` 로 바꿔 두었다(설정이 `false` 면 Codex 가 "enabled 를 바꿔야 한다" 고 한다 — 서버가 도구 목록에 없어서다). Claude 가 `-c` 로 세션만 켜는 안을 추천, 사용자 "네 추천대로 하겠다", 합의 요청서에 "ㄱㄱ". 설정은 같은 날 `false` 로 되돌렸다.
+- **바꾼 것**: `docs/RULES/SUBAGENTS.md` §7-5 Blender MCP 줄에 하위 항목 하나(직접 사용 때 `-c`·`-p`, 설정 파일은 손대지 않음, Blender 는 하나).
+- **실측 (codex-cli 0.165.0, 이 PC)**: `codex --help` 의 `-c, --config <key=value>` "Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`", `-p, --profile` "Layer $CODEX_HOME/<name>.config.toml on top of the base user config". 설정 `true` 일 때 `codex -c mcp_servers.blender.enabled=false mcp list` → `blender … disabled`, 설정 `false` 로 되돌린 뒤 `codex mcp list` → `disabled`, `codex -c mcp_servers.blender.enabled=true mcp list` → `enabled`.
+- **확인 못 한 것**: `-c` 로 띄운 대화형 세션에서 Blender 도구가 실제로 불리는지(`mcp list` 표시만 봤다), Codex 데스크톱 앱에서 같은 덮어쓰기가 되는지. 사용자가 처음 써 볼 때 결과를 이 항목에 적는다.
+- **버린 대안**: 설정을 늘 `true` 로 두고 비용 도구만 막기 — 2026-11-14 "Codex 의 Blender MCP" 가 이미 버린 안(닫힌 동안 도구가 목록에 보이고 승인 정책이 바뀌면 열린다)이고, 도구별 차단 설정이 되는지는 확인하지 않았다. 직접 쓸 때마다 설정 파일을 고쳤다 되돌리기 — 잊으면 켜진 채 남는다(이번이 그 경우).
+- **함께 드러난 것**: `feature/art-runner-blockout` 은 `-Blender` 가 `dev` 에 들어오기 전(`f6be824`)에 갈라져 그 브랜치의 `tools/codex-unity.ps1` 에 `-Blender` 가 없다. OMEGA 바이저 작업은 `git show dev:tools/codex-unity.ps1` 을 scratchpad 로 꺼내 실행했다(코드 0 `done`). 스크립트 결함이 아니라 브랜치가 뒤처진 것이라 고치지 않는다.
+
 ## 2026-11-14 · 러너 캐릭터 아트: 블록아웃 B(2.5등신) · 리그 1개 + 단단한 스킨 · 렌더러 1·머티리얼 2 · 클립 8(+1) · 5종은 같은 뼈대에 색·겉장식만 (`feature/art-runner-blockout`)
 
 - **결정 (사용자, 2026-11-14, 요청서 `docs/ART_REQUEST_RUNNER.md` 0절이 원본)**: Q1 B 확정, 얼굴 "두가지 다" / Q2 리그 + 키 포즈 클립을 지금, 뼈를 코드로 돌릴지(b)·Animator(c)는 Unity 반영 요청서에서 / Q3 "몸체 기본 뼈대는 동일하되 색, 겉장식만" / Q4 러너 하나 렌더러 1·머티리얼 2·삼각형 3,000 이하 / Q5 봉 스윙·부스트 추가, 실패 숙임 대신 충돌 움찔("벽 충돌 혹은 플레이어끼리 충돌") / Q6 `art-src/Runner/`. 1차 뒤: 발 접지 고치기, ALPHA 발광 민트, 발목 고정(①)·발바닥 수평(②) "두가지 버전 다", 2차는 ①② 둘 다 + 봉 스윙 대안 `Runner_PoleSwingEdge`, 장식 치수는 Claude 추천, "codex로 구현하라"(위 항목), OMEGA 어깨판은 "추천대로" 0.04 m.

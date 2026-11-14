@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System.Collections;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;

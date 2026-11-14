@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System;
 using System.Collections;
 using System.Diagnostics;

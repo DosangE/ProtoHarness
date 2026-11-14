@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System;
 using System.Collections;
 using System.IO;
@@ -118,6 +119,10 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Confirm();
+            // Time attack or bots first (user 2026-11-13); the page opens on time attack.
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
+            Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.SingleModePage.TimeAttackRow));
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             Assert.That(menu.Cursor, Is.EqualTo(1), "The speed page opens on Fast.");
             menu.Confirm();
@@ -148,6 +153,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Confirm();
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             Assert.That(preview.Rendering, Is.True);
             Assert.That(preview.Shown, Is.EqualTo(0));
@@ -173,6 +179,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             menu.Confirm();
@@ -213,6 +220,7 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "Fast until another is chosen.");
             menu.Move(-1);
@@ -236,6 +244,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
@@ -275,7 +284,7 @@ namespace ProtoHarness.Tests.PlayMode
                 menu.Highlight(0);
                 menu.Confirm();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Move, UiSound.Cue.Confirm }));
-                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
                 heard.Clear();
                 menu.Back();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Back }));
@@ -293,22 +302,25 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
-            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Speed, LobbyMenu.Page.Track })
+            // The mode page (time attack or bots, user 2026-11-13) has two entries; the others are checked on their first three.
+            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Mode, LobbyMenu.Page.Speed, LobbyMenu.Page.Track })
             {
                 Assert.That(menu.CurrentPage, Is.EqualTo(expected));
                 var seen = new System.Collections.Generic.HashSet<string>();
-                for (int row = 0; row < 3; row++)
+                int rows = expected == LobbyMenu.Page.Mode ? 2 : 3;
+                for (int row = 0; row < rows; row++)
                 {
                     menu.Highlight(row);
                     Assert.That(menu.Description, Is.Not.Empty, $"{expected} row {row}");
                     Assert.That(seen.Add(menu.Description), Is.True, $"{expected} row {row} repeats another row's description.");
                 }
-                // Main: single race (0); speed: fast (1); track: the stadium (0).
+                // Main: single race (0); mode: time attack (0); speed: fast (1); track: the stadium (0).
                 menu.Highlight(expected == LobbyMenu.Page.Speed ? 1 : 0);
                 menu.Confirm();
             }
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             Assert.That(menu.Description, Is.Empty, "The runner page shows its profile, not a description.");
+            menu.Back();
             menu.Back();
             menu.Back();
             menu.Back();
@@ -325,8 +337,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            menu.Back();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
+            Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.SingleModePage.TimeAttackRow), "Back on the mode the race was set up in.");
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Move(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
@@ -633,6 +649,7 @@ namespace ProtoHarness.Tests.PlayMode
             store.Submit(Stadium().name, SpeedClass.Fast, 3970, "BETA");
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
             Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록 (빠름)  01:19.4  ·  BETA"), "Read again as the track page opens.");
             store.Clear(Stadium().name, SpeedClass.Fast);
@@ -651,6 +668,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Records = store;
             try
             {
+                menu.Confirm();
                 menu.Confirm();
                 menu.Highlight(0);
                 menu.Confirm();
@@ -817,6 +835,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             int index = title == "STADIUM" ? 0 : title == "SKYWAY LOOP" ? 1 : title == "FINGER LANES" ? 2 : title == "PALM COAST" ? 3 : 4;

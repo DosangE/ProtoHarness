@@ -1,8 +1,8 @@
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
-    // The main menu: single race (to the speed page, then track and runner — user 2026-10-29: the track page shows the
-    // records of the speed already chosen), multi (locked until M7), the tutorial's stages and settings. Back leaves for
-    // the title.
+    // The main menu: single race (to the mode page — time attack or bots, user 2026-11-13 — then speed, track and runner;
+    // user 2026-10-29: the track page shows the records of the speed already chosen), multi (locked until M7), the
+    // tutorial's stages and settings. Back leaves for the title.
     public sealed class MainPage : LobbyPage
     {
         public const int SingleRow = 0, MultiRow = 1, TutorialRow = 2, SettingsRow = 3;
@@ -10,7 +10,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         private static readonly bool[] Locks = { false, true, false, false };
         private static readonly string[] Descriptions =
         {
-            "혼자 코스를 달려 기록에 도전합니다.\n속도와 트랙, 러너를 골라 출발하세요.\n속도와 트랙마다 최고 기록이 남습니다.",
+            "혼자 기록에 도전하는 타임어택,\n봇 3명과 순위를 겨루는 봇전.\n속도와 트랙, 러너를 골라 출발하세요.",
             "다른 러너들과 같은 코스에서 순위를 겨룹니다.\n멀티 레이스는 M7 에서 열립니다.",
             "넓은 연습장에서 과제를 따라가며\n이동, 봉 스윙, 부스터를 익힙니다.",
             "볼륨과 속도 시야 효과를 조절하고\n조작 키를 확인합니다.",
@@ -26,7 +26,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override string Description(int row) => Descriptions[row];
 
         public override Step Confirm(int row) =>
-            row == SingleRow ? Step.Open(LobbyMenu.Page.Speed, Context.Speed)
+            row == SingleRow ? Step.Open(LobbyMenu.Page.Mode, SingleModePage.RowOf(Context.Mode))
             : row == TutorialRow ? Step.Open(LobbyMenu.Page.Tutorial, 0)
             : row == SettingsRow ? Step.Open(LobbyMenu.Page.Settings, 0) : Step.Stay;
 

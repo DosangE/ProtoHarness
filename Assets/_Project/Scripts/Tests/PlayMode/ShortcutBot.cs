@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;

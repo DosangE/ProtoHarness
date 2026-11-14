@@ -6,6 +6,8 @@ namespace ProtoHarness.ChainRush.Flow
         Single,
         Multi,
         // The mission map (Tutorial/TutorialCourse): no laps, records or ghost.
-        Tutorial
+        Tutorial,
+        // Race against bots; no records or ghost.
+        Bots
     }
 }

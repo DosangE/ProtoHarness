@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace ProtoHarness.Net
+namespace ProtoHarness.ChainRush.Race
 {
     // Who is ahead among the racers still running, as the server sees it (DESIGN.md P3: the race's standings are the
     // server's). RaceStandings places finishers by the ticks their runs took, so running racers are compared the same way:

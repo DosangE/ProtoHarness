@@ -139,6 +139,9 @@ namespace ProtoHarness.ChainRush
             inputSource = source;
         }
 
+        // The source StepTick() reads, as SetInputSource left it (the keyboard until then). Read-only, for checks.
+        public IInputSource InputSource => inputSource;
+
         // Replaces the course centerline (test roads now, hand-built circuits later). The finish line stays
         // at finishZ along it. A circuit race builds its own track, so it refuses a replacement.
         public void SetTrack(Centerline replacement)

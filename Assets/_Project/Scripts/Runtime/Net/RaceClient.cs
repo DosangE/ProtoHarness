@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Race;
 using System.Collections.Generic;
 using System.IO;
 using ProtoHarness.ChainRush;

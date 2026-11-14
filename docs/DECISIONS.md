@@ -10,6 +10,22 @@
 
 ---
 
+## 2026-11-14 · Codex 샌드박스 계약 — `-Write` 는 `tools/codex-unity.ps1` 로만, 계약 블록·실행 전 거부·종료 코드와 결과 파일, Unity 승인은 `-Unity` 일 때만 (`fix/codex-sandbox-contract`)
+
+- **문제**: MP2 단계 A 의 Codex 쓰기 실행 3회가 모두 끝까지 가지 못했다(아래 "MP2 단계 A" 의 "진행에서 생긴 일"). `git mv` 는 샌드박스에 거부됐고, 턴은 질문으로 끝났고, 사용량이 소진됐다. 첫 실행은 끝난 뒤 36분 동안 완료 알림이 없었다. `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책이 `never` 라 권한을 올릴 수 없다.
+- **결정 (사용자 2026-11-13 "설계대로 단계 뒤에 진행", 2026-11-14 "ㄱㄱ")**: 규칙은 `docs/RULES/SUBAGENTS.md` §7-5 가 원본이다.
+  - ① 예방: `-Write` 지시서 앞에 계약 블록을 붙인다(`CLAUDE-GIT:`·`CLAUDE-QUESTION:`·`CLAUDE-BLOCKED:`, 마지막 줄 `CLAUDE-STATUS:`). 지시서에 git 쓰기 명령이나 `.git/`·`.codex/`·`.agents/` 경로가 있으면 띄우기 전에 거부한다(종료 코드 2). `CLAUDE-GIT-DONE:` 줄은 예외다.
+  - ② 감지: companion 을 `--json` 으로 불러 마지막 메시지를 0 / 10 git / 11 질문 / 12 막힘·계약 위반 / 13 오류·소진·강제 종료로 나눈다. `<지시서>.result.json` 은 맨 마지막에 한 번에 쓴다. 강제 종료면 감시 프로세스가 `13 killed` 를 쓴다.
+  - ③ 복구: 코드별로 Claude 가 할 일은 §7-5 표에 있다. 10 은 승인 범위 안의 git 명령만 실행하고 `-ResumeLast`, 11 은 범위 안이면 답하고 최대 2회, 12·13 은 보고만 한다.
+  - **`-Unity` 스위치 (사용자 2026-11-14 선택)**: 전에는 스크립트를 부르면 늘 Unity MCP 승인을 열었다. 그래서 Unity 허락이 없는 쓰기 실행은 companion 을 직접 불렀고, 계약을 거치지 않았다. 이제 승인은 `-Unity` 를 줄 때만 열고, 이 실행이 연 승인만 닫는다(다른 실행이 열어 둔 승인을 만나면 13 으로 멈추고 그 승인은 남긴다).
+  - 스크립트에 UTF-8 BOM 을 붙였다. PowerShell 5.1 은 BOM 이 없는 `.ps1` 을 ANSI 로 읽어 한글 계약문과 `？` 정규식을 깨뜨렸다(첫 시험 `parsing "[?竊?$" - Unterminated [] set.`). 한글이 든 다른 `tools/*.ps1` 4개도 BOM 을 쓴다.
+- **검증** (D:/PCUBE, Windows PowerShell 5.1, Codex 플러그인 1.0.6)
+  - 가짜 `node`·임시 `CODEX_HOME` 으로 12건: done 0, git 10, `CLAUDE-QUESTION` 11, 계약 밖 물음표 11, blocked 12, 상태 줄 없음 12, `.git/index.lock … Permission denied` 가 보이는데 done 이면 12, 소진(status 1·빈 메시지) 13, JSON 아님 13, 지시서의 `git mv` 2, `.codex/` 2, `CLAUDE-GIT-DONE` 줄 0. 12/12 일치했고 매번 설정이 원래대로 돌아왔다.
+  - 강제 종료(`Stop-Process -Force`): 결과 파일 `13 killed`, 승인 닫힘. `-Unity` 없이: 실행 중 승인이 열리지 않음. `-Unity`: 열렸다가 닫힘. 다른 실행이 연 승인이 있을 때: 13, 그 승인 그대로.
+  - 실제 Codex(`-Write`, `-Effort low`, `-Unity` 없음) 3건: 브랜치를 만들라는 지시서 → 10(`CLAUDE-GIT: git switch -c spike/codex-contract-probe`, 실행하지 않음, Claude 도 실행하지 않음). 사용자 몫의 값을 정하라는 지시서 → 11(`CLAUDE-QUESTION:` 으로 목표 랩타임을 물음). 매개변수를 읽으라는 지시서 → 0(목록 정확, `codex-unity.ps1:24` 근거). 세 실행이 15:19~15:20 에 이어서 끝났고 `until` 루프가 결과 파일로 바로 받았다. 리포 변경 없음, 실행 뒤 `-Status` closed.
+- **확인 못 한 것**: 실제 `-ResumeLast` 이어 가기(10·11 복구), 실제 사용량 소진 때의 companion 출력(가짜로만 13), `-Unity` 를 준 실제 실행.
+- **버린 대안**: companion 의 사람용 출력을 정규식으로 읽기(형식이 정해져 있지 않다. `--json` 은 `codex-companion.mjs:511-517` 의 고정 필드다), 감지를 Codex 의 명령 로그(`commandExecutions`)로 하기(task 의 `--json` 결과에 없다), `-Unity` 없이 승인을 늘 여는 방식 유지(사용자가 고르지 않음).
+
 ## 2026-11-13 · MP2 단계 A: 봇전 판 — `RaceMode.Bots`, 싱글 안의 타임어택/봇전, 시드로 뽑은 시험 봇 3명, 왼쪽 아래 금·은·동 순위, 봇전은 기록·고스트 없음 (`feature/mp2-bot-race`)
 
 - **결정 (사용자, 2026-11-13)**: 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md` "승인" — 두 단계(A 봇전 판, B 몸싸움)로 나눠 병합하고, 구현은 Codex(`-Write` + Unity MCP), 대조는 Claude. 사용자 답은 요청서 0절이 원본이다. 요지: D9 시드로 무작위 / D10·RaceMode "추가해야한다. 싱글플레이 중 혼자하는건 기록용, 봇은 말그대로 시나리오 모드나 멀티 대신 하는 용이다." / D3b "일단은 시험 봇과 유사하게 … 시험 봇이 쉬움 기준" / D7 (a) 플레이어가 들어오면 끝 / D2b "서로의 방향대로 밀리는 그런 물리 값" / 스윙 중 접촉은 끊긴다 / 출발은 가로 한 줄, 자리는 시드로("a로").

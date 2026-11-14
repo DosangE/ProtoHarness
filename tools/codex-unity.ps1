@@ -15,8 +15,9 @@
 # below in front: report git writes as CLAUDE-GIT lines, never end the turn on a bare question, and end with one CLAUDE-STATUS
 # line. The run's last message is sorted into an exit code and a result file, which a caller can wait for (docs/RULES/SUBAGENTS.md §7-5):
 #   0 done   2 prompt refused (Codex not started)   10 git writes for Claude   11 question   12 blocked   13 error or exhausted
-# Next to <name>.md the run leaves <name>.sent.md (what was sent), <name>.out.md (Codex's last message), <name>.stderr.log and,
-# last of all, <name>.result.json. The watcher writes a result file too when this script is killed before it can.
+# Next to <name>.md the run leaves <name>.<RunId>.sent.md (what was sent), .out.md (Codex's last message), .stderr.log and,
+# last of all, .result.json. The watcher writes the result file too when this script is killed before it can. A run without
+# -Write gets no contract, so it is only sorted into 0 (an answer came) or 13.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -PromptFile <path> [-Write] [-Unity] [-ResumeLast] [-Effort high]
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -Status
@@ -27,6 +28,8 @@ param(
     [switch]$Unity,
     [switch]$ResumeLast,
     [string]$Effort = 'high',
+    # Names this run's files, so a caller waiting for one run never reads another's result. A new one for every run.
+    [string]$RunId,
     [switch]$Status,
     [switch]$Close,
     # Internal: the watcher waits for this run's process, then closes that run's block.
@@ -136,8 +139,9 @@ function Get-ForbiddenLines([string]$text) {
     }
 }
 
-# Sorts Codex's last message by the contract. A run that broke the contract is blocked (12), never done.
-function Get-Verdict($run) {
+# Sorts Codex's last message by the contract (-Write runs only). A run that broke the contract is blocked (12): the status line
+# is checked first, so a run without one is never sent on to the git or question recovery.
+function Get-Verdict($run, [bool]$contracted) {
     $verdict = @{ companionExit = $run.Exit }
     $payload = $null
     try { $payload = $run.Out | ConvertFrom-Json }
@@ -157,6 +161,10 @@ function Get-Verdict($run) {
         $verdict.reason = "companion exit $($run.Exit), turn status $($payload.status), last message $(if ($raw.Trim()) { 'present' } else { 'empty' }). Read the stderr log."
         return $verdict
     }
+    if (-not $contracted) {
+        $verdict.code = 0; $verdict.kind = 'answer'; $verdict.reason = 'A run without -Write has no contract; an answer came back.'
+        return $verdict
+    }
     $lines = @($raw -split "\r?\n" | Where-Object { $_.Trim() })
     $verdict.gitLines = @($lines | ForEach-Object { if ($_ -match '^\s*CLAUDE-GIT:\s*(.+?)\s*$') { $Matches[1] } })
     $verdict.questions = @($lines | ForEach-Object { if ($_ -match '^\s*CLAUDE-QUESTION:\s*(.+?)\s*$') { $Matches[1] } })
@@ -165,25 +173,28 @@ function Get-Verdict($run) {
     $verdict.statusLine = if ($last -match '^CLAUDE-STATUS:\s*(done|git|question|blocked)$') { $Matches[1] } else { $null }
     if ($raw -match '(?i)\.git[/\\]\S*[^\r\n]*Permission denied') { $verdict.sandboxDenied = $true }
 
-    if ($verdict.statusLine -eq 'blocked' -or $verdict.blocked.Count -gt 0) {
-        $verdict.code = 12; $verdict.kind = 'blocked'; $verdict.reason = 'Codex reported it is blocked.'
-    }
-    elseif ($verdict.statusLine -eq 'git' -or $verdict.gitLines.Count -gt 0) {
-        if ($verdict.gitLines.Count -eq 0) { $verdict.code = 12; $verdict.kind = 'blocked'; $verdict.reason = 'CLAUDE-STATUS: git without any CLAUDE-GIT line.' }
-        else { $verdict.code = 10; $verdict.kind = 'git'; $verdict.reason = "$($verdict.gitLines.Count) git write(s) for Claude." }
-    }
-    elseif ($verdict.statusLine -eq 'question' -or $verdict.questions.Count -gt 0 -or ((-not $verdict.statusLine) -and $last -match '[?？]$')) {
-        $verdict.code = 11; $verdict.kind = 'question'
-        $verdict.reason = if ($verdict.questions.Count -gt 0) { 'Codex asked through CLAUDE-QUESTION.' } else { 'Codex ended on a question outside the contract.' }
-    }
-    elseif ($verdict.statusLine -eq 'done') {
-        $verdict.code = 0; $verdict.kind = 'done'; $verdict.reason = 'Codex reported done.'
-    }
-    else {
-        $verdict.code = 12; $verdict.kind = 'blocked'; $verdict.reason = 'The last line is not a CLAUDE-STATUS line, so the run broke the contract.'
-    }
-    if ($verdict.sandboxDenied -and $verdict.code -eq 0) {
-        $verdict.code = 12; $verdict.kind = 'blocked'; $verdict.reason = 'Codex reported done, but its message shows a .git write refused by the sandbox.'
+    $verdict.code = 12; $verdict.kind = 'blocked'
+    switch ($verdict.statusLine) {
+        $null {
+            $verdict.reason = 'The last line is not a CLAUDE-STATUS line, so the run broke the contract.'
+            if ($last -match '[?？]$') { $verdict.reason += ' It ended on a bare question.' }
+        }
+        'blocked' { $verdict.reason = 'Codex reported it is blocked.' }
+        'git' {
+            if ($verdict.gitLines.Count -eq 0) { $verdict.reason = 'CLAUDE-STATUS: git without any CLAUDE-GIT line.' }
+            elseif ($verdict.blocked.Count -gt 0) { $verdict.reason = 'CLAUDE-STATUS: git, but a CLAUDE-BLOCKED line too.' }
+            else { $verdict.code = 10; $verdict.kind = 'git'; $verdict.reason = "$($verdict.gitLines.Count) git write(s) for Claude." }
+        }
+        'question' {
+            if ($verdict.questions.Count -eq 0) { $verdict.reason = 'CLAUDE-STATUS: question without any CLAUDE-QUESTION line.' }
+            elseif ($verdict.blocked.Count -gt 0 -or $verdict.gitLines.Count -gt 0) { $verdict.reason = 'CLAUDE-STATUS: question, but CLAUDE-BLOCKED or CLAUDE-GIT lines too.' }
+            else { $verdict.code = 11; $verdict.kind = 'question'; $verdict.reason = 'Codex asked through CLAUDE-QUESTION.' }
+        }
+        'done' {
+            if ($verdict.gitLines.Count + $verdict.questions.Count + $verdict.blocked.Count -gt 0) { $verdict.reason = 'CLAUDE-STATUS: done, but CLAUDE-GIT, QUESTION or BLOCKED lines too.' }
+            elseif ($verdict.sandboxDenied) { $verdict.reason = 'Codex reported done, but its message shows a .git write refused by the sandbox.' }
+            else { $verdict.code = 0; $verdict.kind = 'done'; $verdict.reason = 'Codex reported done.' }
+        }
     }
     $verdict
 }
@@ -221,44 +232,46 @@ if (-not $PromptFile) { throw 'codex-unity: -PromptFile is required.' }
 if (-not (Test-Path -LiteralPath $PromptFile)) { throw "codex-unity: no prompt file at $PromptFile" }
 
 $promptPath = (Resolve-Path -LiteralPath $PromptFile).ProviderPath
-$base = Join-Path (Split-Path -Parent $promptPath) ([System.IO.Path]::GetFileNameWithoutExtension($promptPath))
+if (-not $RunId) { $RunId = (Get-Date).ToString('yyyyMMddTHHmmssfff') }
+if ($RunId -notmatch '^[\w-]+$') { throw "codex-unity: -RunId '$RunId' must be letters, digits, _ or -." }
+$base = Join-Path (Split-Path -Parent $promptPath) ([System.IO.Path]::GetFileNameWithoutExtension($promptPath) + ".$RunId")
 $sentFile = "$base.sent.md"; $outFile = "$base.out.md"; $errFile = "$base.stderr.log"; $resultFile = "$base.result.json"
-foreach ($file in $sentFile, $outFile, $errFile, $resultFile) {
-    if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
-}
+# A run never reuses or deletes another run's files: a caller already waiting on that result would read the old one.
+$taken = @($sentFile, $outFile, $errFile, $resultFile | Where-Object { Test-Path -LiteralPath $_ })
+if ($taken.Count -gt 0) { throw "codex-unity: run $RunId already has files ($($taken -join ', ')). Pass a new -RunId." }
+"codex-unity: run $RunId, result $resultFile"
 
-$prompt = [System.IO.File]::ReadAllText($promptPath, $utf8)
-if ($Write) {
-    $forbidden = @(Get-ForbiddenLines $prompt)
-    if ($forbidden.Count -gt 0) {
-        Write-Result $resultFile @{ code = 2; kind = 'refused'; reason = 'The prompt asks for git writes or .git/.codex/.agents paths that the -Write sandbox refuses. Run those yourself first, then say so in CLAUDE-GIT-DONE lines.'; lines = $forbidden }
-        [Console]::Error.WriteLine("codex-unity: refused, Codex not started. Lines of $promptPath :`n" + ($forbidden -join "`n"))
-        exit 2
-    }
-    $prompt = $contract + $prompt
-}
-[System.IO.File]::WriteAllText($sentFile, $prompt, $utf8)
-
-$plugins = Join-Path $HOME '.claude/plugins/cache/openai-codex/codex'
-$companion = Get-ChildItem -LiteralPath $plugins -Directory | Sort-Object Name -Descending |
-    ForEach-Object { Join-Path $_.FullName 'scripts/codex-companion.mjs' } |
-    Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-if (-not $companion) { throw "codex-unity: no codex-companion.mjs under $plugins" }
-
-$arguments = @($companion, 'task', '--json', '--effort', $Effort, '--prompt-file', $sentFile)
-if ($Write) { $arguments += '--write' }
-if ($ResumeLast) { $arguments += '--resume-last' }
-
-# The watcher starts first, so there is no moment with the block in place and nothing to remove it. It runs without -Unity
+# The watcher starts before anything can fail, so every run that got this far ends with a result file. It runs without -Unity
 # too: then it only writes the result file of a killed run (it closes a block only when this process owns it).
 Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Watch', $PID, '-WatchResult', "`"$resultFile`"")
 $result = $null
 $opened = $false
 try {
-    if ($Unity) { Open-Door; $opened = $true }
-    $run = Invoke-Node $arguments
-    [System.IO.File]::WriteAllText($errFile, $run.Err, $utf8)
-    $result = Get-Verdict $run
+    $prompt = [System.IO.File]::ReadAllText($promptPath, $utf8)
+    $forbidden = if ($Write) { @(Get-ForbiddenLines $prompt) } else { @() }
+    if ($forbidden.Count -gt 0) {
+        $result = @{ code = 2; kind = 'refused'; reason = 'The prompt asks for git writes or .git/.codex/.agents paths that the -Write sandbox refuses. Run those yourself first, then say so in CLAUDE-GIT-DONE lines.'; lines = $forbidden }
+        [Console]::Error.WriteLine("codex-unity: refused, Codex not started. Lines of $promptPath :`n" + ($forbidden -join "`n"))
+    }
+    else {
+        if ($Write) { $prompt = $contract + $prompt }
+        [System.IO.File]::WriteAllText($sentFile, $prompt, $utf8)
+
+        $plugins = Join-Path $HOME '.claude/plugins/cache/openai-codex/codex'
+        $companion = Get-ChildItem -LiteralPath $plugins -Directory | Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName 'scripts/codex-companion.mjs' } |
+            Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if (-not $companion) { throw "no codex-companion.mjs under $plugins" }
+
+        $arguments = @($companion, 'task', '--json', '--effort', $Effort, '--prompt-file', $sentFile)
+        if ($Write) { $arguments += '--write' }
+        if ($ResumeLast) { $arguments += '--resume-last' }
+
+        if ($Unity) { Open-Door; $opened = $true }
+        $run = Invoke-Node $arguments
+        [System.IO.File]::WriteAllText($errFile, $run.Err, $utf8)
+        $result = Get-Verdict $run ([bool]$Write)
+    }
 }
 catch {
     # Recorded as error 13 with the message, and said on stderr: the caller waits for the result file, not for a throw.

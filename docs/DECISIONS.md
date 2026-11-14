@@ -10,6 +10,43 @@
 
 ---
 
+## 2026-11-14 · MP2 단계 B: 몸싸움과 출발 격자 — 틱을 입력·이동·판정으로 나누고, 같은 틱의 겹침을 무게 비율 밀어내기 + 반발 0.3 임펄스로, 봇전은 가로 한 줄 격자에 플레이어 포함 시드로 선다 (`feature/mp2-contact`)
+
+- **결정 (사용자)**: 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md` "승인"(2026-11-13, A·B 전체). 6-4 ③ "봉 스윙 중에 부딪히면 끊겨야한다", ①②④⑤ 는 제안대로. 출발 자리는 2026-11-14 "플레이어 포함 섞기" — 요청서 `:141`(플레이어 늘 칸 0)·`:153`(출발 순서 섞기 안 함)은 처음 안의 잔재로 보고 따르지 않았다(`:18` "a로", `docs/COURSE.md` §7-2a 와 같다).
+- **만든 것**
+  - `ChainRushGame`: `InputTick`(`tick++`·`PrepareTick`·`Consume`·`Attack`) / `MoveTick`(`Step`) / `JudgeTick`(위험물·서킷·결승, 끝에 `TickCompleted`). 순서를 어기면 `InvalidOperationException`. `StepTick` 은 셋을 같은 순서로 부르고, 입력원이 예외를 던져도 삼키지 않고 단계 상태만 `Input` 으로 되돌린다(`finally`). 혼자 판 실행 순서는 그대로다.
+  - `RaceField.FixedUpdate`: 전원 입력 → 전원 이동 → 접촉(고정 3회: 풀이 → `Move` → 실제 위치·벽 법선을 다시 읽어 풀이, 6-3) → 전원 판정. `ContactEnabled`(기본 켬). 배열은 `Initialize` 에서 캐시.
+  - `Race/RunnerContact`(static, 순수): 수평 겹침을 무게 반비례로 풀고, 다가오는 짝에만 법선 방향 임펄스(반발 `Restitution = 0.3f`), 접선은 그대로. 벽에 막힌 쪽의 위치 몫은 상대가 받는다(임펄스는 실제 무게).
+  - `Race/StartGrid`(static): 출발선 가로 한 줄 4칸(8인이면 4 m 뒤 둘째 줄), 간격 = min(2.4, (S −12~+4 m 반폭 최솟값 − 0.38 − 0.6) × 2 ÷ 3), 1.2 m 미만이면 예외. `Assign(count, seed)` 가 플레이어 포함 칸을 섞는다(`System.Random`, Unity 난수 흐름을 건드리지 않음).
+  - `RunnerMotor.ApplyContact`(밀기는 `CharacterController.Move` 로 벽에 막힘, 부딪히면 `SwingTicks = 0`, 접지 다시 보고 `LastGroundedS`, 그래플·타이머·부스터·게이지는 그대로) · `UseStartPosition`. `CircuitRace.UseStartSlot`(출발 위치와 랩 시작 S 를 같은 칸으로). `RaceAssembler` 는 Bots 일 때만 칸을 준다.
+- **테스트 계약을 바꾼 곳 (밝힌다 — 통과용이 아니라 D11·격자로 계약이 바뀐 것)**: `ChainRushRaceFieldTests` ① 완료 이벤트 안 상대 틱 `tick - 1` → `tick` ② "상대와 달린 플레이어 런 = 혼자 런" 비교를 같은 칸의 혼자 런 + 접촉 끔으로 ③ `:138` "상대가 플레이어와 같은 자리" → 각자 배정 칸의 S·D ±1 mm, 수평 오차 ≤ 1 mm, 네 명 서로 ≥ 0.76 m(Codex 질문에 Claude 가 범위 안으로 답하고 더 엄격하게).
+- **진행 (하네스 실험 기록)**: Codex `-Write -Unity` 2턴. `mp2b-1`(20:49~21:18, 약 29분) 코드 11 — `:138` 을 바꿔도 되는지 `CLAUDE-QUESTION`(지시서가 "그 밖의 기존 단언은 고치지 않는다" 였다). `mp2b-2` `-ResumeLast`(21:19~21:24) 코드 0. 샌드박스 계약(아래 2026-11-14)대로 질문이 결과 파일로 바로 떨어졌다. 두 실행 사이 Codex 가 몇 분씩 Unity 를 쓰지 않아 사용자가 멈춘 줄 알았다 → 무활동 알림을 `fix/codex-wait-heartbeat` 로 따로 한다(사용자 "그걸 수정해야한다", 합의 "ㅇㅋ", 10분). Codex 는 샌드박스가 기본 기록 폴더 쓰기를 막아 실행 기록을 `.utmp/mp2-test-runs/` 에 남겼고, Claude 가 `%LOCALAPPDATA%\ProtoHarness\test-runs` 로 옮겼다.
+- **Claude 가 고친 것**: `tools/select-tests.ps1` 에 Codex 가 넣은 `Race/(RunnerContact|StartGrid|RaceField)` 줄이 일반 `Race/` 줄보다 앞이라(처음 맞는 줄만 쓴다, `:312`) `RaceField.cs` 를 바꿔도 Replay·Rollback·World·Net 이 빠질 뻔했다 → 그 줄을 지우고 일반 `Race/` 줄에 `ChainRushContactTests` 를 더했다. 실행 결과 `RaceField.cs`·`RunnerContact.cs`·`StartGrid.cs → … ChainRushContactTests, NetReconcileTests …`.
+- **검증** (에디터 6000.3.25f1, D:/PCUBE, 기준 `6a9e601` + 커밋 전 작업 트리; 결과 XML 은 Claude 가 직접 읽음)
+  - 컴파일 `*** Tundra build success (2.26 seconds), 5 items updated, 1618 evaluated`, Console 에러 0.
+  - 지문 `ChainRush replay circuit: 1700 ticks identical, hash 0xEF92FB76BFD1D767` 그대로. 봇전 4명 × 300틱 두 번 위치 해시 `0xAB407E424EDC7FAE` 일치(Codex 보고). 필드 비트 비교 `hash 0xD5D7049E4C280040`(같은 칸 혼자 런 = 상대와 달린 런).
+  - 실행 (모두 `!Device`·`!Enemy`·`!NetEndReplay`, 게이트 전체는 돌리지 않음):
+    - 11:58:26Z EditMode `RunnerContactTests`·`StartGridTests`·`BotLineupTests` `testcasecount="30" result="Passed" passed="30" failed="0"`
+    - 11:59:35Z PlayMode `ChainRushContactTests` `testcasecount="10" result="Failed(Child)" passed="9" failed="1"` — 벽 압박 `Residual overlap … Expected: greater than or equal to 0.74000001f But was: 0.734379768f` → 벽 법선을 다음 풀이에 넘기도록 런타임만 고침(허용 2 cm 그대로)
+    - 12:02:49Z PlayMode 고른 110개 `result="Failed(Child)" passed="105" failed="5"` — `:138` 1건 + `NetReconcileTests` 4건(`Client_RestartedDuringARace_IsFaultedAndStaysFaulted` 의 `InvalidOperationException: ChainRushGame: tick stages must run in input, movement, judgment order.` — 입력 거부 예외 뒤 단계가 `Movement` 에 남아 다음 테스트로 번짐) → `StepTick` 의 `finally`
+    - 12:09:38Z 같은 110개 `result="Failed(Child)" passed="109" failed="1"` (`:138` 만). 클래스: BotRace 23 · Contact 10 · Flow 79 · RaceField 6 · Replay 2 · Rollback 10 · Tutorial 17 · World 5 · NetReconcile 23
+    - 12:14:25Z `Race_BotLap_…` STADIUM 보통 `testcasecount="1" result="Passed"` · 12:15:37Z EditMode `testcasecount="13" result="Passed"`
+    - 12:21:53Z `:138` 을 바꾼 뒤 `ChainRushRaceFieldTests` `testcasecount="6" result="Passed" passed="6" failed="0"`. 12:09 실행 뒤 런타임 파일은 바뀌지 않았다(마지막 런타임 수정 21:08:11 KST, `tools/test-runs.ps1 -Last -Passed` 의 "그 뒤 Assets/ 에서 바뀐 파일: 없음").
+  - 영향 평가: 틱 분해(`ChainRushGame`) → 모든 모드가 지나는 시뮬 입구라 지문·롤백·World(완료 이벤트·일시정지 계약)·Flow·Tutorial·Net / `RunnerMotor`·`CircuitRace` 리셋 경로 → Flow·Tutorial·Lap 1칸 / `RaceField`·접촉·격자 → RaceField·BotRace·Contact.
+  - **사용자 플레이 확인**: "플레이 확인했다. 접촉 충돌 잘 되었어."
+- **병합 전 리뷰** ("그 밖" 규모, 커밋 `aac183d`; 사용자 "커밋하고 리뷰돌리고 문제없으면 병합까지. 문제있으면 수정후 ㄱㄱ")
+  - Codex `adversarial-review --wait --base dev`(읽기 전용): `needs-attention`, high 1 · medium 1. 사용 한도 `used_percent` 는 읽지 못했다.
+  - `unity-reviewer` (`subagent_tokens` 119,189, 도구 33회, 268 s): 치명 0 / 중대 0 / 보통 2 / 제안 8. 보통 2건이 Codex 의 두 건과 같은 경로다(두 리뷰가 독립으로 같은 결함을 짚었다).
+  - **고친 것 ① [Codex high · reviewer 보통 1]**: 봇전에서 상대 월드를 불러오는 동안 `ManualStart` 가 켜져 있어 Enter 로 출발할 수 있었고(`ChainRushGame.cs:169`), 그러면 `UseStartSlot` 이 `try` 밖에서 던져 조립이 `StopAssembling` 없이 멈췄다(A 에도 "필드 없이 출발" 구멍이 있었다). → `RaceAssembler.Awake` 에서 상대가 있으면 `ManualStart = false`, `CountIn` 에서 되돌림. 격자 배정은 `try` 안, `ArgumentException` 이면 `LogException` + `StopAssembling`. 처음엔 `Start` 에 두었다가 테스트가 씬 로드 직후(`Start` 전) 값을 읽어 실패해 `Awake` 로 옮겼다.
+  - **고친 것 ② [Codex medium · reviewer 보통 2]**: 필드는 `StepTick` 의 `finally` 를 거치지 않아, 한 러너의 단계가 던지면 다른 러너가 단계 중간에 남고 다음 `FixedUpdate` 마다 순서 검사 예외가 반복됐다. → `RaceField.FixedUpdate` 의 단계 실행을 `try` 로 감싸 `LogException` + `Stop`(한 번 `LogError`, `stopped`, `enabled = false` — 틱 어긋남 처리도 같은 `Stop` 으로). 프로필 검사는 매 틱에서 `Initialize` 로 옮겼다(§5 초기화에서 거부).
+  - **고친 것 ③ [reviewer 제안]**: `StartGridTests` 의 격자 들어맞음을 STADIUM·SUMMIT 에서 다섯 트랙 모두로.
+  - **고치기 전 실패** (§4-4): 새 테스트 `ChainRushContactTests.Bots_WhileTheFieldGathers_TheKeyboardCannotStartTheRace_AndCanOnceItCountsIn` · `Field_AnOpponentsInputThrows_StopsTheRaceOnceAndLoudly` → 12:41:11Z `testcasecount="2" result="Failed(Child)" passed="0" failed="2"` — `Enter must not start the run while the field gathers. Expected: False But was: True` / `Expected log did not appear: [Exception] Regex: The input source refuses this tick`(예외가 필드 밖으로 샜다). 그 전 12:40:06Z 실행은 첫 테스트가 로딩 중에 실패해 다음 테스트로 번졌다(`opponent 0 did not assemble itself`) → 로딩 중 값을 기록만 하고 모인 뒤 단언하도록 테스트를 고쳤다.
+  - **고친 뒤** (에디터 6000.3.25f1): 컴파일 `*** Tundra build success (1.23 seconds), 11 items updated, 1618 evaluated`. 12:43:23Z 1차 `testcasecount="120" result="Failed(Child)" passed="119" failed="1"`(위 `Start` → `Awake` 건). 12:47:54Z PlayMode `groupNames = { ^ChainRushContactTests$, ^ChainRushBotRaceTests$, ^ChainRushRaceFieldTests$, ^ChainRushFlowTests$, ^ChainRushTutorialTests$ }`, `!Device`·`!Enemy`·`!NetEndReplay`·`!^Lap$` → `testcasecount="120" result="Passed" passed="120" failed="0"`, ~12:51:06Z. 12:51:26Z EditMode `StartGridTests`·`RunnerContactTests` → `testcasecount="26" result="Passed" passed="26" failed="0"`. Console 에러 10건은 모두 통과한 테스트가 기대한 로그(롤백의 `tick … came after`, 깨진 고스트, Multi 거부, 외형 불일치).
+  - 영향 평가: `RaceField` 는 봇전에만 붙고 혼자 판 시뮬이 읽지 않는다 → 지문·롤백·Net 은 다시 돌리지 않았다(12:09 실행 이후 시뮬 코드 `ChainRushGame`·`RunnerMotor`·`RunnerContact`·`StartGrid`·`CircuitRace` 는 바뀌지 않음). `RaceAssembler` → 봇전·싱글·튜토리얼 조립(Flow·Tutorial·BotRace·RaceField·Contact).
+  - **두는 것 (reviewer 제안)**: `CircuitRace.UseStartSlot` 의 `1.05f`(리스폰 `RunnerMotor.cs:516` 과 같은 리터럴 — 공용 상수는 따로), `StartGrid.BodyRadius` 0.38 이 씬 캡슐 반경의 사본, 줄 간격 `4f`·창 `-12d`/`4d` 이름 없음, `ApplyContact` 가 x/z NaN 을 거르지 않음(필드 경로는 `Solve` 가 검증), `ChainRushContactTests` 의 private 메서드 리플렉션 호출(기존 테스트에 없던 방식), 무게 리터럴, `RaceAssembler` 의 항상 참인 `Mode == Bots` 검사, 접촉 켬 상태의 비트 비교 없음. `select-tests` 에서 `CircuitRace.cs` 줄이 Contact·RaceField·BotRace 를 고르지 않는 것도 남긴다(표 합의).
+- **버린 대안**: `SetPosition` 으로 밀기(벽 검사가 없다, 요청서 5절), 트랙 `.asset` 의 `startSlots` 를 다섯 번 고치기(에디터 작업, 옆 거리 필드가 없다), 플레이어 칸 0 고정(사용자가 고르지 않음).
+- **남은 것**: 봇 난이도 3단계와 자동 개선 루프(지문용 봇을 먼저 따로 고정 — 요청서 5절 끝 줄), D8 복귀 겹침, 8인 격자 검증.
+
 ## 2026-11-14 · Codex 직접 사용 때 Blender MCP: 설정은 `false` 그대로, 세션만 `codex -c mcp_servers.blender.enabled=true` (`docs/codex-direct-blender`)
 
 - **결정 (사용자, 2026-11-14)**: Claude 한도가 차거나 토큰이 한쪽에 몰릴 때 Codex 에 Blender 작업을 직접 시키려고 사용자가 `~/.codex/config.toml` 의 `[mcp_servers.blender]` 를 `enabled = true` 로 바꿔 두었다(설정이 `false` 면 Codex 가 "enabled 를 바꿔야 한다" 고 한다 — 서버가 도구 목록에 없어서다). Claude 가 `-c` 로 세션만 켜는 안을 추천, 사용자 "네 추천대로 하겠다", 합의 요청서에 "ㄱㄱ". 설정은 같은 날 `false` 로 되돌렸다.

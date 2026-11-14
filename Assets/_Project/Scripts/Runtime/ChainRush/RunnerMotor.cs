@@ -171,6 +171,9 @@ namespace ProtoHarness.ChainRush
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
         // The profile given by Configure; null runs on the scene's values.
         public RunnerProfile Profile => profile;
+        public Vector3 ContactCenter => transform.TransformPoint(controller.center);
+        public float ContactRadius => controller.radius;
+        public float ContactHeight => controller.height;
         // The speed class's scale given by Configure (Flow.SpeedScale); 1 is the scene's speeds.
         public float SpeedClassScale => speedClassScale;
         // The values the simulation runs on: the scene's, scaled by the profile and the speed class.
@@ -678,6 +681,32 @@ namespace ProtoHarness.ChainRush
             racer.Steer = 0f;
             racer.JumpQueued = false;
             racer.CoyoteTime = 0f;
+        }
+
+        // A field's contact pass is not another simulation tick: no drive, rope release, pads, gauge or timers.
+        public Vector3 ApplyContact(Vector3 displacement, Vector3 velocityChange)
+        {
+            if (displacement.y != 0f || velocityChange.y != 0f)
+                throw new System.ArgumentException("RunnerMotor: contact must be horizontal.");
+            if (displacement == Vector3.zero && velocityChange == Vector3.zero) return Vector3.zero;
+            RacerState racer = game.Racer;
+            racer.Velocity += velocityChange;
+            racer.SwingTicks = 0;
+            bool grounded = racer.Grounded;
+            hitGuard = false;
+            controller.Move(displacement);
+            Vector3 wallNormal = hitGuard ? guardNormal : Vector3.zero;
+            SyncGrounded();
+            if (grounded && !racer.Grounded && racer.Velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
+            if (racer.Grounded) racer.LastGroundedS = game.Track.Project(transform.position).S;
+            return wallNormal;
+        }
+
+        // Retained across ResetAtSpawn, including countdowns and restarts. Solo runs never call this.
+        public void UseStartPosition(Vector3 position)
+        {
+            if (game.IsRunning || game.IsPaused) throw new System.InvalidOperationException("RunnerMotor: set the start position before the run.");
+            spawnPosition = position;
         }
     }
 }

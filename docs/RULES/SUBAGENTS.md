@@ -67,10 +67,13 @@
 - **합의해서 쓰기를 맡길 때는 `tools/codex-unity.ps1 -PromptFile <파일> -Write` 로만 부른다** (Unity MCP 허락이 없어도. `docs/DECISIONS.md` 2026-11-14 "Codex 샌드박스 계약"). companion 에 `--write` 를 직접 붙이지 않는다. `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책이 `never` 라 권한을 올릴 수 없기 때문이다.
   - **지시서**: git 쓰기 명령이나 `.git/`·`.codex/`·`.agents/` 경로를 적지 않는다. 적으면 스크립트가 Codex 를 띄우지 않고 종료 코드 2 로 거부한다(`codex-unity.ps1:131`). 파일 이동·이름 바꾸기는 Claude 가 먼저 `git mv` 로 하고(`.meta` 포함), 지시서에는 `CLAUDE-GIT-DONE: <실행한 명령>` 줄로 알린다.
   - **계약**: 스크립트가 `-Write` 지시서 앞에 계약 블록을 붙인다(`codex-unity.ps1:114`). git 쓰기는 실행하지 말고 `CLAUDE-GIT:` 줄로 보고한다. 질문으로 턴을 끝내지 않는다(범위 밖일 때만 `CLAUDE-QUESTION:`). 막히면 `CLAUDE-BLOCKED:` 와 에러 원문을 적는다. 마지막 줄은 `CLAUDE-STATUS: done|git|question|blocked` 하나다.
-  - **기다리기**: 실행마다 새 `-RunId <이름>` 을 준다(이어 가기 포함). 스크립트를 `run_in_background` 로 띄우고, `<지시서>.<RunId>.result.json` 이 생길 때까지 도는 `until` 루프를 따로 `run_in_background` 로 둔다. 백그라운드 껍데기의 완료 알림만 믿지 않는다(2026-11-13 Codex 가 끝난 뒤 36분 "돌고 있음").
+  - **기다리기**: 실행마다 새 `-RunId <이름>` 을 준다(이어 가기 포함). 스크립트를 `run_in_background` 로 띄우고, 기다리는 쪽은 `tools/codex-wait.ps1 -Result <지시서>.<RunId>.result.json` 을 따로 `run_in_background` 로 둔다(기본 무활동 10분·상한 90분). 백그라운드 껍데기의 완료 알림만 믿지 않는다(2026-11-13 Codex 가 끝난 뒤 36분 "돌고 있음").
+    - `codex-wait.ps1` 은 결과 파일이 생기면 0, 활동 신호(Codex 세션 로그 크기·`Editor.log` 크기·`git status`·`-Watch` 파일 크기)가 10분 동안 하나도 바뀌지 않으면 3, 상한이면 4 로 끝난다(`docs/DECISIONS.md` 2026-11-14 "Codex 무활동 알림"). 3 은 알리기만 한다 — Codex 를 멈추지 않는다. 세션 로그는 이 실행 것만 센다: 새 실행은 스크립트를 띄우기 2분 전부터 생긴 로그(그래서 `codex-unity.ps1` 과 같은 턴에 띄운다), `-ResumeLast` 이어 가기는 앞 결과의 `threadId` 를 `-Thread` 로 준다. `Editor.log`·`git status` 는 다른 세션도 바꿀 수 있어, 같은 트리에서 다른 세션이 일하면 무활동을 늦게 잡을 수 있다.
+    - 3·4 를 받거나 코드 11·12·13 결과가 오면 보고 **첫 줄**에 `Codex 멈춤: <이유> / <한 조치>` 를 쓴다. 3 은 출력의 마지막 Codex 이벤트를 붙이고, 사용자가 멈추라고 하지 않으면 같은 명령으로 다시 기다린다.
+    - companion 리뷰(`adversarial-review`)는 세션 로그를 남기지 않는다. stderr 를 파일로 받아(`> <out> 2> <err>; echo done > <done>`) `-Result <done> -Watch <err>` 로 기다린다 — stderr 에 단계마다 `[codex] Running command` 줄이 쌓인다.
     - 결과 파일은 맨 마지막에 한 번에 생긴다. 스크립트가 강제 종료되면 감시 프로세스가 `13 killed` 로 남긴다.
     - 같은 자리에 `.sent.md`(보낸 지시서)·`.out.md`(Codex 마지막 메시지)·`.stderr.log` 가 남는다.
-    - 같은 `RunId` 의 파일이 이미 있으면 스크립트는 그 파일을 지우지 않고 곧바로 멈춘다. 지시서가 없을 때와 `RunId` 가 잘못됐을 때도 결과 파일 없이 곧바로 멈춘다. 그래서 루프에는 상한 시간을 두고, 껍데기가 결과 파일 없이 끝났으면 그 출력 원문을 13 으로 보고한다.
+    - 같은 `RunId` 의 파일이 이미 있으면 스크립트는 그 파일을 지우지 않고 곧바로 멈춘다. 지시서가 없을 때와 `RunId` 가 잘못됐을 때도 결과 파일 없이 곧바로 멈춘다. 그래서 `codex-wait.ps1` 에 상한이 있고(4), 껍데기가 결과 파일 없이 끝났으면 그 출력 원문을 13 으로 보고한다.
   - **판정은 `-Write` 실행에만**: 계약을 붙이지 않은 읽기 실행은 답이 오면 0(`answer`), 아니면 13 이다.
   - **종료 코드별 복구** (`codex-unity.ps1:144` 의 판정. 마지막 줄의 `CLAUDE-STATUS` 를 먼저 보고, 그 줄과 표지 줄이 맞지 않으면 12 다)
 

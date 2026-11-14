@@ -34,6 +34,7 @@ namespace ProtoHarness.ChainRush.Race
         private Vector3[] contactChanges;
         private Vector3[] contactWallNormals;
         public bool ContactEnabled { get; set; } = true;
+        private bool stopped;
         // Match the existing running-order hysteresis (RaceServer); finishers are ranked separately below.
         private const double OrderMarginMetres = 1d;
 
@@ -67,6 +68,8 @@ namespace ProtoHarness.ChainRush.Race
             if (opponentInputs == null) throw new ArgumentNullException(nameof(opponentInputs));
             if (opponentInputs.Count != opponentWorlds.Count) throw new ArgumentException("Each opponent needs one input source.", nameof(opponentInputs));
             if (playerGame.Circuit == null) throw new ArgumentException("The player's world needs a circuit.", nameof(playerGame));
+            // Contact weighs every runner by its profile (RunnerProfile.Weight), on every tick.
+            if (playerGame.Player.Profile == null) throw new ArgumentException("The player's runner needs a profile (RunnerMotor.Configure).", nameof(playerGame));
             if (opponents != null) throw new InvalidOperationException("RaceField: the field is already set up.");
             PhysicsScene playerPhysics = playerGame.gameObject.scene.GetPhysicsScene();
             var worlds = new RaceWorld[opponentWorlds.Count];
@@ -78,6 +81,7 @@ namespace ProtoHarness.ChainRush.Race
                     throw new ArgumentException($"Opponent {i} needs an input source of its own, never the keyboard.", nameof(opponentInputs));
                 if (world.Game == playerGame) throw new ArgumentException($"Opponent world {i} is the player's own world.", nameof(opponentWorlds));
                 if (world.Game.Circuit == null) throw new ArgumentException($"Opponent world {i} needs a circuit.", nameof(opponentWorlds));
+                if (world.Player.Profile == null) throw new ArgumentException($"Opponent world {i}'s runner needs a profile (RunnerMotor.Configure).", nameof(opponentWorlds));
                 if (world.PhysicsWorld == playerPhysics)
                     throw new ArgumentException($"Opponent world {i} shares the player's physics scene; load it with RaceWorld.IsolatedLoad.", nameof(opponentWorlds));
                 for (int k = 0; k < i; k++)
@@ -132,7 +136,7 @@ namespace ProtoHarness.ChainRush.Race
 
         private void FixedUpdate()
         {
-            if (opponents == null || !game.IsRunning) return;
+            if (opponents == null || stopped || !game.IsRunning) return;
             MirrorPause();
             if (game.Tick == 0)
             {
@@ -146,21 +150,39 @@ namespace ProtoHarness.ChainRush.Race
                 }
                 staged = false;
             }
-            for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
-            for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick();
-            if (ContactEnabled) ResolveContact();
-            for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].JudgeTick();
+            try
+            {
+                for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
+                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick();
+                if (ContactEnabled) ResolveContact();
+                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].JudgeTick();
+            }
+            catch (Exception e)
+            {
+                // The field runs the stages itself, past StepTick's own clean-up: a stage that threw leaves the other runners
+                // between stages, and no later tick of this race can be trusted. It stops once, loudly.
+                Debug.LogException(e, this);
+                Stop($"a runner's tick threw {e.GetType().Name}; the worlds are left mid-tick and the race stops.");
+                return;
+            }
             int tick = game.Tick;
             for (int i = 0; i < opponents.Length; i++)
             {
                 ChainRushGame other = opponents[i].Game;
                 // A run that has ended keeps the tick it ended on.
                 if (!other.IsRunning || other.Tick == tick) continue;
-                Debug.LogError($"RaceField: opponent {i} is at tick {other.Tick} and the player at tick {tick}; the worlds are out of step and the race stops.", this);
-                enabled = false;
+                Stop($"opponent {i} is at tick {other.Tick} and the player at tick {tick}; the worlds are out of step and the race stops.");
                 return;
             }
             CollectStandings();
+        }
+
+        // A stopped field steps nobody again, even when its tick is called directly.
+        private void Stop(string why)
+        {
+            Debug.LogError("RaceField: " + why, this);
+            stopped = true;
+            enabled = false;
         }
 
         private void ResolveContact()
@@ -179,8 +201,7 @@ namespace ProtoHarness.ChainRush.Race
                     contactVelocities[count] = motor.Velocity;
                     contactRadii[count] = motor.ContactRadius;
                     contactHeights[count] = motor.ContactHeight;
-                    if (motor.Profile == null) throw new InvalidOperationException("RaceField: contact needs a configured runner profile.");
-                    contactWeights[count++] = motor.Profile.Weight;
+                    contactWeights[count++] = motor.Profile.Weight; // Initialize refused a runner without a profile.
                 }
                 RunnerContact.Solve(contactPositions, contactVelocities, contactRadii, contactHeights, contactWeights,
                     RunnerContact.Restitution, contactMoves, contactChanges, count, contactWallNormals);

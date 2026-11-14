@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Bots;
@@ -269,6 +270,41 @@ namespace ProtoHarness.Tests.PlayMode
             finally { game.TickCompleted -= completed; }
         }
 
+        // Review 2026-11-14 (Codex medium, unity-reviewer 보통 2): the field runs the stages itself, past StepTick's
+        // finally. One runner's input that throws stops the race once and loudly; it never leaves the others mid-stage
+        // to throw the stage-order error on every later tick.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Field_AnOpponentsInputThrows_StopsTheRaceOnceAndLoudly()
+        {
+            yield return Load();
+            Begin();
+            worlds[2].Game.SetInputSource(new RefusedInput());
+            LogAssert.Expect(LogType.Exception, new Regex("The input source refuses this tick"));
+            LogAssert.Expect(LogType.Error, new Regex("^RaceField: .*the race stops"));
+            Step();
+            var ticks = new int[worlds.Length];
+            for (int i = 0; i < worlds.Length; i++) ticks[i] = worlds[i].Game.Tick;
+            worlds[2].Game.SetInputSource(Idle());
+            Step();
+            for (int i = 0; i < worlds.Length; i++)
+                Assert.That(worlds[i].Game.Tick, Is.EqualTo(ticks[i]), "A stopped field steps nobody, racer " + i);
+        }
+
+        // Review 2026-11-14 (Codex high, unity-reviewer 보통 1): while the opponents' worlds load, Enter must not start
+        // the player's run — a run that started before the field gathered had no grid slot and no opponents.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Bots_WhileTheFieldGathers_TheKeyboardCannotStartTheRace_AndCanOnceItCountsIn()
+        {
+            yield return Launch();
+            // Read while loading, assert once gathered: a failure here must not leave a half-loaded field to the next test.
+            bool assembling = assembler.IsAssembling, manualWhileGathering = player.Game.ManualStart;
+            yield return Gathered();
+            Assert.That(assembling, Is.True, "The opponents' worlds were still loading.");
+            Assert.That(manualWhileGathering, Is.False, "Enter must not start the run while the field gathers.");
+            Assert.That(player.Game.ManualStart, Is.True, "The player starts the race again once it counts in.");
+            Assert.That(player.Game.IsCountingDown, Is.True);
+        }
+
         private ulong RunBots(int ticks)
         {
             foreach (RaceWorld world in worlds) world.Game.SetInputSource(new CircuitBot(world.Game, world.Player, world.Grapple, world.Circuit));
@@ -332,6 +368,13 @@ namespace ProtoHarness.Tests.PlayMode
 
         private IEnumerator Load()
         {
+            yield return Launch();
+            yield return Gathered();
+        }
+
+        // Requests the bot race and loads its scene; the opponents' worlds may still be loading when it returns.
+        private IEnumerator Launch()
+        {
 #if UNITY_EDITOR
             RunnerProfile Profile(string name) => AssetDatabase.LoadAssetAtPath<RunnerProfile>("Assets/_Project/Data/RunnerProfile_" + name + ".asset");
             var definition = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_Stadium.asset");
@@ -344,6 +387,15 @@ namespace ProtoHarness.Tests.PlayMode
             foreach (GameObject root in scene.GetRootGameObjects())
                 if (root.TryGetComponent(out RaceAssembler found)) assembler = found;
             Assert.That(assembler, Is.Not.Null);
+#else
+            Assert.Fail("Contact tests require the Unity Editor.");
+            yield break;
+#endif
+        }
+
+        // Waits for the field to gather and takes it over for synchronous ticks.
+        private IEnumerator Gathered()
+        {
             float deadline = Time.realtimeSinceStartup + 60f;
             while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
             Assert.That(assembler.enabled, Is.True);
@@ -352,10 +404,6 @@ namespace ProtoHarness.Tests.PlayMode
             Field.enabled = false; // Invoke the real field tick synchronously; the frame cannot add extra ticks.
             worlds = new[] { player, Field.Opponents[0], Field.Opponents[1], Field.Opponents[2] };
             foreach (RaceWorld world in worlds) world.Game.SetInputSource(Idle());
-#else
-            Assert.Fail("Contact tests require the Unity Editor.");
-            yield break;
-#endif
         }
     }
 }

@@ -27,7 +27,7 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(playerSlots.Count, Is.EqualTo(4));
         }
 
-        [TestCase("Stadium"), TestCase("SummitDrop")]
+        [TestCase("Stadium"), TestCase("Skyway"), TestCase("FingerLanes"), TestCase("PalmCoast"), TestCase("SummitDrop")]
         public void Slot_FourRunners_FitTheWholeStartWindowOnOneRow(string track)
         {
             var definition = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_" + track + ".asset");

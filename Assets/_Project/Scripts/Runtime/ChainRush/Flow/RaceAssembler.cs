@@ -140,6 +140,9 @@ namespace ProtoHarness.ChainRush.Flow
             player.Configure(setup.Runner, SpeedScale.Of(setup.Speed));
             if (setup.Runner.Look != null && !TryDress(setup.Runner.Look)) return;
             launched = true;
+            // Enter waits for the field (CountIn gives it back): a run started while the opponents' worlds load would have
+            // no grid slot and no opponents (Codex review 2026-11-14). Set in Awake, before any Update can read it.
+            if (!setup.IsOpponentWorld && setup.OpponentCount > 0) game.ManualStart = false;
             if (setup.IsOpponentWorld) return;
             if (isTutorial)
             {
@@ -300,11 +303,21 @@ namespace ProtoHarness.ChainRush.Flow
             }
             if (setup.Mode == RaceMode.Bots)
             {
-                int count = worlds.Count + 1;
-                int[] slots = StartGrid.Assign(count, setup.Seed);
-                circuit.UseStartSlot(count, slots[0]);
-                game.ReturnToStart();
-                for (int i = 0; i < worlds.Count; i++) worlds[i].Circuit.UseStartSlot(count, slots[i + 1]);
+                try
+                {
+                    int count = worlds.Count + 1;
+                    int[] slots = StartGrid.Assign(count, setup.Seed);
+                    circuit.UseStartSlot(count, slots[0]);
+                    game.ReturnToStart();
+                    for (int i = 0; i < worlds.Count; i++) worlds[i].Circuit.UseStartSlot(count, slots[i + 1]);
+                }
+                catch (System.ArgumentException e)
+                {
+                    // A start section too narrow for the grid (StartGrid, docs/COURSE.md §7-2a): no race to run on it.
+                    Debug.LogException(e, this);
+                    StopAssembling("the start grid does not fit this track's start section.");
+                    yield break;
+                }
             }
             field = gameObject.AddComponent<RaceField>();
             try
@@ -427,6 +440,7 @@ namespace ProtoHarness.ChainRush.Flow
         {
             if (leaving) return;
             countedIn = true;
+            if (setup.OpponentCount > 0) game.ManualStart = true;
             if (tutorial != null) game.ReturnToStart();
             else game.StartCountdown();
         }

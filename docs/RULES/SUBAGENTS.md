@@ -64,7 +64,25 @@
 **지키는 것**
 - **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만 — 위 표의 병합 전 리뷰 1회만 예외)과 §3-4(`승인:`·`브랜치:` 줄을 요청 첫머리에)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
 - **쓰기 작업은 맡기지 않는다.** Codex 에 쓰기를 맡기는 것은 그 자체가 §3 합의 대상이다. Codex 기본 지침은 "되돌릴 수 있는 작업과 수정은 허락을 묻지 말고 진행" 쪽이라(2026-10-26 세션 기록 `base_instructions`) §3 과 방향이 반대다.
+- **합의해서 쓰기를 맡길 때는 `tools/codex-unity.ps1 -PromptFile <파일> -Write` 로만 부른다** (Unity MCP 허락이 없어도. `docs/DECISIONS.md` 2026-11-14 "Codex 샌드박스 계약"). companion 에 `--write` 를 직접 붙이지 않는다. `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책이 `never` 라 권한을 올릴 수 없기 때문이다.
+  - **지시서**: git 쓰기 명령이나 `.git/`·`.codex/`·`.agents/` 경로를 적지 않는다. 적으면 스크립트가 Codex 를 띄우지 않고 종료 코드 2 로 거부한다(`codex-unity.ps1:131`). 파일 이동·이름 바꾸기는 Claude 가 먼저 `git mv` 로 하고(`.meta` 포함), 지시서에는 `CLAUDE-GIT-DONE: <실행한 명령>` 줄로 알린다.
+  - **계약**: 스크립트가 `-Write` 지시서 앞에 계약 블록을 붙인다(`codex-unity.ps1:114`). git 쓰기는 실행하지 말고 `CLAUDE-GIT:` 줄로 보고한다. 질문으로 턴을 끝내지 않는다(범위 밖일 때만 `CLAUDE-QUESTION:`). 막히면 `CLAUDE-BLOCKED:` 와 에러 원문을 적는다. 마지막 줄은 `CLAUDE-STATUS: done|git|question|blocked` 하나다.
+  - **기다리기**: 실행마다 새 `-RunId <이름>` 을 준다(이어 가기 포함). 스크립트를 `run_in_background` 로 띄우고, `<지시서>.<RunId>.result.json` 이 생길 때까지 도는 `until` 루프를 따로 `run_in_background` 로 둔다. 백그라운드 껍데기의 완료 알림만 믿지 않는다(2026-11-13 Codex 가 끝난 뒤 36분 "돌고 있음").
+    - 결과 파일은 맨 마지막에 한 번에 생긴다. 스크립트가 강제 종료되면 감시 프로세스가 `13 killed` 로 남긴다.
+    - 같은 자리에 `.sent.md`(보낸 지시서)·`.out.md`(Codex 마지막 메시지)·`.stderr.log` 가 남는다.
+    - 같은 `RunId` 의 파일이 이미 있으면 스크립트는 그 파일을 지우지 않고 곧바로 멈춘다. 지시서가 없을 때와 `RunId` 가 잘못됐을 때도 결과 파일 없이 곧바로 멈춘다. 그래서 루프에는 상한 시간을 두고, 껍데기가 결과 파일 없이 끝났으면 그 출력 원문을 13 으로 보고한다.
+  - **판정은 `-Write` 실행에만**: 계약을 붙이지 않은 읽기 실행은 답이 오면 0(`answer`), 아니면 13 이다.
+  - **종료 코드별 복구** (`codex-unity.ps1:144` 의 판정. 마지막 줄의 `CLAUDE-STATUS` 를 먼저 보고, 그 줄과 표지 줄이 맞지 않으면 12 다)
+
+    | 코드 | 뜻 | Claude 가 하는 것 |
+    |---|---|---|
+    | 0 | 끝남 | 결과를 §7-4 대로 검토한다 |
+    | 2 | 지시서 거부, Codex 안 띄움 | git 쓰기는 직접 하고, 지시서를 고쳐 다시 부른다 |
+    | 10 | `CLAUDE-STATUS: git` 과 `CLAUDE-GIT:` 줄 | 승인 범위 안의 명령만 실행하고, 실행한 것을 `CLAUDE-GIT-DONE:` 줄로 적은 지시서를 `-ResumeLast` 로 보낸다. 범위 밖이면 멈추고 보고한다 |
+    | 11 | `CLAUDE-STATUS: question` 과 `CLAUDE-QUESTION:` 줄 | 지시서 범위 안의 세부면 답하고 `-ResumeLast` 로 이어 간다. 한 작업에 최대 2회. 범위 밖이거나 3번째면 사용자에게 묻는다 |
+    | 12 | 막힘, 또는 계약 위반(마지막 줄이 `CLAUDE-STATUS` 가 아님 — 물음표로 끝난 맨 질문 포함, 상태와 표지 줄이 맞지 않음, `.git` 쓰기 거부가 보이는데 done) | 이어 가지 않고 `.out.md` 원문을 보고한다 |
+    | 13 | 오류·사용량 소진·강제 종료 | 이어 가지 않고 `.stderr.log` 와 `reason` 원문을 보고한다(위 "Codex 가 실패하면 시끄럽게") |
 - **Unity 에디터는 한 번에 한쪽만 쓴다.** Claude 와 Codex 는 같은 relay 로 같은 에디터에 붙는다. 한쪽이 Unity MCP 를 쓰는 동안 다른 쪽은 쓰지 않는다 (CLAUDE.md §7 병렬 절대 금지 2번).
-- **Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다** (사용자 2026-11-06 "쓸 순 있지만 내가 너에게 명령할때 codex로 구현하고 mcp 활용하라고 사용 허락할때만"). "codex로 구현" 만으로는 허락이 아니다. 허락이 있으면 `tools/codex-unity.ps1 -PromptFile <파일> [-Write]` 로 부르고, 지시서에 `Unity MCP: 이 실행에서 허용` 줄과 쓸 수 있는 도구를 적는다. 허락이 없으면 companion 을 그대로 부르고 지시서에 `Unity MCP: 허용 안 됨` 을 적는다. 스크립트는 그 실행 동안만 `~/.codex/config.toml` 의 도구 승인을 `approve` 로 두고 끝나면 되돌린다. 서버 이름은 머신마다 달라(`unity_mcp`, `unity-mcp`) relay 를 쓰는 서버를 찾아 쓴다. 스크립트가 강제 종료돼도 따로 띄운 감시 프로세스가 지운다. 전원이 끊긴 뒤에는 `-Status` 로 보고 `-Close` 로 닫는다. 승인을 설정에 남겨 두지 않는다.
-- **Codex 의 Blender MCP 는 평소 꺼 둔다.** `~/.codex/config.toml` 에 `[mcp_servers.blender]` 를 `enabled = false` 로 등록했다(2026-11-09, `codex mcp list` 에 `disabled`). 켜는 방식은 Codex 로 Blender 를 부르는 첫 작업에서 합의하고, 그때 차단 → 허용 → 재차단을 실행해 확인한다. `tools/codex-unity.ps1` 은 Unity 도구 두 개만 연다(`codex-unity.ps1:38-39`).
+- **Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다** (사용자 2026-11-06 "쓸 순 있지만 내가 너에게 명령할때 codex로 구현하고 mcp 활용하라고 사용 허락할때만"). "codex로 구현" 만으로는 허락이 아니다. 허락이 있으면 `tools/codex-unity.ps1 -PromptFile <파일> [-Write] -Unity` 로 부르고, 지시서에 `Unity MCP: 이 실행에서 허용` 줄과 쓸 수 있는 도구를 적는다. 허락이 없으면 `-Unity` 를 빼고(쓰기면 위 스크립트, 읽기 전용이면 companion 을 그대로) 지시서에 `Unity MCP: 허용 안 됨` 을 적는다. 스크립트는 `-Unity` 를 준 실행 동안만 `~/.codex/config.toml` 의 도구 승인을 `approve` 로 두고 끝나면 되돌린다. 서버 이름은 머신마다 달라(`unity_mcp`, `unity-mcp`) relay 를 쓰는 서버를 찾아 쓴다. 스크립트가 강제 종료돼도 따로 띄운 감시 프로세스가 지운다. 전원이 끊긴 뒤에는 `-Status` 로 보고 `-Close` 로 닫는다. 승인을 설정에 남겨 두지 않는다.
+- **Codex 의 Blender MCP 는 평소 꺼 둔다.** `~/.codex/config.toml` 에 `[mcp_servers.blender]` 를 `enabled = false` 로 등록했다(2026-11-09, `codex mcp list` 에 `disabled`). 켜는 방식은 Codex 로 Blender 를 부르는 첫 작업에서 합의하고, 그때 차단 → 허용 → 재차단을 실행해 확인한다. `tools/codex-unity.ps1` 은 Unity 도구 두 개만 연다(`codex-unity.ps1:45`).
 - **stop 리뷰 게이트(`/codex:setup --enable-review-gate`)는 켜지 않는다.** 파일을 고친 턴마다 끝에서 Codex 리뷰가 돌고 최대 900초를 기다린다(플러그인 `hooks/hooks.json`). 켜려면 합의한다.

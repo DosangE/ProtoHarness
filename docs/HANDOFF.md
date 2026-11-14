@@ -7,8 +7,9 @@
 
 ## 1. 지금 상태 (2026-11-14)
 
-- **마일스톤**: M5 (v0.7) "같이 달리는 맛" — MP1 끝, MP2 단계 A(봇전 판) 구현·플레이 확인 끝·병합 전. `main` 은 v0.6 (M6, 2026-11-09). 순서·완료 조건은 `docs/DESIGN.md` §5-1.
-- **MP2 단계 A** (DECISIONS 2026-11-13 "MP2 단계 A", 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`): `feature/mp2-bot-race` `238c3c4`(origin 에 있음). 사용자 플레이 확인 "다 잘 나왔다", `unity-reviewer` 반영 끝, Codex 설계 리뷰(2026-11-14, medium 1 — 결과 순위의 1 m 여유)도 고쳐 봇전·필드 테스트 29/29 통과. 남은 것은 병합(사용자 지시). 2026-11-14 D:/PCUBE 에디터 6000.3.25f1 에서도 컴파일 에러 0(`Tundra build success (2.73 seconds)`).
+- **마일스톤**: M5 (v0.7) "같이 달리는 맛" — MP1 끝, MP2 단계 A(봇전 판) `dev` 병합 끝. `main` 은 v0.6 (M6, 2026-11-09). 순서·완료 조건은 `docs/DESIGN.md` §5-1.
+- **MP2 단계 A** (DECISIONS 2026-11-13 "MP2 단계 A", 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`): `dev` `9a43927` 에 병합하고 2026-11-14 origin 에 푸시했다(기능 브랜치 `feature/mp2-bot-race` `b2389f4`). 사용자 플레이 확인 "다 잘 나왔다", `unity-reviewer` 반영, Codex 설계 리뷰 수정 뒤 봇전·필드 테스트 29/29 통과.
+- **Codex 샌드박스 계약** (DECISIONS 2026-11-14 "Codex 샌드박스 계약"): `fix/codex-sandbox-contract` 를 `dev` 에 병합했다(2026-11-14, Codex 병합 전 리뷰 4건 반영). 이제 Codex `-Write` 는 `tools/codex-unity.ps1` 로만 부르고, Unity MCP 승인은 `-Unity` 를 줄 때만 열린다(§7-5).
 - **v1.0 = PC 싱글 + 봇전(M5 까지), 하네스 실험이 공동 주목적** (DECISIONS 2026-11-12 "방향 재설정"). 멀티(M7)·모바일·아이템전은 v1.0 밖. UI 는 IMGUI 유지, `Runtime/Net/` 은 동결(컴파일만 유지).
 - **MP1 끝** (DECISIONS 2026-11-12 "MP1 구조", "MP1"): 상대마다 서킷 씬 복사본을 격리 로드하고 `Race/RaceField` 가 같은 틱으로 돌린다. 상대 3명을 같이 돌린 플레이어 런이 혼자 런과 비트 일치(서킷 지문 `0xEF92FB76BFD1D767`). `dev` `8ffe3c6` 에 병합(기능 브랜치 `feature/mp1-race-field` `68ded91`), 병합 전 리뷰 지적 중 MP2 로 넘긴 것은 DECISIONS "MP1" 의 "병합 전 리뷰" 줄. 로비는 아직 상대를 주지 않는다 — 플레이로 확인할 것은 MP2 부터.
 - **브랜치**: `dev` 는 origin 에 푸시돼 있다(2026-11-13 `f6be824`). origin 의 기능 브랜치: `feature/mp2-bot-race`(위), `feature/art-runner-blockout` `aa59c87`(러너 블록아웃 `art-src/RunnerKit/RunnerKit.blend` — A 7등신·B 2.5등신, 2026-11-13 채택은 B. 문서 `ART_RUNNER`·DECISIONS 기록은 아직). 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
@@ -18,9 +19,7 @@
 
 ## 2. 다음 작업 (각각 §3-2 요청서부터, 사용자가 고른다)
 
-1. **MP2 봇전** — 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`(사용자 "승인", A·B 두 단계 전체, Codex 구현 + Unity MCP). 순서:
-   - ① 단계 A 병합(사용자 지시). 리뷰는 끝났다(DECISIONS "MP2 단계 A" 의 "병합 전 리뷰").
-   - ② `fix/codex-sandbox-contract` (7번, 사용자 "설계대로 단계 뒤에 진행").
+1. **MP2 봇전** — 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`(사용자 "승인", A·B 두 단계 전체, Codex 구현 + Unity MCP). ① 단계 A 병합과 ② Codex 샌드박스 계약은 끝났다(1절). 남은 순서:
    - ③ 단계 B `feature/mp2-contact` (A 병합 뒤 `dev` 에서): 틱 분해(D11), 밀어내기·충돌 임펄스(D2a·D2b, 반발 계수 0.3 시작), 가로 한 줄 출발 격자(`docs/COURSE.md` §7-2a). 요청서 3절·6절(6-3~6-5) 대로. 6-4 의 ①②④⑤ 는 제안대로 구현하고 B 보고에 결과를 적는다(요청서 0절).
    - ④ 봇 난이도 3단계(사용자 "추후에 쉬움 포함 난이도 3개 정도", 지금 `CircuitBot` = 쉬움) — 아래 자동 개선 루프를 붙인다. 지문용 봇을 먼저 따로 고정한다(요청서 5절 끝 줄).
    - 참고 값 (2026-11-14, D:/PCUBE 에디터 6000.3.25f1, 보관한 중복 구현의 `RaceBotTests` — `CircuitBot` 에 `ShortcutBot` 의 지름길 스윙을 더한 봇, 빠름·ALPHA 혼자): STADIUM 86.70 s, SKYWAY 170.80 s, FINGER LANES 142.26 s(지름길 4회), PALM COAST 186.34 s, SUMMIT DROP 90.00 s(지름길 1회). 실행 기록 `20261114T055057Z-PlayMode-f6be824.xml`(67/67 통과).
@@ -35,7 +34,8 @@
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
 7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
-   - **Codex 샌드박스 계약 (사용자 2026-11-13 "설계대로 단계 뒤에 진행" — MP2 단계 A 병합 뒤 `fix/codex-sandbox-contract`)**: `--write` 는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책 `never` 라 권한을 못 올린다(Codex 세션 로그 `permission_profile`, 플러그인 `lib/codex.mjs:67`). 그래서 MP2 단계 A 에서 `git mv` 6건이 거부됐다. 질문으로 턴을 끝낸 일도 있었고, 완료 알림이 오지 않은 일도 있었다. 설계: ① 예방 — `tools/codex-unity.ps1` 이 `-Write` 지시서 앞에 계약 블록을 붙인다(git 쓰기는 `CLAUDE-GIT:` 줄로 보고, 질문으로 끝내지 않음, 막힘 보고 형식). git 쓰기·`.codex/` 쓰기 지시가 있으면 띄우기 전에 거부한다. 파일 이동은 Claude 가 먼저 `git mv` 한다(SUBAGENTS §7-5). ② 감지 — 출력을 분류해 종료 코드(0 완료 / 10 샌드박스 거부 / 11 질문 / 12 막힘 / 13 소진·오류)와 `<출력>.result.json` 을 남기고, Claude 는 `Monitor` 로 그 파일을 기다린다. ③ 복구 — 10 은 승인 범위 안의 `CLAUDE-GIT:` 만 Claude 가 실행하고 `-ResumeLast`, 11 은 명세 안 세부면 Claude 가 답하고 이어 가기(최대 2회), 12·13 은 보고만 한다. 검증: 일부러 거부되게·질문하게·정상으로 만든 지시서 3개로 스크립트를 실제로 돌린다. `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
+   - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 실제 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력, `-Unity` 를 준 실제 실행. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다.
+   - 그 밖의 후보: `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
    - **재측정** (사용자 2026-11-13 "다 네 추천대로 ㄱㄱ"): **2026-11-27 이후, 그리고 2026-11-13 이후 시작한 세션이 10개 이상일 때** `python -I tools/harness-cost.py --since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 표와 비교하고, 결과를 같은 항목에 덧붙인다.
      - 비교할 것: 요청당 컨텍스트 중앙값, 20만 넘는 요청의 입력 몫, 조회 분류. 세션마다 작업 종류(코드·아트·문서)를 붙여 같은 종류끼리 본다.
      - B모드 부작용: 인덱스를 내린 뒤 `.cs` Read 가 늘었는지 본다(기준선 385).
@@ -57,7 +57,7 @@
 - **장식 킷 (blender → Unity)**: `blender-artist` 가 `art-src/<Kit>/` 에 `.blend`·FBX(폴더는 메인이 먼저 만든다 — `save_as_mainfile` 은 폴더를 만들지 않는다) → `unity-implementer` 가 `Assets/_Project/Art/Models/` 로 복사·코드 수정 → 메인이 Unity MCP 로 임포트 확인·재빌드 메뉴·전후 렌더·그 프리팹을 읽는 테스트 → 사용자 플레이 → 커밋 → Codex + `unity-reviewer` → 병합. `ExteriorKit.KitMesh(kit, name)` 는 슬롯 하나·원점 가운데를 검사한다. FBX 는 `use_selection=True, apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True` 로 내보낸다(Blender 앞면 −Y → Unity +Z, DECISIONS 2026-11-09 "Blender 시험 제작").
 - **킷에서 배운 것**: 크게 늘려 멀리 두는 소품은 모양을 바꿔도 달리며 안 보인다 — 효과는 길가 소품·실루엣에서. 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 가려지는 디테일에 쓰지 않는다. FINGER·PALM 은 장식을 병합하지 않는다(나무마다 렌더러) — 정점과 렌더러 수를 함께 본다. SUMMIT 은 머티리얼별 한 메시로 병합한다. 비탈에 놓는 넓은 소품은 밑동 맞추기(`SummitDropEnvironmentBuilder.Rock`). 렌더할 소품 자리는 병합 메시 정점에서 찾는다.
 - **장식 재빌드**: 프리팹 로컬 fileID 가 새로 나와 큰 diff 가 생기고 `TrackLook` 에 `music`·`ambience` 빈 줄이 붙는다 — 내용이 같으면 커밋하지 않는다. 재빌드 뒤 렌더가 이상하면(데이터는 정상) 에디터부터 다시 켠다.
-- **Codex**: 구현·검증을 Codex 에 맡기면 `tools/codex-unity.ps1 -PromptFile <파일> -Write`(§7-5). 출력은 파이프로 묶지 말고 파일로 받는다. Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다("codex로 구현" 만으로는 허락이 아니다). 서버는 이름이 아니라 relay 를 실행하는 서버로 찾는다(PC 마다 `unity_mcp`/`unity-mcp`).
+- **Codex**: 구현·검증을 Codex 에 맡기면 `tools/codex-unity.ps1 -PromptFile <파일> -Write -RunId <새 이름>`(Unity 허락이 있으면 `-Unity`, §7-5). 스크립트를 `run_in_background` 로 띄우고 `<지시서>.<RunId>.result.json` 을 기다리는 `until` 루프(상한 있음)를 따로 둔다. 종료 코드별로 할 일은 §7-5 표에 있다. Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다("codex로 구현" 만으로는 허락이 아니다). 서버는 이름이 아니라 relay 를 실행하는 서버로 찾는다(PC 마다 `unity_mcp`/`unity-mcp`).
 - **트랙 장식을 새로 만들 때 (2026-10-30 PALM COAST 방식)**: 레퍼런스 영상을 scratchpad 에 받아(yt-dlp `--js-runtimes node`) 1 s 접촉 시트로 색·소재를 읽고 → `TrackLook`(도로·벽·차선 표시) + `XxxEnvironmentBuilder`(`PalmCoastEnvironmentBuilder` 형식, 공통은 `ExteriorKit`·`ExteriorAssets`) → 발광 없는 차분한 색, `Hash` 로 자리마다 다르게. 도로 침범 검사는 축 정렬 경계라 대각선 도로에서 회전한 물체는 반경의 1.5배 밖에 둔다. 새 트랙은 빌더의 `BuildLook` 에 `ExteriorAssets.BuildSky` 를 넘긴다. 사용자 몫: 장식 씬 저장, 빌드 씬 목록(`ProjectSettings` 만 담은 브랜치), 로비 항목 저장. 기존 게임 트랙의 배치는 옮기지 않는다(DECISIONS 2026-11-12 "방향 재설정").
 - **마일스톤 태그**: 태그마다 `TitleScreen.Version` 을 같이 올린다(DECISIONS 2026-10-29 "M3 범위 조정"). 다음은 v0.7.
 - **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다. 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 푼다.

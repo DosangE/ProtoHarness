@@ -265,6 +265,32 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTest, Timeout(120000)]
+        // The running order keeps two runners within its margin (1 m) in the order they had, so they do not swap places on
+        // every tick. The result is final: the runners still out go by distance (D7 (a), proposal 0절), so a bot that gets
+        // ahead of another by less than the margin on the player's finishing tick is placed ahead (Codex review 2026-11-14).
+        public IEnumerator Field_BotPassesAnotherByLessThanTheOrderMarginOnTheFinishTick_ResultGoesByDistance()
+        {
+            yield return LoadRace();
+            yield return StartField();
+            SetProgress(Field.Opponents[1], 300d);
+            SetProgress(Field.Opponents[2], 310d);
+            yield return StepField();
+            Assert.That(Field.Place(3), Is.LessThan(Field.Place(2)), "Racer 3 must be ahead before the pass.");
+            double behind = Field.Progress(3);
+            ArmFinish(player, 1d);
+            // Inside the player's tick, before the opponents' final tick: racer 2 is put just ahead of racer 3.
+            Action<int> pass = _ => SetProgress(Field.Opponents[1], behind + 0.5d);
+            player.Game.TickCompleted += pass;
+            try { yield return StepField(); }
+            finally { player.Game.TickCompleted -= pass; }
+            Assert.That(Field.HasResult, Is.True);
+            double lead = Field.Progress(2) - Field.Progress(3);
+            Assert.That(lead, Is.GreaterThan(0d).And.LessThan(1d), $"The pass must be inside the order's margin to test it (lead {lead:F3} m).");
+            Assert.That(Field.Place(2), Is.LessThan(Field.Place(3)), $"The result must go by distance: racer 2 at {Field.Progress(2):F3} m, racer 3 at {Field.Progress(3):F3} m.");
+            Assert.That(Field.Place(0), Is.EqualTo(1));
+        }
+
+        [UnityTest, Timeout(120000)]
         public IEnumerator Race_BotFinishAndRestart_KeepNoRecordOrGhostAndResetStandingsWithTheSameLineup()
         {
             yield return LoadRace();

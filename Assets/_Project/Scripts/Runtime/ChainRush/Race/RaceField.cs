@@ -170,6 +170,7 @@ namespace ProtoHarness.ChainRush.Race
             }
             int finishers = 0;
             for (int r = 0; r < RacerCount; r++) if (finishTicks[r] > 0) finishers++;
+            bool result = game.HasFinished || game.HasFailed;
             for (int r = 0; r < RacerCount; r++)
             {
                 if (finishTicks[r] > 0)
@@ -179,10 +180,22 @@ namespace ProtoHarness.ChainRush.Race
                         if (finishTicks[o] > 0 && finishTicks[o] < finishTicks[r]) place++;
                     places[r] = place;
                 }
-                else places[r] = finishers + order[r];
+                // While the race runs, the running order's margin keeps runners side by side from swapping places on every
+                // tick. The result is final, so those still out go by the distance they reached (D7 (a)): the margin would
+                // keep the order of a tick before.
+                else places[r] = finishers + (result ? 1 + RunnersFurtherThan(r) : order[r]);
             }
-            HasResult = game.HasFinished || game.HasFailed;
+            HasResult = result;
             StandingsChanged?.Invoke();
+        }
+
+        // How many runners who have not finished got further than this one; equal distance shares a place.
+        private int RunnersFurtherThan(int racer)
+        {
+            int further = 0;
+            for (int o = 0; o < RacerCount; o++)
+                if (o != racer && finishTicks[o] == 0 && progress[o] > progress[racer]) further++;
+            return further;
         }
 
         // Puts every opponent on the start line, at rest, as the player's game is before its run.

@@ -7,8 +7,15 @@
 # back too if this script is killed before the finally runs. Only a power loss can leave it: then -Status says open and
 # -Close closes it. Pass -Unity only when the user said to let Codex use Unity MCP for this task (docs/RULES/SUBAGENTS.md §7-5).
 #
-# The server's name differs between machines (unity_mcp, unity-mcp), so it is found by the relay it runs. A tool that already
-# has a table keeps it: TOML refuses a second one, so its value changes in place and a trailing comment remembers the old one.
+# -Blender does the same for the Blender MCP server (mcp-for-blender), which stays registered with enabled = false: for one run
+# it is switched on and only the four tools blender-artist has get an approval (get_addon_status, get_scene_info,
+# execute_blender_code, look). search_assets, import_asset and generate_3d are not approved (external calls and cost). Pass
+# -Blender only when the user said to let Codex use Blender for this task. One Blender, one user: nothing else may drive it
+# during the run. -Unity and -Blender share one block and one owner, so a second run cannot open either while one is open.
+#
+# The server's name differs between machines (unity_mcp, unity-mcp), so it is found by the relay it runs (Blender: by the
+# mcp-for-blender package in its args). A tool that already has a table keeps it: TOML refuses a second one, so its value
+# changes in place and a trailing comment remembers the old one. The Blender server's enabled line changes in place the same way.
 #
 # A -Write run cannot write .git, .codex or .agents and cannot ask for more (approval "never"). So a -Write prompt that tells
 # Codex to run a git write or to touch those folders is refused before Codex starts, and every -Write prompt gets the contract
@@ -19,13 +26,14 @@
 # last of all, .result.json. The watcher writes the result file too when this script is killed before it can. A run without
 # -Write gets no contract, so it is only sorted into 0 (an answer came) or 13.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -PromptFile <path> [-Write] [-Unity] [-ResumeLast] [-Effort high]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -PromptFile <path> [-Write] [-Unity] [-Blender] [-ResumeLast] [-Effort high]
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -Status
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools/codex-unity.ps1 -Close
 param(
     [string]$PromptFile,
     [switch]$Write,
     [switch]$Unity,
+    [switch]$Blender,
     [switch]$ResumeLast,
     [string]$Effort = 'high',
     # Names this run's files, so a caller waiting for one run never reads another's result. A new one for every run.
@@ -42,7 +50,9 @@ $ErrorActionPreference = 'Stop'
 $begin = '# >>> protoharness codex-unity (tools/codex-unity.ps1 removes this block)'
 $end = '# <<< protoharness codex-unity'
 $inline = '# protoharness codex-unity owner'
-$tools = 'Unity_RunCommand', 'Unity_GetConsoleLogs'
+$unityDoor = @{ What = 'Unity relay'; Find = 'command[ \t]*=[^\r\n]*relay'; Enable = $false; Tools = @('Unity_RunCommand', 'Unity_GetConsoleLogs') }
+$blenderDoor = @{ What = 'mcp-for-blender'; Find = 'args[ \t]*=[^\r\n]*mcp-for-blender'; Enable = $true
+    Tools = @('get_addon_status', 'get_scene_info', 'execute_blender_code', 'look') }
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
 $config = Join-Path $codexHome 'config.toml'
 if (-not (Test-Path -LiteralPath $config)) { throw "codex-unity: no Codex config at $config" }
@@ -53,38 +63,45 @@ function Test-Open {
     $text.Contains($begin) -or $text.Contains($inline)
 }
 
-# The one MCP server that runs the Unity relay. None or several is a fault to fix by hand, not a guess to make.
-function Get-Server([string]$text) {
-    $pattern = '(?m)^\[mcp_servers\.([^\].]+)\][ \t]*\r?\n(?:(?!\[)[^\r\n]*\r?\n)*?command[ \t]*=[^\r\n]*relay'
+# The one MCP server whose table has a line matching $door.Find (the Unity relay, the mcp-for-blender package). None or
+# several is a fault to fix by hand, not a guess to make.
+function Get-Server([string]$text, [hashtable]$door) {
+    $pattern = '(?m)^\[mcp_servers\.([^\].]+)\][ \t]*\r?\n(?:(?!\[)[^\r\n]*\r?\n)*?' + $door.Find
     $found = @([regex]::Matches($text, $pattern) | ForEach-Object { $_.Groups[1].Value })
-    if ($found.Count -ne 1) { throw "codex-unity: expected one Unity relay server in $config, found $($found.Count): $($found -join ', ')" }
+    if ($found.Count -ne 1) { throw "codex-unity: expected one $($door.What) server in $config, found $($found.Count): $($found -join ', ')" }
     $found[0]
 }
 
-function Open-Door {
+# Opens every door in $doors in one write, under one owner: a door that fails to open leaves the file as it was.
+function Open-Door([hashtable[]]$doors) {
     if (Test-Open) { throw "codex-unity: the block is already in $config. Another run, or a run that was killed: check, then -Close." }
     $text = [System.IO.File]::ReadAllText($config, $utf8)
     if (-not $text.EndsWith("`n")) { $text += "`n" }
-    $server = Get-Server $text
-    $missing = @()
-    foreach ($tool in $tools) {
-        $table = '(?m)^(\[mcp_servers\.' + [regex]::Escape($server) + '\.tools\.' + $tool + '\][ \t]*\r?\n)'
-        if (-not [regex]::IsMatch($text, $table)) { $missing += $tool; continue }
-        $value = $table + 'approval_mode[ \t]*=[ \t]*"(\w+)"[ \t]*(?=\r?$)'
-        if (-not [regex]::IsMatch($text, $value)) { throw "codex-unity: $server's $tool table does not start with a plain approval_mode. Fix it by hand." }
-        $text = [regex]::Replace($text, $value, '$1approval_mode = "approve" ' + "$inline $PID was " + '$2')
+    $lines = @($begin, "# owner $PID")
+    foreach ($door in $doors) {
+        $server = Get-Server $text $door
+        if ($door.Enable) {
+            # The server's own enabled line, before any sub-table ([mcp_servers.<name>.env] and the like).
+            $enabled = '(?m)(^\[mcp_servers\.' + [regex]::Escape($server) + '\][ \t]*\r?\n(?:(?!\[)[^\r\n]*\r?\n)*?)enabled[ \t]*=[ \t]*(true|false)[ \t]*(?=\r?$)'
+            if (-not [regex]::IsMatch($text, $enabled)) { throw "codex-unity: $server has no plain enabled line. Fix it by hand." }
+            $text = [regex]::Replace($text, $enabled, '${1}enabled = true ' + "$inline $PID was " + '$2')
+        }
+        foreach ($tool in $door.Tools) {
+            $table = '(?m)^(\[mcp_servers\.' + [regex]::Escape($server) + '\.tools\.' + $tool + '\][ \t]*\r?\n)'
+            if (-not [regex]::IsMatch($text, $table)) { $lines += "[mcp_servers.$server.tools.$tool]", 'approval_mode = "approve"'; continue }
+            $value = $table + 'approval_mode[ \t]*=[ \t]*"(\w+)"[ \t]*(?=\r?$)'
+            if (-not [regex]::IsMatch($text, $value)) { throw "codex-unity: $server's $tool table does not start with a plain approval_mode. Fix it by hand." }
+            $text = [regex]::Replace($text, $value, '$1approval_mode = "approve" ' + "$inline $PID was " + '$2')
+        }
     }
-    if ($missing.Count -gt 0) {
-        $lines = @($begin, "# owner $PID")
-        foreach ($tool in $missing) { $lines += "[mcp_servers.$server.tools.$tool]", 'approval_mode = "approve"' }
-        $text += (($lines + $end) -join "`n") + "`n"
-    }
+    if ($lines.Count -gt 2) { $text += (($lines + $end) -join "`n") + "`n" }
     [System.IO.File]::WriteAllText($config, $text, $utf8)
 }
 
 function Close-Door {
     $text = [System.IO.File]::ReadAllText($config, $utf8)
     $text = [regex]::Replace($text, 'approval_mode = "approve" ' + [regex]::Escape($inline) + ' \d+ was (\w+)', 'approval_mode = "$1"')
+    $text = [regex]::Replace($text, 'enabled = true ' + [regex]::Escape($inline) + ' \d+ was (true|false)', 'enabled = $1')
     $from = $text.IndexOf($begin)
     if ($from -ge 0) {
         $to = $text.IndexOf($end, $from)
@@ -267,7 +284,10 @@ try {
         if ($Write) { $arguments += '--write' }
         if ($ResumeLast) { $arguments += '--resume-last' }
 
-        if ($Unity) { Open-Door; $opened = $true }
+        $doors = @()
+        if ($Unity) { $doors += $unityDoor }
+        if ($Blender) { $doors += $blenderDoor }
+        if ($doors.Count -gt 0) { Open-Door $doors; $opened = $true }
         $run = Invoke-Node $arguments
         [System.IO.File]::WriteAllText($errFile, $run.Err, $utf8)
         $result = Get-Verdict $run ([bool]$Write)
@@ -279,7 +299,7 @@ catch {
     [Console]::Error.WriteLine($result.reason)
 }
 finally {
-    # Only a block this run opened is closed: without -Unity, or when Open-Door refused, another run's block is not ours to take.
+    # Only a block this run opened is closed: without -Unity/-Blender, or when Open-Door refused, another run's block is not ours to take.
     try { if ($opened) { Close-Door } }
     catch {
         if ($null -eq $result) { $result = @{ code = 13; kind = 'error'; reason = '' } }

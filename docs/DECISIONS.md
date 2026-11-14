@@ -10,6 +10,32 @@
 
 ---
 
+## 2026-11-14 · 러너 캐릭터 아트: 블록아웃 B(2.5등신) · 리그 1개 + 단단한 스킨 · 렌더러 1·머티리얼 2 · 클립 8(+1) · 5종은 같은 뼈대에 색·겉장식만 (`feature/art-runner-blockout`)
+
+- **결정 (사용자, 2026-11-14, 요청서 `docs/ART_REQUEST_RUNNER.md` 0절이 원본)**: Q1 B 확정, 얼굴 "두가지 다" / Q2 리그 + 키 포즈 클립을 지금, 뼈를 코드로 돌릴지(b)·Animator(c)는 Unity 반영 요청서에서 / Q3 "몸체 기본 뼈대는 동일하되 색, 겉장식만" / Q4 러너 하나 렌더러 1·머티리얼 2·삼각형 3,000 이하 / Q5 봉 스윙·부스트 추가, 실패 숙임 대신 충돌 움찔("벽 충돌 혹은 플레이어끼리 충돌") / Q6 `art-src/Runner/`. 1차 뒤: 발 접지 고치기, ALPHA 발광 민트, 발목 고정(①)·발바닥 수평(②) "두가지 버전 다", 2차는 ①② 둘 다 + 봉 스윙 대안 `Runner_PoleSwingEdge`, 장식 치수는 Claude 추천, "codex로 구현하라"(위 항목), OMEGA 어깨판은 "추천대로" 0.04 m.
+- **만든 것** (`art-src/Runner/`, Unity 가 읽지 않음): `Runner.blend`·`Runner.fbx`(① 발목 고정) · `RunnerFlatFoot.blend`·`RunnerFlatFoot.fbx`(② 발바닥 수평) — 아마추어 `RunnerRig` 뼈 17, 메시 10(`Runner{Alpha,Beta,Theta,Delta,Omega}{Closed,Open}`, 삼각형 2,072~2,632, 슬롯 2, 가중치 없는 정점 0), 액션 ① 8 / ② 9. 팔레트 `T_RunnerPalette_<러너>.png` 5장(32 × 32, 같은 UV), 렌더 `Render_*.png`(라인업 `Render_Lineup5.png`).
+- **이유**: 지금 모형은 렌더러 25·머티리얼 25, 러너 하나 ≈ 150 배치(2026-11-12 "MP1 구조"). 블록 부품을 뼈마다 가중치 1.0 으로 붙이면 겉보기는 같고 렌더러는 1이다. 리그 FBX 는 `bake_space_transform=False`(Blender 원문 "known to be broken with armatures/animations") — Unity 루트 회전 처리는 반영 때 정한다.
+- **진행 (하네스 실험 기록)**: `blender-artist` 3회(1차 약 129k 토큰·50 도구, 접지 수정 약 166k·18, ② 판 약 209k·19) → Codex `-Write -Blender` 3턴(`p2a` 요청서 모순을 찾아 12, `p2b` `-ResumeLast` 0 약 14분, `p3` OMEGA 0 약 50분). 요청서 쪽 잘못이 네 번 드러났다 — 뼈 개수(18 → 17), 착지 `Root` 하강이 발을 바닥 아래로(1차), 무릎을 굽히면 발끝이 내려가 `Root` 를 올려야 함(1차 수정), 등 장식이 몸통에 묻히지 않음(Codex). 모두 에이전트가 스스로 메우지 않고 멈추거나 보고해서 잡혔다.
+- **Unity 반영 때 바뀔 코드**: 요청서 7절(`RunnerLook` 재설계 — 공개 API, `RunnerAnimation`, `TryDress`, `GhostRunner`, `RunnerPreview`, `ropeOrigin`, 씬·프리팹, 테스트 3개). 지시에 있던 "스윙 잔상" 은 코드에 없다(2026-11-06 버린 대안).
+- **확인 못 한 것**: Unity 임포트·축·클립 이름(`RunnerRig|` 접두사), ①② 중 어느 판을 쓸지, 키 사이 보간 프레임의 접지, 드로 배치 재측정.
+
+## 2026-11-14 · Codex 의 Blender MCP: `tools/codex-unity.ps1 -Blender` 로 한 실행 동안만 연다, 도구 4개만 승인 (`docs/codex-blender`)
+
+- **결정 (사용자, 2026-11-14)**: 러너 아트 2차(4종)를 "codex로 구현하라". Codex 로 Blender 를 부르는 첫 작업이라 방식을 물었고(가 직접 다루기 / 나 스크립트만 / 다 `blender-artist`), 답 "가", 합의 요청서에 "ㄱㄱ".
+- **만든 것**
+  - `tools/codex-unity.ps1` 에 `-Blender`: 그 실행 동안만 `[mcp_servers.blender]` 의 `enabled = false` 를 `true` 로 바꾸고 `blender-artist` 와 같은 도구 4개(`get_addon_status`·`get_scene_info`·`execute_blender_code`·`look`)에 `approval_mode = "approve"` 를 준 뒤 finally·감시 프로세스로 되돌린다. 서버는 이름이 아니라 `args` 의 `mcp-for-blender` 로 찾는다. `-Unity` 와 표지·소유자를 같이 써서 한쪽이 열려 있으면 다른 실행은 열지 못한다. 문 열기는 `Open-Door($doors)` 한 번의 쓰기로 묶었다(Unity 문 동작은 그대로).
+  - 사용자 설정 `~/.codex/config.toml`(리포 밖): `D:/PCUBE` PC 에 `[mcp_servers.blender]` = `uvx mcp-for-blender@2.2.7`, env `BLENDER_MCP_SAFE_MODE=1`·`DISABLE_TELEMETRY=true`, `enabled = false` 를 처음 등록했다(2026-11-09 등록은 다른 PC). 등록 전 사본은 그 세션 scratchpad.
+  - `docs/RULES/SUBAGENTS.md` §7-5 의 "Blender MCP 는 평소 꺼 둔다" 줄을 여는 방법·실측으로 바꿨다.
+- **실측 (codex-cli 0.165.0)**
+  - 설정 사본 시험(스크립트의 함수를 그대로 불러): Blender 만 / Unity + Blender / Unity 만 — 열면 표가 들어가고 닫으면 원본과 바이트까지 같다, 열린 채 두 번째 열기는 거부.
+  - 실제 Codex 읽기 실행 3회(`-Effort low`): ① 닫힘 — 도구 목록에 `blender` 서버 없음 ② `-Blender` — `get_addon_status` 성공(`5.2.3 LTS`, 텔레메트리 false, 라이브러리·생성기 off), 승인 안 한 `search_assets` 는 `MCP tool call requires approval, but approval policy is never` ③ 다시 닫힘 — 서버 없음. 실행 뒤 `-Status` `closed`, 설정은 열기 전과 같다.
+  - 쓰기 실행: 러너 아트 2차(같은 날 "러너 캐릭터 아트") — `p2a` 코드 12(요청서 모순을 찾아 멈춤), `p2b` `-ResumeLast` 코드 0, `p3` OMEGA 수정. 세이프 모드 거부 1회(`as_pointer`)는 Codex 가 다시 써서 해결.
+- **발견 (고치지 않았다)**: 이 PC 의 Codex 설정에 Unity relay 서버가 둘(`unity_mcp`, `unity-mcp`)이라 `-Unity` 는 "expected one Unity relay server … found 2" 로 실패한다(서버 찾기 패턴은 `dev` 와 같다). 사용자 설정이라 손대지 않고 사용자에게 물었다.
+- **버린 대안**: (나) Codex 가 Blender 스크립트만 쓰고 `blender-artist` 가 실행 — Codex 가 결과를 보지 못한다. (다) `blender-artist` 그대로 — 사용자 지시와 다르다. 서버를 늘 켜 두고 도구 승인만 여닫기 — 닫힌 동안 `search_assets`·`generate_3d` 같은 도구가 목록에 보이고, 승인 정책이 바뀌면 그대로 열린다.
+- **병합 (문서 검증)**: (병합할 때 채운다)
+
+---
+
 ## 2026-11-14 · Codex 샌드박스 계약 — `-Write` 는 `tools/codex-unity.ps1` 로만, 계약 블록·실행 전 거부·종료 코드와 결과 파일, Unity 승인은 `-Unity` 일 때만 (`fix/codex-sandbox-contract`)
 
 - **문제**: MP2 단계 A 의 Codex 쓰기 실행 3회가 모두 끝까지 가지 못했다(아래 "MP2 단계 A" 의 "진행에서 생긴 일"). `git mv` 는 샌드박스에 거부됐고, 턴은 질문으로 끝났고, 사용량이 소진됐다. 첫 실행은 끝난 뒤 36분 동안 완료 알림이 없었다. `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책이 `never` 라 권한을 올릴 수 없다.
@@ -30,6 +56,7 @@
   - [medium] companion 을 찾지 못하는 등 준비 단계 오류는 결과 파일 없이 끝났다 → 경로를 정한 직후 감시자를 띄우고 준비 작업을 `try` 안으로. 그보다 앞의 오류(지시서 없음, 잘못된 RunId, 같은 RunId)는 곧바로 멈추므로, 기다리는 루프에 상한을 두고 껍데기 출력을 본다(§7-5).
   - 고친 뒤 가짜 21건(상태·표지 불일치 4건, 읽기 실행 2건, **실제 Codex 출력 3건의 재생** 10/11/0 포함)과 같은 RunId 재사용 거부가 모두 맞았다. 강제 종료·`-Unity` 유무·남의 승인 보존도 새 이름으로 다시 통과했다. 실제 Codex 재실행은 하지 않았다(판정만 바뀌었고, 실제 출력을 재생해 확인했다).
 - **확인 못 한 것**: 실제 `-ResumeLast` 이어 가기(10·11 복구), 실제 사용량 소진 때의 companion 출력(가짜로만 13), `-Unity` 를 준 실제 실행.
+  - 2026-11-14 덧붙임(`docs/codex-blender`): 실제 `-ResumeLast` 를 12(blocked) 뒤에 한 번 썼다 — 요청서를 고치고 같은 스레드로 이어 코드 0 `done`(`-Write -Blender`, 약 14분). 결과 파일·`CLAUDE-STATUS` 판정이 정상. 10·11 뒤의 이어 가기는 아직 겪지 않았다. 껍데기 알림은 이번에도 결과 파일보다 늦거나(읽기 실행 1회는 결과 파일이 생긴 뒤 10분 넘게 "실행 중") 믿을 수 없어 결과 파일로 기다렸다.
 - **버린 대안**: companion 의 사람용 출력을 정규식으로 읽기(형식이 정해져 있지 않다. `--json` 은 `codex-companion.mjs:511-517` 의 고정 필드다), 감지를 Codex 의 명령 로그(`commandExecutions`)로 하기(task 의 `--json` 결과에 없다), `-Unity` 없이 승인을 늘 여는 방식 유지(사용자가 고르지 않음).
 
 ## 2026-11-13 · MP2 단계 A: 봇전 판 — `RaceMode.Bots`, 싱글 안의 타임어택/봇전, 시드로 뽑은 시험 봇 3명, 왼쪽 아래 금·은·동 순위, 봇전은 기록·고스트 없음 (`feature/mp2-bot-race`)
